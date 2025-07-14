@@ -95,6 +95,9 @@ For TLS-disabled Web3Signer (only for testing, do not use in production):
 
 ```bash
 web3signer --http-listen-port=9000 \
+  --tls-keystore-file=/path/to/keystore.p12 \
+  --tls-keystore-password-file=/path/to/password.txt \
+  --tls-known-clients-file=/path/to/knownClients.txt \
   eth2 \
   --network=mainnet \
   --slashing-protection-db-url="jdbc:postgresql://${POSTGRES_HOST}/web3signer" \

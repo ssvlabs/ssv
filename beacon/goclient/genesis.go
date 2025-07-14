@@ -12,10 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
-	return genesisForClient(ctx, gc.log, gc.multiClient)
-}
-
 // It's used in both Genesis and singleClientHooks, so we need some common implementation to avoid code repetition.
 func genesisForClient(ctx context.Context, log *zap.Logger, provider client.Service) (*apiv1.Genesis, error) {
 	start := time.Now()

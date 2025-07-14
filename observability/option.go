@@ -1,11 +1,15 @@
 package observability
 
-type (
-	Option func(*Config)
-)
+type Option func(*Config)
 
 func WithMetrics() Option {
 	return func(cfg *Config) {
-		cfg.metricsEnabled = true
+		cfg.metrics.enabled = true
+	}
+}
+
+func WithTraces() Option {
+	return func(cfg *Config) {
+		cfg.traces.enabled = true
 	}
 }

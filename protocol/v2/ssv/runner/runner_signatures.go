@@ -8,6 +8,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -22,8 +23,8 @@ func (b *BaseRunner) signBeaconObject(
 	slot spec.Slot,
 	signatureDomain spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
-	domain, err := runner.GetBeaconNode().DomainData(epoch, signatureDomain)
+	epoch := runner.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
+	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get beacon domain")
 	}

@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -9,13 +8,11 @@ import (
 	"time"
 
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSubscribeToHeadEvents(t *testing.T) {
@@ -57,7 +54,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
-		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", make(chan<- *apiv1.HeadEvent))
+		err := client.SubscribeToHeadEvents(t.Context(), "test_caller", make(chan<- *apiv1.HeadEvent))
 
 		assert.NoError(t, err)
 		assert.Len(t, client.headEventSubscribers, 1)
@@ -72,7 +69,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		client.supportedTopics = []EventTopic{}
 		defer server.Close()
 
-		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", make(chan<- *apiv1.HeadEvent))
+		err := client.SubscribeToHeadEvents(t.Context(), "test_caller", make(chan<- *apiv1.HeadEvent))
 
 		assert.Error(t, err)
 		assert.Equal(t, "the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber", err.Error())
@@ -81,12 +78,12 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 }
 
 func eventsTestClient(t *testing.T, serverURL string) *GoClient {
-	server, err := New(zap.NewNop(), Options{
-		BeaconNodeAddr: serverURL,
-		Context:        context.Background(),
-		Network:        beacon.NewNetwork(types.MainNetwork),
-	},
-		tests.MockSlotTickerProvider)
+	server, err := New(
+		t.Context(),
+		zap.NewNop(),
+		Options{
+			BeaconNodeAddr: serverURL,
+		})
 
 	require.NoError(t, err)
 	return server

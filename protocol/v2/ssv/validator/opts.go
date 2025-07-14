@@ -8,6 +8,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -32,7 +33,7 @@ type Options struct {
 
 // CommonOptions represents options that all validators share.
 type CommonOptions struct {
-	NetworkConfig       networkconfig.NetworkConfig
+	NetworkConfig       networkconfig.Network
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
@@ -41,7 +42,7 @@ type CommonOptions struct {
 	DoppelgangerHandler runner.DoppelgangerProvider
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
-	Exporter            bool
+	ExporterOptions     exporter.Options
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
@@ -50,7 +51,7 @@ type CommonOptions struct {
 }
 
 func NewCommonOptions(
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig networkconfig.Network,
 	network specqbft.Network,
 	beacon beacon.BeaconNode,
 	storage *storage.ParticipantStores,
@@ -59,7 +60,7 @@ func NewCommonOptions(
 	doppelgangerHandler runner.DoppelgangerProvider,
 	newDecidedHandler qbftctrl.NewDecidedHandler,
 	fullNode bool,
-	exporter bool,
+	exporterOptions exporter.Options,
 	historySyncBatchSize int,
 	gasLimit uint64,
 	messageValidator validation.MessageValidator,
@@ -76,7 +77,7 @@ func NewCommonOptions(
 		DoppelgangerHandler: doppelgangerHandler,
 		NewDecidedHandler:   newDecidedHandler,
 		FullNode:            fullNode,
-		Exporter:            exporter,
+		ExporterOptions:     exporterOptions,
 		QueueSize:           DefaultQueueSize,
 		GasLimit:            gasLimit,
 		MessageValidator:    messageValidator,

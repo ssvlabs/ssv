@@ -1,9 +1,8 @@
 name: Spec tests
 
 on:
-  push:
-    branches:
-      - "**"
+  pull_request:
+    types: [opened, synchronize]
 
   workflow_dispatch:
 

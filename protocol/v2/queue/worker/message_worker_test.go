@@ -16,12 +16,12 @@ import (
 func TestWorker(t *testing.T) {
 	logger := logging.TestLogger(t)
 	worker := NewWorker(logger, &Config{
-		Ctx:          context.Background(),
+		Ctx:          t.Context(),
 		WorkersCount: 1,
 		Buffer:       2,
 	})
 
-	worker.UseHandler(func(msg network.DecodedSSVMessage) error {
+	worker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
 		require.NotNil(t, msg)
 		return nil
 	})
@@ -36,13 +36,13 @@ func TestManyWorkers(t *testing.T) {
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{
-		Ctx:          context.Background(),
+		Ctx:          t.Context(),
 		WorkersCount: 10,
 		Buffer:       0,
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(msg network.DecodedSSVMessage) error {
+	worker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		return nil
@@ -60,13 +60,13 @@ func TestBuffer(t *testing.T) {
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{
-		Ctx:          context.Background(),
+		Ctx:          t.Context(),
 		WorkersCount: 1,
 		Buffer:       10,
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(msg network.DecodedSSVMessage) error {
+	worker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		time.Sleep(time.Millisecond * 100)

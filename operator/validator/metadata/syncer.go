@@ -3,16 +3,19 @@ package metadata
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math/big"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -25,14 +28,25 @@ const (
 	defaultSyncInterval      = 12 * time.Minute
 	defaultStreamInterval    = 2 * time.Second
 	defaultUpdateSendTimeout = 30 * time.Second
-	batchSize                = 512
+	// NOTE:
+	// A higher value of `batchSize` results in fewer HTTP calls to the Consensus Node,
+	// but each call will have larger payloads and responses. While this speeds up
+	// metadata synchronization, it also increases the risk of timeouts.
+	//
+	// The value of `batchSize` should depend on the number of validators the node handles
+	// (especially relevant when comparing Exporter vs. Non-Exporter nodes)
+	// and the sync interval (how often metadata should be refreshed).
+	//
+	// ⚠️ Caution: Since there is no prioritization implemented, if the node cannot
+	// sync all validator shares within the given sync interval, there is a high risk
+	// that some validators will not be refreshed for an unpredictable amount of time.
+	batchSize = 512
 )
 
 type Syncer struct {
 	logger            *zap.Logger
 	shareStorage      shareStorage
 	validatorStore    selfValidatorStore
-	networkConfig     networkconfig.NetworkConfig
 	beaconNode        beacon.BeaconNode
 	fixedSubnets      networkcommons.Subnets
 	syncInterval      time.Duration
@@ -43,7 +57,7 @@ type Syncer struct {
 type shareStorage interface {
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error
+	UpdateValidatorsMetadata(beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
 }
 
 type selfValidatorStore interface {
@@ -54,16 +68,14 @@ func NewSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
-	networkConfig networkconfig.NetworkConfig,
 	beaconNode beacon.BeaconNode,
 	fixedSubnets networkcommons.Subnets,
 	opts ...Option,
 ) *Syncer {
 	u := &Syncer{
-		logger:            logger,
+		logger:            logger.Named(logging.NameShareMetadataSyncer),
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
-		networkConfig:     networkConfig,
 		beaconNode:        beaconNode,
 		fixedSubnets:      fixedSubnets,
 		syncInterval:      defaultSyncInterval,
@@ -86,7 +98,10 @@ func WithSyncInterval(interval time.Duration) Option {
 	}
 }
 
-func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+// SyncAll loads all non-liquidated validator shares that belong to operator's subnets,
+// and triggers a full metadata synchronization for them.
+// It returns a mapping of validator public keys to their updated metadata.
+func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -94,78 +109,77 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated(), func(share *ssvtypes.SSVShare) bool {
 		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
 		subnet := subnetsBuf.Uint64()
-		return ownSubnets[subnet] != 0
+		return ownSubnets.IsSet(subnet)
 	})
 	if len(shares) == 0 {
 		s.logger.Info("could not find non-liquidated own subnets validator shares on initial metadata retrieval")
 		return nil, nil
 	}
 
-	// Skip syncing if metadata was already fetched before
-	// to prevent blocking startup after first sync.
-	needToSync := false
 	pubKeysToFetch := make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
 		pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey)
-		if !share.HasBeaconMetadata() {
-			needToSync = true
-		}
-	}
-	if !needToSync {
-		// Stream should take it over from here.
-		return nil, nil
 	}
 
 	// Sync all pubkeys that belong to own subnets. We don't need to batch them because we need to wait here until all of them are synced.
 	return s.Sync(ctx, pubKeysToFetch)
 }
 
-type SyncBatch struct {
-	IndicesBefore []phase0.ValidatorIndex
-	IndicesAfter  []phase0.ValidatorIndex
-	Validators    ValidatorMap
-}
-
-type ValidatorMap = map[spectypes.ValidatorPK]*beacon.ValidatorMetadata
-
-func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
-	fetchStart := time.Now()
-	metadata, err := s.Fetch(ctx, pubKeys)
-	if err != nil {
-		return nil, fmt.Errorf("fetch metadata: %w", err)
-	}
-
-	logger := s.logger.With(zap.Int("metadatas", len(metadata)), zap.Int("validators", len(pubKeys)))
-	logger.Debug("🆕 fetched validators metadata", fields.Took(time.Since(fetchStart)))
-
-	updateStart := time.Now()
-	// TODO: Refactor share storage to support passing context.
-	if err := s.shareStorage.UpdateValidatorsMetadata(metadata); err != nil {
-		return metadata, fmt.Errorf("update metadata: %w", err)
-	}
-
-	logger.Debug("🆕 saved validators metadata", fields.Took(time.Since(updateStart)))
-
-	return metadata, nil
-}
-
-func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
+// Sync retrieves metadata for the provided public keys and updates storage accordingly.
+// Returns updated metadata for keys that had changes. Returns nil if no keys were provided or no updates occurred.
+func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
 
-	var blsPubKeys []phase0.BLSPubKey
-	for _, pk := range pubKeys {
-		blsPubKeys = append(blsPubKeys, phase0.BLSPubKey(pk))
+	fetchStart := time.Now()
+	metadata, err := s.fetchMetadata(ctx, pubKeys)
+	if err != nil {
+		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
 
-	// TODO: Refactor beacon.BeaconNode to support passing context.
-	validatorsIndexMap, err := s.beaconNode.GetValidatorData(blsPubKeys)
+	s.logger.Debug("🆕 fetched validators metadata",
+		fields.Took(time.Since(fetchStart)),
+		zap.Int("requested_count", len(pubKeys)),
+		zap.Int("received_count", len(metadata)),
+	)
+
+	updateStart := time.Now()
+	// TODO: Refactor share storage to support passing context.
+	updatedValidators, err := s.shareStorage.UpdateValidatorsMetadata(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("update metadata: %w", err)
+	}
+
+	s.logger.Debug("🆕 saved validators metadata",
+		fields.Took(time.Since(updateStart)),
+		zap.Int("received_count", len(metadata)),
+		zap.Int("updated_count", len(updatedValidators)),
+	)
+
+	return updatedValidators, nil
+}
+
+// fetchMetadata is responsible for fetching validator metadata from the beacon node for the provided public keys.
+// The beacon node response is sometimes empty for certain public keys — for such validators,
+// the ValidatorMetadataMap will contain empty metadata objects.
+func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
+	blsPubKeys := make([]phase0.BLSPubKey, len(pubKeys))
+	for i, pk := range pubKeys {
+		blsPubKeys[i] = phase0.BLSPubKey(pk)
+	}
+
+	validatorsIndexMap, err := s.beaconNode.GetValidatorData(ctx, blsPubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
 	}
 
-	results := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, len(validatorsIndexMap))
+	results := make(beacon.ValidatorMetadataMap, len(pubKeys))
+
+	for _, key := range pubKeys {
+		results[key] = &beacon.ValidatorMetadata{}
+	}
+
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
 			Status:          v.Status,
@@ -179,6 +193,9 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Vali
 	return results, nil
 }
 
+// Stream continuously fetches and streams batches of validator metadata updates as they become available.
+// It yields updates through a channel (`SyncBatch`) and handles retries, sleeping between sync attempts
+// when all metadata is up to date. The loop respects the provided context and stops gracefully when canceled.
 func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 	metadataUpdates := make(chan SyncBatch)
 
@@ -199,33 +216,33 @@ func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 				continue
 			}
 
-			if len(batch.Validators) == 0 {
+			if len(batch.Before) == 0 {
+				s.logger.Debug("sleeping because all validators’ metadata has been refreshed.",
+					zap.Duration("sleep_for", s.streamInterval),
+					zap.Duration("refresh_interval", s.syncInterval))
 				if slept := s.sleep(ctx, s.streamInterval); !slept {
 					return
 				}
 				continue
 			}
 
-			// TODO: use time.After when Go is updated to 1.23
-			timer := time.NewTimer(s.updateSendTimeout)
 			select {
 			case metadataUpdates <- batch:
 				// Only sleep if there aren't more validators to fetch metadata for.
 				// It's done to wait for some data to appear. Without sleep, the next batch would likely be empty.
 				if done {
+					s.logger.Debug("sleeping after batch was streamed because all validators’ metadata has been refreshed.",
+						zap.Duration("sleep_for", s.streamInterval),
+						zap.Duration("refresh_interval", s.syncInterval))
 					if slept := s.sleep(ctx, s.streamInterval); !slept {
-						// canceled context
-						timer.Stop()
 						return
 					}
 				}
 			case <-ctx.Done():
-				timer.Stop()
 				return
-			case <-timer.C:
+			case <-time.After(s.updateSendTimeout):
 				s.logger.Warn("timed out waiting for sending update")
 			}
-			timer.Stop()
 		}
 	}()
 
@@ -244,36 +261,27 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 	default:
 	}
 
-	shares := s.nextBatch(ctx, subnetsBuf)
-	if len(shares) == 0 {
+	beforeMetadata := s.nextBatchFromDB(ctx, subnetsBuf)
+	if len(beforeMetadata) == 0 {
 		return SyncBatch{}, false, nil
 	}
 
-	pubKeys := make([]spectypes.ValidatorPK, len(shares))
-	for i, share := range shares {
-		pubKeys[i] = share.ValidatorPubKey
-	}
-
-	indicesBefore := s.allActiveIndices(ctx, s.networkConfig.Beacon.GetBeaconNetwork().EstimatedCurrentEpoch())
-
-	validators, err := s.Sync(ctx, pubKeys)
+	afterMetadata, err := s.Sync(ctx, slices.Collect(maps.Keys(beforeMetadata)))
 	if err != nil {
 		return SyncBatch{}, false, fmt.Errorf("sync: %w", err)
 	}
 
-	indicesAfter := s.allActiveIndices(ctx, s.networkConfig.Beacon.GetBeaconNetwork().EstimatedCurrentEpoch())
-
-	update := SyncBatch{
-		IndicesBefore: indicesBefore,
-		IndicesAfter:  indicesAfter,
-		Validators:    validators,
+	syncBatch := SyncBatch{
+		Before: beforeMetadata,
+		After:  afterMetadata,
 	}
 
-	return update, len(shares) < batchSize, nil
+	return syncBatch, len(beforeMetadata) < batchSize, nil
 }
 
-// nextBatch returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.SSVShare {
+// nextBatchFromDB returns metadata for non-liquidated shares from DB that are most deserving of an update.
+// It prioritizes shares whose metadata was never fetched or became stale based on BeaconMetadataLastUpdated.
+func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.ValidatorMetadataMap {
 	// TODO: use context, return if it's done
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -285,7 +293,7 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 
 		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
 		subnet := subnetsBuf.Uint64()
-		if ownSubnets[subnet] == 0 {
+		if !ownSubnets.IsSet(subnet) {
 			return true
 		}
 
@@ -298,51 +306,28 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 			staleShares = append(staleShares, share)
 		}
 
-		return len(newShares) < batchSize
+		return len(newShares)+len(staleShares) < batchSize
 	})
 
 	// Combine validators up to batchSize, prioritizing the new ones.
-	shares := newShares
-	if remainder := batchSize - len(shares); remainder > 0 {
-		end := remainder
-		if end > len(staleShares) {
-			end = len(staleShares)
-		}
-		shares = append(shares, staleShares[:end]...)
+	shares := append(newShares, staleShares...)
+	if len(shares) > batchSize {
+		shares = shares[:batchSize]
 	}
 
-	// Record update time for selected shares.
+	metadataMap := make(beacon.ValidatorMetadataMap, len(shares))
 	for _, share := range shares {
-		share.BeaconMetadataLastUpdated = time.Now()
+		metadataMap[share.ValidatorPubKey] = share.BeaconMetadata()
 	}
 
-	return shares
-}
-
-// TODO: Create a wrapper for share storage that contains all common methods like AllActiveIndices and use the wrapper.
-func (s *Syncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase0.ValidatorIndex {
-	var indices []phase0.ValidatorIndex
-
-	// TODO: use context, return if it's done
-	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if share.IsParticipating(s.networkConfig, epoch) {
-			indices = append(indices, share.ValidatorIndex)
-		}
-		return true
-	})
-
-	return indices
+	return metadataMap
 }
 
 func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
-	// TODO: use time.After when Go is updated to 1.23
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
 	select {
 	case <-ctx.Done():
 		return false
-	case <-timer.C:
+	case <-time.After(d):
 		return true
 	}
 }
@@ -356,14 +341,13 @@ func (s *Syncer) selfSubnets(buf *big.Int) networkcommons.Subnets {
 		localBuf = new(big.Int)
 	}
 
-	mySubnets := make(networkcommons.Subnets, networkcommons.SubnetsCount)
-	copy(mySubnets, s.fixedSubnets)
+	mySubnets := s.fixedSubnets
 
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
 		networkcommons.SetCommitteeSubnet(localBuf, v.CommitteeID())
-		mySubnets[localBuf.Uint64()] = 1
+		mySubnets.Set(localBuf.Uint64())
 	}
 
 	return mySubnets

@@ -103,7 +103,6 @@ linters:
     govet:
       enable:
         - atomicalign
-      disable:
         - shadow
       enable-all: false
       disable-all: false
@@ -215,11 +214,12 @@ issues:
   new: false
   fix: false
 formatters:
+  enable:
+    - gofmt
+    - goimports
   settings:
     gofmt:
       simplify: true
-    gofumpt:
-      extra-rules: false
     goimports:
       local-prefixes:
         - github.com/ssvlabs/ssv/

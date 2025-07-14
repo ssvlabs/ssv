@@ -8,6 +8,7 @@ import (
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -46,17 +47,20 @@ type slashingProtector interface {
 // or proposal is slashable.
 type SlashingProtector struct {
 	logger      *zap.Logger
+	beaconCfg   networkconfig.Beacon
 	signerStore Storage
 	protection  *slashingprotection.NormalProtection
 }
 
 func NewSlashingProtector(
 	logger *zap.Logger,
+	beaconCfg networkconfig.Beacon,
 	signerStore Storage,
 	protection *slashingprotection.NormalProtection,
 ) *SlashingProtector {
 	return &SlashingProtector{
 		logger:      logger,
+		beaconCfg:   beaconCfg,
 		signerStore: signerStore,
 		protection:  protection,
 	}
@@ -113,7 +117,7 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 }
 
 func (sp *SlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
-	currentSlot := sp.signerStore.BeaconNetwork().EstimatedCurrentSlot()
+	currentSlot := sp.beaconCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
 	if err := sp.updateHighestAttestation(txn, pubKey, currentSlot); err != nil {
@@ -136,7 +140,7 @@ func (sp *SlashingProtector) updateHighestAttestation(txn basedb.Txn, pubKey pha
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	currentEpoch := sp.signerStore.BeaconNetwork().EstimatedEpochAtSlot(slot)
+	currentEpoch := sp.beaconCfg.EstimatedEpochAtSlot(slot)
 	minimalSP := sp.computeMinimalAttestationSP(currentEpoch)
 
 	// Check if the retrieved highest attestation data is valid and not outdated.

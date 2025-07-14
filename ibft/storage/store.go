@@ -10,8 +10,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -28,6 +29,7 @@ const (
 // participantStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type participantStorage struct {
+	logger         *zap.Logger
 	prefix         []byte
 	oldPrefix      string // kept back for cleanup
 	db             basedb.Database
@@ -35,9 +37,10 @@ type participantStorage struct {
 }
 
 // New create new participant store
-func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.ParticipantStore {
+func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.ParticipantStore {
 	role := byte(prefix & 0xff)
 	return &participantStorage{
+		logger:    logger,
 		prefix:    []byte{role},
 		oldPrefix: prefix.String(),
 		db:        db,
@@ -45,20 +48,20 @@ func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.Participan
 }
 
 // Prune waits for the initial tick and then removes all slots below the tickSlot - retain
-func (i *participantStorage) Prune(ctx context.Context, logger *zap.Logger, threshold phase0.Slot) {
-	logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threshold))
+func (i *participantStorage) Prune(ctx context.Context, threshold phase0.Slot) {
+	i.logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threshold))
 
 	// remove ALL slots below the threshold
 	start := time.Now()
-	count := i.removeSlotsOlderThan(logger, threshold)
+	count := i.removeSlotsOlderThan(threshold)
 
-	logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+	i.logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 }
 
-// PruneContinously on every tick looks up and removes the slots that fall below the retain threshold
-func (i *participantStorage) PruneContinously(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
+// PruneContinuously on every tick looks up and removes the slots that fall below the retain threshold
+func (i *participantStorage) PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
 	ticker := slotTickerProvider()
-	logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
+	i.logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
 	for {
 		select {
 		case <-ctx.Done():
@@ -67,10 +70,10 @@ func (i *participantStorage) PruneContinously(ctx context.Context, logger *zap.L
 			threshold := ticker.Slot() - retain - 1
 			count, err := i.removeSlotAt(threshold)
 			if err != nil {
-				logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threshold))
+				i.logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threshold))
 			}
 
-			logger.Debug("removed stale slots", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count))
+			i.logger.Debug("removed stale slots", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count))
 		}
 	}
 }
@@ -114,7 +117,7 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 var dropPrefixMu sync.Mutex
 
 // removes ALL entries for any slots older or equal to given slot
-func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase0.Slot) int {
+func (i *participantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 	var total int
 	for {
 		slot-- // slots are incremental
@@ -125,21 +128,21 @@ func (i *participantStorage) removeSlotsOlderThan(logger *zap.Logger, slot phase
 
 			count, err := i.db.CountPrefix(prefix)
 			if err != nil {
-				logger.Error("count prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
+				i.logger.Error("count prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
 				return true
 			}
 
 			if count == 0 {
-				logger.Debug("no more keys at slot", zap.String("store", i.ID()), fields.Slot(slot))
+				i.logger.Debug("no more keys at slot", zap.String("store", i.ID()), fields.Slot(slot))
 				return true
 			}
 
 			if err := i.db.DropPrefix(prefix); err != nil {
-				logger.Error("drop prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
+				i.logger.Error("drop prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
 				return true
 			}
 
-			logger.Debug("drop prefix", zap.String("store", i.ID()), zap.Int64("count", count), fields.Slot(slot))
+			i.logger.Debug("drop prefix", zap.String("store", i.ID()), zap.Int64("count", count), fields.Slot(slot))
 			total += int(count)
 
 			return false
@@ -311,7 +314,7 @@ func slotToByteSlice(v phase0.Slot) []byte {
 	b := make([]byte, 4)
 
 	// we're casting down but we should be good for now
-	slot := uint32(uint64(v)) // #nosec G115
+	slot := uint32(v) // #nosec G115
 
 	binary.LittleEndian.PutUint32(b, slot)
 	return b

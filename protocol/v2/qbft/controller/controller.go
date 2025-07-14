@@ -7,11 +7,16 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -55,24 +60,32 @@ func NewController(
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
 func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return errors.Wrap(err, "value invalid")
+		return observability.Errorf(span, "value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		return errors.New("attempting to start an instance with a past height")
+		return observability.Errorf(span, "attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return errors.New("instance already running")
+		return observability.Errorf(span, "instance already running")
 	}
 
 	c.Height = height
 
 	newInstance := c.addAndStoreNewInstance()
+
+	span.AddEvent("start new instance")
 	newInstance.Start(ctx, logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -102,12 +115,12 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	isDecided, err := IsDecidedMsg(c.CommitteeMember, msg)
+	isDecided, err := c.IsDecidedMsg(msg)
 	if err != nil {
 		return nil, err
 	}
 	if isDecided {
-		return c.UponDecided(logger, msg)
+		return c.UponDecided(msg)
 	}
 
 	isFuture, err := c.isFutureMessage(msg)
