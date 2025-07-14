@@ -86,9 +86,7 @@ type mockSlotTickerService struct {
 
 func waitForSlotN(beaconCfg *networkconfig.Beacon, slots phase0.Slot) {
 	waitUntil := beaconCfg.GenesisTime.Add(beaconCfg.SlotDuration * time.Duration(slots))
-	if waitUntil.After(time.Now()) {
-		time.Sleep(time.Until(waitUntil))
-	}
+	time.Sleep(time.Until(waitUntil))
 }
 
 func setupSchedulerAndMocks(
