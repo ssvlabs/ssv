@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -34,8 +36,8 @@ func setupAttesterDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	getShares := func() []*types.SSVShare {
-		var attestingShares []*types.SSVShare
+	getSnapshots := func() []*registrystorage.ValidatorSnapshot {
+		var snapshots []*registrystorage.ValidatorSnapshot
 		dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.AttesterDuty) bool {
 			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
@@ -53,39 +55,64 @@ func setupAttesterDutiesMock(
 					// this particular status is needed so that ActivationEpoch can be taken into consideration when checking the IsAttesting() condition.
 					Status: eth2apiv1.ValidatorStatePendingQueued,
 				}
-				attestingShares = append(attestingShares, attestingShare)
+
+				snapshot := &registrystorage.ValidatorSnapshot{
+					Share:          *attestingShare.Copy(),
+					IsOwnValidator: true,
+					ParticipationStatus: registrystorage.ParticipationStatus{
+						IsParticipating: true,
+					},
+				}
+				snapshots = append(snapshots, snapshot)
 			}
 			return true
 		})
 
-		return attestingShares
+		return snapshots
 	}
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetSelfValidators().DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetSelfValidators().DoAndReturn(getSnapshots).AnyTimes()
+
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetValidator(gomock.Any()).DoAndReturn(
-		func(pubKey []byte) (*types.SSVShare, bool) {
-			var ssvShare *types.SSVShare
-			var minEpoch phase0.Epoch
+		func(id registrystorage.ValidatorID) (*registrystorage.ValidatorSnapshot, bool) {
+			var pubKey []byte
+			if pk, ok := id.(registrystorage.ValidatorPubKey); ok {
+				pubKey = pk[:]
+			} else {
+				return nil, false
+			}
+
+			var snapshot *registrystorage.ValidatorSnapshot
+			var minEpoch = ^phase0.Epoch(0)
+
 			dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.AttesterDuty) bool {
 				for _, duty := range duties {
 					if bytes.Equal(duty.PubKey[:], pubKey) {
-						ssvShare = &types.SSVShare{
+						share := &types.SSVShare{
 							Share: spectypes.Share{
 								ValidatorIndex: duty.ValidatorIndex,
 							},
 						}
 						if epoch < minEpoch {
 							minEpoch = epoch
-							ssvShare.SetMinParticipationEpoch(epoch)
+							share.SetMinParticipationEpoch(epoch)
 						}
-						return true
+
+						snapshot = &registrystorage.ValidatorSnapshot{
+							Share:          *share.Copy(),
+							IsOwnValidator: true,
+							ParticipationStatus: registrystorage.ParticipationStatus{
+								IsParticipating: true,
+							},
+						}
+						return false // found it, stop iterating
 					}
 				}
 				return true
 			})
 
-			if ssvShare != nil {
-				return ssvShare, true
+			if snapshot != nil {
+				return snapshot, true
 			}
 
 			return nil, false
