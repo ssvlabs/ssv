@@ -85,13 +85,13 @@ func (i *Instance) Start(
 	spData *ssvtypes.SlashingProtectionData,
 ) {
 	i.startOnce.Do(func() {
-		ctx, span := tracer.Start(ctx,
+		_, span := tracer.Start(ctx,
 			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
 			trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 		defer span.End()
 
 		i.StartValue = value
-		i.bumpToRound(ctx, specqbft.FirstRound)
+		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
 		i.spData = spData
 		i.metrics.StartStage()
@@ -101,14 +101,14 @@ func (i *Instance) Start(
 			fields.Round(i.State.Round),
 			fields.Height(i.State.Height))
 
-		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
+		proposerID := i.proposer(specqbft.FirstRound)
 		const eventMsg = "ℹ️ starting QBFT instance"
 		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
 		span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
 
 		// propose if this node is the proposer
 		if proposerID == i.State.CommitteeMember.OperatorID {
-			proposal, err := CreateProposal(i.State, i.signer, i.StartValue, nil, nil)
+			proposal, err := i.CreateProposal(i.StartValue, nil, nil)
 			if err != nil {
 				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				span.SetStatus(codes.Error, err.Error())
@@ -127,7 +127,7 @@ func (i *Instance) Start(
 				logger.Debug(eventMsg)
 				span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
 
-				if err := i.Broadcast(logger, proposal); err != nil {
+				if err := i.Broadcast(proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 					span.RecordError(err)
 				}
@@ -138,7 +138,7 @@ func (i *Instance) Start(
 	})
 }
 
-func (i *Instance) Broadcast(logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing messages")
 	}
@@ -168,18 +168,18 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 
 		switch msg.QBFTMessage.MsgType {
 		case specqbft.ProposalMsgType:
-			return i.uponProposal(ctx, logger, msg, i.State.ProposeContainer)
+			return i.uponProposal(ctx, logger, msg)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(ctx, logger, msg, i.State.PrepareContainer)
+			return i.uponPrepare(ctx, logger, msg)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(ctx, logger, msg, i.State.CommitContainer)
+			decided, decidedValue, aggregatedCommit, err = i.UponCommit(ctx, logger, msg)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(ctx, logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueChecker())
+			return i.uponRoundChange(ctx, logger, msg)
 		default:
 			return errors.New("signed message type not supported")
 		}
@@ -205,40 +205,26 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 
 	switch msg.QBFTMessage.MsgType {
 	case specqbft.ProposalMsgType:
-		return isValidProposal(
-			i.State,
-			i.config,
-			msg,
-			i.spData,
-			i.config.GetValueChecker(),
-		)
+		return i.isValidProposal(msg)
 	case specqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
 
-		return validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+		return i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 			msg,
-			i.State.Height,
 			i.State.Round,
 			proposedMsg.QBFTMessage.Root,
-			i.State.CommitteeMember.Committee,
 		)
 	case specqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
-		return validateCommit(
-			msg,
-			i.State.Height,
-			i.State.Round,
-			i.State.ProposalAcceptedForCurrentRound,
-			i.State.CommitteeMember.Committee,
-		)
+		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:
-		return validRoundChangeForDataIgnoreSignature(i.State, i.config, msg, i.State.Height, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
+		return i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
 	default:
 		return errors.New("signed message type not supported")
 	}
@@ -283,7 +269,7 @@ func (i *Instance) Decode(data []byte) error {
 }
 
 // bumpToRound sets round and sends current round metrics.
-func (i *Instance) bumpToRound(ctx context.Context, round specqbft.Round) {
+func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.State.Round = round
 }
 
