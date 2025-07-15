@@ -18,12 +18,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 const (
@@ -41,10 +42,6 @@ type ValidatorRegistrationRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 
 	gasLimit uint64
-	// TODO: gasLimit36Epoch is temporarily living here on main branch, on stage branch ValidatorRegistrationRunner
-	// has access to SSV-config from where it can just reference GasLimit36Epoch - so, eventually, we'll want to get
-	// rid of this field here and replace it with SSV-config usage instead.
-	gasLimit36Epoch phase0.Epoch
 }
 
 func NewValidatorRegistrationRunner(
@@ -55,7 +52,6 @@ func NewValidatorRegistrationRunner(
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	gasLimit uint64,
-	gasLimit36Epoch phase0.Epoch,
 ) (Runner, error) {
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
@@ -68,12 +64,11 @@ func NewValidatorRegistrationRunner(
 			Share:          share,
 		},
 
-		beacon:          beacon,
-		network:         network,
-		signer:          signer,
-		operatorSigner:  operatorSigner,
-		gasLimit:        gasLimit,
-		gasLimit36Epoch: gasLimit36Epoch,
+		beacon:         beacon,
+		network:        network,
+		signer:         signer,
+		operatorSigner: operatorSigner,
+		gasLimit:       gasLimit,
 	}, nil
 }
 
@@ -272,7 +267,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 	gasLimit := r.gasLimit
 	if gasLimit == 0 {
 		defaultGasLimit := DefaultGasLimit
-		if r.BaseRunner.NetworkConfig.EstimatedCurrentEpoch() < r.gasLimit36Epoch {
+		if r.BaseRunner.NetworkConfig.EstimatedCurrentEpoch() < r.BaseRunner.NetworkConfig.GetGasLimit36Epoch() {
 			defaultGasLimit = DefaultGasLimitOld
 		}
 		gasLimit = defaultGasLimit
