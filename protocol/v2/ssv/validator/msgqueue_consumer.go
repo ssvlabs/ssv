@@ -20,7 +20,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
+type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -65,21 +65,21 @@ func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 }
 
 // StartQueueConsumer start ConsumeQueue with handler
-func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
+func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(logger, msgID, handler)
+		err := v.ConsumeQueue(msgID, handler)
 		if err != nil {
-			logger.Debug("❗ failed consuming queue", zap.Error(err))
+			v.logger.Debug("❗ failed consuming queue", zap.Error(err))
 		}
 	}
 }
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) error {
+func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -98,7 +98,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		return err
 	}
 
-	logger.Debug("📬 queue consumer is running")
+	v.logger.Debug("📬 queue consumer is running")
 
 	lens := make([]int, 0, 10)
 
@@ -153,30 +153,30 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			break
 		}
 		if msg == nil {
-			logger.Error("❗ got nil message from queue, but context is not done!")
+			v.logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
-			logger.Debug("📬 [TEMPORARY] queue statistics",
+			v.logger.Debug("📬 [TEMPORARY] queue statistics",
 				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
 				zap.Ints("past_10_lengths", lens))
 			lens = lens[:0]
 		}
 
 		// Handle the message.
-		if err := handler(ctx, logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
+		if err := handler(ctx, msg); err != nil {
+			v.logMsg(msg, "❗ could not handle message",
 				fields.MessageType(msg.MsgType),
 				zap.Error(err))
 		}
 	}
 
-	logger.Debug("📪 queue consumer is closed")
+	v.logger.Debug("📪 queue consumer is closed")
 	return nil
 }
 
-func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
+func (v *Validator) logMsg(msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
@@ -195,7 +195,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 			fields.Slot(psm.Slot),
 		}
 	}
-	logger.Debug(logMsg, append(baseFields, withFields...)...)
+	v.logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
 
 // GetLastHeight returns the last height for the given identifier

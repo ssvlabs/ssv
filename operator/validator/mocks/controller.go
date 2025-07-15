@@ -24,7 +24,6 @@ import (
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
 	gomock "go.uber.org/mock/gomock"
-	zap "go.uber.org/zap"
 )
 
 // MockController is a mock of Controller interface.
@@ -52,27 +51,27 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockController) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID types.CommitteeID, duty *types.CommitteeDuty) {
+func (m *MockController) ExecuteCommitteeDuty(ctx context.Context, committeeID types.CommitteeID, duty *types.CommitteeDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteCommitteeDuty", ctx, logger, committeeID, duty)
+	m.ctrl.Call(m, "ExecuteCommitteeDuty", ctx, committeeID, duty)
 }
 
 // ExecuteCommitteeDuty indicates an expected call of ExecuteCommitteeDuty.
-func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(ctx, logger, committeeID, duty any) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(ctx, committeeID, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockController)(nil).ExecuteCommitteeDuty), ctx, logger, committeeID, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockController)(nil).ExecuteCommitteeDuty), ctx, committeeID, duty)
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockController) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *types.ValidatorDuty) {
+func (m *MockController) ExecuteDuty(ctx context.Context, duty *types.ValidatorDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteDuty", ctx, logger, duty)
+	m.ctrl.Call(m, "ExecuteDuty", ctx, duty)
 }
 
 // ExecuteDuty indicates an expected call of ExecuteDuty.
-func (mr *MockControllerMockRecorder) ExecuteDuty(ctx, logger, duty any) *gomock.Call {
+func (mr *MockControllerMockRecorder) ExecuteDuty(ctx, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), ctx, logger, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), ctx, duty)
 }
 
 // ExitValidator mocks base method.

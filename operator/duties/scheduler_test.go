@@ -157,9 +157,8 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.ValidatorDuty, executeDutiesCallSize)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(_ context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
-			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(_ context.Context, duty *spectypes.ValidatorDuty) error {
 			executeDutiesBuffer <- duty
 
 			// Check if all expected duties have been received
@@ -182,16 +181,14 @@ func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Valida
 func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
-			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(ctx context.Context, duty *spectypes.ValidatorDuty) error {
 			return nil
 		},
 	).AnyTimes()
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
-			logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 			executeDutiesBuffer <- &committeeDuty{id: committeeID, duty: duty}
 
 			// Check if all expected duties have been received

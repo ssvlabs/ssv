@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -30,7 +31,10 @@ import (
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
-	mtx    *sync.RWMutex
+	logger *zap.Logger
+
+	mtx *sync.RWMutex
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -54,8 +58,9 @@ type Validator struct {
 }
 
 // NewValidator creates a new instance of Validator.
-func NewValidator(pctx context.Context, cancel func(), options *Options) *Validator {
+func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
 	v := &Validator{
+		logger:           logger.Named(logging.NameValidator).With(fields.PubKey(options.SSVShare.ValidatorPubKey[:])),
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
 		cancel:           cancel,
@@ -136,7 +141,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
 	traceCtx, dutyID := v.fetchTraceContext(ctx, msg.GetID())
 	ctx, span := tracer.Start(traceCtx,
 		observability.InstrumentName(observabilityNamespace, "process_message"),
@@ -148,6 +153,8 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	msgType := msg.GetType()
 	span.SetAttributes(observability.ValidatorMsgTypeAttribute(msgType))
+
+	logger := v.logger.With(zap.String("message_type", message.MsgTypeToString(msgType)))
 
 	if msgType != message.SSVEventMsgType {
 		span.AddEvent("validating message and signature")

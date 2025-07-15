@@ -2,15 +2,40 @@ package validator
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+func (v *Validator) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) error {
+	ssvMsg, err := CreateDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.GetDomainType())
+	if err != nil {
+		return fmt.Errorf("create duty execute msg: %w", err)
+	}
+	dec, err := queue.DecodeSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("decode duty execute msg: %w", err)
+	}
+
+	dec.TraceContext = ctx
+
+	if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+		return fmt.Errorf("dropping ExecuteDuty message for validator %s because the queue is full", duty.PubKey.String())
+	}
+
+	return nil
+}
 
 func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
 	ctx, span := tracer.Start(ctx,
@@ -33,7 +58,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	// force the validator to be started (subscribed to validator's topic and synced)
 	span.AddEvent("start validator")
-	if _, err := v.Start(logger); err != nil {
+	if _, err := v.Start(); err != nil {
 		return observability.Errorf(span, "could not start validator: %w", err)
 	}
 
@@ -44,6 +69,33 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDuty) error {
+	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.GetDomainType())
+	if err != nil {
+		return fmt.Errorf("create committee duty: %w", err)
+	}
+	dec, err := queue.DecodeSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("decode duty execute msg: %w", err)
+	}
+
+	dec.TraceContext = ctx
+
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
+	committeeOpIDs := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
+	committeeDutyID := fields.FormatCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot)
+	logger := c.logger.
+		With(fields.CommitteeID(c.CommitteeMember.CommitteeID)).
+		With(fields.DutyID(committeeDutyID)).
+		With(fields.Role(duty.RunnerRole())).
+		With(fields.CurrentSlot(c.networkConfig.EstimatedCurrentSlot())).
+		With(fields.Slot(duty.Slot)).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.StartTimeUnixMilli(c.networkConfig.GetSlotStartTime(duty.Slot)))
+
+	return c.OnExecuteDuty(ctx, logger, dec.Body.(*types.EventMsg))
 }
 
 func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
@@ -76,4 +128,48 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+// CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
+func CreateDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+	executeDutyData := types.ExecuteDutyData{Duty: duty}
+	data, err := json.Marshal(executeDutyData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
+	}
+
+	return dutyDataToSSVMsg(domain, pubKey[:], duty.RunnerRole(), data)
+}
+
+// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
+func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
+	data, err := json.Marshal(executeCommitteeDutyData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
+	}
+
+	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
+}
+
+func dutyDataToSSVMsg(
+	domain spectypes.DomainType,
+	msgIdentifier []byte,
+	runnerRole spectypes.RunnerRole,
+	data []byte,
+) (*spectypes.SSVMessage, error) {
+	msg := types.EventMsg{
+		Type: types.ExecuteDuty,
+		Data: data,
+	}
+	msgData, err := msg.Encode()
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode event msg: %w", err)
+	}
+
+	return &spectypes.SSVMessage{
+		MsgType: message.SSVEventMsgType,
+		MsgID:   spectypes.NewMsgID(domain, msgIdentifier, runnerRole),
+		Data:    msgData,
+	}, nil
 }

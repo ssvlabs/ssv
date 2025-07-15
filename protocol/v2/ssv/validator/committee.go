@@ -33,10 +33,11 @@ type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex
 
 type Committee struct {
 	logger *zap.Logger
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	beaconConfig networkconfig.Beacon
+	networkConfig networkconfig.Network
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
@@ -55,7 +56,7 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	beaconConfig networkconfig.Beacon,
+	networkConfig networkconfig.Network,
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
@@ -66,7 +67,7 @@ func NewCommittee(
 	}
 	return &Committee{
 		logger:          logger,
-		beaconConfig:    beaconConfig,
+		networkConfig:   networkConfig,
 		ctx:             ctx,
 		cancel:          cancel,
 		Queues:          make(map[phase0.Slot]queueContainer),
@@ -219,7 +220,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
 	traceContext, dutyID := c.buildTraceContext(ctx, msg)
 	ctx, span := tracer.Start(traceContext,
 		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
@@ -232,6 +233,8 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	msgType := msg.GetType()
 	span.SetAttributes(observability.ValidatorMsgTypeAttribute(msgType))
+
+	logger := c.logger.With(zap.String("message_type", message.MsgTypeToString(msgType)))
 
 	// Validate message
 	if msgType != message.SSVEventMsgType {
@@ -315,7 +318,7 @@ func (c *Committee) buildTraceContext(ctx context.Context, msg *queue.SSVMessage
 		return ctx, "unknown"
 	}
 
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
 	return observability.TraceContext(ctx, dutyID), dutyID
 }
 
@@ -329,7 +332,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.beaconConfig.EstimatedEpochAtSlot(slot)
+			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
 			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
