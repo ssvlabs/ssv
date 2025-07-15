@@ -19,7 +19,7 @@ import (
 )
 
 func (v *Validator) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) error {
-	ssvMsg, err := CreateDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.GetDomainType())
+	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.GetDomainType())
 	if err != nil {
 		return fmt.Errorf("create duty execute msg: %w", err)
 	}
@@ -72,7 +72,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 }
 
 func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDuty) error {
-	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.GetDomainType())
+	ssvMsg, err := createCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.GetDomainType())
 	if err != nil {
 		return fmt.Errorf("create committee duty: %w", err)
 	}
@@ -130,8 +130,8 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	return nil
 }
 
-// CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
-func CreateDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+// createDutyExecuteMsg returns ssvMsg with event type of execute duty
+func createDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	data, err := json.Marshal(executeDutyData)
 	if err != nil {
@@ -141,8 +141,8 @@ func CreateDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey
 	return dutyDataToSSVMsg(domain, pubKey[:], duty.RunnerRole(), data)
 }
 
-// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
-func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+// createCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
+func createCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
 	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
