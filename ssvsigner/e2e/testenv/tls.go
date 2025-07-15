@@ -99,7 +99,7 @@ func (env *TestEnvironment) setupTLSCertificates() error {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 	env.certDir = filepath.Join(cwd, ".tmp", "e2e-certs-"+randomSuffix())
-	if err := os.MkdirAll(env.certDir, 0750); err != nil {
+	if err := os.MkdirAll(env.certDir, dirMode); err != nil {
 		return fmt.Errorf("failed to create cert directory: %w", err)
 	}
 	type certConfig struct {
