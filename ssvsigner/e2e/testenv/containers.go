@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"os"
@@ -156,9 +157,9 @@ func (env *TestEnvironment) startWeb3Signer() error {
 			Cmd: []string{
 				"--http-listen-host=0.0.0.0",
 				"--http-host-allowlist=*",
-				"--tls-keystore-file=/certs/localhost.p12",
-				"--tls-keystore-password-file=/certs/localhost_password.txt",
-				"--tls-allow-any-client=true",
+				"--tls-keystore-file=/certs/web3signer.p12",
+				"--tls-keystore-password-file=/certs/web3signer_password.txt",
+				"--tls-known-clients-file=/certs/web3signer_known_clients.txt",
 				"eth2",
 				"--network=mainnet",
 				"--slashing-protection-enabled=true",
@@ -192,7 +193,7 @@ func (env *TestEnvironment) startWeb3Signer() error {
 
 	env.web3SignerURL = fmt.Sprintf("https://%s:%s", host, mappedPort.Port())
 
-	tlsConfig, err := createTrustedTLSConfig(env.web3SignerCertPath)
+	tlsConfig, err := createMutualTLSConfig(env.web3SignerCertPath, env.e2eClientCertPath)
 	if err != nil {
 		return fmt.Errorf("failed to create TLS config: %w", err)
 	}
@@ -203,7 +204,7 @@ func (env *TestEnvironment) startWeb3Signer() error {
 
 // web3SignerWaitStrategy returns the wait strategy for Web3Signer
 func (env *TestEnvironment) web3SignerWaitStrategy() (wait.Strategy, error) {
-	tlsConfig, err := createTrustedTLSConfig(env.web3SignerCertPath)
+	tlsConfig, err := createMutualTLSConfig(env.web3SignerCertPath, env.e2eClientCertPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TLS config for wait strategy: %w", err)
 	}
@@ -226,7 +227,12 @@ func (env *TestEnvironment) startSSVSigner() error {
 		return fmt.Errorf("certificate directory does not exist: %s", env.certDir)
 	}
 
-	waitStrategy, err := env.ssvSignerWaitStrategy()
+	tlsConfig, err := createMutualTLSConfig(env.ssvSignerCertPath, env.e2eClientCertPath)
+	if err != nil {
+		return fmt.Errorf("failed to create TLS config for SSV-Signer client: %w", err)
+	}
+
+	waitStrategy, err := env.ssvSignerWaitStrategy(tlsConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create wait strategy: %w", err)
 	}
@@ -253,9 +259,9 @@ func (env *TestEnvironment) startSSVSigner() error {
 				"KNOWN_CLIENTS_FILE":     "/certs/known_clients.txt",
 
 				// Client TLS for Web3Signer
-				"WEB3SIGNER_KEYSTORE_FILE":          "/certs/localhost.p12",
-				"WEB3SIGNER_KEYSTORE_PASSWORD_FILE": "/certs/localhost_password.txt",
-				"WEB3SIGNER_SERVER_CERT_FILE":       "/certs/localhost.crt",
+				"WEB3SIGNER_KEYSTORE_FILE":          "/certs/ssv-signer.p12",
+				"WEB3SIGNER_KEYSTORE_PASSWORD_FILE": "/certs/ssv-signer_password.txt",
+				"WEB3SIGNER_SERVER_CERT_FILE":       "/certs/web3signer.crt",
 			},
 			HostConfigModifier: func(hostConfig *container.HostConfig) {
 				hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
@@ -287,23 +293,13 @@ func (env *TestEnvironment) startSSVSigner() error {
 	}
 
 	env.ssvSignerURL = fmt.Sprintf("https://%s:%s", host, mappedPort.Port())
-
-	tlsConfig, err := createTrustedTLSConfig(env.ssvSignerCertPath)
-	if err != nil {
-		return fmt.Errorf("failed to create TLS config for SSV-Signer client: %w", err)
-	}
 	env.ssvSignerClient = ssvsigner.NewClient(env.ssvSignerURL, ssvsigner.WithTLSConfig(tlsConfig))
 
 	return nil
 }
 
 // ssvSignerWaitStrategy returns the wait strategy for SSV-Signer
-func (env *TestEnvironment) ssvSignerWaitStrategy() (wait.Strategy, error) {
-	tlsConfig, err := createTrustedTLSConfig(env.ssvSignerCertPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create TLS config for wait strategy: %w", err)
-	}
-
+func (env *TestEnvironment) ssvSignerWaitStrategy(tlsConfig *tls.Config) (wait.Strategy, error) {
 	return wait.ForHTTP(ssvsigner.PathOperatorIdentity).
 		WithPort("8080/tcp").
 		WithTLS(true, tlsConfig).

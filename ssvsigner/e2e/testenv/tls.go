@@ -3,6 +3,7 @@ package testenv
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -33,7 +34,6 @@ func generateSelfSignedCert(commonName string, dnsNames []string) ([]byte, []byt
 		return nil, nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
-	// Generate unique serial number based on current time
 	serialNumber := big.NewInt(time.Now().UnixNano())
 
 	template := x509.Certificate{
@@ -105,26 +105,27 @@ func (env *TestEnvironment) setupTLSCertificates() error {
 		name     string
 		dnsNames []string
 		certPath *string
-		keyPath  *string
-		needP12  bool
 	}
 
 	certConfigs := []certConfig{
 		{
-			name:     "localhost",
-			dnsNames: []string{"localhost", "web3signer"},
+			name:     "web3signer",
+			dnsNames: []string{"web3signer"},
 			certPath: &env.web3SignerCertPath,
-			keyPath:  &env.web3SignerKeyPath,
-			needP12:  true,
 		},
 		{
 			name:     "ssv-signer",
-			dnsNames: []string{"localhost", "ssv-signer"},
+			dnsNames: []string{"ssv-signer"},
 			certPath: &env.ssvSignerCertPath,
-			keyPath:  &env.ssvSignerKeyPath,
-			needP12:  true,
+		},
+		{
+			name:     "e2e-client",
+			dnsNames: []string{"e2e-client"},
+			certPath: &env.e2eClientCertPath,
 		},
 	}
+
+	fingerprints := make(map[string]string)
 
 	for _, config := range certConfigs {
 		cert, key, err := generateSelfSignedCert(config.name, config.dnsNames)
@@ -133,41 +134,68 @@ func (env *TestEnvironment) setupTLSCertificates() error {
 		}
 
 		*config.certPath = filepath.Join(env.certDir, config.name+".crt")
-		*config.keyPath = filepath.Join(env.certDir, config.name+".key")
+		keyPath := filepath.Join(env.certDir, config.name+".key")
 
 		if err := os.WriteFile(*config.certPath, cert, fileMode); err != nil {
 			return fmt.Errorf("failed to write %s certificate: %w", config.name, err)
 		}
-		if err := os.WriteFile(*config.keyPath, key, fileMode); err != nil {
+		if err := os.WriteFile(keyPath, key, fileMode); err != nil {
 			return fmt.Errorf("failed to write %s key: %w", config.name, err)
 		}
 
-		if config.needP12 {
-			p12Path := filepath.Join(env.certDir, config.name+".p12")
-			if err := generatePKCS12FromPEM(*config.certPath, *config.keyPath, p12Path, testPassword); err != nil {
-				return fmt.Errorf("failed to generate PKCS12 keystore for %s: %w", config.name, err)
-			}
+		p12Path := filepath.Join(env.certDir, config.name+".p12")
+		if err := generatePKCS12FromPEM(*config.certPath, keyPath, p12Path, testPassword); err != nil {
+			return fmt.Errorf("failed to generate PKCS12 keystore for %s: %w", config.name, err)
 		}
+
+		// Calculate fingerprint for all certificates
+		certPEM, _ := pem.Decode(cert)
+		if certPEM == nil {
+			return fmt.Errorf("failed to decode %s certificate PEM", config.name)
+		}
+
+		parsedCert, err := x509.ParseCertificate(certPEM.Bytes)
+		if err != nil {
+			return fmt.Errorf("failed to parse %s certificate: %w", config.name, err)
+		}
+
+		fingerprint := sha256.Sum256(parsedCert.Raw)
+		fingerprintHex := fmt.Sprintf("%X", fingerprint[:])
+		fingerprints[config.name] = fingerprintHex
 	}
 
-	// Create known_clients.txt file for server TLS client authentication
-	// For E2E tests, we create an empty file since no clients will connect with certificates
-	knownClientsPath := filepath.Join(env.certDir, "known_clients.txt")
-	knownClientsContent := "# Known client certificates for SSV-Signer E2E tests\n" +
+	ssvSignerKnownClientsPath := filepath.Join(env.certDir, "known_clients.txt")
+	ssvSignerKnownClientsContent := "# Known client certificates for SSV-Signer E2E tests\n" +
 		"# Format: <client-name> <sha256-fingerprint>\n" +
-		"# Empty for E2E tests - no client certificate authentication required\n"
+		fmt.Sprintf("e2e-client %s\n", fingerprints["e2e-client"])
 
-	if err := os.WriteFile(knownClientsPath, []byte(knownClientsContent), fileMode); err != nil {
-		return fmt.Errorf("failed to write known_clients.txt: %w", err)
+	if err := os.WriteFile(ssvSignerKnownClientsPath, []byte(ssvSignerKnownClientsContent), fileMode); err != nil {
+		return fmt.Errorf("failed to write SSV-Signer known_clients.txt: %w", err)
+	}
+
+	web3SignerKnownClientsPath := filepath.Join(env.certDir, "web3signer_known_clients.txt")
+	web3SignerKnownClientsContent := "# Known client certificates for Web3Signer E2E tests\n" +
+		"# Format: <client-name> <sha256-fingerprint>\n" +
+		fmt.Sprintf("ssv-signer %s\n", fingerprints["ssv-signer"]) +
+		fmt.Sprintf("e2e-client %s\n", fingerprints["e2e-client"])
+
+	if err := os.WriteFile(web3SignerKnownClientsPath, []byte(web3SignerKnownClientsContent), fileMode); err != nil {
+		return fmt.Errorf("failed to write Web3Signer known_clients.txt: %w", err)
 	}
 
 	return nil
 }
 
-// createTrustedTLSConfig creates a TLS config that trusts our self-signed certificates
-func createTrustedTLSConfig(certPath string) (*tls.Config, error) {
+// createMutualTLSConfig creates a mutual TLS config for secure connections
+func createMutualTLSConfig(serverCertPath, clientCertPath string) (*tls.Config, error) {
+	clientP12Path := strings.TrimSuffix(clientCertPath, ".crt") + ".p12"
+	clientPasswordFile := strings.TrimSuffix(clientCertPath, ".crt") + "_password.txt"
+
 	tlsConf := &ssvtls.Config{
-		ClientServerCertFile: certPath,
+		ClientServerCertFile:       serverCertPath,
+		ClientKeystoreFile:         clientP12Path,
+		ClientKeystorePasswordFile: clientPasswordFile,
 	}
+
 	return tlsConf.LoadClientTLSConfig()
 }
