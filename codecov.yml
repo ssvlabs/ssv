@@ -25,6 +25,8 @@ ignore:
   - "migrations/**"
   - "**/*mock*/**"
   - "**/*mock*.go"
+  - "**/*_test.go"
+  - "**/e2e/**"
   - "**/metrics.go"
   - "**/observability.go"
   - "protocol"
