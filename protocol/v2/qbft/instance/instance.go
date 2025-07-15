@@ -108,7 +108,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 				// TODO align spec to add else to avoid broadcast errored proposal
 			}
 
-			r, err := specqbft.HashDataRoot(i.StartValue) // @TODO (better than decoding?)
+			r, err := specqbft.HashDataRoot(i.StartValue) // TODO (better than decoding?)
 			if err != nil {
 				logger.Warn("❗ failed to hash input data", zap.Error(err))
 				span.SetStatus(codes.Error, err.Error())

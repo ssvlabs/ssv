@@ -118,10 +118,8 @@ func assertMigratedShares(t *testing.T, db basedb.Database, key []byte, seededSh
 }
 
 func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*migration_6_OldStorageShare, error) {
-	var (
-		dbShares     = make([]basedb.Obj, 0, numOfItems)
-		seededShares = make([]*migration_6_OldStorageShare, 0, numOfItems)
-	)
+	dbShares := make([]basedb.Obj, 0, numOfItems)
+	seededShares := make([]*migration_6_OldStorageShare, 0, numOfItems)
 	for range numOfItems {
 		var share *migration_6_OldStorageShare
 		if err := gofakeit.Struct(&share); err != nil {
