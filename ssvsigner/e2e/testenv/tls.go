@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -149,9 +150,15 @@ func (env *TestEnvironment) setupTLSCertificates() error {
 		}
 
 		// Calculate fingerprint for all certificates
-		certPEM, _ := pem.Decode(cert)
+		certPEM, rest := pem.Decode(cert)
 		if certPEM == nil {
 			return fmt.Errorf("failed to decode %s certificate PEM", config.name)
+		}
+		if certPEM.Type != "CERTIFICATE" {
+			return fmt.Errorf("expected CERTIFICATE type but got %s for %s", certPEM.Type, config.name)
+		}
+		if len(rest) > 0 {
+			return fmt.Errorf("certificate %s contains extra data after the PEM block", config.name)
 		}
 
 		parsedCert, err := x509.ParseCertificate(certPEM.Bytes)
@@ -160,7 +167,7 @@ func (env *TestEnvironment) setupTLSCertificates() error {
 		}
 
 		fingerprint := sha256.Sum256(parsedCert.Raw)
-		fingerprintHex := fmt.Sprintf("%X", fingerprint[:])
+		fingerprintHex := hex.EncodeToString(fingerprint[:])
 		fingerprints[config.name] = fingerprintHex
 	}
 
