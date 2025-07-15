@@ -158,37 +158,6 @@ func extractVersionRank(version string) int {
 	return rank
 }
 
-// getMigrationStatus returns the current migration status
-func (env *TestEnvironment) GetMigrationStatus() ([]string, error) {
-	if env.postgresDB == nil {
-		return nil, fmt.Errorf("database connection not established")
-	}
-
-	query := `
-		SELECT version, description, installed_on 
-		FROM schema_version 
-		WHERE success = true 
-		ORDER BY version_rank
-	`
-
-	rows, err := env.postgresDB.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query migration status: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var applied []string
-	for rows.Next() {
-		var version, description, installedOn string
-		if err := rows.Scan(&version, &description, &installedOn); err != nil {
-			return nil, fmt.Errorf("failed to scan migration row: %w", err)
-		}
-		applied = append(applied, fmt.Sprintf("%s: %s", version, description))
-	}
-
-	return applied, nil
-}
-
 // applyMigrations applies all pending Web3Signer migrations
 func (env *TestEnvironment) applyMigrations() error {
 	if env.postgresDB == nil {

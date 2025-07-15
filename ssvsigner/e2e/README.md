@@ -27,7 +27,7 @@ The E2E tests use **mandatory TLS** for all connections:
 - **SSV-Signer**: TLS client with certificate fingerprint verification
 - **Certificates**: Auto-generated for each test run
 
-> **Note**: Database migrations in `testdata/migrations/` are copied from Web3Signer. When upgrading Web3Signer versions, check for new migrations at: https://github.com/ConsenSys/web3signer/tree/main/slashing-protection/src/main/resources/migrations/postgresql
+> **Note**: Database migrations in `testdata/migrations/` are copied from Web3Signer. When upgrading Web3Signer versions, check for new migrations at: https://github.com/Consensys/web3signer/tree/25.4.1/slashing-protection/src/main/resources/migrations/postgresql
 
 ## Test Structure
 

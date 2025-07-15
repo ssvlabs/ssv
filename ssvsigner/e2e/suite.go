@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -26,7 +25,7 @@ type E2ETestSuite struct {
 
 // SetupTest initializes a fresh test environment for each test
 func (s *E2ETestSuite) SetupTest() {
-	s.ctx = context.Background()
+	s.ctx = s.T().Context()
 
 	// Create test environment
 	env, err := testenv.NewTestEnvironment(s.ctx, s.T())
@@ -155,7 +154,7 @@ func (s *E2ETestSuite) AddValidator(ctx context.Context) *common.ValidatorKeyPai
 	// Verify SSV-Signer operational status and that validator was successfully added
 	validators, err := ssvSignerClient.ListValidators(ctx)
 	s.Require().NoError(err, "Failed to list validators")
-	s.Require().True(slices.Contains(validators, validatorKeyPair.BLSPubKey))
+	s.Require().Contains(validators, validatorKeyPair.BLSPubKey)
 
 	return validatorKeyPair
 }
