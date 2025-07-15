@@ -9,6 +9,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -456,6 +457,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 			}
 
 			if metadata.Equals(share.BeaconMetadata()) {
+				share.BeaconMetadataLastUpdated = time.Now()
 				continue
 			}
 

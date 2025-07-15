@@ -551,7 +551,7 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	logger := ec.logger.With(fields.Address(ec.nodeAddr))
 
 	start := time.Now()
-	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
+	tasks.ExecWithInterval(ctx, func(lastTick time.Duration) (stop bool, cont bool) {
 		logger.Info("reconnecting")
 		if err := ec.connect(ctx); err != nil {
 			if ec.isClosed() {

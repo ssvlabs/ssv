@@ -59,7 +59,7 @@ type DomainDataProvider interface {
 	DomainData(context.Context, phase0.Epoch, phase0.DomainType) (phase0.Domain, error)
 }
 
-func New(ctx context.Context,
+func New(
 	logger *zap.Logger,
 	validators registrystorage.ValidatorStore,
 	client DomainDataProvider,
@@ -503,7 +503,11 @@ func (c *Collector) collectLateMessage(ctx context.Context, msg *queue.SSVMessag
 			return
 		}
 		tries++
-		time.Sleep(time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
 	}
 	c.logger.Warn("exhausted retries for late message", fields.MessageID(msg.MsgID), zap.Int("tries", tries))
 }

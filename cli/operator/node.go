@@ -509,7 +509,7 @@ var StartNodeCmd = &cobra.Command{
 				dstore := &dutytracer.DutyTraceStoreMetrics{
 					Store: dutytracestore.New(db),
 				}
-				collector = dutytracer.New(cmd.Context(), logger,
+				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
 					dstore, networkConfig.BeaconConfig)
 
@@ -583,7 +583,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
-		if _, err := metadataSyncer.SyncOnStartup(cmd.Context()); err != nil {
+		if _, err := metadataSyncer.SyncAll(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
 		}
 
