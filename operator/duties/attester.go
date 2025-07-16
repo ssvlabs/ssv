@@ -156,6 +156,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconSlotAttribute(slot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleAttester),
 		))
 	defer span.End()
 

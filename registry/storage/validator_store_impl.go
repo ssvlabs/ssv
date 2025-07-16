@@ -837,6 +837,7 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 		// Check if metadata actually changed
 		currentMetadata := state.share.BeaconMetadata()
 		if newMetadata.Equals(currentMetadata) {
+			state.share.BeaconMetadataLastUpdated = time.Now() // Update last updated time even if metadata didn't change
 			continue
 		}
 

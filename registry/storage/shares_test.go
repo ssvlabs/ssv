@@ -19,17 +19,18 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -130,7 +131,7 @@ func TestSharesStorage(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateValidatorMetadata_updatesMetadata", func(t *testing.T) {
+	t.Run("UpdateValidatorMetadata_updatesMetadata_whenMetadataChanged", func(t *testing.T) {
 		for _, share := range persistedActiveValidatorShares {
 			updatedIndex := phase0.ValidatorIndex(rand.Uint64())
 			updatedActivationEpoch, updatedExitEpoch := phase0.Epoch(5), phase0.Epoch(6)
@@ -694,7 +695,7 @@ func generateMaxPossibleShare() (*Share, error) {
 }
 
 type testStorage struct {
-	db             *kv.BadgerDB
+	db             *kv.DB
 	Operators      Operators
 	Shares         Shares
 	ValidatorStore ValidatorStore

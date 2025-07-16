@@ -10,9 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
@@ -25,8 +26,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -83,12 +84,18 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
+
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
+
 				var peers []peer.ID
-				for len(peers) < options.MinConnected && ctx.Err() == nil {
+				for len(peers) < options.MinConnected {
 					peers = node.(HostProvider).Host().Network().Peers()
-					time.Sleep(time.Millisecond * 100)
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(100 * time.Millisecond):
+					}
 				}
 				if ctx.Err() != nil {
 					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, options.Nodes, len(peers))

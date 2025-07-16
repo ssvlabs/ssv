@@ -11,10 +11,11 @@ import (
 	"testing"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
@@ -25,10 +26,11 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		GasLimit36Epoch:      0,
 	}
 
 	// Marshal to JSON
-	jsonBytes, err := json.Marshal(originalConfig)
+	jsonBytes, err := json.Marshal(&originalConfig)
 	require.NoError(t, err)
 
 	// Unmarshal from JSON
@@ -37,7 +39,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// Marshal again after unmarshaling
-	remarshaledBytes, err := json.Marshal(unmarshaledConfig)
+	remarshaledBytes, err := json.Marshal(&unmarshaledConfig)
 	require.NoError(t, err)
 
 	// Compare the original and remarshaled JSON bytes
@@ -59,10 +61,11 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		GasLimit36Epoch:      0,
 	}
 
 	// Marshal to YAML
-	yamlBytes, err := yaml.Marshal(originalConfig)
+	yamlBytes, err := yaml.Marshal(&originalConfig)
 	require.NoError(t, err)
 
 	// Unmarshal from YAML
@@ -71,7 +74,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	// Marshal again after unmarshaling
-	remarshaledBytes, err := yaml.Marshal(unmarshaledConfig)
+	remarshaledBytes, err := yaml.Marshal(&unmarshaledConfig)
 	require.NoError(t, err)
 
 	// Compare the original and unmarshaled structs
@@ -147,10 +150,11 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			GasLimit36Epoch:      0,
 		}
 
 		// Marshal and unmarshal to test preservation
-		jsonBytes, err := json.Marshal(config)
+		jsonBytes, err := json.Marshal(&config)
 		require.NoError(t, err)
 
 		var unmarshaled SSVConfig
@@ -158,10 +162,10 @@ func TestFieldPreservation(t *testing.T) {
 		require.NoError(t, err)
 
 		// Hash the original and unmarshaled struct
-		originalHash, err := hashStructJSON(config)
+		originalHash, err := hashStructJSON(&config)
 		require.NoError(t, err)
 
-		unmarshaledHash, err := hashStructJSON(unmarshaled)
+		unmarshaledHash, err := hashStructJSON(&unmarshaled)
 		require.NoError(t, err)
 
 		// The hashes should match if all fields are preserved
@@ -181,10 +185,11 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			GasLimit36Epoch:      0,
 		}
 
 		// Marshal and unmarshal to test preservation
-		yamlBytes, err := yaml.Marshal(config)
+		yamlBytes, err := yaml.Marshal(&config)
 		require.NoError(t, err)
 
 		var unmarshaled SSVConfig
@@ -192,10 +197,10 @@ func TestFieldPreservation(t *testing.T) {
 		require.NoError(t, err)
 
 		// For YAML, convert to JSON for consistent hashing
-		originalHash, err := hashStructJSON(config)
+		originalHash, err := hashStructJSON(&config)
 		require.NoError(t, err)
 
-		unmarshaledHash, err := hashStructJSON(unmarshaled)
+		unmarshaledHash, err := hashStructJSON(&unmarshaled)
 		require.NoError(t, err)
 
 		// The hashes should match if all fields are preserved

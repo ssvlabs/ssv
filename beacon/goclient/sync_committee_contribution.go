@@ -13,9 +13,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // IsSyncCommitteeAggregator returns tru if aggregator
@@ -51,7 +52,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 		return nil, DataVersionNil, fmt.Errorf("mismatching number of selection proofs and subnet IDs")
 	}
 
-	gc.waitForOneThirdSlotDuration(slot)
+	gc.waitForOneThirdSlotDuration(ctx, slot)
 
 	scDataReqStart := time.Now()
 	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(ctx, &api.BeaconBlockRootOpts{
@@ -80,7 +81,9 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 
 	blockRoot := beaconBlockRootResp.Data
 
-	gc.waitToSlotTwoThirds(slot)
+	if err := gc.waitToSlotTwoThirds(ctx, slot); err != nil {
+		return nil, 0, fmt.Errorf("wait for 2/3 of slot: %w", err)
+	}
 
 	// Fetch sync committee contributions for each subnet in parallel.
 	var (
@@ -155,7 +158,7 @@ func (gc *GoClient) SubmitSignedContributionAndProof(
 }
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after slot start time)
-func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
+func (gc *GoClient) waitForOneThirdSlotDuration(ctx context.Context, slot phase0.Slot) {
 	config := gc.getBeaconConfig()
 	delay := config.IntervalDuration()
 	finalTime := config.GetSlotStartTime(slot).Add(delay)
@@ -163,5 +166,10 @@ func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
 	if wait <= 0 {
 		return
 	}
-	time.Sleep(wait)
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(wait):
+	}
 }

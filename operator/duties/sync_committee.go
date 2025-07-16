@@ -152,6 +152,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconPeriodAttribute(period),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
 		))
 	defer span.End()
 
@@ -221,7 +222,11 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	start := time.Now()
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
-		trace.WithAttributes(observability.BeaconPeriodAttribute(period)))
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconPeriodAttribute(period),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
+		))
 	defer span.End()
 
 	if period > h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
@@ -267,6 +272,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 			Duty:           duty,
 			InCommittee:    inCommittee,
 		})
+		span.AddEvent("will store duty", trace.WithAttributes(observability.ValidatorIndexAttribute(duty.ValidatorIndex)))
 	}
 
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))

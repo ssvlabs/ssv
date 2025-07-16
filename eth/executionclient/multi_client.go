@@ -260,7 +260,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
 				f := func(client SingleClientProvider) (any, error) {
 					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
-					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
+					if isInterruptedError(err) {
 						return nil, err
 					}
 
@@ -269,12 +269,18 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				}
 
 				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
-				if err != nil && !errors.Is(err, ErrClosed) && !errors.Is(err, context.Canceled) {
-					// NOTE: There are unit tests that trigger Fatal and override its behavior.
-					// Therefore, the code must call `return` afterward.
-					mc.logger.Fatal("failed to stream registry events", zap.Error(err))
+				if err == nil {
+					return
 				}
-				return
+
+				if isInterruptedError(err) {
+					mc.logger.Debug("stream logs stopped", zap.Error(err))
+					return
+				}
+
+				// NOTE: There are unit tests that trigger Fatal and override its behavior.
+				// Therefore, the code must call `return` afterward.
+				mc.logger.Fatal("failed to stream logs", zap.Error(err))
 			}
 		}
 	}()
@@ -282,7 +288,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 	return logs
 }
 
-// Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
+// Healthy returns whether execution client is currently healthy: responds to requests and not in the syncing state.
 func (mc *MultiClient) Healthy(ctx context.Context) error {
 	if time.Since(time.Unix(mc.lastHealthy.Load(), 0)) < mc.healthInvalidationInterval {
 		return nil
@@ -471,12 +477,11 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		}
 
 		v, err := f(client)
-		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-			logger.Debug("received graceful closure from client", zap.Error(err))
+		if isInterruptedError(err) {
+			logger.Debug("call was interrupted", zap.Error(err))
 			recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[clientIndex], time.Since(startTime), err)
 			return v, err
 		}
-
 		if err != nil {
 			logger.Error("call failed, switching to the next client",
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),

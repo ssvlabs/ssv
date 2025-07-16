@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -8,8 +9,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -44,8 +46,8 @@ type Storage interface {
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
 
-	GetPrivateKeyHash() (string, bool, error)
-	SavePrivateKeyHash(privKeyHash string) error
+	GetPrivateKeyHash() ([]byte, bool, error)
+	SavePrivateKeyHash(privKeyHash []byte) error
 
 	GetPublicKey() (string, bool, error)
 	SavePublicKey(pubKey string) error
@@ -203,20 +205,29 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 }
 
 // GetPrivateKeyHash return sha256 hashed private key
-func (s *storage) GetPrivateKeyHash() (string, bool, error) {
+func (s *storage) GetPrivateKeyHash() ([]byte, bool, error) {
 	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey))
 	if !found {
-		return "", found, nil
+		return nil, found, nil
 	}
 	if err != nil {
-		return "", found, err
+		return nil, found, err
 	}
-	return string(obj.Value), found, nil
+
+	privateKeyHex := string(obj.Value)
+	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
+	if err != nil {
+		// Not passing an error to avoid leaking the private key.
+		return nil, found, fmt.Errorf("expected private key to be hex encoded")
+	}
+
+	return privateKeyBytes, found, nil
 }
 
 // SavePrivateKeyHash saves operator private key hash
-func (s *storage) SavePrivateKeyHash(hashedKey string) error {
-	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKey))
+func (s *storage) SavePrivateKeyHash(hashedKey []byte) error {
+	hashedKeyHex := hex.EncodeToString(hashedKey) // key is stored hex-encoded
+	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKeyHex))
 }
 
 // GetPublicKey returns public key.

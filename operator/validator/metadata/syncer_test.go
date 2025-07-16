@@ -32,8 +32,10 @@ const (
 // createTestSnapshot creates a new ValidatorSnapshot with test data based on the provided validator public key, index, and metadata flag.
 func createTestSnapshot(pk spectypes.ValidatorPK, index phase0.ValidatorIndex, hasMetadata bool) *storage.ValidatorSnapshot {
 	status := eth2apiv1.ValidatorStateUnknown
+	var lastUpdated time.Time
 	if hasMetadata {
 		status = eth2apiv1.ValidatorStateActiveOngoing
+		lastUpdated = time.Now() // Set current time for validators with metadata
 	}
 
 	return &storage.ValidatorSnapshot{
@@ -46,7 +48,7 @@ func createTestSnapshot(pk spectypes.ValidatorPK, index phase0.ValidatorIndex, h
 			ActivationEpoch:           0,
 			ExitEpoch:                 goclient.FarFutureEpoch,
 			Liquidated:                false,
-			BeaconMetadataLastUpdated: time.Time{}, // Zero for new validators
+			BeaconMetadataLastUpdated: lastUpdated,
 		},
 		LastUpdated:    time.Now(),
 		IsOwnValidator: true,
@@ -218,7 +220,6 @@ func TestSyncer_Sync(t *testing.T) {
 	// Subtest: Empty pubKeys
 	t.Run("EmptyPubKeys", func(t *testing.T) {
 		mockValidatorStore := mocks.NewMockValidatorStore(ctrl)
-		mockValidatorStore.EXPECT().UpdateValidatorsMetadata(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 		unusedMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
 		// GetValidatorData should not be called in this case
@@ -237,7 +238,7 @@ func TestSyncer_Sync(t *testing.T) {
 	})
 }
 
-func TestSyncer_UpdateOnStartup(t *testing.T) {
+func TestSyncer_SyncAll(t *testing.T) {
 	logger := zap.NewNop()
 
 	ctrl := gomock.NewController(t)
@@ -263,12 +264,12 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 			validatorStore: mockValidatorStore,
 		}
 
-		// Set expectations - SyncOnStartup calls both GetAllValidators() and GetSelfValidators()
+		// Set expectations - SyncAll calls both GetAllValidators() and GetSelfValidators()
 		mockValidatorStore.EXPECT().GetAllValidators().Return([]*storage.ValidatorSnapshot{})
 		mockValidatorStore.EXPECT().GetSelfValidators().Return([]*storage.ValidatorSnapshot{}).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -282,6 +283,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		syncer := &Syncer{
 			logger:         logger,
 			validatorStore: mockValidatorStore,
+			beaconNode:     defaultMockBeaconNode,
 		}
 
 		// Create snapshots with metadata
@@ -290,12 +292,13 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 			createTestSnapshot(spectypes.ValidatorPK{0x2}, 2, true),
 		}
 
-		// Set expectations - SyncOnStartup calls both GetAllValidators() and GetSelfValidators()
+		// Set expectations - SyncAll calls GetAllValidators(), GetSelfValidators() and UpdateValidatorsMetadata()
 		mockValidatorStore.EXPECT().GetAllValidators().Return(snapshots)
 		mockValidatorStore.EXPECT().GetSelfValidators().Return(snapshots).AnyTimes()
+		mockValidatorStore.EXPECT().UpdateValidatorsMetadata(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -318,7 +321,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		snapshots := []*storage.ValidatorSnapshot{snapshot1, snapshot2}
 
-		// Set expectations - SyncOnStartup calls both GetAllValidators() and GetSelfValidators()
+		// Set expectations - SyncAll calls both GetAllValidators() and GetSelfValidators()
 		mockValidatorStore.EXPECT().GetAllValidators().Return(snapshots)
 		mockValidatorStore.EXPECT().GetSelfValidators().Return(snapshots).AnyTimes()
 		mockValidatorStore.EXPECT().UpdateValidatorsMetadata(gomock.Any(), gomock.Any()).Return(beacon.ValidatorMetadataMap{
@@ -326,7 +329,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		}, nil)
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -354,12 +357,12 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		snapshot1 := createTestSnapshot(spectypes.ValidatorPK{0x1}, 0, false)
 		snapshots := []*storage.ValidatorSnapshot{snapshot1}
 
-		// Set expectations - SyncOnStartup calls both GetAllValidators() and GetSelfValidators()
+		// Set expectations - SyncAll calls both GetAllValidators() and GetSelfValidators()
 		mockValidatorStore.EXPECT().GetAllValidators().Return(snapshots)
 		mockValidatorStore.EXPECT().GetSelfValidators().Return(snapshots).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.Error(t, err)

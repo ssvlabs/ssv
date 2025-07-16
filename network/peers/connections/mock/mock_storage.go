@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/operator/storage"
@@ -16,7 +17,7 @@ import (
 var _ storage.Storage = NodeStorage{}
 
 type NodeStorage struct {
-	MockPrivateKeyHash              string
+	MockPrivateKeyHash              []byte
 	MockPublicKey                   string
 	RegisteredOperatorPublicKeyPEMs []string
 }
@@ -29,19 +30,19 @@ func (m NodeStorage) BeginRead() basedb.ReadTxn {
 	panic("unexpected BeginRead call")
 }
 
-func (m NodeStorage) GetNextNonce(basedb.Reader, common.Address) (registrystorage.Nonce, error) {
+func (m NodeStorage) GetNextNonce(txn basedb.Reader, owner common.Address) (registrystorage.Nonce, error) {
 	panic("unexpected GetNextNonce call")
 }
 
-func (m NodeStorage) BumpNonce(basedb.ReadWriter, common.Address) error {
+func (m NodeStorage) BumpNonce(txn basedb.ReadWriter, owner common.Address) error {
 	panic("unexpected BumpNonce call")
 }
 
-func (m NodeStorage) SaveLastProcessedBlock(basedb.ReadWriter, *big.Int) error {
+func (m NodeStorage) SaveLastProcessedBlock(txn basedb.ReadWriter, offset *big.Int) error {
 	panic("unexpected SaveLastProcessedBlock call")
 }
 
-func (m NodeStorage) GetLastProcessedBlock(basedb.Reader) (*big.Int, bool, error) {
+func (m NodeStorage) GetLastProcessedBlock(txn basedb.Reader) (*big.Int, bool, error) {
 	panic("unexpected GetLastProcessedBlock call")
 }
 
@@ -59,23 +60,23 @@ func (m NodeStorage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey str
 	return nil, false, errors.New("operator not found")
 }
 
-func (m NodeStorage) GetOperatorData(basedb.Reader, spectypes.OperatorID) (*registrystorage.OperatorData, bool, error) {
+func (m NodeStorage) GetOperatorData(txn basedb.Reader, id spectypes.OperatorID) (*registrystorage.OperatorData, bool, error) {
 	panic("unexpected GetOperatorData call")
 }
 
-func (m NodeStorage) OperatorsExist(basedb.Reader, []spectypes.OperatorID) (bool, error) {
+func (m NodeStorage) OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error) {
 	panic("unexpected OperatorsExist call")
 }
 
-func (m NodeStorage) SaveOperatorData(basedb.ReadWriter, *registrystorage.OperatorData) (bool, error) {
+func (m NodeStorage) SaveOperatorData(txn basedb.ReadWriter, operatorData *registrystorage.OperatorData) (bool, error) {
 	panic("unexpected SaveOperatorData call")
 }
 
-func (m NodeStorage) DeleteOperatorData(basedb.ReadWriter, spectypes.OperatorID) error {
+func (m NodeStorage) DeleteOperatorData(txn basedb.ReadWriter, id spectypes.OperatorID) error {
 	panic("unexpected DeleteOperatorData call")
 }
 
-func (m NodeStorage) ListOperators(basedb.Reader, uint64, uint64) ([]registrystorage.OperatorData, error) {
+func (m NodeStorage) ListOperators(txn basedb.Reader, from uint64, to uint64) ([]registrystorage.OperatorData, error) {
 	return nil, errors.New("empty")
 }
 
@@ -83,19 +84,19 @@ func (m NodeStorage) GetOperatorsPrefix() []byte {
 	panic("unexpected GetOperatorsPrefix call")
 }
 
-func (m NodeStorage) GetRecipientData(basedb.Reader, common.Address) (*registrystorage.RecipientData, bool, error) {
+func (m NodeStorage) GetRecipientData(txn basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error) {
 	panic("unexpected GetRecipientData call")
 }
 
-func (m NodeStorage) GetRecipientDataMany(basedb.Reader, []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+func (m NodeStorage) GetRecipientDataMany(txn basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
 	panic("unexpected GetRecipientDataMany call")
 }
 
-func (m NodeStorage) SaveRecipientData(basedb.ReadWriter, *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
+func (m NodeStorage) SaveRecipientData(txn basedb.ReadWriter, recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
 	panic("unexpected SaveRecipientData call")
 }
 
-func (m NodeStorage) DeleteRecipientData(basedb.ReadWriter, common.Address) error {
+func (m NodeStorage) DeleteRecipientData(txn basedb.ReadWriter, owner common.Address) error {
 	panic("unexpected DeleteRecipientData call")
 }
 
@@ -123,15 +124,15 @@ func (m NodeStorage) DropShares() error {
 	panic("unexpected DropShares call")
 }
 
-func (m NodeStorage) GetPrivateKeyHash() (string, bool, error) {
-	if m.MockPrivateKeyHash != "" {
+func (m NodeStorage) GetPrivateKeyHash() ([]byte, bool, error) {
+	if m.MockPrivateKeyHash != nil {
 		return m.MockPrivateKeyHash, true, nil
 	} else {
-		return "", false, errors.New("error")
+		return nil, false, errors.New("error")
 	}
 }
 
-func (m NodeStorage) SavePrivateKeyHash(string) error {
+func (m NodeStorage) SavePrivateKeyHash(privKeyHash []byte) error {
 	panic("unexpected SavePrivateKeyHash call")
 }
 
@@ -143,18 +144,18 @@ func (m NodeStorage) GetPublicKey() (string, bool, error) {
 	}
 }
 
-func (m NodeStorage) SavePublicKey(string) error {
+func (m NodeStorage) SavePublicKey(publicKey string) error {
 	panic("unexpected SavePublicKey call")
 }
 
-func (m NodeStorage) GetConfig(basedb.ReadWriter) (*storage.ConfigLock, bool, error) {
+func (m NodeStorage) GetConfig(rw basedb.ReadWriter) (*storage.ConfigLock, bool, error) {
 	panic("implement me")
 }
 
-func (m NodeStorage) SaveConfig(basedb.ReadWriter, *storage.ConfigLock) error {
+func (m NodeStorage) SaveConfig(rw basedb.ReadWriter, config *storage.ConfigLock) error {
 	panic("implement me")
 }
 
-func (m NodeStorage) DeleteConfig(basedb.ReadWriter) error {
+func (m NodeStorage) DeleteConfig(rw basedb.ReadWriter) error {
 	panic("implement me")
 }

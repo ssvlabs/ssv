@@ -9,16 +9,18 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (
@@ -65,15 +67,17 @@ func TestDropRegistryData(t *testing.T) {
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	sharepubkey := func(id int) []byte {
+	sharePubkey := func(id int) []byte {
 		v := make([]byte, 48)
-		rand.Read(v)
+		_, err := rand.Read(v)
+		require.NoError(t, err)
+		v[0] = byte(id) // makes sure every generated pubkey is unique
 		return v
 	}
 	// Save operators, shares and recipients.
 	var (
 		operatorIDs     = []uint64{1, 2, 3}
-		sharePubKeys    = [][]byte{sharepubkey(1), sharepubkey(2), sharepubkey(3)}
+		sharePubKeys    = [][]byte{sharePubkey(1), sharePubkey(2), sharePubkey(3)}
 		recipientOwners = []common.Address{{1}, {2}, {3}}
 	)
 	for _, id := range operatorIDs {
@@ -93,7 +97,7 @@ func TestDropRegistryData(t *testing.T) {
 		err := storage.Shares().Save(nil, &types.SSVShare{
 			Share: spectypes.Share{
 				SharePubKey:     pk,
-				ValidatorPubKey: spectypes.ValidatorPK(append(make([]byte, 47), pk...)),
+				ValidatorPubKey: spectypes.ValidatorPK(pk),
 			},
 		})
 		require.NoError(t, err)

@@ -29,15 +29,22 @@ endif
 
 GET_TOOL=go get -modfile=tool.mod -tool
 RUN_TOOL=go tool -modfile=tool.mod
+SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
 lint:
-	$(RUN_TOOL) golangci-lint run -v ./...
+	GOWORK=off $(RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -v ./...
+	@$(MAKE) ssvsigner-lint
+
+.PHONY: ssvsigner-lint
+ssvsigner-lint:
+	cd ssvsigner && GOWORK=off $(SSVSIGNER_RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -c ../.golangci.yaml -v ./...
 
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
 
 .PHONY: integration-test
 integration-test:
@@ -48,6 +55,12 @@ integration-test:
 unit-test:
 	@echo "Running unit tests"
 	@go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+	@$(MAKE) ssvsigner-test
+
+.PHONY: ssvsigner-test
+ssvsigner-test:
+	@echo "Running ssv-signer unit tests"
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "ssvsigner/e2e"`
 
 .PHONY: spec-test
 spec-test:

@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -24,7 +26,19 @@ const (
 	defaultSyncInterval      = 12 * time.Minute
 	defaultStreamInterval    = 2 * time.Second
 	defaultUpdateSendTimeout = 30 * time.Second
-	batchSize                = 512
+	// NOTE:
+	// A higher value of `batchSize` results in fewer HTTP calls to the Consensus Node,
+	// but each call will have larger payloads and responses. While this speeds up
+	// metadata synchronization, it also increases the risk of timeouts.
+	//
+	// The value of `batchSize` should depend on the number of validators the node handles
+	// (especially relevant when comparing Exporter vs. Non-Exporter nodes)
+	// and the sync interval (how often metadata should be refreshed).
+	//
+	// ⚠️ Caution: Since there is no prioritization implemented, if the node cannot
+	// sync all validator shares within the given sync interval, there is a high risk
+	// that some validators will not be refreshed for an unpredictable amount of time.
+	batchSize = 512
 )
 
 type Syncer struct {
@@ -45,7 +59,7 @@ func NewSyncer(
 	opts ...Option,
 ) *Syncer {
 	u := &Syncer{
-		logger:            logger,
+		logger:            logger.Named(logging.NameShareMetadataSyncer),
 		validatorStore:    validatorStore,
 		beaconNode:        beaconNode,
 		fixedSubnets:      fixedSubnets,
@@ -61,7 +75,10 @@ func NewSyncer(
 	return u
 }
 
-func (s *Syncer) SyncOnStartup(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
+// SyncAll loads all non-liquidated validator shares that belong to operator's subnets,
+// and triggers a full metadata synchronization for them.
+// It returns a mapping of validator public keys to their updated metadata.
+func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -70,7 +87,6 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (beacon.ValidatorMetadataMap
 
 	// Filter for non-liquidated validators in own subnets
 	var validatorsToSync []*registrystorage.ValidatorSnapshot
-	needToSync := false
 
 	for _, snapshot := range allValidators {
 		// Skip liquidated validators
@@ -86,22 +102,10 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (beacon.ValidatorMetadataMap
 		}
 
 		validatorsToSync = append(validatorsToSync, snapshot)
-
-		// Check if any validator needs metadata sync
-		if !snapshot.Share.HasBeaconMetadata() {
-			needToSync = true
-		}
 	}
 
 	if len(validatorsToSync) == 0 {
 		s.logger.Info("could not find non-liquidated own subnets validator shares on initial metadata retrieval")
-		return nil, nil
-	}
-
-	// Skip syncing if metadata was already fetched before
-	// to prevent blocking startup after first sync.
-	if !needToSync {
-		// Stream should take it over from here.
 		return nil, nil
 	}
 
@@ -118,8 +122,12 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (beacon.ValidatorMetadataMap
 // Sync retrieves metadata for the provided public keys and updates storage accordingly.
 // Returns updated metadata for keys that had changes. Returns nil if no keys were provided or no updates occurred.
 func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
+	if len(pubKeys) == 0 {
+		return nil, nil
+	}
+
 	fetchStart := time.Now()
-	metadata, err := s.Fetch(ctx, pubKeys)
+	metadata, err := s.fetchMetadata(ctx, pubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
@@ -145,11 +153,10 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 	return updatedValidators, nil
 }
 
-func (s *Syncer) Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
-	if len(pubKeys) == 0 {
-		return nil, nil
-	}
-
+// fetchMetadata is responsible for fetching validator metadata from the beacon node for the provided public keys.
+// The beacon node response is sometimes empty for certain public keys — for such validators,
+// the ValidatorMetadataMap will contain empty metadata objects.
+func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	blsPubKeys := make([]phase0.BLSPubKey, len(pubKeys))
 	for i, pk := range pubKeys {
 		blsPubKeys[i] = phase0.BLSPubKey(pk)
@@ -160,7 +167,12 @@ func (s *Syncer) Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (be
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
 	}
 
-	results := make(beacon.ValidatorMetadataMap, len(validatorsIndexMap))
+	results := make(beacon.ValidatorMetadataMap, len(pubKeys))
+
+	for _, key := range pubKeys {
+		results[key] = &beacon.ValidatorMetadata{}
+	}
+
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
 			Status:          v.Status,
@@ -174,6 +186,9 @@ func (s *Syncer) Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (be
 	return results, nil
 }
 
+// Stream continuously fetches and streams batches of validator metadata updates as they become available.
+// It yields updates through a channel (`SyncBatch`) and handles retries, sleeping between sync attempts
+// when all metadata is up to date. The loop respects the provided context and stops gracefully when canceled.
 func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 	metadataUpdates := make(chan SyncBatch)
 
@@ -194,33 +209,33 @@ func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 				continue
 			}
 
-			if len(batch.After) == 0 {
+			if len(batch.Before) == 0 {
+				s.logger.Debug("sleeping because all validators’ metadata has been refreshed.",
+					zap.Duration("sleep_for", s.streamInterval),
+					zap.Duration("refresh_interval", s.syncInterval))
 				if slept := s.sleep(ctx, s.streamInterval); !slept {
 					return
 				}
 				continue
 			}
 
-			// TODO: use time.After when Go is updated to 1.23
-			timer := time.NewTimer(s.updateSendTimeout)
 			select {
 			case metadataUpdates <- batch:
 				// Only sleep if there aren't more validators to fetch metadata for.
 				// It's done to wait for some data to appear. Without sleep, the next batch would likely be empty.
 				if done {
+					s.logger.Debug("sleeping after batch was streamed because all validators’ metadata has been refreshed.",
+						zap.Duration("sleep_for", s.streamInterval),
+						zap.Duration("refresh_interval", s.syncInterval))
 					if slept := s.sleep(ctx, s.streamInterval); !slept {
-						// canceled context
-						timer.Stop()
 						return
 					}
 				}
 			case <-ctx.Done():
-				timer.Stop()
 				return
-			case <-timer.C:
+			case <-time.After(s.updateSendTimeout):
 				s.logger.Warn("timed out waiting for sending update")
 			}
-			timer.Stop()
 		}
 	}()
 
@@ -313,14 +328,10 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.
 }
 
 func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
-	// TODO: use time.After when Go is updated to 1.23
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
 	select {
 	case <-ctx.Done():
 		return false
-	case <-timer.C:
+	case <-time.After(d):
 		return true
 	}
 }

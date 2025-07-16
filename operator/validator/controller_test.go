@@ -1,13 +1,13 @@
 package validator
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -18,16 +18,15 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
@@ -45,8 +44,10 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 const (
@@ -58,18 +59,18 @@ const (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
-	beacon            beacon.BeaconNode
-	validatorOptions  validator.Options
-	StorageMap        *ibftstorage.ParticipantStores
-	validatorsMap     *validators.ValidatorsMap
-	validatorStore    registrystorage.ValidatorStore
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorStorage   registrystorage.Operators
-	networkConfig     networkconfig.NetworkConfig
-	keyManager        ekm.KeyManager
+	network             P2PNetwork
+	recipientsStorage   Recipients
+	sharesStorage       SharesStorage
+	beacon              beacon.BeaconNode
+	validatorCommonOpts *validator.CommonOptions
+	StorageMap          *ibftstorage.ParticipantStores
+	validatorsMap       *validators.ValidatorsMap
+	validatorStore      registrystorage.ValidatorStore
+	operatorDataStore   operatordatastore.OperatorDataStore
+	operatorStorage     registrystorage.Operators
+	networkConfig       *networkconfig.NetworkConfig
+	keyManager          ekm.KeyManager
 }
 
 func TestNewController(t *testing.T) {
@@ -107,7 +108,7 @@ func TestNewController(t *testing.T) {
 		ValidatorStore:    validatorStore,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions)
+	control := NewController(logger, controllerOptions, exporter.Options{})
 	require.IsType(t, &controller{}, control)
 }
 
@@ -176,9 +177,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 		syncHighestDecidedResponse error
 		getValidatorDataResponse   error
 	}{
-		{"no shares of non committee", nil, nil, nil},
-		{"set up non committee validators", sharesWithMetadata, nil, nil},
-		{"set up non committee validators without metadata", sharesWithoutMetadata, nil, nil},
+		{"no shares of non-committee", nil, nil, nil},
+		{"set up non-committee validators", sharesWithMetadata, nil, nil},
+		{"set up non-committee validators without metadata", sharesWithoutMetadata, nil, nil},
 		{"fail to sync highest decided", sharesWithMetadata, errors.New("failed to sync highest decided"), nil},
 		{"fail to update validators metadata", sharesWithMetadata, nil, errors.New("could not update all validators")},
 	}
@@ -221,8 +222,10 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    validatorStore,
 				keyManager:        keyManager,
-				validatorOptions: validator.Options{
-					Exporter: true,
+				validatorCommonOpts: &validator.CommonOptions{
+					ExporterOptions: exporter.Options{
+						Enabled: true,
+					},
 				},
 			}
 			ctr := setupController(t, logger, controllerOptions)
@@ -236,72 +239,79 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
 	mockValidatorsMap := validators.New(t.Context())
 	controllerOptions := MockControllerOptions{
-		validatorsMap: mockValidatorsMap,
+		validatorsMap:       mockValidatorsMap,
+		validatorCommonOpts: &validator.CommonOptions{},
 	}
-	ctr := setupController(t, logger, controllerOptions) // none committee
+	ctr := setupController(t, logger, controllerOptions) // non-committee
 
-	// Only exporter handles non committee messages
-	ctr.validatorOptions.Exporter = true
+	// Only exporter handles non-committee messages
+	ctr.validatorCommonOpts.ExporterOptions.Enabled = true
 
 	go ctr.handleRouterMessages()
 
-	var wg sync.WaitGroup
-
+	receivedMsgs := make(chan network.DecodedSSVMessage, 1)
 	ctr.messageWorker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
-		wg.Done()
+		receivedMsgs <- msg
 		return nil
 	})
 
-	wg.Add(3)
+	logger.Debug("starting to send messages")
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
+			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateDecidedMessage(t, identifier),
 		},
 	})
-
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
+			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateChangeRoundMsg(t, identifier),
 		},
 	})
-
-	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-			MsgType: message.SSVSyncMsgType,
-			MsgID:   identifier,
-			Data:    []byte("data"),
-		},
-	})
-
-	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-			MsgType: 123,
-			MsgID:   identifier,
-			Data:    []byte("data"),
-		},
-	})
-
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgType: message.SSVSyncMsgType, // this message will be skipped
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: 123, // this message will be skipped
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    []byte("data2"),
 		},
 	})
 
-	go func() {
-		time.Sleep(time.Second * 4)
-		panic("time out!")
-	}()
-
-	wg.Wait()
+	receivedMsgsCnt := 0
+	timeout := time.After(30 * time.Second)
+	for {
+		select {
+		case msg := <-receivedMsgs:
+			logger.Debug("received message", zap.Any("msg", msg))
+			receivedMsgsCnt++
+			if receivedMsgsCnt == 3 {
+				// Wait a bit and check in case there are unexpected messages still to come.
+				time.Sleep(100 * time.Millisecond)
+				require.Equal(t, 0, len(receivedMsgs), "unexpectedly received more than 3 messages")
+				return
+			}
+		case <-timeout:
+			require.Fail(t, "timed out waiting for all 3 messages to arrive")
+		}
+	}
 }
 
 func TestSetupValidators(t *testing.T) {
@@ -530,7 +540,7 @@ func TestSetupValidators(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
-				validatorOptions: validator.Options{
+				validatorCommonOpts: &validator.CommonOptions{
 					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
 				},
@@ -580,7 +590,6 @@ func TestGetValidatorStats(t *testing.T) {
 	// Common setup
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
-	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
 	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
 
@@ -620,7 +629,7 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatorDataStore,
 			operatorStorage:   operatorStore,
@@ -664,7 +673,7 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatorDataStore,
 			operatorStorage:   operatorStore,
@@ -700,7 +709,7 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatorDataStore,
 			operatorStorage:   operatorStore,
@@ -751,7 +760,7 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatorDataStore,
 			operatorStorage:   operatorStore,
@@ -943,7 +952,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 
 // setupController initializes and returns a controller instance with provided options and default configurations.
 func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) controller {
-	if opts.networkConfig.Name == "" {
+	if opts.networkConfig == nil {
 		opts.networkConfig = networkconfig.TestNetwork
 	}
 
@@ -959,7 +968,7 @@ func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOption
 		validatorStore:          opts.validatorStore,
 		keyManager:              opts.keyManager,
 		ctx:                     t.Context(),
-		validatorOptions:        opts.validatorOptions,
+		validatorCommonOpts:     opts.validatorCommonOpts,
 		recipientsStorage:       opts.recipientsStorage,
 		networkConfig:           opts.networkConfig,
 		messageRouter:           newMessageRouter(logger),
@@ -1257,7 +1266,7 @@ func prepareController(t *testing.T, shares ...[]*types.SSVShare) (*controller, 
 		validatorStore:    validatorStore,
 		networkConfig:     networkconfig.TestNetwork,
 		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
-		validatorOptions: validator.Options{
+		validatorCommonOpts: &validator.CommonOptions{
 			NetworkConfig: networkconfig.TestNetwork,
 		},
 		validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -1270,4 +1279,33 @@ func prepareController(t *testing.T, shares ...[]*types.SSVShare) (*controller, 
 	mockRecipientsStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
 
 	return validatorCtrl, mockSharesStorage
+}
+
+type mockShares []*types.SSVShare
+
+func (m mockShares) Range(_ basedb.Reader, fn func(*types.SSVShare) bool) {
+	for _, share := range m {
+		if !fn(share) {
+			break
+		}
+	}
+}
+
+func (m mockShares) Get(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
+	for _, share := range m {
+		if bytes.Equal(share.SharePubKey, pubKey) {
+			return share, true
+		}
+	}
+	return nil, false
+}
+
+func (m mockShares) List(_ basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare {
+	return m
+}
+func (m mockShares) Save(_ basedb.ReadWriter, shares ...*types.SSVShare) error { return nil }
+func (m mockShares) Delete(_ basedb.ReadWriter, pubKey []byte) error           { return nil }
+func (m mockShares) Drop() error                                               { return nil }
+func (m mockShares) UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	return nil, nil
 }

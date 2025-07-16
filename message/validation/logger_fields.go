@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
@@ -56,9 +57,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 }
 
 func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) *LoggerFields {
-	descriptor := &LoggerFields{
-		Consensus: &ConsensusFields{},
-	}
+	descriptor := &LoggerFields{}
 
 	if decodedMessage == nil {
 		return descriptor
@@ -76,8 +75,10 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	case *specqbft.Message:
 		if m != nil {
 			descriptor.Slot = phase0.Slot(m.Height)
-			descriptor.Consensus.Round = m.Round
-			descriptor.Consensus.QBFTMessageType = m.MsgType
+			descriptor.Consensus = &ConsensusFields{
+				Round:           m.Round,
+				QBFTMessageType: m.MsgType,
+			}
 		}
 	case *spectypes.PartialSignatureMessages:
 		if m != nil {

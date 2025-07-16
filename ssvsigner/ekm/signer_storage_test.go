@@ -19,8 +19,8 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -362,13 +362,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		defer db.Close()
 
 		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
-
-		err = signerStorage.SetEncryptionKey("aabbccddee")
-		require.NoError(t, err)
-
-		err = signerStorage.SetEncryptionKey("invalid-hex-key")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "the key must be a valid hexadecimal string")
+		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
 	t.Run("DataEncryption", func(t *testing.T) {
@@ -397,8 +391,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		accountID := account.ID()
 
 		// test with encryption key
-		err = signerStorage.SetEncryptionKey("0123456789abcdef0123456789abcdef")
-		require.NoError(t, err)
+		signerStorage.SetEncryptionKey([]byte("0123456789abcdef0123456789abcdef"))
 
 		// save the account (this will encrypt it)
 		err = signerStorage.SaveAccount(account)
@@ -410,9 +403,21 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NotNil(t, retrievedAccount)
 		require.Equal(t, accountID, retrievedAccount.ID())
 
-		// now test without encryption key
-		err = signerStorage.SetEncryptionKey("")
+		// now test with a key of different length
+		signerStorage.SetEncryptionKey([]byte("0123456789abcdef"))
+
+		// save the account again (this will encrypt it)
+		err = signerStorage.SaveAccount(account)
 		require.NoError(t, err)
+
+		// retrieve the account (this will decrypt it)
+		retrievedAccount, err = signerStorage.OpenAccount(accountID)
+		require.NoError(t, err)
+		require.NotNil(t, retrievedAccount)
+		require.Equal(t, accountID, retrievedAccount.ID())
+
+		// now test without encryption key
+		signerStorage.SetEncryptionKey(nil)
 
 		// save the account again (this won't encrypt it)
 		err = signerStorage.SaveAccount(account)
@@ -520,9 +525,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("InvalidAttestationSSZ", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -537,9 +539,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyAttestationValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -652,9 +651,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyProposalValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 

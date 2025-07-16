@@ -229,11 +229,17 @@ func (n *p2pNetwork) Close() error {
 func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 	connector := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
-		// Wait for own subnets to be subscribed to and updated.
-		// TODO: wait more intelligently with a channel.
-		time.Sleep(8 * time.Second)
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
+
+		// Wait for own subnets to be subscribed to and updated.
+		// TODO: wait more intelligently with a channel.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(8 * time.Second):
+		}
+
 		n.backoffConnector.Connect(ctx, connector)
 	}()
 
@@ -541,7 +547,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 			zap.Any("subnets", subnetsList),
 			zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
 			zap.Int("total_subnets", len(subnetsList)),
-			zap.Duration("took", time.Since(start)),
+			fields.Took(time.Since(start)),
 			zap.Error(errs),
 		)
 	}

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"maps"
@@ -10,6 +11,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -23,6 +25,10 @@ import (
 // During database migrations, records often need to be moved to a different prefix,
 // which is why the version evolves over time.
 var sharesPrefix = []byte("shares_v2/")
+
+// pubkeyIndexMapping is a prefix for the pubkey to index mapping.
+// since the churn of validators is low, we can use an append only mapping
+var pubkeyIndexMapping = []byte("val_pki")
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -122,9 +128,7 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, error) {
 	return storage, nil
 }
 
-// loadFromDB reads all shares from db and populates the in-memory map.
 func (s *sharesStorage) loadFromDB() error {
-	// not locking since at this point nobody has the reference to this object
 	return s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
 		val := &Share{}
 		if err := val.Decode(obj.Value); err != nil {
@@ -207,7 +211,44 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	return s.saveToDB(rw, shares...)
 }
 
+func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.ValidatorPK) (out []phase0.ValidatorIndex, err error) {
+	var pubkeys = make([][]byte, 0, len(vkeys))
+
+	for _, pk := range vkeys {
+		pubkeys = append(pubkeys, pk[:])
+	}
+
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
+
+	err = s.db.GetMany(prefix, pubkeys, func(obj basedb.Obj) error {
+		index := binary.LittleEndian.Uint64(obj.Value)
+		out = append(out, phase0.ValidatorIndex(index))
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get validator index by pubkey: %w", err)
+	}
+
+	return out, nil
+}
+
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
+	// save validator pubkey -> index mapping
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
+
+	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (basedb.Obj, error) {
+		vindex := shares[i].ValidatorIndex
+		pubkey := shares[i].ValidatorPubKey
+
+		b := make([]byte, 8)
+		binary.LittleEndian.PutUint64(b, uint64(vindex))
+
+		return basedb.Obj{Key: pubkey[:], Value: b}, nil
+	})
+	if err != nil {
+		return fmt.Errorf("save validator pubkey to index mapping: %w", err)
+	}
+
 	return s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
 		share := FromSSVShare(shares[i])
 		value, err := share.Encode()
@@ -314,6 +355,11 @@ func SharesDBPrefix(storagePrefix []byte) []byte {
 // SharesDBKey builds share key using sharesPrefix & validator public key, e.g. "shares_ssz/0x00..01"
 func SharesDBKey(pk []byte) []byte {
 	return append(sharesPrefix, pk...)
+}
+
+// PubkeyToIndexMappingDBKey builds key using storage prefix followed by mapping prefix, e.g. "operator/val_pki"
+func PubkeyToIndexMappingDBKey(storagePrefix []byte) []byte {
+	return append(storagePrefix, pubkeyIndexMapping...)
 }
 
 // ByOperatorID filters by operator ID.

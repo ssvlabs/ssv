@@ -42,3 +42,5 @@ patches/
 
 go.work
 go.work.sum
+
+.tmp/
