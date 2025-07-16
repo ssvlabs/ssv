@@ -299,13 +299,13 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	const workerCount = 30
 
 	go func() {
+		defer close(dutiesCh)
 		for _, duty := range committeeDuty.ValidatorDuties {
 			if ctx.Err() != nil {
 				break
 			}
 			dutiesCh <- duty
 		}
-		close(dutiesCh)
 	}()
 
 	for range workerCount {
@@ -315,6 +315,9 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			defer wg.Done()
 
 			for validatorDuty := range dutiesCh {
+				if ctx.Err() != nil {
+					return
+				}
 				if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
 					const eventMsg = "duty is no longer valid"
 					span.AddEvent(eventMsg, trace.WithAttributes(
@@ -323,7 +326,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 						observability.BeaconRoleAttribute(validatorDuty.Type),
 					))
 					logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
-					return
+					continue
 				}
 
 				switch validatorDuty.Type {
@@ -336,7 +339,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					}
 					if isAttesterDutyBlocked {
 						blockedAttesterDuties.Add(1)
-						return
+						continue
 					}
 
 					signaturesCh <- partialSigMsg
