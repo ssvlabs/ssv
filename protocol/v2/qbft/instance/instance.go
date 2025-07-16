@@ -34,6 +34,7 @@ type Instance struct {
 
 	forceStop  bool
 	StartValue []byte
+	spData     *ssvtypes.SlashingProtectionData
 
 	metrics *metrics
 }
@@ -76,7 +77,13 @@ func (i *Instance) ForceStop() {
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(
+	ctx context.Context,
+	logger *zap.Logger,
+	value []byte,
+	height specqbft.Height,
+	spData *ssvtypes.SlashingProtectionData,
+) {
 	i.startOnce.Do(func() {
 		_, span := tracer.Start(ctx,
 			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
@@ -86,6 +93,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
+		i.spData = spData
 		i.metrics.StartStage()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
