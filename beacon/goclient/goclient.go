@@ -24,7 +24,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 const (
@@ -130,13 +129,6 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 
-	// registrationMu synchronises access to registrations
-	registrationMu sync.Mutex
-	// registrations is a set of validator-registrations (their latest versions) to be sent to
-	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
-	// participating validators
-	registrations map[phase0.BLSPubKey]*validatorRegistration
-
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
 	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
@@ -197,7 +189,6 @@ func New(
 		log:                                logger.Named("consensus_client"),
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
@@ -256,14 +247,6 @@ func New(
 		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * config.SlotDuration),
 	)
 
-	slotTickerProvider := func() slotticker.SlotTicker {
-		return slotticker.New(logger, slotticker.Config{
-			SlotDuration: config.SlotDuration,
-			GenesisTime:  config.GenesisTime,
-		})
-	}
-
-	go client.registrationSubmitter(ctx, slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
