@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sync"
@@ -15,7 +16,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -138,7 +138,7 @@ func (cr *CommitteeRunner) Decode(data []byte) error {
 func (cr *CommitteeRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := cr.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode CommitteeRunner")
+		return [32]byte{}, fmt.Errorf("could not encode CommitteeRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
@@ -516,25 +516,20 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
+			attribute.Int("ssv.validator.partial_signature_msg.count", len(signedMsg.Messages)),
 		))
 	defer span.End()
 
+	span.AddEvent("base post consensus message processing")
 	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, cr, signedMsg)
 	if err != nil {
 		return observability.Errorf(span, "failed processing post consensus message: %w", err)
 	}
 
-	span.SetAttributes(
-		observability.ValidatorHasQuorumAttribute(hasQuorum),
-		observability.BeaconBlockRootCountAttribute(len(roots)),
-	)
 	logger = logger.With(fields.Slot(signedMsg.Slot))
 
-	// TODO: (Alan) revert?
 	indices := make([]uint64, len(signedMsg.Messages))
-	signers := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
-		signers[i] = msg.Signer
 		indices[i] = uint64(msg.ValidatorIndex)
 	}
 	logger = logger.With(fields.ConsensusTime(cr.measurements.ConsensusTime()))
@@ -554,6 +549,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return nil
 	}
 
+	span.AddEvent("getting attestations, sync committees and root beacon objects")
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
@@ -565,17 +561,20 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return ErrNoValidDuties
 	}
 
-	var anyErr error
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
 	// Get unique roots to avoid repetition
-	rootSet := make(map[[32]byte]struct{})
+	deduplicatedRoots := make(map[[32]byte]struct{})
 	for _, root := range roots {
-		rootSet[root] = struct{}{}
+		deduplicatedRoots[root] = struct{}{}
 	}
+
+	var executionErr error
+
+	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(deduplicatedRoots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
-	for root := range rootSet {
+	for root := range deduplicatedRoots {
 		// Get validators related to the given root
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
 
@@ -597,6 +596,19 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			zap.Any("validators", validators),
 		)
 
+		type signatureResult struct {
+			signature      phase0.BLSSignature
+			validatorIndex phase0.ValidatorIndex
+		}
+		var (
+			lock        sync.RWMutex
+			wg          sync.WaitGroup
+			errCh       = make(chan error, len(validators))
+			signatureCh = make(chan signatureResult, len(validators))
+		)
+
+		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
+
 		for _, validator := range validators {
 			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
 			if !cr.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root) {
@@ -607,71 +619,86 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				continue
 			}
 
-			// Reconstruct signature
-			share := cr.BaseRunner.Share[validator]
-			pubKey := share.ValidatorPubKey
-			vlogger := logger.With(zap.Uint64("validator_index", uint64(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
+			wg.Add(1)
+			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots map[[32]byte]struct{}) {
+				defer wg.Done()
 
-			sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root,
-				pubKey[:], validator)
-			// If the reconstructed signature verification failed, fall back to verifying each partial signature
-			// TODO should we return an error here? maybe other sigs are fine?
-			if err != nil {
-				for root := range rootSet {
-					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
-						share.Committee, validator)
-				}
-				const eventMsg = "got post-consensus quorum but it has invalid signatures"
-				span.AddEvent(eventMsg)
-				vlogger.Error(eventMsg,
-					fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
-					zap.Error(err),
-				)
+				lock.RLock()
+				share := cr.BaseRunner.Share[validatorIndex]
+				lock.RUnlock()
 
-				anyErr = errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
-				continue
-			}
-			specSig := phase0.BLSSignature{}
-			copy(specSig[:], sig)
+				pubKey := share.ValidatorPubKey
+				vlogger := logger.With(zap.Uint64("validator_index", uint64(validatorIndex)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
 
-			const eventMsg = "🧩 reconstructed partial signatures committee"
-			span.AddEvent(eventMsg)
-			vlogger.Debug(eventMsg, zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
-			// Get the beacon object related to root
-			validatorObjs, exists := beaconObjects[validator]
-			if !exists {
-				anyErr = errors.Wrap(err, "could not find beacon object for validator")
-				continue
-			}
-			sszObject, exists := validatorObjs[root]
-			if !exists {
-				anyErr = errors.Wrap(err, "could not find beacon object for validator")
-				continue
-			}
-
-			// Store objects for multiple submission
-			if role == spectypes.BNRoleSyncCommittee {
-				syncMsg := sszObject.(*altair.SyncCommitteeMessage)
-				// Insert signature
-				syncMsg.Signature = specSig
-
-				syncCommitteeMessagesToSubmit[validator] = syncMsg
-
-			} else if role == spectypes.BNRoleAttester {
-				// Only mark as safe if this is an attester role
-				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
-				// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
-				cr.doppelgangerHandler.ReportQuorum(validator)
-
-				att := sszObject.(*spec.VersionedAttestation)
-				// Insert signature
-				att, err = specssv.VersionedAttestationWithSignature(att, specSig)
+				sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
+				// If the reconstructed signature verification failed, fall back to verifying each partial signature
 				if err != nil {
-					anyErr = errors.Wrap(err, "could not insert signature in versioned attestation")
+					for root := range roots {
+						cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root, share.Committee, validatorIndex)
+					}
+					const eventMsg = "got post-consensus quorum but it has invalid signatures"
+					span.AddEvent(eventMsg)
+					vlogger.Error(eventMsg, fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Error(err))
+
+					errCh <- fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+					return
+				}
+
+				vlogger.Debug("🧩 reconstructed partial signatures committee", zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
+				result := signatureResult{
+					validatorIndex: validatorIndex,
+				}
+				copy(result.signature[:], sig)
+				signatureCh <- result
+			}(validator, root, deduplicatedRoots)
+		}
+
+		go func() {
+			wg.Wait()
+			close(signatureCh)
+		}()
+
+	listener:
+		for {
+			select {
+			case err := <-errCh:
+				executionErr = err
+			case signatureResult, ok := <-signatureCh:
+				if !ok {
+					break listener
+				}
+				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
+				if !exists {
+					executionErr = fmt.Errorf("could not find beacon object for validator")
+					continue
+				}
+				sszObject, exists := validatorObjects[root]
+				if !exists {
+					executionErr = fmt.Errorf("could not find beacon object for validator")
 					continue
 				}
 
-				attestationsToSubmit[validator] = att
+				// Store objects for multiple submission
+				if role == spectypes.BNRoleSyncCommittee {
+					syncMsg := sszObject.(*altair.SyncCommitteeMessage)
+					syncMsg.Signature = signatureResult.signature
+
+					syncCommitteeMessagesToSubmit[signatureResult.validatorIndex] = syncMsg
+				} else if role == spectypes.BNRoleAttester {
+					// Only mark as safe if this is an attester role
+					// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
+					// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
+					cr.doppelgangerHandler.ReportQuorum(signatureResult.validatorIndex)
+
+					att := sszObject.(*spec.VersionedAttestation)
+					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
+					if err != nil {
+						executionErr = fmt.Errorf("could not insert signature in versioned attestation")
+						continue
+					}
+
+					attestationsToSubmit[signatureResult.validatorIndex] = att
+				}
 			}
 		}
 	}
@@ -681,14 +708,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	logger = logger.With(fields.PostConsensusTime(cr.measurements.PostConsensusTime()))
 
-	// Submit multiple attestations
 	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
 	for _, att := range attestationsToSubmit {
 		if att != nil && att.ValidatorIndex != nil {
-			span.AddEvent("adding attestation to submit to beacon", trace.WithAttributes(
-				observability.ValidatorIndexAttribute(*att.ValidatorIndex),
-			))
-
 			attestations = append(attestations, att)
 		}
 	}
@@ -696,8 +718,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	cr.measurements.EndDutyFlow()
 
 	if len(attestations) > 0 {
-		submissionStart := time.Now()
 		span.AddEvent("submitting attestations")
+		submissionStart := time.Now()
+
+		// Submit multiple attestations
 		if err := cr.beacon.SubmitAttestations(ctx, attestations); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
 
@@ -753,6 +777,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	if len(syncCommitteeMessages) > 0 {
+		span.AddEvent("submitting sync committee")
 		submissionStart := time.Now()
 		if err := cr.beacon.SubmitSyncMessages(ctx, syncCommitteeMessages); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
@@ -798,9 +823,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		}
 	}
 
-	if anyErr != nil {
-		span.SetStatus(codes.Error, anyErr.Error())
-		return anyErr
+	if executionErr != nil {
+		span.SetStatus(codes.Error, executionErr.Error())
+		return executionErr
 	}
 
 	// Check if duty has terminated (runner has submitted for all duties)
@@ -902,7 +927,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(beaconVoteData); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
+		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
 	}
 
 	slot := duty.DutySlot()
