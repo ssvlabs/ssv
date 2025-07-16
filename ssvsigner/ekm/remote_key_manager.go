@@ -536,7 +536,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 }
 
 func (km *RemoteKeyManager) getForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
-	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
+	_, currentFork := km.beaconConfig.BeaconForkAtEpoch(epoch)
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
