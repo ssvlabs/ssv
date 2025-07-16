@@ -85,7 +85,7 @@ func (ps *PartialSigContainer) GetSignatures(validatorIndex phase0.ValidatorInde
 	signaturesCopy := make(map[spectypes.OperatorID]spectypes.Signature, len(signatures))
 	maps.Copy(signaturesCopy, signatures)
 
-	// Return a copy to avoid external mutation
+	// Return a copy to avoid external mutation and avoid data races
 	return signaturesCopy
 }
 
