@@ -687,6 +687,41 @@ func (s *validatorStoreImpl) GetValidator(id ValidatorID) (*ValidatorSnapshot, b
 	return s.createSnapshot(state), true
 }
 
+// GetValidatorIndex retrieves a validator's index by its identifier (pubkey or index).
+// This is a convenience method that extracts the index from the validator's metadata.
+// If the input is already a ValidatorIndex, it validates that the validator exists.
+func (s *validatorStoreImpl) GetValidatorIndex(id ValidatorID) (phase0.ValidatorIndex, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var key string
+
+	switch v := id.(type) {
+	case ValidatorPubKey:
+		key = hex.EncodeToString(v[:])
+	case ValidatorIndex:
+		// For ValidatorIndex input, first check if it exists in indices map
+		pubKey, exists := s.indices[phase0.ValidatorIndex(v)]
+		if !exists {
+			return 0, false
+		}
+		key = hex.EncodeToString(pubKey[:])
+	default:
+		return 0, false
+	}
+
+	state, exists := s.validators[key]
+	if !exists {
+		return 0, false
+	}
+
+	if !state.share.HasBeaconMetadata() {
+		return 0, false
+	}
+
+	return state.share.ValidatorIndex, true
+}
+
 // GetCommittee returns a committee snapshot by ID.
 func (s *validatorStoreImpl) GetCommittee(id spectypes.CommitteeID) (*CommitteeSnapshot, bool) {
 	s.mu.RLock()

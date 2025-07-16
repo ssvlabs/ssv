@@ -347,6 +347,67 @@ func TestValidatorStore_InitialState(t *testing.T) {
 	})
 }
 
+func TestValidatorStore_GetValidatorIndex(t *testing.T) {
+	t.Run("get index by pubkey", func(t *testing.T) {
+		store, _, _ := createTestStore(t, testShare1, testShare2)
+
+		// Test existing validator with metadata
+		index, exists := store.GetValidatorIndex(ValidatorPubKey(testShare1.ValidatorPubKey))
+		require.True(t, exists)
+		require.Equal(t, testShare1.ValidatorIndex, index)
+
+		// Test non-existing validator
+		var nonExistentPubKey spectypes.ValidatorPK
+		copy(nonExistentPubKey[:], []byte{255, 255, 255})
+		index, exists = store.GetValidatorIndex(ValidatorPubKey(nonExistentPubKey))
+		require.False(t, exists)
+		require.Equal(t, phase0.ValidatorIndex(0), index)
+	})
+
+	t.Run("get index by index (validation)", func(t *testing.T) {
+		store, _, _ := createTestStore(t, testShare1, testShare2)
+
+		// Test existing validator index - should return same index
+		index, exists := store.GetValidatorIndex(ValidatorIndex(testShare1.ValidatorIndex))
+		require.True(t, exists)
+		require.Equal(t, testShare1.ValidatorIndex, index)
+
+		// Test non-existing validator index
+		index, exists = store.GetValidatorIndex(ValidatorIndex(99999))
+		require.False(t, exists)
+		require.Equal(t, phase0.ValidatorIndex(0), index)
+	})
+
+	t.Run("validator without metadata", func(t *testing.T) {
+		shareWithoutMetadata := &types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorIndex:      0, // No index assigned
+				ValidatorPubKey:     spectypes.ValidatorPK{100, 101, 102},
+				Committee:           []*spectypes.ShareMember{{Signer: 1}},
+				FeeRecipientAddress: [20]byte{1, 2, 3},
+			},
+			Status:       eth2apiv1.ValidatorStateUnknown, // No beacon metadata
+			OwnerAddress: common.HexToAddress("0x12345"),
+		}
+
+		store, _, _ := createTestStore(t, shareWithoutMetadata)
+
+		// Should return false for validator without beacon metadata
+		index, exists := store.GetValidatorIndex(ValidatorPubKey(shareWithoutMetadata.ValidatorPubKey))
+		require.False(t, exists)
+		require.Equal(t, phase0.ValidatorIndex(0), index)
+	})
+
+	t.Run("invalid validator id type", func(t *testing.T) {
+		store, _, _ := createTestStore(t, testShare1)
+
+		// Test with nil ValidatorID (should not happen in practice, but test defensive code)
+		index, exists := store.GetValidatorIndex(nil)
+		require.False(t, exists)
+		require.Equal(t, phase0.ValidatorIndex(0), index)
+	})
+}
+
 func TestValidatorStore_OnShareAdded(t *testing.T) {
 	ctx := t.Context()
 

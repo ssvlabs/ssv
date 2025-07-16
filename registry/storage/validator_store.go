@@ -93,6 +93,12 @@ type ValidatorQuerier interface {
 	// whether the validator was found.
 	GetValidator(id ValidatorID) (*ValidatorSnapshot, bool)
 
+	// GetValidatorIndex retrieves a validator's index by its identifier (pubkey or index).
+	// This is a convenience method that extracts the index from the validator's metadata.
+	// Returns the index and a boolean indicating whether the validator was found and has an index.
+	// If the input is already a ValidatorIndex, it validates that the validator exists.
+	GetValidatorIndex(id ValidatorID) (phase0.ValidatorIndex, bool)
+
 	// GetAllValidators returns a slice of snapshots for all validators currently managed by the store.
 	GetAllValidators() []*ValidatorSnapshot
 

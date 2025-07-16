@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 
@@ -43,7 +45,7 @@ type DutyTraceStore interface {
 }
 
 func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
-	index, found := c.validators.ValidatorIndex(pubkey)
+	index, found := c.validators.GetValidatorIndex(registrystorage.ValidatorPubKey(pubkey))
 	if !found {
 		return spectypes.CommitteeID{}, 0, fmt.Errorf("validator not found")
 	}

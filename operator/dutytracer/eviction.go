@@ -2,8 +2,9 @@ package validator
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"go.uber.org/zap"
+
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -79,7 +80,7 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 		for _, role := range trace.roleTraces() {
 			if role.Validator == 0 {
 				c.logger.Info("got trace with missing validator index", fields.Validator(pk[:]), fields.Slot(slot))
-				index, found := c.validators.GetValidator(registrystorage.ValidatorPubKey(pk))
+				index, found := c.validators.GetValidatorIndex(registrystorage.ValidatorPubKey(pk))
 				if !found {
 					continue
 				}

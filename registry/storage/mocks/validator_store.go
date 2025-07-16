@@ -174,6 +174,21 @@ func (mr *MockValidatorStoreMockRecorder) GetValidator(id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockValidatorStore)(nil).GetValidator), id)
 }
 
+// GetValidatorIndex mocks base method.
+func (m *MockValidatorStore) GetValidatorIndex(id storage.ValidatorID) (phase0.ValidatorIndex, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidatorIndex", id)
+	ret0, _ := ret[0].(phase0.ValidatorIndex)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetValidatorIndex indicates an expected call of GetValidatorIndex.
+func (mr *MockValidatorStoreMockRecorder) GetValidatorIndex(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorIndex", reflect.TypeOf((*MockValidatorStore)(nil).GetValidatorIndex), id)
+}
+
 // GetValidatorStatusReport mocks base method.
 func (m *MockValidatorStore) GetValidatorStatusReport() storage.ValidatorStatusReport {
 	m.ctrl.T.Helper()
@@ -585,6 +600,21 @@ func (m *MockValidatorQuerier) GetValidator(id storage.ValidatorID) (*storage.Va
 func (mr *MockValidatorQuerierMockRecorder) GetValidator(id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockValidatorQuerier)(nil).GetValidator), id)
+}
+
+// GetValidatorIndex mocks base method.
+func (m *MockValidatorQuerier) GetValidatorIndex(id storage.ValidatorID) (phase0.ValidatorIndex, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidatorIndex", id)
+	ret0, _ := ret[0].(phase0.ValidatorIndex)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetValidatorIndex indicates an expected call of GetValidatorIndex.
+func (mr *MockValidatorQuerierMockRecorder) GetValidatorIndex(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorIndex", reflect.TypeOf((*MockValidatorQuerier)(nil).GetValidatorIndex), id)
 }
 
 // MockCommitteeQuerier is a mock of CommitteeQuerier interface.
