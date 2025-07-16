@@ -113,7 +113,7 @@ func TestForkAtEpoch(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		version, fork := config.ForkAtEpoch(tc.epoch)
+		version, fork := config.BeaconForkAtEpoch(tc.epoch)
 		require.Equal(t, tc.version, version, "Wrong version")
 		require.NotNil(t, tc.fork, fork, "Nil fork")
 		require.Equal(t, tc.fork, *fork, "Wrong fork")
