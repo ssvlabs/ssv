@@ -644,9 +644,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 					return
 				}
 
+				debugLogger := logger.Named("DEBUGGING")
 				start := time.Now()
-				vlogger.Debug("🧩 reconstructed partial signatures committee", zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
-				logger.Info("DEBUG: fetched consensus committee signers", zap.Duration("elapsed", time.Since(start)))
+				vlogger.Debug("🧩 reconstructed partial signatures committee", zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root, logger)))
+				debugLogger.Info("DEBUG: fetched consensus committee signers", zap.Duration("elapsed", time.Since(start)))
 
 				result := signatureResult{
 					validatorIndex: validatorIndex,
