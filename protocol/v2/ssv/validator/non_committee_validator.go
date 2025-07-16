@@ -243,17 +243,17 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 	}
 
 	for _, msg := range partialMsgs.Messages {
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
+		validatorSnapshot, exists := ncv.ValidatorStore.GetValidator(registrystorage.ValidatorIndex(msg.ValidatorIndex))
 		if !exists {
-			return fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
+			return fmt.Errorf("could not find share for validatorSnapshot with index %d", msg.ValidatorIndex)
 		}
 		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
-			container = ssv.NewPartialSigContainer(validator.Quorum())
+			container = ssv.NewPartialSigContainer(validatorSnapshot.Share.Quorum())
 			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			if err := ncv.resolveDuplicateSignature(container, msg, validator); err != nil {
+			if err := ncv.resolveDuplicateSignature(container, msg, &validatorSnapshot.Share); err != nil {
 				return err
 			}
 		} else {

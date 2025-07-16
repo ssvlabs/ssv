@@ -511,7 +511,7 @@ var StartNodeCmd = &cobra.Command{
 					Store: dutytracestore.New(db),
 				}
 				collector = dutytracer.New(logger,
-					nodeStorage.ValidatorStore(), consensusClient,
+					validatorStore, consensusClient,
 					dstore, networkConfig.BeaconConfig)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
@@ -654,7 +654,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				handlers.NewExporter(logger, storageMap, collector, validatorStore),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {

@@ -544,8 +544,8 @@ func (c *controller) handleNonCommitteeMessages(
 	return nil
 }
 
-// StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators(ctx context.Context) {
+// StartValidators loads all persisted shares and sets up the corresponding validators
+func (c *controller) StartValidators(context.Context) {
 	// Get own validators from ValidatorStore
 	ownValidators := c.validatorStore.GetSelfValidators()
 
@@ -553,12 +553,6 @@ func (c *controller) StartValidators(ctx context.Context) {
 		close(c.committeeValidatorSetup)
 		c.logger.Info("could not find validators")
 
-		// Subscribe to random subnet if no validators
-		if !c.validatorOptions.Exporter {
-			if err := c.network.SubscribeRandoms(1); err != nil {
-				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
-			}
-		}
 		return
 	}
 
