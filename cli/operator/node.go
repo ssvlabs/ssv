@@ -410,7 +410,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			networkConfig.Forks[spec.DataVersionElectra].Epoch,
+			networkConfig.BeaconConfig.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 
@@ -605,7 +605,7 @@ var StartNodeCmd = &cobra.Command{
 			myActiveSubnets := 0
 			for _, v := range myValidators {
 				var subnet uint64
-				if networkConfig.NetworkTopologyFork() {
+				if networkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 					subnet = networkcommons.CommitteeSubnetPostFork(v.OperatorIDs())
 				} else {
 					subnet = networkcommons.CommitteeSubnet(v.CommitteeID())

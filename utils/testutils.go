@@ -108,7 +108,7 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 
 	mockNetwork.EXPECT().GetGasLimit36Epoch().Return(phase0.Epoch(0)).AnyTimes()
 
-	mockNetwork.EXPECT().NetworkTopologyFork().Return(false).AnyTimes()
+	mockNetwork.EXPECT().SSVForkAtEpoch(gomock.Any()).Return(networkconfig.AlanFork).AnyTimes()
 
 	return mockNetwork
 }

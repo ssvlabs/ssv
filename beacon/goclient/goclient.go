@@ -371,7 +371,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return // Tests may override Fatal's behavior
 			}
 
-			dataVersion, _ := currentConfig.ForkAtEpoch(currentConfig.EstimatedCurrentEpoch())
+			dataVersion, _ := currentConfig.BeaconForkAtEpoch(currentConfig.EstimatedCurrentEpoch())
 			logger.Info("retrieved beacon config",
 				zap.Uint64("data_version", uint64(dataVersion)),
 				zap.Stringer("config", currentConfig),

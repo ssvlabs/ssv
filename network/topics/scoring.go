@@ -226,7 +226,7 @@ func filterCommitteesForTopic(netCfg *networkconfig.NetworkConfig, topic string,
 	for _, committee := range committees {
 		// Get topic
 		var subnet uint64
-		if netCfg.NetworkTopologyFork() {
+		if netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 			subnet = commons.CommitteeSubnetPostFork(committee.Operators)
 		} else {
 			subnet = commons.CommitteeSubnet(committee.ID)

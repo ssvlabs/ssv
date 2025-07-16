@@ -43,6 +43,35 @@ func (m *MockNetwork) EXPECT() *MockNetworkMockRecorder {
 	return m.recorder
 }
 
+// BeaconForkAtEpoch mocks base method.
+func (m *MockNetwork) BeaconForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeaconForkAtEpoch", epoch)
+	ret0, _ := ret[0].(spec.DataVersion)
+	ret1, _ := ret[1].(*phase0.Fork)
+	return ret0, ret1
+}
+
+// BeaconForkAtEpoch indicates an expected call of BeaconForkAtEpoch.
+func (mr *MockNetworkMockRecorder) BeaconForkAtEpoch(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeaconForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).BeaconForkAtEpoch), epoch)
+}
+
+// CurrentSSVFork mocks base method.
+func (m *MockNetwork) CurrentSSVFork() ForkName {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CurrentSSVFork")
+	ret0, _ := ret[0].(ForkName)
+	return ret0
+}
+
+// CurrentSSVFork indicates an expected call of CurrentSSVFork.
+func (mr *MockNetworkMockRecorder) CurrentSSVFork() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentSSVFork", reflect.TypeOf((*MockNetwork)(nil).CurrentSSVFork))
+}
+
 // EpochDuration mocks base method.
 func (m *MockNetwork) EpochDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -181,21 +210,6 @@ func (m *MockNetwork) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
 func (mr *MockNetworkMockRecorder) FirstSlotAtEpoch(epoch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FirstSlotAtEpoch", reflect.TypeOf((*MockNetwork)(nil).FirstSlotAtEpoch), epoch)
-}
-
-// ForkAtEpoch mocks base method.
-func (m *MockNetwork) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForkAtEpoch", epoch)
-	ret0, _ := ret[0].(spec.DataVersion)
-	ret1, _ := ret[1].(*phase0.Fork)
-	return ret0, ret1
-}
-
-// ForkAtEpoch indicates an expected call of ForkAtEpoch.
-func (mr *MockNetworkMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).ForkAtEpoch), epoch)
 }
 
 // GetDomainType mocks base method.
@@ -422,16 +436,16 @@ func (mr *MockNetworkMockRecorder) NetworkName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkName", reflect.TypeOf((*MockNetwork)(nil).NetworkName))
 }
 
-// NetworkTopologyFork mocks base method.
-func (m *MockNetwork) NetworkTopologyFork() bool {
+// SSVForkAtEpoch mocks base method.
+func (m *MockNetwork) SSVForkAtEpoch(epoch phase0.Epoch) ForkName {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NetworkTopologyFork")
-	ret0, _ := ret[0].(bool)
+	ret := m.ctrl.Call(m, "SSVForkAtEpoch", epoch)
+	ret0, _ := ret[0].(ForkName)
 	return ret0
 }
 
-// NetworkTopologyFork indicates an expected call of NetworkTopologyFork.
-func (mr *MockNetworkMockRecorder) NetworkTopologyFork() *gomock.Call {
+// SSVForkAtEpoch indicates an expected call of SSVForkAtEpoch.
+func (mr *MockNetworkMockRecorder) SSVForkAtEpoch(epoch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkTopologyFork", reflect.TypeOf((*MockNetwork)(nil).NetworkTopologyFork))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SSVForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).SSVForkAtEpoch), epoch)
 }

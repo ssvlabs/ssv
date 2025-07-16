@@ -227,7 +227,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 
 	// Rule: Check if message was sent in the correct topic
 	var messageTopics []string
-	if mv.netCfg.NetworkTopologyFork() {
+	if mv.netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		messageTopics = commons.CommitteeTopicIDPostFork(committeeInfo.committee)
 	} else {
 		messageTopics = commons.CommitteeTopicID(committeeInfo.committeeID)

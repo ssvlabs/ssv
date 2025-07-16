@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -52,7 +53,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	var topics []string
 
-	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		topics = commons.CommitteeTopicIDPostFork(msg.OperatorIDs)
 	} else {
 		if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
@@ -137,7 +138,7 @@ func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	updatedSubnets := n.persistentSubnets
 
-	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
 			updatedSubnets.Set(subnet)
@@ -166,7 +167,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		if err := n.subscribeCommitteePostFork(share.OperatorIDs()); err != nil {
 			return fmt.Errorf("could not subscribe to committee (post-fork): %w", err)
 		}
@@ -263,7 +264,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 
 	cmtid := share.CommitteeID()
 	var topics []string
-	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		topics = commons.CommitteeTopicIDPostFork(share.OperatorIDs())
 	} else {
 		topics = commons.CommitteeTopicID(cmtid)
@@ -273,7 +274,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 			return err
 		}
 	}
-	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		n.activeCommitteesPostFork.Delete(encodeCommittee(share.OperatorIDs()))
 	} else {
 		n.activeCommittees.Delete(string(cmtid[:]))

@@ -11,6 +11,7 @@ const forkName = "alan"
 
 type Network interface {
 	NetworkName() string
+	CurrentSSVFork() ForkName
 	Beacon
 	SSV
 }
@@ -32,4 +33,8 @@ func (n NetworkConfig) String() string {
 
 func (n NetworkConfig) NetworkName() string {
 	return fmt.Sprintf("%s:%s", n.Name, forkName)
+}
+
+func (n NetworkConfig) CurrentSSVFork() ForkName {
+	return n.SSVForkAtEpoch(n.EstimatedCurrentEpoch())
 }

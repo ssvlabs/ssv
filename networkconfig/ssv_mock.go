@@ -68,3 +68,17 @@ func (mr *MockSSVMockRecorder) GetGasLimit36Epoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockSSV)(nil).GetGasLimit36Epoch))
 }
+
+// SSVForkAtEpoch mocks base method.
+func (m *MockSSV) SSVForkAtEpoch(epoch phase0.Epoch) ForkName {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SSVForkAtEpoch", epoch)
+	ret0, _ := ret[0].(ForkName)
+	return ret0
+}
+
+// SSVForkAtEpoch indicates an expected call of SSVForkAtEpoch.
+func (mr *MockSSVMockRecorder) SSVForkAtEpoch(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SSVForkAtEpoch", reflect.TypeOf((*MockSSV)(nil).SSVForkAtEpoch), epoch)
+}
