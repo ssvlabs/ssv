@@ -43,7 +43,25 @@ func BenchmarkTracer(b *testing.B) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+
+	// Create proper ValidatorStore
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(zap.NewNop(), db, []byte("test"))
+
+	vstore, err := registrystorage.NewValidatorStore(
+		zap.NewNop(),
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		func() spectypes.OperatorID { return 1 },
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	// Define different message counts to test
 	messageCounts := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 4000, 8000}

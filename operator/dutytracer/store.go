@@ -86,7 +86,7 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 }
 
 func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
-	vIndex, found := c.validators.ValidatorIndex(pubkey)
+	vIndex, found := c.validators.GetValidatorIndex(registrystorage.ValidatorPubKey(pubkey))
 	if !found {
 		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
 	}
@@ -214,12 +214,12 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes
 
 	mapping := make(map[spectypes.CommitteeID]spectypes.ValidatorPK)
 	for _, link := range links {
-		share, found := c.validators.ValidatorByIndex(link.ValidatorIndex)
+		validatorSnapshot, found := c.validators.GetValidator(registrystorage.ValidatorIndex(link.ValidatorIndex))
 		if !found {
 			c.logger.Error("validator not found", fields.ValidatorIndex(link.ValidatorIndex))
 			continue
 		}
-		mapping[link.CommitteeID] = share.ValidatorPubKey
+		mapping[link.CommitteeID] = validatorSnapshot.Share.ValidatorPubKey
 	}
 
 	for _, duty := range duties {
@@ -270,7 +270,7 @@ func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) (out []*model.Commit
 }
 
 func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) (out []qbftstorage.ParticipantsRangeEntry, err error) {
-	index, found := c.validators.ValidatorIndex(pubkey)
+	index, found := c.validators.GetValidatorIndex(registrystorage.ValidatorPubKey(pubkey))
 	if !found {
 		return nil, fmt.Errorf("validator not found: %s", hex.EncodeToString(pubkey[:]))
 	}
@@ -361,7 +361,7 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 		slices.Sort(signers)
 		signers = slices.Compact(signers)
 
-		share, found := c.validators.ValidatorByIndex(duty.Validator)
+		validatorSnapshot, found := c.validators.GetValidator(registrystorage.ValidatorIndex(duty.Validator))
 		if !found {
 			c.logger.Error("validator not found", fields.ValidatorIndex(duty.Validator))
 			continue
@@ -369,7 +369,7 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 
 		out = append(out, qbftstorage.ParticipantsRangeEntry{
 			Slot:    slot,
-			PubKey:  share.ValidatorPubKey,
+			PubKey:  validatorSnapshot.Share.ValidatorPubKey,
 			Signers: signers,
 		})
 	}
