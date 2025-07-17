@@ -61,9 +61,8 @@ type TestEnvironment struct {
 	// TLS certificates
 	certDir            string
 	web3SignerCertPath string
-	web3SignerKeyPath  string
 	ssvSignerCertPath  string
-	ssvSignerKeyPath   string
+	e2eClientCertPath  string
 
 	// Operator key for validator encryption
 	operatorKey keys.OperatorPrivateKey
