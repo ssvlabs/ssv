@@ -591,6 +591,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconRoleAttribute(role),
 			observability.BeaconBlockRootAttribute(root),
+			observability.ValidatorCountAttribute(len(validators)),
 		))
 		logger.Debug(eventMsg,
 			fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
