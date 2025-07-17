@@ -28,12 +28,9 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
-	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/operator/validator"
-	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -155,14 +152,16 @@ func setupEventHandler(
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
 
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:           ctx,
-		NetworkConfig:     testNetworkConfig,
-		DB:                db,
-		RegistryStorage:   nodeStorage,
-		OperatorDataStore: operatorDataStore,
-		ValidatorsMap:     validators.New(ctx),
-	}, exporter.Options{})
+	validatorStore, err := registrystorage.NewValidatorStore(
+		logger,
+		nodeStorage.Shares(),
+		nodeStorage,
+		testNetworkConfig.BeaconConfig,
+		operatorDataStore.GetOperatorID,
+	)
+	if err != nil {
+		logger.Fatal("could not create validator store", zap.Error(err))
+	}
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
@@ -174,8 +173,8 @@ func setupEventHandler(
 	eh, err := eventhandler.New(
 		nodeStorage,
 		parser,
-		validatorCtrl,
 		testNetworkConfig,
+		validatorStore,
 		operatorDataStore,
 		privateKey,
 		keyManager,
@@ -198,7 +197,7 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

@@ -289,7 +289,10 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
+		operaStorage := registrystorage.NewOperatorsStorage(logger, db, operatorstorage.OperatorStoragePrefix)
+		sharesStorage, err := registrystorage.NewSharesStorage(db, operatorstorage.OperatorStoragePrefix)
+
+		nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 		if err != nil {
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
@@ -315,6 +318,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
+		validatorStore, err := registrystorage.NewValidatorStore(logger, sharesStorage, operaStorage, networkConfig.BeaconConfig, operatorDataStore.GetOperatorID)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -390,7 +394,6 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		}
 
-		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorDataStore.GetOperatorData().PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
@@ -405,7 +408,7 @@ var StartNodeCmd = &cobra.Command{
 
 		messageValidator := validation.New(
 			networkConfig,
-			nodeStorage.ValidatorStore(),
+			validatorStore,
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
@@ -478,7 +481,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ProposerDelay = cfg.ProposerDelay
-		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
+		cfg.SSVOptions.ValidatorOptions.ValidatorStore = validatorStore
 
 		fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 		if err != nil {
@@ -491,8 +494,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metadataSyncer := metadata.NewSyncer(
 			logger,
-			nodeStorage.Shares(),
-			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+			validatorStore,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -509,7 +511,7 @@ var StartNodeCmd = &cobra.Command{
 					Store: dutytracestore.New(db),
 				}
 				collector = dutytracer.New(logger,
-					nodeStorage.ValidatorStore(), consensusClient,
+					validatorStore, consensusClient,
 					dstore, networkConfig.BeaconConfig)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
@@ -526,7 +528,7 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
 				BeaconConfig:       networkConfig.BeaconConfig,
 				BeaconNode:         consensusClient,
-				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+				ValidatorProvider:  validatorStore,
 				SlotTickerProvider: slotTickerProvider,
 				Logger:             logger,
 			})
@@ -536,10 +538,11 @@ var StartNodeCmd = &cobra.Command{
 			logger.Info("Doppelganger protection disabled.")
 		}
 		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
+		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions, cfg.ExporterOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
+		cfg.SSVOptions.ValidatorStore = validatorStore
 
 		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
@@ -577,6 +580,7 @@ var StartNodeCmd = &cobra.Command{
 			operatorPrivKey,
 			keyManager,
 			doppelgangerHandler,
+			validatorStore,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
 			nodeProber.AddNode("event syncer", eventSyncer)
@@ -599,16 +603,18 @@ var StartNodeCmd = &cobra.Command{
 				idealPeersPerSubnet = 3
 			)
 			start := time.Now()
-			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
+			myValidators := validatorStore.GetSelfValidators()
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
-			for _, v := range myValidators {
-				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+
+			for _, snapshot := range myValidators {
+				subnet := networkcommons.CommitteeSubnet(snapshot.Share.CommitteeID())
 				if !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
 				}
 			}
+
 			idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 			if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 				logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
@@ -623,9 +629,11 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 				return validatorCtrl.GetValidatorStats()
 			}
+
 			if err := p2pNetwork.Setup(); err != nil {
 				logger.Fatal("failed to setup network", zap.Error(err))
 			}
+
 			if err := p2pNetwork.Start(); err != nil {
 				logger.Fatal("failed to start network", zap.Error(err))
 			}
@@ -646,7 +654,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				handlers.NewExporter(logger, storageMap, collector, validatorStore),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
@@ -1084,6 +1092,7 @@ func syncContractEvents(
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler eventhandler.DoppelgangerProvider,
+	validatorStore registrystorage.ValidatorStore,
 ) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
@@ -1095,8 +1104,8 @@ func syncContractEvents(
 	eventHandler, err := eventhandler.New(
 		nodeStorage,
 		eventParser,
-		validatorCtrl,
 		networkConfig,
+		validatorStore,
 		operatorDataStore,
 		operatorDecrypter,
 		keyManager,

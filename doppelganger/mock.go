@@ -15,7 +15,7 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/ssvlabs/ssv/protocol/v2/types"
+	storage "github.com/ssvlabs/ssv/registry/storage"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -119,18 +119,18 @@ func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 	return m.recorder
 }
 
-// SelfParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
+// GetSelfParticipatingValidators mocks base method.
+func (m *MockValidatorProvider) GetSelfParticipatingValidators(epoch phase0.Epoch, opts storage.ParticipationOptions) []*storage.ValidatorSnapshot {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SelfParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types.SSVShare)
+	ret := m.ctrl.Call(m, "GetSelfParticipatingValidators", epoch, opts)
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
 	return ret0
 }
 
-// SelfParticipatingValidators indicates an expected call of SelfParticipatingValidators.
-func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch any) *gomock.Call {
+// GetSelfParticipatingValidators indicates an expected call of GetSelfParticipatingValidators.
+func (mr *MockValidatorProviderMockRecorder) GetSelfParticipatingValidators(epoch, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfParticipatingValidators), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).GetSelfParticipatingValidators), epoch, opts)
 }
 
 // MockBeaconNode is a mock of BeaconNode interface.

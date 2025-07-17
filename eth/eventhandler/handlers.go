@@ -13,7 +13,6 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -97,7 +96,11 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	return nil
 }
 
-func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
+func (eh *EventHandler) handleOperatorRemoved(
+	ctx context.Context,
+	txn basedb.Txn,
+	event *contract.ContractOperatorRemoved,
+) error {
 	logger := eh.logger.With(
 		fields.EventName(OperatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -124,6 +127,15 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		return fmt.Errorf("could not delete operator data: %w", err)
 	}
 
+	// Notify ValidatorStore about operator removal
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	if err := eh.validatorStore.OnOperatorRemoved(ctx, event.OperatorId, opts); err != nil {
+		logger.Error("failed to notify validator store of operator removal", zap.Error(err))
+		return fmt.Errorf("notify validator store of operator removal: %w", err)
+	}
+
 	logger.Debug("processed event")
 	return nil
 }
@@ -132,6 +144,7 @@ func (eh *EventHandler) handleValidatorAdded(
 	ctx context.Context,
 	txn basedb.Txn,
 	event *contract.ContractValidatorAdded,
+	triggerCallbacks bool,
 ) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorAdded),
@@ -214,6 +227,16 @@ func (eh *EventHandler) handleValidatorAdded(
 			zap.String("got", event.Owner.String()))
 
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
+	}
+
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: triggerCallbacks,
+	}
+
+	// Notify ValidatorStore about the new share
+	// TODO: rename this method, maybe create a new struct with observer pattern
+	if err := eh.validatorStore.OnShareAdded(ctx, validatorShare, opts); err != nil {
+		return nil, fmt.Errorf("notify validator store of share addition: %w", err)
 	}
 
 	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
@@ -330,7 +353,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 var emptyPK = [48]byte{}
 
-func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
+func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorRemoved, triggerCallbacks bool) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -379,16 +402,24 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		// If txn gets rolled back, the validator state will remain removed, however, it's not an issue,
 		// because the node will crash and attempt to sync events again fixing the state inconsistency.
 		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
+	}
 
-		logger.Debug("processed event")
-		return share.ValidatorPubKey, nil
+	// Notify ValidatorStore about share removal for ALL shares (operator and non-operator)
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnShareRemoved(ctx, share.ValidatorPubKey, opts); err != nil {
+		return emptyPK, fmt.Errorf("notify validator store of share removal: %w", err)
 	}
 
 	logger.Debug("processed event")
+
+	if isOperatorShare {
+		return share.ValidatorPubKey, nil
+	}
+
 	return emptyPK, nil
 }
 
-func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
+func (eh *EventHandler) handleClusterLiquidated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterLiquidated, triggerCallbacks bool) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
 		fields.EventName(ClusterLiquidated),
 		fields.TxHash(event.Raw.TxHash),
@@ -411,11 +442,17 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 		logger = logger.With(zap.Strings("liquidated_validators", liquidatedPubKeys))
 	}
 
+	// Notify ValidatorStore about cluster liquidation
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnClusterLiquidated(ctx, event.Owner, event.OperatorIds, opts); err != nil {
+		return nil, fmt.Errorf("notify validator store of cluster liquidation: %w", err)
+	}
+
 	logger.Debug("processed event")
 	return toLiquidate, nil
 }
 
-func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
+func (eh *EventHandler) handleClusterReactivated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterReactivated, triggerCallbacks bool) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
 		fields.EventName(ClusterReactivated),
 		fields.TxHash(event.Raw.TxHash),
@@ -449,11 +486,17 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		logger = logger.With(zap.Strings("enabled_validators", enabledPubKeys))
 	}
 
+	// Notify ValidatorStore about cluster reactivation
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnClusterReactivated(ctx, event.Owner, event.OperatorIds, opts); err != nil {
+		return nil, fmt.Errorf("notify validator store of cluster reactivation: %w", err)
+	}
+
 	logger.Debug("processed event")
 	return toReactivate, nil
 }
 
-func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
+func (eh *EventHandler) handleFeeRecipientAddressUpdated(ctx context.Context, txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated, triggerCallbacks bool) (bool, error) {
 	logger := eh.logger.With(
 		fields.EventName(FeeRecipientAddressUpdated),
 		fields.TxHash(event.Raw.TxHash),
@@ -480,11 +523,17 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
 
+	// Notify ValidatorStore about fee recipient update
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnFeeRecipientUpdated(ctx, event.Owner, event.RecipientAddress, opts); err != nil {
+		return false, fmt.Errorf("notify validator store of fee recipient update: %w", err)
+	}
+
 	logger.Debug("processed event")
 	return r != nil, nil
 }
 
-func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*duties.ExitDescriptor, error) {
+func (eh *EventHandler) handleValidatorExited(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorExited, triggerCallbacks bool) (*registrystorage.ExitDescriptor, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorExited),
 		fields.TxHash(event.Raw.TxHash),
@@ -515,7 +564,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], share.ValidatorPubKey[:])
 
-	ed := &duties.ExitDescriptor{
+	ed := &registrystorage.ExitDescriptor{
 		OwnValidator:   false,
 		PubKey:         pk,
 		ValidatorIndex: share.ValidatorIndex,
@@ -523,6 +572,12 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	}
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		ed.OwnValidator = true
+	}
+
+	// Notify ValidatorStore about validator exit
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnValidatorExited(ctx, share.ValidatorPubKey, event.Raw.BlockNumber, opts); err != nil {
+		return nil, fmt.Errorf("notify validator store of validator exit: %w", err)
 	}
 
 	return ed, nil

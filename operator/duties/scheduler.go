@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -64,10 +66,10 @@ type ExecutionClient interface {
 
 // ValidatorProvider represents the component that controls validators via the scheduler
 type ValidatorProvider interface {
-	Validators() []*types.SSVShare
-	SelfValidators() []*types.SSVShare
-	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
-	Validator(pubKey []byte) (*types.SSVShare, bool)
+	GetAllValidators() []*registrystorage.ValidatorSnapshot
+	GetSelfValidators() []*registrystorage.ValidatorSnapshot
+	GetSelfParticipatingValidators(epoch phase0.Epoch, opts registrystorage.ParticipationOptions) []*registrystorage.ValidatorSnapshot
+	GetValidator(id registrystorage.ValidatorID) (*registrystorage.ValidatorSnapshot, bool)
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
@@ -84,7 +86,7 @@ type SchedulerOptions struct {
 	ValidatorController ValidatorController
 	DutyExecutor        DutyExecutor
 	IndicesChg          chan struct{}
-	ValidatorExitCh     <-chan ExitDescriptor
+	ValidatorExitCh     <-chan registrystorage.ExitDescriptor
 	SlotTickerProvider  slotticker.Provider
 	DutyStore           *dutystore.Store
 	P2PNetwork          network.P2PNetwork
