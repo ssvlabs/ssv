@@ -639,7 +639,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 					span.AddEvent(eventMsg)
 					vlogger.Error(eventMsg, fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Error(err))
 
-					errCh <- fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+					errCh <- fmt.Errorf("%s: %w", eventMsg, err)
 					return
 				}
 
