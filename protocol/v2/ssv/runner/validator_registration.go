@@ -267,7 +267,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 	gasLimit := r.gasLimit
 	if gasLimit == 0 {
 		defaultGasLimit := DefaultGasLimit
-		if r.BaseRunner.NetworkConfig.EstimatedCurrentEpoch() < r.BaseRunner.NetworkConfig.GetGasLimit36Epoch() {
+		if r.BaseRunner.NetworkConfig.EstimatedCurrentEpoch() < r.BaseRunner.NetworkConfig.GasLimit36Epoch {
 			defaultGasLimit = DefaultGasLimitOld
 		}
 		gasLimit = defaultGasLimit
