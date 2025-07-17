@@ -269,6 +269,12 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 		}
 	}
 
+	c.logger.Debug("check for missing keys completed",
+		zap.Int("remote_count", len(remoteKeys)),
+		zap.Int("local_count", len(localKeys)),
+		zap.Int("missing_count", len(missing)),
+	)
+
 	return missing, nil
 }
 
