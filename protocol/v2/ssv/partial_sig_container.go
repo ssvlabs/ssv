@@ -2,6 +2,7 @@ package ssv
 
 import (
 	"encoding/hex"
+	"maps"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -83,7 +84,11 @@ func (ps *PartialSigContainer) GetSignatures(validatorIndex phase0.ValidatorInde
 		return nil
 	}
 
-	return signatures
+	signaturesCopy := make(map[spectypes.OperatorID]spectypes.Signature, len(signatures))
+	maps.Copy(signaturesCopy, signatures)
+
+	// Return a copy to avoid external mutation and avoid data races
+	return signaturesCopy
 }
 
 // Remove signer from signature map
