@@ -334,7 +334,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					totalAttesterDuties.Add(1)
 					isAttesterDutyBlocked, partialSigMsg, err := cr.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
 					if err != nil {
-						errCh <- observability.Errorf(span, "failed signing attestation data: %w", err)
+						errCh <- fmt.Errorf("failed signing attestation data: %w", err)
 						return
 					}
 					if isAttesterDutyBlocked {
@@ -355,7 +355,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 						spectypes.DomainSyncCommittee,
 					)
 					if err != nil {
-						errCh <- observability.Errorf(span, "failed signing sync committee message: %w", err)
+						errCh <- fmt.Errorf("failed signing sync committee message: %w", err)
 						return
 					}
 
