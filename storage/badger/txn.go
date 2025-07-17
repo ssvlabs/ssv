@@ -32,14 +32,14 @@ func (t badgerTxn) Set(prefix []byte, key []byte, value []byte) error {
 	return t.txn.Set(append(prefix, key...), value)
 }
 
-func (t badgerTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+func (t badgerTxn) SetMany(prefix []byte, n int, next func(int) (key, value []byte, err error)) error {
 	for i := 0; i < n; i++ {
-		item, err := next(i)
+		key, value, err := next(i)
 		if err != nil {
 			return err
 		}
 
-		if err := t.txn.Set(append(prefix, item.Key...), item.Value); err != nil {
+		if err := t.txn.Set(append(prefix, key...), value); err != nil {
 			return err
 		}
 	}
@@ -52,17 +52,17 @@ func (t badgerTxn) Get(prefix []byte, key []byte) (obj basedb.Obj, found bool, e
 	item, err := t.txn.Get(append(prefix, key...))
 	if err != nil {
 		if errors.Is(err, badger.ErrKeyNotFound) { // in order to couple the not found errors together
-			return basedb.Obj{}, false, nil
+			return Obj{}, false, nil
 		}
-		return basedb.Obj{}, true, err
+		return Obj{}, true, err
 	}
 	resValue, err = item.ValueCopy(nil)
 	if err != nil {
-		return basedb.Obj{}, true, err
+		return Obj{}, true, err
 	}
-	return basedb.Obj{
-		Key:   key,
-		Value: resValue,
+	return Obj{
+		key:   key,
+		value: resValue,
 	}, true, err
 }
 

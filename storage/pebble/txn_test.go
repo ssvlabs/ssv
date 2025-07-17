@@ -55,19 +55,19 @@ func TestPebbleTxn_SetMany(t *testing.T) {
 	prefix := []byte("test_prefix")
 
 	// Test data
-	items := []basedb.Obj{
-		{Key: []byte("key1"), Value: []byte("value1")},
-		{Key: []byte("key2"), Value: []byte("value2")},
+	items := []Obj{
+		{key: []byte("key1"), value: []byte("value1")},
+		{key: []byte("key2"), value: []byte("value2")},
 	}
 
-	err := txn.SetMany(prefix, len(items), func(i int) (basedb.Obj, error) {
-		return items[i], nil
+	err := txn.SetMany(prefix, len(items), func(i int) (key, value []byte, err error) {
+		return items[i].key, items[i].value, nil
 	})
 	require.NoError(t, err)
 
 	// Verify all items were set
 	for _, item := range items {
-		obj, found, err := txn.Get(prefix, item.Key)
+		obj, found, err := txn.Get(prefix, item.Key())
 		require.NoError(t, err)
 		require.True(t, found)
 		assert.Equal(t, item.Key, obj.Key)
@@ -106,22 +106,22 @@ func TestPebbleTxn_GetMany(t *testing.T) {
 	prefix := []byte("test_prefix")
 
 	// Test data
-	items := []basedb.Obj{
-		{Key: []byte("key1"), Value: []byte("value1")},
-		{Key: []byte("key2"), Value: []byte("value2")},
-		{Key: []byte("key3"), Value: []byte("value3")},
+	items := []Obj{
+		{key: []byte("key1"), value: []byte("value1")},
+		{key: []byte("key2"), value: []byte("value2")},
+		{key: []byte("key3"), value: []byte("value3")},
 	}
 
 	// Set items
-	err := txn.SetMany(prefix, len(items), func(i int) (basedb.Obj, error) {
-		return items[i], nil
+	err := txn.SetMany(prefix, len(items), func(i int) (key, value []byte, err error) {
+		return items[i].key, items[i].value, nil
 	})
 	require.NoError(t, err)
 
 	// Test getting all keys
 	keys := make([][]byte, len(items))
 	for i, item := range items {
-		keys[i] = item.Key
+		keys[i] = item.key
 	}
 
 	var results []basedb.Obj
@@ -146,15 +146,15 @@ func TestPebbleTxn_GetAll(t *testing.T) {
 	prefix := []byte("test_prefix")
 
 	// Test data
-	items := []basedb.Obj{
-		{Key: []byte("key1"), Value: []byte("value1")},
-		{Key: []byte("key2"), Value: []byte("value2")},
-		{Key: []byte("key3"), Value: []byte("value3")},
+	items := []Obj{
+		{key: []byte("key1"), value: []byte("value1")},
+		{key: []byte("key2"), value: []byte("value2")},
+		{key: []byte("key3"), value: []byte("value3")},
 	}
 
 	// Set items
 	for _, item := range items {
-		err := txn.Set(prefix, item.Key, item.Value)
+		err := txn.Set(prefix, item.Key(), item.Value())
 		require.NoError(t, err)
 	}
 
@@ -170,7 +170,7 @@ func TestPebbleTxn_GetAll(t *testing.T) {
 	require.Len(t, results, len(items))
 
 	slices.SortFunc(results, func(a, b basedb.Obj) int {
-		return bytes.Compare(a.Key, b.Key)
+		return bytes.Compare(a.Key(), b.Key())
 	})
 
 	// Verify results
@@ -275,8 +275,8 @@ func TestPebbleTxn_SetMany_Error(t *testing.T) {
 	expectedErr := errors.New("next function error")
 
 	// Test with next function that returns an error
-	err := txn.SetMany(prefix, 1, func(i int) (basedb.Obj, error) {
-		return basedb.Obj{}, expectedErr
+	err := txn.SetMany(prefix, 1, func(i int) (key, value []byte, err error) {
+		return nil, nil, expectedErr
 	})
 	require.Error(t, err)
 	assert.Equal(t, expectedErr, err)
@@ -362,16 +362,16 @@ func TestPebbleReadTxn_GetAll(t *testing.T) {
 	prefix := []byte("test_prefix")
 
 	// Set up test data
-	testData := []basedb.Obj{
-		{Key: []byte("key1"), Value: []byte("value1")},
-		{Key: []byte("key2"), Value: []byte("value2")},
-		{Key: []byte("key3"), Value: []byte("value3")},
+	testData := []Obj{
+		{key: []byte("key1"), value: []byte("value1")},
+		{key: []byte("key2"), value: []byte("value2")},
+		{key: []byte("key3"), value: []byte("value3")},
 	}
 
 	// Write data using a write transaction
 	err := db.Update(func(txn basedb.Txn) error {
 		for _, item := range testData {
-			if err := txn.Set(prefix, item.Key, item.Value); err != nil {
+			if err := txn.Set(prefix, item.Key(), item.Value()); err != nil {
 				return err
 			}
 		}
@@ -394,12 +394,12 @@ func TestPebbleReadTxn_GetAll(t *testing.T) {
 
 		// Sort results for consistent comparison
 		slices.SortFunc(results, func(a, b basedb.Obj) int {
-			return bytes.Compare(a.Key, b.Key)
+			return bytes.Compare(a.Key(), b.Key())
 		})
 
 		for i, result := range results {
-			require.Equal(t, testData[i].Key, result.Key)
-			require.Equal(t, testData[i].Value, result.Value)
+			require.Equal(t, testData[i].Key, result.Key())
+			require.Equal(t, testData[i].Value, result.Value())
 		}
 	})
 
@@ -475,16 +475,16 @@ func TestPebbleReadTxn_GetMany(t *testing.T) {
 	prefix := []byte("test_prefix")
 
 	// Set up test data
-	testData := []basedb.Obj{
-		{Key: []byte("key1"), Value: []byte("value1")},
-		{Key: []byte("key2"), Value: []byte("value2")},
-		{Key: []byte("key3"), Value: []byte("value3")},
+	testData := []Obj{
+		{key: []byte("key1"), value: []byte("value1")},
+		{key: []byte("key2"), value: []byte("value2")},
+		{key: []byte("key3"), value: []byte("value3")},
 	}
 
 	// Write data using a write transaction
 	err := db.Update(func(txn basedb.Txn) error {
 		for _, item := range testData {
-			if err := txn.Set(prefix, item.Key, item.Value); err != nil {
+			if err := txn.Set(prefix, item.Key(), item.Value()); err != nil {
 				return err
 			}
 		}
@@ -499,7 +499,7 @@ func TestPebbleReadTxn_GetMany(t *testing.T) {
 
 		keys := make([][]byte, len(testData))
 		for i, item := range testData {
-			keys[i] = item.Key
+			keys[i] = item.Key()
 		}
 
 		var results []basedb.Obj
@@ -512,7 +512,7 @@ func TestPebbleReadTxn_GetMany(t *testing.T) {
 
 		// Sort results for consistent comparison
 		slices.SortFunc(results, func(a, b basedb.Obj) int {
-			return bytes.Compare(a.Key, b.Key)
+			return bytes.Compare(a.Key(), b.Key())
 		})
 
 		for i, result := range results {
@@ -555,9 +555,9 @@ func TestPebbleReadTxn_GetMany(t *testing.T) {
 		defer readTxn.Discard()
 
 		keys := [][]byte{
-			testData[0].Key,
+			testData[0].Key(),
 			[]byte("non_existent"),
-			testData[1].Key,
+			testData[1].Key(),
 		}
 
 		var results []basedb.Obj
@@ -574,7 +574,7 @@ func TestPebbleReadTxn_GetMany(t *testing.T) {
 		readTxn := db.BeginRead()
 		defer readTxn.Discard()
 
-		keys := [][]byte{testData[0].Key}
+		keys := [][]byte{testData[0].Key()}
 		expectedErr := errors.New("iterator error")
 		err := readTxn.GetMany(prefix, keys, func(obj basedb.Obj) error {
 			return expectedErr
@@ -589,7 +589,7 @@ func TestPebbleReadTxn_GetMany(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(numGoroutines)
 
-		keys := [][]byte{testData[0].Key, testData[1].Key}
+		keys := [][]byte{testData[0].Key(), testData[1].Key()}
 
 		for range numGoroutines {
 			go func() {

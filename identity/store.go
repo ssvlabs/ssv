@@ -52,7 +52,7 @@ func (s identityStore) GetNetworkKey() (*ecdsa.PrivateKey, bool, error) {
 	if err != nil {
 		return nil, found, err
 	}
-	pk, err := decode(obj.Value)
+	pk, err := decode(obj.Value())
 	pk.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
 	if err != nil {
 		return nil, found, errors.WithMessage(err, "failed to decode private key")

@@ -161,7 +161,7 @@ func (pdb *DB) Update(fn func(basedb.Txn) error) error {
 	return batch.Commit(pebble.Sync)
 }
 
-func (pdb *DB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+func (pdb *DB) SetMany(prefix []byte, n int, next func(int) (key, value []byte, err error)) error {
 	batch := pdb.NewBatch()
 	txn := newTxn(pdb.logger, batch)
 	if err := txn.SetMany(prefix, n, next); err != nil {
