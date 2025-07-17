@@ -645,11 +645,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 				vlogger.Debug("🧩 reconstructed partial signature")
 
-				result := signatureResult{
+				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,
+					signature:      (phase0.BLSSignature)(sig),
 				}
-				copy(result.signature[:], sig)
-				signatureCh <- result
 			}(validator, root, deduplicatedRoots)
 		}
 
