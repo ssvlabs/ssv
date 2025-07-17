@@ -611,7 +611,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		)
 
 		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-
 		for _, validator := range validators {
 			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
 			if !cr.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root) {
@@ -647,7 +646,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 					return
 				}
 
-				vlogger.Debug("🧩 reconstructed partial signatures committee", zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
+				vlogger.Debug("🧩 reconstructed partial signature")
+
 				result := signatureResult{
 					validatorIndex: validatorIndex,
 				}
@@ -670,6 +670,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				if !ok {
 					break listener
 				}
+
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
 					executionErr = fmt.Errorf("could not find beacon object for validator")
@@ -704,6 +705,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				}
 			}
 		}
+
+		logger.Debug("🧩 reconstructed partial signatures for root",
+			zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)),
+			fields.BlockRoot(root),
+		)
 	}
 
 	cr.measurements.EndPostConsensus()
