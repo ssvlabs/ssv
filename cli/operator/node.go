@@ -335,6 +335,7 @@ var StartNodeCmd = &cobra.Command{
 				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
+				executionclient.WithHTTPLogClient(cfg.ExecutionClient.HTTPLogClientAddr),
 			)
 			if err != nil {
 				logger.Fatal("could not connect to execution client", zap.Error(err))
@@ -353,6 +354,7 @@ var StartNodeCmd = &cobra.Command{
 				executionclient.WithReconnectionMaxIntervalMulti(executionclient.DefaultReconnectionMaxInterval),
 				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
+				executionclient.WithHTTPLogClientMulti(cfg.ExecutionClient.HTTPLogClientAddr),
 			)
 			if err != nil {
 				logger.Fatal("could not connect to execution client", zap.Error(err))
