@@ -17,6 +17,8 @@ import (
 type SigningRoot string
 
 type PartialSigContainer struct {
+	// lock protects access to the Signatures map to prevent concurrent read/write access
+	// from multiple goroutines
 	lock sync.RWMutex
 	// Signature map: validator index -> signing root -> operator id (signer) -> signature (from the signer for the validator's signing root)
 	Signatures map[phase0.ValidatorIndex]map[specssv.SigningRoot]map[spectypes.OperatorID]spectypes.Signature

@@ -604,7 +604,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			validatorIndex phase0.ValidatorIndex
 		}
 		var (
-			lock        sync.RWMutex
 			wg          sync.WaitGroup
 			errCh       = make(chan error, len(validators))
 			signatureCh = make(chan signatureResult, len(validators))
@@ -625,9 +624,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots map[[32]byte]struct{}) {
 				defer wg.Done()
 
-				lock.RLock()
 				share := cr.BaseRunner.Share[validatorIndex]
-				lock.RUnlock()
 
 				pubKey := share.ValidatorPubKey
 				vlogger := logger.With(zap.Uint64("validator_index", uint64(validatorIndex)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
