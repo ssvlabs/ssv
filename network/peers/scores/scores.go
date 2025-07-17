@@ -1,4 +1,4 @@
-package peers
+package scores
 
 import (
 	"sort"
@@ -9,13 +9,27 @@ import (
 
 type PeerScore float64
 
+// NodeScore is a wrapping object for scores
+type NodeScore struct {
+	Name  string
+	Value float64
+}
+
+// ScoreIndex is an interface for managing peers scores
+type ScoreIndex interface {
+	// Score adds score to the given peer
+	Score(id peer.ID, scores ...*NodeScore) error
+	// GetScore returns the desired score for the given peer
+	GetScore(id peer.ID, names ...string) ([]NodeScore, error)
+}
+
 // scoresIndex implements ScoreIndex
 type scoresIndex struct {
 	scores map[peer.ID][]*NodeScore
 	lock   *sync.RWMutex
 }
 
-func newScoreIndex() ScoreIndex {
+func NewScoreIndex() ScoreIndex {
 	return &scoresIndex{
 		scores: map[peer.ID][]*NodeScore{},
 		lock:   &sync.RWMutex{},
