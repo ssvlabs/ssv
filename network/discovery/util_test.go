@@ -137,7 +137,7 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, commons.ZeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, commons.ZeroSubnets)
 }
 
 func NodeWithCustomSubnets(t *testing.T, subnets commons.Subnets) *enode.Node {

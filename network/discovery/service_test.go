@@ -282,9 +282,6 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 	_, ok := dvs.dv5Listener.(*discover.UDPv5)
 	require.True(t, ok)
 
-	_, ok = dvs.dv5Listener.(*forkingDV5Listener)
-	require.False(t, ok)
-
 	// Check bootnodes
 	CheckBootnodes(t, dvs, testNetConfig)
 
