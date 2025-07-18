@@ -39,12 +39,12 @@ func SubnetTopicID(subnet uint64) string {
 	return fmt.Sprintf("%d", subnet)
 }
 
-func CommitteeTopicID(cid spectypes.CommitteeID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnet(cid))}
+func CommitteeTopicIDAlan(cid spectypes.CommitteeID) []string {
+	return []string{fmt.Sprintf("%d", CommitteeSubnetAlan(cid))}
 }
 
-func CommitteeTopicIDPostFork(committee []spectypes.OperatorID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnetPostFork(committee))}
+func CommitteeTopicID(committee []spectypes.OperatorID) []string {
+	return []string{fmt.Sprintf("%d", CommitteeSubnet(committee))}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -57,13 +57,13 @@ func GetTopicBaseName(topicName string) string {
 	return strings.TrimPrefix(topicName, topicPrefix+".")
 }
 
-// CommitteeSubnet returns the subnet for the given committee
-func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
+// CommitteeSubnetAlan returns the subnet for the given committee
+func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
 	return subnet.Uint64()
 }
 
-func CommitteeSubnetPostFork(committee []spectypes.OperatorID) uint64 {
+func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 	if len(committee) < 4 {
 		panic(fmt.Sprintf("committee is too short: %v", committee))
 	}

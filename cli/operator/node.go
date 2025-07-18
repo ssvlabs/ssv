@@ -606,9 +606,9 @@ var StartNodeCmd = &cobra.Command{
 			for _, v := range myValidators {
 				var subnet uint64
 				if networkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-					subnet = networkcommons.CommitteeSubnetPostFork(v.OperatorIDs())
+					subnet = networkcommons.CommitteeSubnet(v.OperatorIDs())
 				} else {
-					subnet = networkcommons.CommitteeSubnet(v.CommitteeID())
+					subnet = networkcommons.CommitteeSubnetAlan(v.CommitteeID())
 				}
 				if !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)

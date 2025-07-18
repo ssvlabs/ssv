@@ -185,7 +185,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 
 			subnets := commons.Subnets{}
 			for _, share := range sharesWithMetadata {
-				subnets.Set(commons.CommitteeSubnet(share.CommitteeID()))
+				subnets.Set(commons.CommitteeSubnetAlan(share.CommitteeID()))
 			}
 
 			network.EXPECT().ActiveSubnets().Return(subnets).AnyTimes()

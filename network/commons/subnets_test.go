@@ -21,8 +21,8 @@ func TestCommitteeSubnet(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Get result from CommitteeSubnet
-		expected := CommitteeSubnet(cid)
+		// Get result from CommitteeSubnetAlan
+		expected := CommitteeSubnetAlan(cid)
 
 		// Get result from SetCommitteeSubnet
 		SetCommitteeSubnet(bigInst, cid)
