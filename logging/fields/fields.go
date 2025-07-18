@@ -377,7 +377,7 @@ func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, beaconRole spectypes.Bea
 }
 
 func FormatCommittee(operators []spectypes.OperatorID) string {
-	var opids []string
+	opids := make([]string, 0, len(operators))
 	for _, op := range operators {
 		opids = append(opids, fmt.Sprint(op))
 	}

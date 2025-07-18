@@ -99,7 +99,6 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 }
 
 func (pcs *State) UnmarshalJSON(data []byte) error {
-
 	// Create alias without duty
 	type StateAlias struct {
 		PreConsensusContainer  *ssv.PartialSigContainer

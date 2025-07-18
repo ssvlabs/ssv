@@ -66,7 +66,6 @@ func New(
 	store DutyTraceStore,
 	beaconNetwork *networkconfig.BeaconConfig,
 ) *Collector {
-
 	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration
 
 	collector := &Collector{
@@ -523,8 +522,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		tracerInFlightMessageHist.Record(ctx, time.Since(start).Seconds())
 	}()
 
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		subMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return nil
@@ -592,7 +590,6 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					var data = new(spectypes.ValidatorConsensusData)
 					if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
 						func() {
-
 							trace.Lock()
 							defer trace.Unlock()
 
@@ -627,7 +624,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			return nil
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
 		if err != nil {

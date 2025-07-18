@@ -18,7 +18,7 @@ func TestSubnetsIndex(t *testing.T) {
 	nks, err := nettesting.CreateKeys(4)
 	require.NoError(t, err)
 
-	var pids []peer.ID
+	pids := make([]peer.ID, 0, len(nks))
 	for _, nk := range nks {
 		sk, err := commons.ECDSAPrivToInterface(nk.NetKey)
 		require.NoError(t, err)

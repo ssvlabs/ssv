@@ -342,7 +342,6 @@ func TestValidatorStore_DropState(t *testing.T) {
 		s, e = store.Validator(share2.ValidatorPubKey[:])
 		require.False(t, e)
 		require.Nil(t, s)
-
 	})
 }
 
@@ -668,7 +667,6 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 		s, e := store.Validator(share1.ValidatorPubKey[:])
 		require.False(t, e)
 		require.Nil(t, s)
-
 	})
 }
 
@@ -683,7 +681,6 @@ func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 		s, e := store.Validator(share1.ValidatorPubKey[:])
 		require.False(t, e)
 		require.Nil(t, s)
-
 	})
 }
 

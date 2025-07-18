@@ -41,7 +41,7 @@ func init() {
 	//
 	// Reverting to LegacyValidation ensures compatibility across the observability stack.
 	// Suggestion: keep this until model.NameValidationScheme setting is deprecated
-	model.NameValidationScheme = model.LegacyValidation // nolint: staticcheck
+	model.NameValidationScheme = model.LegacyValidation //nolint: staticcheck
 }
 
 func Initialize(ctx context.Context, appName, appVersion string, l *zap.Logger, options ...Option) (shutdown func(context.Context) error, err error) {

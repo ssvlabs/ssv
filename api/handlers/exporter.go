@@ -87,7 +87,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
 
-	var pubkeys []spectypes.ValidatorPK
+	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.PubKeys))
 	for i, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		if len(req) != len(pubkey) {
@@ -154,7 +154,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	// Initialize with empty slice to ensure we always return [] instead of null
 	response.Data = make([]*ParticipantResponse, 0)
 
-	var pubkeys []spectypes.ValidatorPK
+	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.PubKeys))
 	for _, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		if len(req) != len(pubkey) {
@@ -292,7 +292,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return api.Render(w, r, toCommitteeTraceResponse(all))
 	}
 
-	var committeeIDs []spectypes.CommitteeID
+	committeeIDs := make([]spectypes.CommitteeID, 0, len(request.CommitteeIDs))
 
 	for _, cmt := range request.CommitteeIDs {
 		var id spectypes.CommitteeID
@@ -353,7 +353,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(errors.New("either pubkeys or indices is required"))
 	}
 
-	var pubkeys []spectypes.ValidatorPK
+	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.Indices))
 
 	for _, index := range request.Indices {
 		share, found := e.validators.ValidatorByIndex(phase0.ValidatorIndex(index))

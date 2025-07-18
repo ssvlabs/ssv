@@ -120,7 +120,6 @@ func testBroadcastedDecided(
 		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
 		found := false
 		for _, msg := range broadcastedSignedMsgs {
-
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
 			msgID := spectypes.MessageID{}
 			copy(msgID[:], identifier)

@@ -209,7 +209,8 @@ func (s *AttestationSlashingTestSuite) TestAttestationValidProgression() {
 	}
 
 	s.T().Logf("✍️ Phase 2: Signing attestations sequentially")
-	var allSigs []spectypes.Signature
+
+	allSigs := make([]spectypes.Signature, 0, len(attestations))
 
 	for _, attestationData := range attestations {
 		sig := s.RequireValidSigning(

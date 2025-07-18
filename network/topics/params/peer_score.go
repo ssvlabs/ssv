@@ -31,7 +31,7 @@ const (
 	ipColocationFactorWeight    = -topicScoreCap
 
 	// P7
-	behaviourPenaltyThreshold = 6
+	behaviorPenaltyThreshold = 6
 )
 
 // PeerScoreThresholds returns the thresholds to use for peer scoring
@@ -48,11 +48,11 @@ func PeerScoreThresholds() *pubsub.PeerScoreThresholds {
 // PeerScoreParams returns peer score params according to the given options
 func PeerScoreParams(netCfg *networkconfig.NetworkConfig, msgIDCacheTTL time.Duration, disableColocation bool, ipWhitelist ...*net.IPNet) *pubsub.PeerScoreParams {
 	// P7 calculation
-	behaviourPenaltyDecay := scoreDecay(netCfg.EpochDuration()*10, netCfg.EpochDuration())
+	behaviorPenaltyDecay := scoreDecay(netCfg.EpochDuration()*10, netCfg.EpochDuration())
 	maxAllowedRatePerDecayInterval := 10.0
-	targetVal, _ := decayConvergence(behaviourPenaltyDecay, maxAllowedRatePerDecayInterval)
-	targetVal = targetVal - behaviourPenaltyThreshold
-	behaviourPenaltyWeight := gossipThreshold / (targetVal * targetVal)
+	targetVal, _ := decayConvergence(behaviorPenaltyDecay, maxAllowedRatePerDecayInterval)
+	targetVal = targetVal - behaviorPenaltyThreshold
+	behaviorPenaltyWeight := gossipThreshold / (targetVal * targetVal)
 
 	finalIPColocationFactorWeight := ipColocationFactorWeight
 	if disableColocation {
@@ -80,8 +80,8 @@ func PeerScoreParams(netCfg *networkconfig.NetworkConfig, msgIDCacheTTL time.Dur
 		IPColocationFactorWhitelist: ipWhitelist,
 
 		// P7
-		BehaviourPenaltyWeight:    behaviourPenaltyWeight,
-		BehaviourPenaltyThreshold: behaviourPenaltyThreshold,
-		BehaviourPenaltyDecay:     behaviourPenaltyDecay,
+		BehaviourPenaltyWeight:    behaviorPenaltyWeight,
+		BehaviourPenaltyThreshold: behaviorPenaltyThreshold,
+		BehaviourPenaltyDecay:     behaviorPenaltyDecay,
 	}
 }

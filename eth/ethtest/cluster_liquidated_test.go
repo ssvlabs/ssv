@@ -71,7 +71,6 @@ func (input *testClusterLiquidatedInput) produce() {
 	require.NoError(input.t, err)
 
 	for _, event := range input.events {
-
 		// Call the contract method
 		_, err = input.boundContract.Liquidate(
 			event.auth,
