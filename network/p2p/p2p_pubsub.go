@@ -138,15 +138,17 @@ func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	updatedSubnets := n.persistentSubnets
 
-	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-		n.activeCommittees.Range(func(encodedCommittee string, status validatorStatus) bool {
-			committee := decodeCommittee(encodedCommittee)
-			subnet := commons.CommitteeSubnet(committee)
-			updatedSubnets.Set(subnet)
-			return true
-		})
-	} else {
-		n.activeCommitteesAlan.Range(func(cid string, status validatorStatus) bool {
+	n.activeCommitteesByCommittee.Range(func(encodedCommittee string, status validatorStatus) bool {
+		committee := decodeCommittee(encodedCommittee)
+		subnet := commons.CommitteeSubnet(committee)
+		updatedSubnets.Set(subnet)
+		return true
+	})
+
+	// We use both pre-fork and post-fork subnets before fork to make sure we have everything ready when fork happens.
+	// Afterwards, we just need the post-fork algorithm.
+	if n.cfg.NetworkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+		n.activeCommitteesByCID.Range(func(cid string, status validatorStatus) bool {
 			subnet := commons.CommitteeSubnetAlan(spectypes.CommitteeID([]byte(cid)))
 			updatedSubnets.Set(subnet)
 			return true
@@ -167,49 +169,51 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-		if err := n.subscribeCommittee(share.OperatorIDs()); err != nil {
-			return fmt.Errorf("could not subscribe to committee (post-fork): %w", err)
-		}
-	} else {
-		if err := n.subscribeCommitteeAlan(share.CommitteeID()); err != nil {
-			return fmt.Errorf("could not subscribe to committee (pre-fork): %w", err)
-		}
+	if err := n.subscribeCommittee(share.CommitteeID(), share.OperatorIDs()); err != nil {
+		return fmt.Errorf("could not subscribe to committee (post-fork): %w", err)
 	}
 
 	return nil
 }
 
-// subscribeCommitteeAlan handles the subscription logic for committee subnets
-func (n *p2pNetwork) subscribeCommitteeAlan(cid spectypes.CommitteeID) error {
-	n.logger.Debug("subscribing to committee (Alan fork)", fields.CommitteeID(cid))
-	status, found := n.activeCommitteesAlan.GetOrSet(string(cid[:]), validatorStatusSubscribing)
+func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID, committee []spectypes.OperatorID) error {
+	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid), fields.OperatorIDs(committee))
+
+	status, found := n.activeCommitteesByCommittee.GetOrSet(encodeCommittee(committee), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
 
-	for _, topic := range commons.CommitteeTopicIDAlan(cid) {
-		if err := n.topicsCtrl.Subscribe(topic); err != nil {
-			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
-		}
-	}
-	n.activeCommitteesAlan.Set(string(cid[:]), validatorStatusSubscribed)
-	return nil
-}
-
-func (n *p2pNetwork) subscribeCommittee(committee []spectypes.OperatorID) error {
-	n.logger.Debug("subscribing to committee (Network Topology fork)", fields.OperatorIDs(committee))
-	status, found := n.activeCommittees.GetOrSet(encodeCommittee(committee), validatorStatusSubscribing)
-	if found && status != validatorStatusInactive {
-		return nil
-	}
+	topicSet := make(map[string]struct{})
 
 	for _, topic := range commons.CommitteeTopicID(committee) {
+		topicSet[topic] = struct{}{}
+	}
+
+	// We use both pre-fork and post-fork subnets before fork to make sure we have everything ready when fork happens.
+	// Afterwards, we just need the post-fork algorithm.
+	if n.cfg.NetworkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+		status, found = n.activeCommitteesByCID.GetOrSet(string(cid[:]), validatorStatusSubscribing)
+		if found && status != validatorStatusInactive {
+			return nil
+		}
+
+		for _, topic := range commons.CommitteeTopicIDAlan(cid) {
+			topicSet[topic] = struct{}{}
+		}
+	}
+
+	for topic := range topicSet {
 		if err := n.topicsCtrl.Subscribe(topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
-	n.activeCommittees.Set(encodeCommittee(committee), validatorStatusSubscribed)
+
+	n.activeCommitteesByCommittee.Set(encodeCommittee(committee), validatorStatusSubscribed)
+	if n.cfg.NetworkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+		n.activeCommitteesByCID.Set(string(cid[:]), validatorStatusSubscribed)
+	}
+
 	return nil
 }
 
@@ -262,22 +266,29 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	cmtid := share.CommitteeID()
-	var topics []string
-	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-		topics = commons.CommitteeTopicID(share.OperatorIDs())
-	} else {
-		topics = commons.CommitteeTopicIDAlan(cmtid)
+	topicSet := make(map[string]struct{})
+	topics := commons.CommitteeTopicID(share.OperatorIDs())
+	for _, topic := range topics {
+		topicSet[topic] = struct{}{}
 	}
+
+	cmtid := share.CommitteeID()
+	if n.cfg.NetworkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+		topics = commons.CommitteeTopicIDAlan(cmtid)
+		for _, topic := range topics {
+			topicSet[topic] = struct{}{}
+		}
+	}
+
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			return err
 		}
 	}
+
+	n.activeCommitteesByCommittee.Delete(encodeCommittee(share.OperatorIDs()))
 	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-		n.activeCommittees.Delete(encodeCommittee(share.OperatorIDs()))
-	} else {
-		n.activeCommitteesAlan.Delete(string(cmtid[:]))
+		n.activeCommitteesByCID.Delete(string(cmtid[:]))
 	}
 	return nil
 }
