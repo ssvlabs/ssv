@@ -18,15 +18,23 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-type Handler struct {
-	logger        *zap.Logger
-	db            basedb.Database
-	enableProf    bool
-	healthChecker HealthChecker
-}
+type (
+	// healthChecker represent an health-check agent
+	healthChecker interface {
+		HealthCheck() error
+	}
+	// Handler serves diagnostic and metrics endpoints such as Prometheus metrics, health checks
+	// and profiling endpoints (pprof).
+	Handler struct {
+		logger        *zap.Logger
+		db            basedb.Database
+		enableProf    bool
+		healthChecker healthChecker
+	}
+)
 
 // NewHandler returns a new metrics handler.
-func NewHandler(logger *zap.Logger, db basedb.Database, enableProf bool, healthChecker HealthChecker) *Handler {
+func NewHandler(logger *zap.Logger, db basedb.Database, enableProf bool, healthChecker healthChecker) *Handler {
 	mh := Handler{
 		logger:        logger,
 		db:            db,
