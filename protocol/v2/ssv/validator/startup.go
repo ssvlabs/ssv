@@ -1,9 +1,9 @@
 package validator
 
 import (
+	"fmt"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -16,7 +16,7 @@ func (v *Validator) Start() (started bool, err error) {
 
 	n, ok := v.Network.(p2p.Subscriber)
 	if !ok {
-		return false, errors.New("network does not support subscription")
+		return false, fmt.Errorf("network does not support subscription")
 	}
 	for role := range v.DutyRunners {
 		identifier := spectypes.NewMsgID(v.NetworkConfig.GetDomainType(), v.Share.ValidatorPubKey[:], role)
