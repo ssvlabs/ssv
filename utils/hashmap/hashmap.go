@@ -15,6 +15,11 @@ func New[Key comparable, Value any]() *Map[Key, Value] {
 	return &Map[Key, Value]{}
 }
 
+func (m *Map[Key, Value]) Has(key Key) bool {
+	_, ok := m.m.Load(key)
+	return ok
+}
+
 func (m *Map[Key, Value]) Get(key Key) (Value, bool) {
 	v, ok := m.m.Load(key)
 	if !ok {

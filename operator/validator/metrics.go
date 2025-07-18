@@ -1,36 +1,36 @@
 package validator
 
 import (
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (c *controller) reportValidatorStatus(pk []byte, meta *beacon.ValidatorMetadata) {
-	logger := c.logger.With(fields.PubKey(pk), zap.Any("metadata", meta))
-	if meta == nil {
-		logger.Debug("validator metadata not found")
-		c.metrics.ValidatorNotFound(pk)
-	} else if meta.IsActive() {
-		logger.Debug("validator is ready")
-		c.metrics.ValidatorReady(pk)
-	} else if meta.Slashed() {
-		logger.Debug("validator slashed")
-		c.metrics.ValidatorSlashed(pk)
-	} else if meta.Exiting() {
-		logger.Debug("validator exiting / exited")
-		c.metrics.ValidatorExiting(pk)
-	} else if !meta.Activated() {
-		logger.Debug("validator not activated")
-		c.metrics.ValidatorNotActivated(pk)
-	} else if meta.Pending() {
-		logger.Debug("validator pending")
-		c.metrics.ValidatorPending(pk)
-	} else if meta.Index == 0 {
-		logger.Debug("validator index not found")
-		c.metrics.ValidatorNoIndex(pk)
+func (c *controller) reportValidatorStatus(share *types.SSVShare) {
+	if share == nil {
+		c.logger.Debug("checking validator: validator share not found")
+		return
+	}
+
+	pk := share.ValidatorPubKey[:]
+	logger := c.logger.With(fields.PubKey(pk), zap.Any("share", share))
+
+	if !share.HasBeaconMetadata() {
+		c.logger.Debug("checking validator: validator has no beacon metadata")
+	} else if share.IsActive() {
+		logger.Debug("checking validator: validator is ready")
+	} else if share.Slashed() {
+		logger.Debug("checking validator: validator slashed")
+	} else if share.Exited() {
+		logger.Debug("checking validator: validator exiting / exited")
+	} else if !share.Activated() {
+		logger.Debug("checking validator: validator not activated")
+	} else if share.Pending() {
+		logger.Debug("checking validator: validator pending")
+	} else if share.ValidatorIndex == 0 {
+		logger.Debug("checking validator: validator index not found")
 	} else {
-		logger.Debug("validator is unknown")
-		c.metrics.ValidatorUnknown(pk)
+		logger.Debug("checking validator: validator is unknown")
 	}
 }

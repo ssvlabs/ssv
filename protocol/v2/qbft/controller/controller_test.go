@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 func TestController_Marshaling(t *testing.T) {
@@ -39,7 +41,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		BeaconSigner: spectestingutils.NewTestingKeyManager(),
+		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:        roundtimer.NewTestingTimer(),
 		CutOffRound:  spectestingutils.TestingCutOffRound,
@@ -82,7 +84,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	contr.StoredInstances.addNewInstance(inst)
 
 	// Call OnTimeout and capture the error
-	err = contr.OnTimeout(logger, *msg)
+	err = contr.OnTimeout(context.TODO(), logger, *msg)
 
 	// Assert that the error is nil and the round did not bump
 	require.NoError(t, err)
@@ -92,7 +94,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	inst.State.Round = specqbft.FirstRound
 
 	// Call OnTimeout and capture the error
-	err = contr.OnTimeout(logger, *msg)
+	err = contr.OnTimeout(context.TODO(), logger, *msg)
 
 	// Assert that the error is nil and the round did bump
 	require.NoError(t, err)

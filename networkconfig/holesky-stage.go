@@ -3,18 +3,15 @@ package networkconfig
 import (
 	"math/big"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
-var HoleskyStage = NetworkConfig{
-	Name:                 "holesky-stage",
-	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
+const HoleskyStageName = "holesky-stage"
+
+var HoleskyStageSSV = &SSVConfig{
 	DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},
-	GenesisEpoch:         1,
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
-	RegistryContractAddr: "0x0d33801785340072C452b994496B19f196b7eE15",
+	RegistryContractAddr: ethcommon.HexToAddress("0x0d33801785340072C452b994496B19f196b7eE15"),
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	Bootnodes: []string{
 		// Public bootnode:
@@ -23,4 +20,6 @@ var HoleskyStage = NetworkConfig{
 		// Private bootnode:
 		"enr:-Ja4QDRUBjWOvVfGxpxvv3FqaCy3psm7IsKu5ETb1GXiexGYDFppD33t7AHRfmQddoAkBiyb7pt4t7ZN0sNB9CsW4I-GAZGOmChMgmlkgnY0gmlwhAorXxuJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
+	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
+	GasLimit36Epoch:         0,
 }

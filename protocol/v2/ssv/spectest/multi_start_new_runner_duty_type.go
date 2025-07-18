@@ -12,10 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -60,7 +61,7 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 				continue
 			}
 
-			msg1 := &types.PartialSignatureMessages{}
+			msg1 := &spectypes.PartialSignatureMessages{}
 			require.NoError(t, msg1.Decode(msg.Data))
 			msg2 := test.OutputMessages[index]
 			require.Len(t, msg1.Messages, len(msg2.Messages))
@@ -163,6 +164,8 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 	require.NoError(t, err)
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
+
+	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
 
 	// override
 	test.PostDutyRunnerState = r

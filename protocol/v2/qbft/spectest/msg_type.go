@@ -4,14 +4,12 @@ import (
 	"testing"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/stretchr/testify/require"
-
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	"github.com/stretchr/testify/require"
 )
 
 func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported
 	var lastErr error
-
 	for i, msg := range test.Messages {
 		if err := msg.Validate(); err != nil {
 			lastErr = err
@@ -37,10 +35,7 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 			require.EqualValues(t, test.ExpectedRoots[i], r)
 		}
 	}
-
-	// check error
-	if len(test.ExpectedError) != 0 {
-		t.Log("Expected error", test.ExpectedError)
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)

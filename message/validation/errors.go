@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -51,25 +52,45 @@ func (e Error) Text() string {
 	return e.text
 }
 
+func (e Error) Unwrap() error {
+	return e.innerErr
+}
+
+func (e Error) Is(target error) bool {
+	var t Error
+	if !errors.As(target, &t) {
+		return false
+	}
+
+	return e.text == t.text
+}
+
+// Ignored errors.
 var (
-	ErrWrongDomain                             = Error{text: "wrong domain"}
-	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
-	ErrUnknownValidator                        = Error{text: "unknown validator"}
-	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}
-	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
-	ErrEarlySlotMessage                        = Error{text: "message was sent before slot starts"}
-	ErrLateSlotMessage                         = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
-	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
-	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
-	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers"}
-	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big"}
-	ErrIncorrectTopic                          = Error{text: "incorrect topic"}
-	ErrNonExistentCommitteeID                  = Error{text: "committee ID doesn't exist"}
-	ErrRoundTooHigh                            = Error{text: "round is too high for this role"}
-	ErrValidatorIndexMismatch                  = Error{text: "partial signature validator index not found"}
-	ErrTooManyDutiesPerEpoch                   = Error{text: "too many duties per epoch"}
-	ErrNoDuty                                  = Error{text: "no duty for this epoch"}
-	ErrEstimatedRoundNotInAllowedSpread        = Error{text: "message round is too far from estimated"}
+	ErrWrongDomain                      = Error{text: "wrong domain"}
+	ErrNoShareMetadata                  = Error{text: "share has no metadata"}
+	ErrUnknownValidator                 = Error{text: "unknown validator"}
+	ErrValidatorLiquidated              = Error{text: "validator is liquidated"}
+	ErrValidatorNotAttesting            = Error{text: "validator is not attesting"}
+	ErrEarlySlotMessage                 = Error{text: "message was sent before slot starts"}
+	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
+	ErrSlotAlreadyAdvanced              = Error{text: "signer has already advanced to a later slot"}
+	ErrRoundAlreadyAdvanced             = Error{text: "signer has already advanced to a later round"}
+	ErrDecidedWithSameSigners           = Error{text: "decided with same number of signers"}
+	ErrPubSubDataTooBig                 = Error{text: "pub-sub message data too big"}
+	ErrIncorrectTopic                   = Error{text: "incorrect topic"}
+	ErrNonExistentCommitteeID           = Error{text: "committee ID doesn't exist"}
+	ErrRoundTooHigh                     = Error{text: "round is too high for this role"}
+	ErrValidatorIndexMismatch           = Error{text: "partial signature validator index not found"}
+	ErrTooManyDutiesPerEpoch            = Error{text: "too many duties per epoch"}
+	ErrNoDuty                           = Error{text: "no duty for this epoch"}
+	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
+	ErrUnknownOperator                  = Error{text: "operator is unknown"}
+	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
+)
+
+// Rejected errors.
+var (
 	ErrEmptyData                               = Error{text: "empty data", reject: true}
 	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
@@ -115,10 +136,9 @@ var (
 	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
 	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
-	ErrEncodeOperators                         = Error{text: "encode operators", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -127,7 +147,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 
 	var valErr Error
 	if !errors.As(err, &valErr) {
-		mv.metrics.MessageIgnored(err.Error(), loggerFields.Role, loggerFields.Consensus.Round)
+		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
 		logger.Debug("ignoring invalid message", zap.Error(err))
 		return pubsub.ValidationIgnore
 	}
@@ -136,7 +156,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 		if !valErr.Silent() {
 			logger.Debug("ignoring invalid message", zap.Error(valErr))
 		}
-		mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
 		return pubsub.ValidationIgnore
 	}
 
@@ -144,13 +164,11 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 		logger.Debug("rejecting invalid message", zap.Error(valErr))
 	}
 
-	mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	loggerFields := mv.buildLoggerFields(decodedMessage)
-	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
-
+func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
+	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
 	return pubsub.ValidationAccept
 }

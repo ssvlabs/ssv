@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -22,7 +20,7 @@ import (
 
 func TestQBFTMapping(t *testing.T) {
 	path, _ := os.Getwd()
-	jsonTests, err := protocoltesting.GetSpecTestJSON(path, "qbft")
+	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
 
 	untypedTests := map[string]interface{}{}
@@ -31,7 +29,6 @@ func TestQBFTMapping(t *testing.T) {
 	}
 
 	for name, test := range untypedTests {
-		name, test := name, test
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
 
@@ -102,7 +99,7 @@ func TestQBFTMapping(t *testing.T) {
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember), convert.RoleCommittee),
+				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember)),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

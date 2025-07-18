@@ -1,7 +1,6 @@
 package connections
 
 import (
-	"context"
 	"testing"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -13,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 type TestData struct {
@@ -49,7 +48,7 @@ func getTestingData(t *testing.T) TestData {
 			NodeVersion:   "some-node-version",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
-			Subnets:       records.AllSubnets,
+			Subnets:       commons.AllSubnets.String(),
 		},
 	}
 
@@ -60,7 +59,7 @@ func getTestingData(t *testing.T) TestData {
 				NodeVersion:   "test-node-version",
 				ExecutionNode: "test-execution-node",
 				ConsensusNode: "test-consensus-node",
-				Subnets:       records.AllSubnets,
+				Subnets:       commons.AllSubnets.String(),
 			},
 		},
 		MockSelfSealed: []byte("something"),
@@ -90,10 +89,10 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:        context.Background(),
+		ctx:        t.Context(),
 		nodeInfos:  nii,
 		peerInfos:  ns,
-		subnetsIdx: peers.NewSubnetsIndex(commons.Subnets()),
+		subnetsIdx: peers.NewSubnetsIndex(),
 		ids:        ids,
 		net:        net,
 		streams:    sc,
@@ -109,7 +108,7 @@ func getTestingData(t *testing.T) TestData {
 		SenderPrivateKey:         privateKey,
 		SenderPeerID:             peerID2,
 		RecipientPeerID:          peerID1,
-		SenderBase64PublicKeyPEM: string(senderPublicKey),
+		SenderBase64PublicKeyPEM: senderPublicKey,
 		Handshaker:               mockHandshaker,
 		Conn:                     mockConn,
 		NetworkPrivateKey:        networkPrivateKey,

@@ -8,9 +8,10 @@ import (
 // Options for creating all db type
 type Options struct {
 	Ctx        context.Context
-	Path       string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Path for storage"`
-	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Flag to run on-off db size reporting"`
-	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection cycles. Set to 0 to disable."`
+	Engine     string        `yaml:"Engine" env:"DB_ENGINE" env-default:"badger" env-description:"Database engine (badger or pebble)"`
+	Path       string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Database storage directory path"`
+	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Enable database size reporting"`
+	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection runs (0 to disable)"`
 }
 
 // Reader is a read-only accessor to the database.
@@ -20,7 +21,7 @@ type Reader interface {
 	GetAll(prefix []byte, handler func(int, Obj) error) error
 }
 
-// ReadWrite is a read-write accessor to the database.
+// ReadWriter is a read-write accessor to the database.
 type ReadWriter interface {
 	Reader
 	Set(prefix []byte, key []byte, value []byte) error
@@ -56,6 +57,8 @@ type Database interface {
 	DropPrefix(prefix []byte) error
 	Update(fn func(Txn) error) error
 	Close() error
+
+	GarbageCollector
 }
 
 // GarbageCollector is an interface implemented by storage engines which demand garbage collection.

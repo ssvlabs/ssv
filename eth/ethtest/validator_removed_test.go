@@ -87,7 +87,7 @@ func (input *TestValidatorRemovedEventsInput) produce() {
 		require.True(input.t, exists)
 		require.NotNil(input.t, valShare)
 
-		_, err = input.boundContract.SimcontractTransactor.RemoveValidator(
+		_, err = input.boundContract.RemoveValidator(
 			event.auth,
 			valPubKey,
 			event.opsIds,

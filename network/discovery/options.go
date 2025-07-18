@@ -4,15 +4,14 @@ import (
 	"crypto/ecdsa"
 	"net"
 
-	"github.com/ssvlabs/ssv/logging"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
-
-	"github.com/ssvlabs/ssv/network/commons"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 )
 
 var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
@@ -34,8 +33,8 @@ type DiscV5Options struct {
 	NetworkKey *ecdsa.PrivateKey
 	// Bootnodes is a list of bootstrapper nodes
 	Bootnodes []string
-	// Subnets is a bool slice represents all the subnets the node is interested in
-	Subnets []byte
+	// Subnets is a bitmask that represents all the subnets the node is interested in
+	Subnets commons.Subnets
 	// EnableLogging when true enables logs to be emitted
 	EnableLogging bool
 }

@@ -3,16 +3,16 @@ package topics
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"sync"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -54,23 +54,21 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
-	networkConfig networkconfig.NetworkConfig
-	ctx           context.Context
-	added         chan addedEvent
-	ids           map[string]*msgIDEntry
-	locker        sync.Locker
-	ttl           time.Duration
+	ctx    context.Context
+	added  chan addedEvent
+	ids    map[string]*msgIDEntry
+	locker sync.Locker
+	ttl    time.Duration
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, networkConfig networkconfig.NetworkConfig, ttl time.Duration) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
 	handler := &msgIDHandler{
-		networkConfig: networkConfig,
-		ctx:           ctx,
-		added:         make(chan addedEvent, msgIDHandlerBufferSize),
-		ids:           make(map[string]*msgIDEntry),
-		locker:        &sync.Mutex{},
-		ttl:           ttl,
+		ctx:    ctx,
+		added:  make(chan addedEvent, msgIDHandlerBufferSize),
+		ids:    make(map[string]*msgIDEntry),
+		locker: &sync.Mutex{},
+		ttl:    ttl,
 	}
 	return handler
 }
@@ -131,7 +129,12 @@ func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	// whereas before it included a BLS signature which made it unique
 	// so we hash full message (including signer) to make it unique
 
-	return commons.MsgID()(msg)
+	if len(msg) == 0 {
+		return ""
+	}
+	b := make([]byte, 12)
+	binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
+	return string(b)
 }
 
 // GetPeers returns the peers that are related to the given msg

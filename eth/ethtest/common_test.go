@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 )
@@ -190,16 +189,11 @@ func (e *TestEnv) setup(
 		return err
 	}
 
-	metricsReporter := metricsreporter.New(
-		metricsreporter.WithLogger(logger),
-	)
-
 	e.eventSyncer = eventsyncer.New(
 		nodeStorage,
 		e.execClient,
 		eh,
 		eventsyncer.WithLogger(logger),
-		eventsyncer.WithMetrics(metricsReporter),
 	)
 
 	e.validatorCtrl = validatorCtrl

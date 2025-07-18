@@ -12,9 +12,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/routing"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 )
@@ -75,7 +74,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 }
 
 // Bootstrap starts to listen to new nodes
-func (md *localDiscovery) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
+func (md *localDiscovery) Bootstrap(handler HandleNewPeer) error {
 	err := md.svc.Start()
 	if err != nil {
 		return errors.Wrap(err, "could not start mdns service")
@@ -94,18 +93,18 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
+func (md *localDiscovery) RegisterSubnets(subnets ...uint64) (updated bool, err error) {
 	// TODO
 	return false, nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
+func (md *localDiscovery) DeregisterSubnets(subnets ...uint64) (updated bool, err error) {
 	// TODO
 	return false, nil
 }
 
-func (md *localDiscovery) PublishENR(logger *zap.Logger) {
+func (md *localDiscovery) PublishENR() {
 	// TODO
 }
 
@@ -128,7 +127,7 @@ func (md *localDiscovery) Close() error {
 	return nil
 }
 
-func (dvs *localDiscovery) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
+func (dvs *localDiscovery) UpdateDomainType(domain spectypes.DomainType) error {
 	// TODO
 	return nil
 }

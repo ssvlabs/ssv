@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
+
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var mockState = &State{
@@ -97,7 +98,7 @@ func TestPriorityQueue_Filter(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 
 	const (
@@ -127,7 +128,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 
 	// Should pop nil after context cancellation.
 	{
-		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), contextTimeout)
 		defer cancel()
 		expectedEnd := time.Now().Add(contextTimeout)
 		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState), FilterAny)
@@ -210,7 +211,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 		matchHeight2 := func(msg *SSVMessage) bool {
 			return msg.Body.(*qbft.Message).Height == 2
 		}
-		popped := queue.Pop(context.Background(), NewMessagePrioritizer(state), matchHeight2)
+		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), matchHeight2)
 		require.Equal(t, expectedMsg, popped)
 	}()
 
@@ -238,7 +239,7 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 	// Pop in a separate goroutine. The first two pops should get the matching messages, and the third should return nil.
 	go func() {
 		defer wg.Done()
-		popped := queue.Pop(context.Background(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
+		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
 			_, ok := msg.Body.(*qbft.Message)
 			if !ok {
 				return true
@@ -265,34 +266,6 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 	// Ensure that the queue still contains the non-matching messages.
 	require.False(t, queue.Empty())
-}
-
-type testMetrics struct {
-	dropped atomic.Uint64
-}
-
-func (n *testMetrics) DroppedQueueMessage(messageID spectypes.MessageID) {
-	n.dropped.Add(1)
-}
-
-func TestWithMetrics(t *testing.T) {
-	metrics := &testMetrics{}
-	queue := WithMetrics(New(1), metrics)
-	require.True(t, queue.Empty())
-
-	// Push 1 message.
-	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-	require.NoError(t, err)
-	pushed := queue.TryPush(msg)
-	require.True(t, pushed)
-	require.False(t, queue.Empty())
-	require.EqualValues(t, 0, metrics.dropped.Load())
-
-	// Push above capacity.
-	pushed = queue.TryPush(msg)
-	require.False(t, pushed)
-	require.False(t, queue.Empty())
-	require.EqualValues(t, 1, metrics.dropped.Load())
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
@@ -378,7 +351,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		// Pop all messages.
 		var poppersWg sync.WaitGroup
 		popped := make(chan *SSVMessage, messageCount*2)
-		poppingCtx, stopPopping := context.WithCancel(context.Background())
+		poppingCtx, stopPopping := context.WithCancel(b.Context())
 		for i := 0; i < poppers; i++ {
 			poppersWg.Add(1)
 			go func() {
@@ -470,7 +443,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 		}()
 	}
 
-	pushersCtx, cancel := context.WithCancel(context.Background())
+	pushersCtx, cancel := context.WithCancel(b.Context())
 	go func() {
 		pushersWg.Wait()
 		cancel()

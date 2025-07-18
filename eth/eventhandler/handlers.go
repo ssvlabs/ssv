@@ -1,23 +1,22 @@
 package eventhandler
 
 import (
-	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -47,12 +46,12 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		fields.TxHash(event.Raw.TxHash),
 		fields.OperatorID(event.OperatorId),
 		fields.Owner(event.Owner),
-		fields.OperatorPubKey(event.PublicKey),
+		fields.OperatorPubKey(string(event.PublicKey)),
 	)
 	logger.Debug("processing event")
 
 	od := &registrystorage.OperatorData{
-		PublicKey:    event.PublicKey,
+		PublicKey:    string(event.PublicKey),
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
@@ -69,7 +68,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	}
 
 	// throw an error if there is an existing operator with the same public key
-	operatorData, pubkeyExists, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, event.PublicKey)
+	operatorData, pubkeyExists, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, string(event.PublicKey))
 	if err != nil {
 		return fmt.Errorf("could not get operator data by public key: %w", err)
 	}
@@ -88,12 +87,11 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return nil
 	}
 
-	if bytes.Equal(event.PublicKey, eh.operatorDataStore.GetOperatorData().PublicKey) {
+	if string(event.PublicKey) == eh.operatorDataStore.GetOperatorData().PublicKey {
 		eh.operatorDataStore.SetOperatorData(od)
 		logger = logger.With(zap.Bool("own_operator", true))
 	}
 
-	eh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
 	logger.Debug("processed event")
 
 	return nil
@@ -121,13 +119,20 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		fields.Owner(od.OwnerAddress),
 	)
 
-	// This function is currently no-op and it will do nothing. Operator removed event is not used in the current implementation.
+	// Permanently remove operator data to prevent further message validation.
+	if err := eh.nodeStorage.DeleteOperatorData(txn, event.OperatorId); err != nil {
+		return fmt.Errorf("could not delete operator data: %w", err)
+	}
 
 	logger.Debug("processed event")
 	return nil
 }
 
-func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (ownShare *ssvtypes.SSVShare, err error) {
+func (eh *EventHandler) handleValidatorAdded(
+	ctx context.Context,
+	txn basedb.Txn,
+	event *contract.ContractValidatorAdded,
+) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorAdded),
 		fields.TxHash(event.Raw.TxHash),
@@ -177,6 +182,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 			zap.String("signature", hex.EncodeToString(signature)),
 			zap.String("owner", event.Owner.String()),
 			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
+			zap.Uint16("expected_nonce", uint16(nonce)),
 			zap.Error(err))
 
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
@@ -184,7 +190,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 
 	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
-		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
+		shareCreated, err := eh.handleShareCreation(ctx, txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -193,7 +199,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 				return nil, err
 			}
 
-			eh.metrics.ValidatorError(event.PublicKey)
 			return nil, err
 		}
 
@@ -212,7 +217,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		eh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", true))
 	}
@@ -223,12 +227,13 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 
 // handleShareCreation is called when a validator was added/updated during registry sync
 func (eh *EventHandler) handleShareCreation(
+	ctx context.Context,
 	txn basedb.Txn,
 	validatorEvent *contract.ContractValidatorAdded,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
-	share, shareSecret, err := eh.validatorAddedEventToShare(
+	share, encryptedKey, err := eh.validatorAddedEventToShare(
 		txn,
 		validatorEvent,
 		sharePublicKeys,
@@ -239,23 +244,25 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if shareSecret == nil {
-			return nil, errors.New("could not decode shareSecret")
-		}
-
-		// Save secret key into BeaconSigner.
-		if err := eh.keyManager.AddShare(shareSecret); err != nil {
-			return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
+		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+			var shareDecryptionEKMError ekm.ShareDecryptionError
+			if errors.As(err, &shareDecryptionEKMError) {
+				return nil, &MalformedEventError{Err: err}
+			}
+			return nil, fmt.Errorf("could not add share encrypted key: %w", err)
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+		//
+		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
+		// because the node will crash and attempt to sync events again updating the participation epoch.
+		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
-	// Save share.
+	// Save share to DB.
 	if err := eh.nodeStorage.Shares().Save(txn, share); err != nil {
 		return nil, fmt.Errorf("could not save validator share: %w", err)
 	}
@@ -268,7 +275,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	event *contract.ContractValidatorAdded,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
-) (*ssvtypes.SSVShare, *bls.SecretKey, error) {
+) (*ssvtypes.SSVShare, []byte, error) {
 	validatorShare := ssvtypes.SSVShare{}
 
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(event.PublicKey)
@@ -285,7 +292,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.OwnerAddress = event.Owner
 
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
-	var shareSecret *bls.SecretKey
+	var encryptedKey []byte
 
 	shareMembers := make([]*spectypes.ShareMember, 0)
 
@@ -312,35 +319,18 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 		//validatorShare.OperatorID = operatorID
 		validatorShare.SharePubKey = sharePublicKeys[i]
-
-		shareSecret = &bls.SecretKey{}
-		decryptedSharePrivateKey, err := eh.operatorDecrypter.Decrypt(encryptedKeys[i])
-		if err != nil {
-			return nil, nil, &MalformedEventError{
-				Err: fmt.Errorf("could not decrypt share private key: %w", err),
-			}
-		}
-		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-			return nil, nil, &MalformedEventError{
-				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
-			}
-		}
-		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
-			return nil, nil, &MalformedEventError{
-				Err: errors.New("share private key does not match public key"),
-			}
-		}
+		encryptedKey = encryptedKeys[i]
 	}
 
-	validatorShare.DomainType = eh.networkConfig.DomainType
+	validatorShare.DomainType = eh.networkConfig.GetDomainType()
 	validatorShare.Committee = shareMembers
 
-	return &validatorShare, shareSecret, nil
+	return &validatorShare, encryptedKey, nil
 }
 
 var emptyPK = [48]byte{}
 
-func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
+func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -379,12 +369,17 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(ctx, txn, phase0.BLSPubKey(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
-		eh.metrics.ValidatorRemoved(event.PublicKey)
+		// Remove validator from doppelganger service
+		//
+		// If txn gets rolled back, the validator state will remain removed, however, it's not an issue,
+		// because the node will crash and attempt to sync events again fixing the state inconsistency.
+		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
+
 		logger.Debug("processed event")
 		return share.ValidatorPubKey, nil
 	}
@@ -405,6 +400,11 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 	toLiquidate, liquidatedPubKeys, err := eh.processClusterEvent(txn, event.Owner, event.OperatorIds, true)
 	if err != nil {
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
+	}
+
+	// Remove validator shares from doppelganger service
+	for _, share := range toLiquidate {
+		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
 	}
 
 	if len(liquidatedPubKeys) > 0 {
@@ -431,7 +431,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 
 	// bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
-		if err := eh.keyManager.(ekm.StorageProvider).BumpSlashingProtection(share.SharePubKey); err != nil {
+		if err := eh.keyManager.BumpSlashingProtection(txn, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
@@ -439,7 +439,10 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+		//
+		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
+		// because the node will crash and attempt to sync events again updating the participation epoch.
+		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	if len(enabledPubKeys) > 0 {
@@ -505,7 +508,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if share.BeaconMetadata == nil {
+	if !share.HasBeaconMetadata() {
 		return nil, nil
 	}
 
@@ -515,7 +518,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	ed := &duties.ExitDescriptor{
 		OwnValidator:   false,
 		PubKey:         pk,
-		ValidatorIndex: share.BeaconMetadata.Index,
+		ValidatorIndex: share.ValidatorIndex,
 		BlockNumber:    event.Raw.BlockNumber,
 	}
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
@@ -547,17 +550,17 @@ func (eh *EventHandler) processClusterEvent(
 ) ([]*ssvtypes.SSVShare, []string, error) {
 	clusterID := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
 	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterIDHash(clusterID))
-	toUpdate := make([]*ssvtypes.SSVShare, 0)
-	updatedPubKeys := make([]string, 0)
+	toUpdate := make([]*ssvtypes.SSVShare, 0, len(shares))
+	var operatorShares []*ssvtypes.SSVShare
+	var operatorValidatorPubKeys []string
 
 	for _, share := range shares {
-		isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
-		if isOperatorShare || eh.fullNode {
-			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
-		}
-		if isOperatorShare {
-			share.Liquidated = toLiquidate
-			toUpdate = append(toUpdate, share)
+		share.Liquidated = toLiquidate
+		toUpdate = append(toUpdate, share)
+
+		if isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorData().ID); isOperatorShare {
+			operatorShares = append(operatorShares, share)
+			operatorValidatorPubKeys = append(operatorValidatorPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
 		}
 	}
 
@@ -567,7 +570,7 @@ func (eh *EventHandler) processClusterEvent(
 		}
 	}
 
-	return toUpdate, updatedPubKeys, nil
+	return operatorShares, operatorValidatorPubKeys, nil
 }
 
 // MalformedEventError is returned when event is malformed

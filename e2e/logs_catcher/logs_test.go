@@ -3,9 +3,10 @@ package logs_catcher
 import (
 	"context"
 	"encoding/binary"
+	"io"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"io"
 )
 
 type mockDockerClient struct {

@@ -1,10 +1,10 @@
 package queue
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -18,6 +18,9 @@ var (
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 type SSVMessage struct {
+	// TraceContext is used to track message flow through the internal queue system,
+	// linking message producers and consumers to help with debugging and monitoring.
+	TraceContext     context.Context
 	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
@@ -207,7 +210,7 @@ func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
+	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0
@@ -296,7 +299,7 @@ func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight in
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
+	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0

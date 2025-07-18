@@ -5,9 +5,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
@@ -24,7 +25,7 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
-	c.metrics.ValidatorRemoved(pubKey[:])
+	validatorsRemovedCounter.Add(c.ctx, 1)
 	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
@@ -60,9 +61,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	if startedValidators > 0 {
 		// Notify DutyScheduler about the changes in validator indices without blocking.
 		go func() {
-			select {
-			case c.indicesChange <- struct{}{}:
-			case <-time.After(12 * time.Second):
+			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
 			}
 		}()
@@ -109,7 +108,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		select {
 		case c.validatorExitCh <- exitDesc:
 			logger.Debug("added voluntary exit task to pipeline")
-		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+		case <-time.After(2 * c.networkConfig.GetSlotDuration()):
 			logger.Error("failed to schedule ExitValidator duty!")
 		}
 	}()

@@ -18,6 +18,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -27,10 +28,12 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type MsgProcessingSpecTest struct {
 	Name                    string
+	ParentName              string
 	Runner                  runner.Runner
 	Duty                    spectypes.Duty
 	Messages                []*spectypes.SignedSSVMessage
@@ -46,6 +49,10 @@ type MsgProcessingSpecTest struct {
 
 func (test *MsgProcessingSpecTest) TestName() string {
 	return test.Name
+}
+
+func (test *MsgProcessingSpecTest) FullName() string {
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
@@ -115,7 +122,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
 				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
-					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
+					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}
 		}
@@ -147,8 +154,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
@@ -234,6 +240,8 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
+	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
+
 	// override
 	test.PostDutyRunnerState = r
 
@@ -262,7 +270,7 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
+	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		r, err := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -279,6 +287,7 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
 			committeeDutyGuard,
+			runnerSample.GetDoppelgangerHandler(),
 		)
 		return r.(*runner.CommitteeRunner), err
 	}
@@ -288,7 +297,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().BeaconNetwork,
+		runnerSample.GetBaseRunner().NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
@@ -310,7 +319,7 @@ func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*
 			SignedSSVMessage: msg,
 			SSVMessage:       &spectypes.SSVMessage{},
 		}
-		dmsg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+		dmsg.MsgType = spectypes.SSVConsensusMsgType
 	} else {
 		dmsg, err = queue.DecodeSignedSSVMessage(msg)
 	}

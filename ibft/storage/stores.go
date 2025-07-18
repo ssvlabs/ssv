@@ -1,34 +1,35 @@
 package storage
 
 import (
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-// QBFTStores wraps sync map with cast functions to qbft store
-type QBFTStores struct {
-	m *hashmap.Map[convert.RunnerRole, qbftstorage.QBFTStore]
+// ParticipantStores wraps sync map with cast functions to qbft store
+type ParticipantStores struct {
+	m *hashmap.Map[spectypes.BeaconRole, qbftstorage.ParticipantStore]
 }
 
-func NewStores() *QBFTStores {
-	return &QBFTStores{
-		m: hashmap.New[convert.RunnerRole, qbftstorage.QBFTStore](),
+func NewStores() *ParticipantStores {
+	return &ParticipantStores{
+		m: hashmap.New[spectypes.BeaconRole, qbftstorage.ParticipantStore](),
 	}
 }
 
-func NewStoresFromRoles(db basedb.Database, roles ...convert.RunnerRole) *QBFTStores {
+func NewStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectypes.BeaconRole) *ParticipantStores {
 	stores := NewStores()
 	for _, role := range roles {
-		stores.Add(role, New(db, role.String()))
+		stores.Add(role, New(logger, db, role))
 	}
 	return stores
 }
 
 // Get store from sync map by role type
-func (qs *QBFTStores) Get(role convert.RunnerRole) qbftstorage.QBFTStore {
+func (qs *ParticipantStores) Get(role spectypes.BeaconRole) qbftstorage.ParticipantStore {
 	s, ok := qs.m.Get(role)
 	if !ok {
 		return nil
@@ -37,14 +38,14 @@ func (qs *QBFTStores) Get(role convert.RunnerRole) qbftstorage.QBFTStore {
 }
 
 // Add store to sync map by role as a key
-func (qs *QBFTStores) Add(role convert.RunnerRole, store qbftstorage.QBFTStore) {
+func (qs *ParticipantStores) Add(role spectypes.BeaconRole, store qbftstorage.ParticipantStore) {
 	qs.m.Set(role, store)
 }
 
 // Each iterates over all stores and calls the given function
-func (qs *QBFTStores) Each(f func(role convert.RunnerRole, store qbftstorage.QBFTStore) error) error {
+func (qs *ParticipantStores) Each(f func(role spectypes.BeaconRole, store qbftstorage.ParticipantStore) error) error {
 	var err error
-	qs.m.Range(func(role convert.RunnerRole, store qbftstorage.QBFTStore) bool {
+	qs.m.Range(func(role spectypes.BeaconRole, store qbftstorage.ParticipantStore) bool {
 		err = f(role, store)
 		return err == nil
 	})

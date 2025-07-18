@@ -9,18 +9,19 @@ import (
 	"path/filepath"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/ekm"
-	"github.com/ssvlabs/ssv/networkconfig"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/ssvlabs/ssv/utils/blskeygen"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/e2e/logs_catcher"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/blskeygen"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 type ShareUpdateCmd struct {
@@ -118,7 +119,7 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 		if validatorShare == nil {
 			return fmt.Errorf(fmt.Sprintf("validator share not found for %s", corruptedShare.ValidatorPubKey))
 		}
-		if validatorShare.Metadata.BeaconMetadata.Index != phase0.ValidatorIndex(corruptedShare.ValidatorIndex) {
+		if validatorShare.ValidatorIndex != phase0.ValidatorIndex(corruptedShare.ValidatorIndex) {
 			return fmt.Errorf("validator index mismatch for validator %s", corruptedShare.ValidatorPubKey)
 		}
 

@@ -2,17 +2,18 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
-	"go.uber.org/mock/gomock"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -44,7 +45,7 @@ const rawValidatorAdded = `{
 
 func TestExecuteTask(t *testing.T) {
 	logger, _ := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	// Create operators rsa keys
 
@@ -102,7 +103,7 @@ func TestExecuteTask(t *testing.T) {
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Create operators rsa keys
@@ -116,7 +117,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 		od := &storage.OperatorData{
-			PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+			PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
 			OwnerAddress: ethcommon.Address{},
 			ID:           id,
 		}
@@ -140,7 +141,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		}
 	}()
 
-	lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, true)
+	lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 

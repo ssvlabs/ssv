@@ -4,17 +4,20 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"sync"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -26,16 +29,17 @@ var (
 	runnerExpirySlots = phase0.Slot(34)
 )
 
-type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error)
+type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []phase0.BLSPubKey, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error)
 
 type Committee struct {
 	logger *zap.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mtx           sync.RWMutex
-	BeaconNetwork spectypes.BeaconNetwork
+	beaconConfig networkconfig.Beacon
 
+	// mtx syncs access to Queues, Runners, Shares.
+	mtx     sync.RWMutex
 	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
 	Shares  map[phase0.ValidatorIndex]*spectypes.Share
@@ -51,7 +55,7 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconConfig networkconfig.Beacon,
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
@@ -62,7 +66,7 @@ func NewCommittee(
 	}
 	return &Committee{
 		logger:          logger,
-		BeaconNetwork:   beaconNetwork,
+		beaconConfig:    beaconConfig,
 		ctx:             ctx,
 		cancel:          cancel,
 		Queues:          make(map[phase0.Slot]queueContainer),
@@ -89,84 +93,70 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	}
 }
 
-func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
+// StartDuty starts a new duty for the given slot.
+func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.BeaconSlotAttribute(duty.Slot)),
+	)
+	defer span.End()
 
-	// Setting the cancel function separately due the queue could be created in HandleMessage
-	q, found := c.Queues[duty.Slot]
-	if !found {
-		return errors.New(fmt.Sprintf("no queue found for slot %d", duty.Slot))
+	span.AddEvent("prepare duty and runner")
+	r, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
+	if err != nil {
+		return observability.Error(span, err)
 	}
 
-	r := c.Runners[duty.Slot]
-	if r == nil {
-		return errors.New(fmt.Sprintf("no runner found for slot %d", duty.Slot))
+	logger.Info("ℹ️ starting duty processing")
+	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
+	if err != nil {
+		return observability.Errorf(span, "runner failed to start duty: %w", err)
 	}
 
-	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
-
-	go func() {
-		defer cancelF()
-		if err := c.ConsumeQueue(queueCtx, q, logger, duty.Slot, c.ProcessMessage, r); err != nil {
-			logger.Error("❗failed consuming committee queue", zap.Error(err))
-		}
-	}()
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
-// StartDuty starts a new duty for the given slot
-func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+	r *runner.CommitteeRunner,
+	runnableDuty *spectypes.CommitteeDuty,
+	err error,
+) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+	_, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.BeaconSlotAttribute(duty.Slot)),
+	)
+	defer span.End()
 
-	if len(duty.ValidatorDuties) == 0 {
-		return errors.New("no beacon duties")
-	}
 	if _, exists := c.Runners[duty.Slot]; exists {
-		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
+		return nil, nil, observability.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
-	// Filter out Beacon duties for which we don't have a share.
-	filteredDuty := &spectypes.CommitteeDuty{
-		Slot:            duty.Slot,
-		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
-	}
-	shares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-	attesters := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
-	for _, beaconDuty := range duty.ValidatorDuties {
-		share, exists := c.Shares[beaconDuty.ValidatorIndex]
-		if !exists {
-			logger.Debug("no share for validator duty",
-				fields.BeaconRole(beaconDuty.Type),
-				zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
-			continue
-		}
-		shares[beaconDuty.ValidatorIndex] = share
-		filteredDuty.ValidatorDuties = append(filteredDuty.ValidatorDuties, beaconDuty)
-
-		if beaconDuty.Type == spectypes.BNRoleAttester {
-			attesters = append(attesters, share.SharePubKey)
-		}
-	}
-	if len(shares) == 0 {
-		return errors.New("no shares for duty's validators")
-	}
-	duty = filteredDuty
-
-	runner, err := c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
+	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		return errors.Wrap(err, "could not create CommitteeRunner")
+		return nil, nil, observability.Error(span, err)
+	}
+
+	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
+	if err != nil {
+		return nil, nil, observability.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
 
 	// Set timeout function.
-	runner.GetBaseRunner().TimeoutF = c.onTimeout
-	c.Runners[duty.Slot] = runner
+	r.GetBaseRunner().TimeoutF = c.onTimeout
+	c.Runners[duty.Slot] = r
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
 		c.Queues[duty.Slot] = queueContainer{
-			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
@@ -179,97 +169,156 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	// Prunes all expired committee runners, when new runner is created
 	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
 	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+		span.RecordError(err)
 		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
-	logger.Info("ℹ️ starting duty processing")
-	err = runner.StartNewDuty(ctx, logger, duty, c.CommitteeMember.GetQuorum())
-	if err != nil {
-		return errors.Wrap(err, "runner failed to start duty")
-	}
-	return nil
+	span.SetStatus(codes.Ok, "")
+	return r, runnableDuty, nil
 }
 
-func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.SSVMessage) {
-	c.mtx.RLock()
-	queue, exists := c.Queues[slot]
-	c.mtx.RUnlock()
-	if !exists {
-		c.logger.Warn("cannot push to non-existing queue", zap.Uint64("slot", uint64(slot)))
-		return
+// prepareDuty filters out unrunnable validator duties and returns the shares and attesters.
+func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+	shares map[phase0.ValidatorIndex]*spectypes.Share,
+	attesters []phase0.BLSPubKey,
+	runnableDuty *spectypes.CommitteeDuty,
+	err error,
+) {
+	if len(duty.ValidatorDuties) == 0 {
+		return nil, nil, nil, errors.New("no beacon duties")
 	}
 
-	if pushed := queue.Q.TryPush(dec); !pushed {
-		c.logger.Warn("dropping ExecuteDuty message because the queue is full")
+	runnableDuty = &spectypes.CommitteeDuty{
+		Slot:            duty.Slot,
+		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
 	}
+	shares = make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
+	attesters = make([]phase0.BLSPubKey, 0, len(duty.ValidatorDuties))
+	for _, beaconDuty := range duty.ValidatorDuties {
+		share, exists := c.Shares[beaconDuty.ValidatorIndex]
+		if !exists {
+			// Filter out Beacon duties for which we don't have a share.
+			logger.Debug("committee has no share for validator duty",
+				fields.BeaconRole(beaconDuty.Type),
+				zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+			continue
+		}
+		shares[beaconDuty.ValidatorIndex] = share
+		runnableDuty.ValidatorDuties = append(runnableDuty.ValidatorDuties, beaconDuty)
+
+		if beaconDuty.Type == spectypes.BNRoleAttester {
+			attesters = append(attesters, phase0.BLSPubKey(share.SharePubKey))
+		}
+	}
+
+	if len(shares) == 0 {
+		return nil, nil, nil, errors.New("no shares for duty's validators")
+	}
+
+	return shares, attesters, runnableDuty, nil
 }
 
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	traceContext, dutyID := c.buildTraceContext(ctx, msg)
+	ctx, span := tracer.Start(traceContext,
+		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID),
+		))
+	defer span.End()
+
+	msgType := msg.GetType()
+	span.SetAttributes(observability.ValidatorMsgTypeAttribute(msgType))
+
 	// Validate message
-	if msg.GetType() != message.SSVEventMsgType {
+	if msgType != message.SSVEventMsgType {
+		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			return observability.Errorf(span, "invalid SignedSSVMessage: %w", err)
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			return observability.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
 		}
 
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return errors.Wrap(err, "Message invalid")
+			return observability.Errorf(span, "Message invalid: %w", err)
 		}
 	}
 
-	switch msg.GetType() {
+	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &qbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get consensus Message from network Message")
+			return observability.Errorf(span, "could not decode consensus Message: %w", err)
 		}
 		if err := qbftMsg.Validate(); err != nil {
-			return errors.Wrap(err, "invalid qbft Message")
+			return observability.Errorf(span, "invalid QBFT Message: %w", err)
 		}
-		c.mtx.Lock()
-		runner, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
-		c.mtx.Unlock()
+		c.mtx.RLock()
+		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
+		c.mtx.RUnlock()
 		if !exists {
-			return errors.New("no runner found for message's slot")
+			return observability.Errorf(span, "no runner found for message's slot")
 		}
-		return runner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
+		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from network Message")
+			return observability.Errorf(span, "could not decode PartialSignatureMessages: %w", err)
 		}
 
 		// Validate
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return errors.New("PartialSignatureMessage has more than 1 signer")
+			return observability.Errorf(span, "PartialSignatureMessage has more than 1 signer")
 		}
 
 		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return errors.Wrap(err, "invalid PartialSignatureMessages")
+			return observability.Errorf(span, "invalid PartialSignatureMessages: %w", err)
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			c.mtx.Lock()
-			runner, exists := c.Runners[pSigMessages.Slot]
-			c.mtx.Unlock()
+			c.mtx.RLock()
+			r, exists := c.Runners[pSigMessages.Slot]
+			c.mtx.RUnlock()
 			if !exists {
-				return errors.New("no runner found for message's slot")
+				return observability.Errorf(span, "no runner found for message's slot")
 			}
-			return runner.ProcessPostConsensus(ctx, logger, pSigMessages)
+			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
+				return observability.Error(span, err)
+			}
+			span.SetStatus(codes.Ok, "")
+			return nil
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(ctx, logger, msg)
+		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
+			return observability.Errorf(span, "could not handle event message: %w", err)
+		}
+		span.SetStatus(codes.Ok, "")
+		return nil
 	default:
-		return errors.New("unknown msg")
+		return observability.Errorf(span, "unknown message type: %d", msgType)
 	}
-	return nil
 
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
+
+func (c *Committee) buildTraceContext(ctx context.Context, msg *queue.SSVMessage) (context.Context, string) {
+	slot, err := msg.Slot()
+	if err != nil {
+		c.logger.Warn("could not get slot from message while building Trace context", zap.Error(err))
+		return ctx, "unknown"
+	}
+
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
+	return observability.TraceContext(ctx, dutyID), dutyID
+}
+
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
 	if runnerExpirySlots > currentSlot {
 		return nil
@@ -280,7 +329,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
+			epoch := c.beaconConfig.EstimatedEpochAtSlot(slot)
 			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))

@@ -128,7 +128,7 @@ func byPubKeys(pubkeys []api.Hex) registrystorage.SharesFilter {
 func byIndices(indices []uint64) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		for _, index := range indices {
-			if share.BeaconMetadata != nil && share.BeaconMetadata.Index == phase0.ValidatorIndex(index) {
+			if share.ValidatorIndex == phase0.ValidatorIndex(index) {
 				return true
 			}
 		}
@@ -162,6 +162,7 @@ type validatorJSON struct {
 	Index           phase0.ValidatorIndex  `json:"index"`
 	Status          string                 `json:"status"`
 	ActivationEpoch phase0.Epoch           `json:"activation_epoch"`
+	ExitEpoch       phase0.Epoch           `json:"exit_epoch"`
 	Owner           api.Hex                `json:"owner"`
 	Committee       []spectypes.OperatorID `json:"committee"`
 	Quorum          uint64                 `json:"quorum"`
@@ -185,9 +186,10 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 		Liquidated: share.Liquidated,
 	}
 	if share.HasBeaconMetadata() {
-		v.Index = share.Metadata.BeaconMetadata.Index
-		v.Status = share.Metadata.BeaconMetadata.Status.String()
-		v.ActivationEpoch = share.Metadata.BeaconMetadata.ActivationEpoch
+		v.Index = share.ValidatorIndex
+		v.Status = share.Status.String()
+		v.ActivationEpoch = share.ActivationEpoch
+		v.ExitEpoch = share.ExitEpoch
 	}
 	return v
 }

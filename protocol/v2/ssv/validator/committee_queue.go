@@ -3,39 +3,51 @@ package validator
 import (
 	"context"
 	"errors"
+	"fmt"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
-
+func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
 		return
 	}
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID),
+		))
+	defer span.End()
 
-	c.mtx.RLock() // read v.Queues
+	msg.TraceContext = ctx
+	span.SetAttributes(observability.BeaconSlotAttribute(slot))
+	// Retrieve or create the queue for the given slot.
+	c.mtx.Lock()
 	q, ok := c.Queues[slot]
-	c.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
-			Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
@@ -43,34 +55,52 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
-		c.mtx.Lock()
 		c.Queues[slot] = q
-		c.mtx.Unlock()
-		logger.Debug("missing queue for slot created", fields.Slot(slot))
+		const eventMsg = "missing queue for slot created"
+		logger.Debug(eventMsg, fields.Slot(slot))
+		span.AddEvent(eventMsg)
 	}
+	c.mtx.Unlock()
 
+	span.AddEvent("pushing message to the queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
-		msgID := msg.MsgID.String()
-		logger.Warn("❗ dropping message because the queue is full",
+		const errMsg = "❗ dropping message because the queue is full"
+		logger.Warn(errMsg,
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msgID))
+			zap.String("msg_id", msg.MsgID.String()))
+		span.SetStatus(codes.Error, errMsg)
 	} else {
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		span.SetStatus(codes.Ok, "")
 	}
 }
 
-//// StartQueueConsumer start ConsumeQueue with handler
-//func (v *Committee) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
-//	ctx, cancel := context.WithCancel(v.ctx)
-//	defer cancel()
-//
-//	for ctx.Err() == nil {
-//		err := v.ConsumeQueue(logger, msgID, handler)
-//		if err != nil {
-//			logger.Debug("❗ failed consuming queue", zap.Error(err))
-//		}
-//	}
-//}
+func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	// Setting the cancel function separately due the queue could be created in HandleMessage
+	q, found := c.Queues[duty.Slot]
+	if !found {
+		return fmt.Errorf("no queue found for slot %d", duty.Slot)
+	}
+
+	r := c.Runners[duty.Slot]
+	if r == nil {
+		return fmt.Errorf("no runner found for slot %d", duty.Slot)
+	}
+
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.beaconConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
+
+	go func() {
+		defer cancelF()
+		if err := c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r); err != nil {
+			logger.Error("❗failed consuming committee queue", zap.Error(err))
+		}
+	}()
+
+	return nil
+}
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
@@ -78,7 +108,6 @@ func (c *Committee) ConsumeQueue(
 	ctx context.Context,
 	q queueContainer,
 	logger *zap.Logger,
-	slot phase0.Slot,
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,
 ) error {
@@ -117,7 +146,7 @@ func (c *Committee) ConsumeQueue(
 		} else if runningInstance != nil && !runningInstance.State.Decided {
 			filter = func(ssvMessage *queue.SSVMessage) bool {
 				// don't read post consensus until decided
-				return ssvMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType
+				return ssvMessage.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
@@ -142,7 +171,7 @@ func (c *Committee) ConsumeQueue(
 		// Handle the message.
 		if err := handler(ctx, logger, msg); err != nil {
 			c.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.SSVMessage.MsgType),
+				fields.MessageType(msg.MsgType),
 				zap.Error(err))
 			if errors.Is(err, runner.ErrNoValidDuties) {
 				// Stop the queue consumer if the runner no longer has any valid duties.
@@ -157,7 +186,7 @@ func (c *Committee) ConsumeQueue(
 
 func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.SSVMessage.MsgType {
+	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{

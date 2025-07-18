@@ -6,17 +6,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/testing"
@@ -26,8 +26,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -44,11 +44,11 @@ type LocalNet struct {
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := commons.GenNetworkKey()
+	bnSk, err := p2pcommons.GenNetworkKey()
 	if err != nil {
 		return err
 	}
-	isk, err := commons.ECDSAPrivToInterface(bnSk)
+	isk, err := p2pcommons.ECDSAPrivToInterface(bnSk)
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork.SSVConfig, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -80,18 +80,22 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
-			i, node := i, node //hack to avoid closures. price of using error groups
-
 			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
-				if err := node.Start(logger); err != nil {
+				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
+
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
+
 				var peers []peer.ID
-				for len(peers) < options.MinConnected && ctx.Err() == nil {
+				for len(peers) < options.MinConnected {
 					peers = node.(HostProvider).Host().Network().Peers()
-					time.Sleep(time.Millisecond * 100)
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(100 * time.Millisecond):
+					}
 				}
 				if ctx.Err() != nil {
 					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, options.Nodes, len(peers))
@@ -142,7 +146,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		return nil, err
 	}
 
-	nodeStorage, err := storage.NewNodeStorage(logger, db)
+	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		return nil, err
 	}
@@ -180,14 +184,15 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
-	cfg.Metrics = nil
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
 		nodeStorage.ValidatorStore(),
+		nodeStorage,
 		dutyStore,
 		signatureVerifier,
+		phase0.Epoch(0),
 	)
-	cfg.Network = networkconfig.TestNetwork
+	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
@@ -209,8 +214,10 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.MessageValidator = validation.New(
 			networkconfig.TestNetwork,
 			nodeStorage.ValidatorStore(),
+			nodeStorage,
 			dutyStore,
 			signatureVerifier,
+			phase0.Epoch(0),
 			validation.WithSelfAccept(selfPeerID, true),
 		)
 	}
@@ -224,12 +231,11 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 
 	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
 
-	mr := metricsreporter.New()
-	p, err := New(logger, cfg, mr)
+	p, err := New(logger, cfg)
 	if err != nil {
 		return nil, err
 	}
-	err = p.Setup(logger)
+	err = p.Setup()
 	if err != nil {
 		return nil, err
 	}

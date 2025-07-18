@@ -1,19 +1,19 @@
 package topics
 
 import (
-	"context"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -21,12 +21,11 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 func TestMsgValidator(t *testing.T) {
@@ -34,19 +33,15 @@ func TestMsgValidator(t *testing.T) {
 
 	ks := spectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, 1),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: v1.ValidatorStateActiveOngoing,
-			},
-			Liquidated: false,
-		},
+		Share:      *spectestingutils.TestingShare(ks, 1),
+		Status:     v1.ValidatorStateActiveOngoing,
+		Liquidated: false,
 	}
 
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := operatorstorage.NewNodeStorage(logger, db)
+	ns, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	require.NoError(t, err)
 
 	require.NoError(t, ns.Shares().Save(nil, share))
@@ -54,19 +49,28 @@ func TestMsgValidator(t *testing.T) {
 	committeeID := share.CommitteeID()
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
-	mv := validation.New(networkconfig.TestNetwork, ns.ValidatorStore(), dutystore.New(), signatureVerifier)
+	mv := validation.New(
+		networkconfig.TestNetwork,
+		ns.ValidatorStore(),
+		ns,
+		dutystore.New(),
+		signatureVerifier,
+		phase0.Epoch(0),
+		validation.WithLogger(logger),
+	)
+
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
+	slot := networkconfig.TestNetwork.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]
 
-	operatorPubKey, err := rsaencryption.ExtractPublicKey(&operatorPrivateKey.PublicKey)
+	operatorPubKey, err := rsaencryption.PublicKeyToBase64PEM(&operatorPrivateKey.PublicKey)
 	require.NoError(t, err)
 
 	od := &storage.OperatorData{
-		PublicKey:    []byte(operatorPubKey),
+		PublicKey:    operatorPubKey,
 		OwnerAddress: common.Address{},
 		ID:           operatorID,
 	}
@@ -101,7 +105,7 @@ func TestMsgValidator(t *testing.T) {
 				Data:  encodedMsg,
 			},
 		}
-		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(t.Context(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
@@ -129,13 +133,13 @@ func TestMsgValidator(t *testing.T) {
 				Data:  encodedMsg,
 			},
 		}
-		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(t.Context(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationIgnore, res)
 	})
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
-		res := mv.Validate(context.Background(), "xxxx", pmsg)
+		res := mv.Validate(t.Context(), "xxxx", pmsg)
 		require.Equal(t, pubsub.ValidationReject, res)
 	})
 
@@ -163,14 +167,14 @@ func TestMsgValidator(t *testing.T) {
 				Data:  encodedMsg,
 			},
 		}
-		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(t.Context(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationIgnore, res)
 	})
 }
 
 func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 	pmsg := &pubsub.Message{
-		Message: &ps_pb.Message{},
+		Message: &pspb.Message{},
 	}
 	pmsg.Data = data
 	pmsg.Topic = &topic

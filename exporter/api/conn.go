@@ -139,7 +139,6 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 			c.writeLock.Lock()
 			n, err := c.sendMsg(message)
 			c.writeLock.Unlock()
-			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 			if err != nil {
 				logger.Warn("failed to send message", zap.Error(err))
 				return
@@ -181,7 +180,7 @@ func (c *conn) ReadLoop(logger *zap.Logger) {
 			break
 		}
 		if mt == websocket.TextMessage {
-			msg = bytes.TrimSpace(bytes.Replace(msg, newline, space, -1))
+			msg = bytes.TrimSpace(bytes.ReplaceAll(msg, newline, space))
 			c.read <- msg
 		}
 	}

@@ -5,54 +5,40 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"net/http"
 	"sync"
+	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+func (gc *GoClient) voluntaryExitDomain() (phase0.Domain, error) {
+	value := gc.voluntaryExitDomainCached.Load()
+	if value != nil {
+		return *value, nil
+	}
+
+	v, err := gc.computeVoluntaryExitDomain()
 	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
+		return phase0.Domain{}, fmt.Errorf("compute voluntary exit domain: %w", err)
 	}
-	if specResponse == nil {
-		return phase0.Domain{}, fmt.Errorf("spec response is nil")
-	}
-	if specResponse.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
-	}
+	gc.voluntaryExitDomainCached.Store(&v)
+	return v, nil
+}
 
-	// TODO: consider storing fork version and genesis validators root in goClient
-	//		instead of fetching it every time
-
-	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
-	}
-	forkVersion, ok := forkVersionRaw.(phase0.Version)
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("failed to decode capella fork version")
-	}
+func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
+	beaconConfig := gc.getBeaconConfig()
 
 	forkData := &phase0.ForkData{
-		CurrentVersion: forkVersion,
+		CurrentVersion:        beaconConfig.Forks[spec.DataVersionCapella].CurrentVersion,
+		GenesisValidatorsRoot: beaconConfig.GenesisValidatorsRoot,
 	}
-
-	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
-	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
-	}
-	if genesisResponse == nil {
-		return phase0.Domain{}, fmt.Errorf("genesis response is nil")
-	}
-	if genesisResponse.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
-	}
-	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {
@@ -66,11 +52,18 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	return domain, nil
 }
 
-func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
+func (gc *GoClient) DomainData(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	domain phase0.DomainType,
+) (phase0.Domain, error) {
+	switch domain {
+	case spectypes.DomainApplicationBuilder:
+		// DomainApplicationBuilder is constructed based on what Ethereum network we are connected
+		// to (Mainnet, Hoodi, etc.)
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
-			CurrentVersion:        gc.network.ForkVersion(),
+			CurrentVersion:        gc.getBeaconConfig().GenesisForkVersion,
 			GenesisValidatorsRoot: phase0.Root{},
 		}
 		root, err := forkData.HashTreeRoot()
@@ -80,14 +73,23 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
-	} else if domain == spectypes.DomainVoluntaryExit {
-		return gc.computeVoluntaryExitDomain(gc.ctx)
+	case spectypes.DomainVoluntaryExit:
+		// Deneb upgrade introduced https://eips.ethereum.org/EIPS/eip-7044 that requires special
+		// handling for DomainVoluntaryExit
+		return gc.voluntaryExitDomain()
 	}
 
-	data, err := gc.client.Domain(gc.ctx, domain, epoch)
+	start := time.Now()
+	data, err := gc.multiClient.Domain(ctx, domain, epoch)
+	recordRequestDuration(ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Domain"),
+			zap.Error(err),
+		)
 		return phase0.Domain{}, err
 	}
+
 	return data, nil
 }
 

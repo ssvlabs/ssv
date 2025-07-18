@@ -1,89 +1,95 @@
 package validator
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jellydator/ttlcache/v3"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type CommitteeObserver struct {
-	logger                 *zap.Logger
-	Storage                *storage.QBFTStores
-	beaconNetwork          beacon.BeaconNetwork
-	qbftController         *qbftcontroller.Controller
-	ValidatorStore         registrystorage.ValidatorStore
-	newDecidedHandler      qbftcontroller.NewDecidedHandler
-	attesterRoots          *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots          *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache            *DomainCache
-	postConsensusContainer map[phase0.ValidatorIndex]*ssv.PartialSigContainer
+	sync.Mutex
+
+	msgID             spectypes.MessageID
+	logger            *zap.Logger
+	Storage           *storage.ParticipantStores
+	beaconConfig      networkconfig.Beacon
+	ValidatorStore    registrystorage.ValidatorStore
+	newDecidedHandler qbftcontroller.NewDecidedHandler
+	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache       *DomainCache
+
+	// cache to identify and skip duplicate computations of attester/sync committee roots
+	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
+
+	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
+	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
+}
+
+// BeaconVoteCacheKey is a composite key for identifying a unique call
+// to computing attester and sync committee roots.
+type BeaconVoteCacheKey struct {
+	root   phase0.Root
+	height specqbft.Height
 }
 
 type CommitteeObserverOptions struct {
 	FullNode          bool
 	Logger            *zap.Logger
-	NetworkConfig     networkconfig.NetworkConfig
+	BeaconConfig      networkconfig.Beacon
 	Network           specqbft.Network
-	Storage           *storage.QBFTStores
-	Operator          *spectypes.CommitteeMember
+	Storage           *storage.ParticipantStores
 	OperatorSigner    ssvtypes.OperatorSigner
-	NewDecidedHandler qbftctrl.NewDecidedHandler
+	NewDecidedHandler qbftcontroller.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	BeaconVoteRoots   *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
 	DomainCache       *DomainCache
 }
 
-func NewCommitteeObserver(identifier convert.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
-	// currently, only need domain & storage
-	config := &qbft.Config{
-		Domain:      opts.NetworkConfig.DomainType,
-		Network:     opts.Network,
-		CutOffRound: roundtimer.CutOffRound,
-	}
-
+func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// TODO: does the specific operator matters?
 
-	ctrl := qbftcontroller.NewController(identifier[:], opts.Operator, config, opts.OperatorSigner, opts.FullNode)
-	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
-
-	return &CommitteeObserver{
-		qbftController:         ctrl,
-		logger:                 opts.Logger,
-		Storage:                opts.Storage,
-		beaconNetwork:          opts.NetworkConfig.Beacon,
-		ValidatorStore:         opts.ValidatorStore,
-		newDecidedHandler:      opts.NewDecidedHandler,
-		attesterRoots:          opts.AttesterRoots,
-		syncCommRoots:          opts.SyncCommRoots,
-		domainCache:            opts.DomainCache,
-		postConsensusContainer: make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer),
+	co := &CommitteeObserver{
+		msgID:             msgID,
+		logger:            opts.Logger,
+		Storage:           opts.Storage,
+		beaconConfig:      opts.BeaconConfig,
+		ValidatorStore:    opts.ValidatorStore,
+		newDecidedHandler: opts.NewDecidedHandler,
+		attesterRoots:     opts.AttesterRoots,
+		syncCommRoots:     opts.SyncCommRoots,
+		domainCache:       opts.DomainCache,
+		beaconVoteRoots:   opts.BeaconVoteRoots,
 	}
+
+	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
+
+	return co
 }
 
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
@@ -99,7 +105,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	partialSigMessages := &spectypes.PartialSignatureMessages{}
-	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
+	if err := partialSigMessages.Decode(msg.GetData()); err != nil {
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {
@@ -113,7 +119,10 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		return fmt.Errorf("got invalid message %w", err)
 	}
 
-	quorums, err := ncv.processMessage(partialSigMessages)
+	ncv.Lock()
+	defer ncv.Unlock()
+
+	quorums, err := ncv.verifySigAndgetQuorums(partialSigMessages)
 	if err != nil {
 		return fmt.Errorf("could not process SignedPartialSignatureMessage %w", err)
 	}
@@ -140,18 +149,17 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
 				fields.BlockRoot(key.Root),
-				zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.qbftController.Identifier)),
+				zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.msgID[:])),
 			)
 		}
 
 		for _, beaconRole := range beaconRoles {
-			msgID := convert.NewMsgID(ncv.qbftController.GetConfig().GetSignatureDomainType(), validator.ValidatorPubKey[:], beaconRole)
-			roleStorage := ncv.Storage.Get(msgID.GetRoleType())
+			roleStorage := ncv.Storage.Get(beaconRole)
 			if roleStorage == nil {
 				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
 			}
 
-			updated, err := roleStorage.UpdateParticipants(msgID, slot, quorum)
+			updated, err := roleStorage.SaveParticipants(validator.ValidatorPubKey, slot, quorum)
 			if err != nil {
 				return fmt.Errorf("update participants: %w", err)
 			}
@@ -161,20 +169,24 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			}
 
 			logger.Info("✅ saved participants",
-				zap.String("converted_role", beaconRole.ToBeaconRole()),
+				zap.String("role", beaconRole.String()),
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
-				zap.String("msg_id", hex.EncodeToString(msgID[:])),
 				fields.BlockRoot(key.Root),
 			)
 
 			if ncv.newDecidedHandler != nil {
-				ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
-					Slot:       slot,
-					Signers:    quorum,
-					Identifier: msgID,
-				})
+				p := qbftstorage.Participation{
+					ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
+						Slot:    slot,
+						Signers: quorum,
+					},
+					Role:   beaconRole,
+					PubKey: validator.ValidatorPubKey,
+				}
+
+				ncv.newDecidedHandler(p)
 			}
 		}
 	}
@@ -182,32 +194,35 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []convert.RunnerRole {
-	if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
+func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []spectypes.BeaconRole {
+	switch msg.MsgID.GetRoleType() {
+	case spectypes.RoleCommittee:
 		attester := ncv.attesterRoots.Get(root)
 		syncCommittee := ncv.syncCommRoots.Get(root)
 
 		switch {
 		case attester != nil && syncCommittee != nil:
-			return []convert.RunnerRole{convert.RoleAttester, convert.RoleSyncCommittee}
+			return []spectypes.BeaconRole{spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee}
 		case attester != nil:
-			return []convert.RunnerRole{convert.RoleAttester}
+			return []spectypes.BeaconRole{spectypes.BNRoleAttester}
 		case syncCommittee != nil:
-			return []convert.RunnerRole{convert.RoleSyncCommittee}
+			return []spectypes.BeaconRole{spectypes.BNRoleSyncCommittee}
 		default:
 			return nil
 		}
+	case spectypes.RoleAggregator:
+		return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
+	case spectypes.RoleProposer:
+		return []spectypes.BeaconRole{spectypes.BNRoleProposer}
+	case spectypes.RoleSyncCommitteeContribution:
+		return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
+	case spectypes.RoleValidatorRegistration:
+		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
+	case spectypes.RoleVoluntaryExit:
+		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
 	}
-	return []convert.RunnerRole{casts.RunnerRoleToConvertRole(msg.MsgID.GetRoleType())}
-}
 
-// nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
-func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
-	if fullNode {
-		// Helps full nodes reduce
-		return 2
-	}
-	return 1
+	return nil
 }
 
 type validatorIndexAndRoot struct {
@@ -215,23 +230,65 @@ type validatorIndexAndRoot struct {
 	Root           phase0.Root
 }
 
-func (ncv *CommitteeObserver) processMessage(
+func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureMessages) error {
+	ncv.Lock()
+	defer ncv.Unlock()
+
+	currentSlot := partialMsgs.Slot
+	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
+	if !exist {
+		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
+		ncv.postConsensusContainer[partialMsgs.Slot] = slotValidators
+	}
+
+	for _, msg := range partialMsgs.Messages {
+		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
+		if !exists {
+			return fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
+		}
+		container, ok := slotValidators[msg.ValidatorIndex]
+		if !ok {
+			container = ssv.NewPartialSigContainer(validator.Quorum())
+			slotValidators[msg.ValidatorIndex] = container
+		}
+		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
+			if err := ncv.resolveDuplicateSignature(container, msg, validator); err != nil {
+				return err
+			}
+		} else {
+			container.AddSignature(msg)
+		}
+	}
+
+	ncv.pruneOldSlots(currentSlot)
+
+	return nil
+}
+
+func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 	signedMsg *spectypes.PartialSignatureMessages,
 ) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
+
+	currentSlot := signedMsg.Slot
+	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
+	if !exist {
+		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
+		ncv.postConsensusContainer[signedMsg.Slot] = slotValidators
+	}
 
 	for _, msg := range signedMsg.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		if !exists {
 			return nil, fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
 		}
-		container, ok := ncv.postConsensusContainer[msg.ValidatorIndex]
+		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
 			container = ssv.NewPartialSigContainer(validator.Quorum())
-			ncv.postConsensusContainer[msg.ValidatorIndex] = container
+			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			ncv.resolveDuplicateSignature(container, msg, validator)
+			_ = ncv.resolveDuplicateSignature(container, msg, validator)
 		} else {
 			container.AddSignature(msg)
 		}
@@ -250,19 +307,35 @@ func (ncv *CommitteeObserver) processMessage(
 			}
 		}
 	}
+
+	ncv.pruneOldSlots(currentSlot)
+
 	return quorums, nil
+}
+
+func (ncv *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
+	// Remove older slots container
+	if len(ncv.postConsensusContainer) >= ncv.postConsensusContainerCapacity() {
+		// #nosec G115 -- capacity must be low epoch not to cause overflow
+		thresholdSlot := currentSlot - phase0.Slot(ncv.postConsensusContainerCapacity())
+		for slot := range ncv.postConsensusContainer {
+			if slot < thresholdSlot {
+				delete(ncv.postConsensusContainer, slot)
+			}
+		}
+	}
 }
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) {
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
 		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)
 		if err == nil {
-			// Keep the previous sigature since it's correct
-			return
+			// Keep the previous signature since it's correct
+			return nil
 		}
 	}
 
@@ -274,12 +347,12 @@ func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSi
 	if err == nil {
 		container.AddSignature(msg)
 	}
+
+	return err
 }
 
 // copied from BaseRunner
 func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root phase0.Root, share *ssvtypes.SSVShare) error {
-	ssvtypes.MetricsSignaturesVerifications.WithLabelValues().Inc()
-
 	for _, n := range share.Committee {
 		if n.Signer == signer {
 			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
@@ -301,7 +374,7 @@ func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signat
 	return fmt.Errorf("unknown signer")
 }
 
-func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
+func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessage) error {
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
 		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
@@ -313,21 +386,31 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
-	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+	bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
 
-	if err := ncv.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
+	// if the roots for this beacon vote hash and height have already been computed, skip
+	if ncv.beaconVoteRoots.Has(bnCacheKey) {
+		return nil
+	}
+
+	epoch := ncv.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+
+	if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
 		return err
 	}
 
-	if err := ncv.saveSyncCommRoots(epoch, beaconVote); err != nil {
+	if err := ncv.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
 		return err
 	}
+
+	// cache the roots for this beacon vote hash and height
+	ncv.beaconVoteRoots.Set(bnCacheKey, struct{}{}, ttlcache.DefaultTTL)
 
 	return nil
 }
 
-func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
-	attesterDomain, err := ncv.domainCache.Get(epoch, spectypes.DomainAttester)
+func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
+	attesterDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
 	}
@@ -345,8 +428,12 @@ func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *
 	return nil
 }
 
-func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote) error {
-	syncCommDomain, err := ncv.domainCache.Get(epoch, spectypes.DomainSyncCommittee)
+func (ncv *CommitteeObserver) saveSyncCommRoots(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	beaconVote *spectypes.BeaconVote,
+) error {
+	syncCommDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return err
 	}
@@ -360,6 +447,11 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *
 	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
 
 	return nil
+}
+
+func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
+	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
+	return int(ncv.beaconConfig.GetSlotsPerEpoch()) + validation.LateSlotAllowance
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {

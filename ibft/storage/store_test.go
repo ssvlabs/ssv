@@ -1,13 +1,240 @@
 package storage
 
 import (
+	"context"
+	"crypto/rsa"
 	"fmt"
+	"slices"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	kv "github.com/ssvlabs/ssv/storage/badger"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+func TestRemoveSlot(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	t.Cleanup(func() { _ = db.Close() })
+	assert.NoError(t, err)
+
+	role := spectypes.BNRoleAttester
+
+	ibftStorage := NewStores()
+	ibftStorage.Add(role, New(zap.NewNop(), db, role))
+
+	_ = bls.Init(bls.BLS12_381)
+
+	sks, op, rsaKeys := GenerateNodes(4)
+	oids := make([]spectypes.OperatorID, 0, len(op))
+	for _, o := range op {
+		oids = append(oids, o.OperatorID)
+	}
+
+	pk := sks[1].GetPublicKey()
+	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     height,
+			Round:      1,
+			Identifier: pk.Serialize(),
+			Root:       [32]byte{0x1, 0x2, 0x3},
+		}
+	})
+	require.NoError(t, err)
+
+	storage := ibftStorage.Get(role).(*participantStorage)
+
+	// save participants
+	for _, d := range decided250Seq {
+		_, err := storage.SaveParticipants(
+			spectypes.ValidatorPK(pk.Serialize()),
+			phase0.Slot(d.State.Height),
+			d.DecidedMessage.OperatorIDs,
+		)
+		require.NoError(t, err)
+	}
+
+	t.Run("should have all participants", func(t *testing.T) {
+		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
+		require.Nil(t, err)
+		require.Equal(t, 251, len(pp)) // seq 0 - 250
+	})
+
+	t.Run("remove slot older than", func(t *testing.T) {
+		threshold := phase0.Slot(100)
+
+		count := storage.removeSlotsOlderThan(threshold)
+		require.Equal(t, 100, count)
+
+		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
+		require.Nil(t, err)
+		require.Equal(t, 151, len(pp)) // seq 0 - 150
+
+		found := slices.ContainsFunc(pp, func(e qbftstorage.ParticipantsRangeEntry) bool {
+			return e.Slot < threshold
+		})
+
+		assert.False(t, found, "found slots, none expected")
+	})
+
+	t.Run("remove slot at", func(t *testing.T) {
+		count, err := storage.removeSlotAt(phase0.Slot(150))
+		require.Nil(t, err)
+		assert.Equal(t, 1, count)
+		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
+		require.Nil(t, err)
+		require.Equal(t, 150, len(pp)) // seq 0 - 149
+	})
+}
+
+func TestSlotCleanupJob(t *testing.T) {
+	// to test the slot cleanup job we insert 10 unique slots with two pubkey entries
+	// per slot, then we configure the job to retain only 1 slot in the past
+	// at boot the job removes ALL slots lower than the retained one, ex: if ticker
+	// returns slot 4 - slots 0,1 and 2 will be deleted and slot 3 retained
+	// and then on next tick (5) slot 3 will be removed as well keeping back slot 4.
+
+	// setup
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	assert.NoError(t, err)
+
+	role := spectypes.BNRoleAttester
+
+	ibftStorage := NewStores()
+	ibftStorage.Add(role, New(zap.NewNop(), db, role))
+
+	_ = bls.Init(bls.BLS12_381)
+
+	sks, op, rsaKeys := GenerateNodes(4)
+	oids := make([]spectypes.OperatorID, 0, len(op))
+	for _, o := range op {
+		oids = append(oids, o.OperatorID)
+	}
+
+	// pk 1
+	pk := sks[1].GetPublicKey()
+	decided10Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     height,
+			Round:      1,
+			Identifier: pk.Serialize(),
+			Root:       [32]byte{0x1, 0x2, 0x3},
+		}
+	})
+	require.NoError(t, err)
+
+	storage := ibftStorage.Get(role).(*participantStorage)
+
+	// save participants
+	for _, d := range decided10Seq {
+		_, err := storage.SaveParticipants(
+			spectypes.ValidatorPK(pk.Serialize()),
+			phase0.Slot(d.State.Height),
+			d.DecidedMessage.OperatorIDs,
+		)
+		require.NoError(t, err)
+	}
+
+	// pk 2
+	pk = sks[2].GetPublicKey()
+	decided10Seq, err = protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     height,
+			Round:      1,
+			Identifier: pk.Serialize(),
+			Root:       [32]byte{0x1, 0x2, 0x3},
+		}
+	})
+	require.NoError(t, err)
+
+	for _, d := range decided10Seq {
+		_, err := storage.SaveParticipants(
+			spectypes.ValidatorPK(pk.Serialize()),
+			phase0.Slot(d.State.Height),
+			d.DecidedMessage.OperatorIDs,
+		)
+		require.NoError(t, err)
+	}
+
+	// test
+	ctx, cancel := context.WithCancel(t.Context())
+
+	ctrl := gomock.NewController(t)
+	ticker := mockslotticker.NewMockSlotTicker(ctrl)
+
+	mockTimeChan := make(chan time.Time)
+	mockSlotChan := make(chan phase0.Slot)
+	t.Cleanup(func() {
+		close(mockSlotChan)
+		close(mockTimeChan)
+	})
+
+	ticker.EXPECT().Next().Return(mockTimeChan).AnyTimes()
+	ticker.EXPECT().Slot().DoAndReturn(func() phase0.Slot {
+		return <-mockSlotChan
+	}).AnyTimes()
+
+	tickerProv := func() slotticker.SlotTicker {
+		return ticker
+	}
+
+	// initial cleanup removes ALL slots below 3
+	storage.Prune(ctx, 3)
+
+	pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
+	require.Nil(t, err)
+	require.Equal(t, 14, len(pp))
+
+	// 	0	1	2	3	4	5	6	7	8	9
+	//	x   x   x	~
+	assert.Equal(t, phase0.Slot(3), pp[0].Slot)
+	assert.Equal(t, phase0.Slot(3), pp[1].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[12].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[13].Slot)
+
+	// run normal gc
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		storage.PruneContinously(ctx, tickerProv, 1)
+	}()
+
+	mockTimeChan <- time.Now()
+	mockSlotChan <- phase0.Slot(5)
+
+	cancel()
+	wg.Wait()
+
+	pp, err = storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
+	require.Nil(t, err)
+	require.Equal(t, 12, len(pp))
+
+	// 	0	1	2	3	4	5	6	7	8	9
+	//	x   x   x	x	~
+	assert.Equal(t, phase0.Slot(4), pp[0].Slot)
+	assert.Equal(t, phase0.Slot(4), pp[1].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[10].Slot)
+	assert.Equal(t, phase0.Slot(9), pp[11].Slot)
+}
 
 func TestEncodeDecodeOperators(t *testing.T) {
 	testCases := []struct {
@@ -100,4 +327,33 @@ func Test_mergeQuorums(t *testing.T) {
 			require.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// GenerateNodes generates randomly nodes
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator, []*rsa.PrivateKey) {
+	_ = bls.Init(bls.BLS12_381)
+	nodes := make([]*spectypes.Operator, 0, cnt)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
+	rsaKeys := make([]*rsa.PrivateKey, 0, cnt)
+	for i := 1; i <= cnt; i++ {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+
+		opPubKey, privateKey, err := rsaencryption.GenerateKeyPairPEM()
+		if err != nil {
+			panic(err)
+		}
+		pk, err := rsaencryption.PEMToPrivateKey(privateKey)
+		if err != nil {
+			panic(err)
+		}
+
+		nodes = append(nodes, &spectypes.Operator{
+			OperatorID:        spectypes.OperatorID(i),
+			SSVOperatorPubKey: opPubKey,
+		})
+		sks[spectypes.OperatorID(i)] = sk
+		rsaKeys = append(rsaKeys, pk)
+	}
+	return sks, nodes, rsaKeys
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -32,51 +33,48 @@ type ParticipantsAPI struct {
 }
 
 // NewParticipantsAPIMsg creates a new message in a new format from the given message.
-func NewParticipantsAPIMsg(msg qbftstorage.ParticipantsRangeEntry) Message {
-	data, err := ParticipantsAPIData(msg)
+func NewParticipantsAPIMsg(domainType spectypes.DomainType, msg qbftstorage.Participation) Message {
+	data, err := ParticipantsAPIData(domainType, msg)
 	if err != nil {
 		return Message{
 			Type: TypeParticipants,
 			Data: []string{},
 		}
 	}
-	identifier := specqbft.ControllerIdToMessageID(msg.Identifier[:])
-	pkv := identifier.GetDutyExecutorID()
 
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
-			PublicKey: hex.EncodeToString(pkv),
+			PublicKey: hex.EncodeToString(msg.PubKey[:]),
 			From:      uint64(msg.Slot),
 			To:        uint64(msg.Slot),
-			Role:      msg.Identifier.GetRoleType().String(),
+			Role:      msg.Role.String(),
 		},
 		Data: data,
 	}
 }
 
 // ParticipantsAPIData creates a new message from the given message in a new format.
-func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
+func ParticipantsAPIData(domainType spectypes.DomainType, msgs ...qbftstorage.Participation) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
 
 	apiMsgs := make([]*ParticipantsAPI, 0)
 	for _, msg := range msgs {
-		dutyExecutorID := msg.Identifier.GetDutyExecutorID()
+		var msgID = legacyNewMsgID(domainType, msg.PubKey[:], msg.Role)
 		blsPubKey := phase0.BLSPubKey{}
-		copy(blsPubKey[:], dutyExecutorID)
-
+		copy(blsPubKey[:], msg.PubKey[:])
 		apiMsg := &ParticipantsAPI{
 			Signers:     msg.Signers,
 			Slot:        msg.Slot,
-			Identifier:  msg.Identifier[:],
-			ValidatorPK: hex.EncodeToString(dutyExecutorID),
-			Role:        msg.Identifier.GetRoleType().String(),
+			Identifier:  msgID[:],
+			ValidatorPK: hex.EncodeToString(msg.PubKey[:]),
+			Role:        msg.Role.String(),
 			Message: specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.Height(msg.Slot),
-				Identifier: msg.Identifier[:],
+				Identifier: msgID[:],
 				Round:      specqbft.FirstRound,
 			},
 			FullData: &spectypes.ValidatorConsensusData{
@@ -120,3 +118,22 @@ const (
 	// TypeParticipants is an enum for participants type messages
 	TypeParticipants MessageType = "participants"
 )
+
+const (
+	domainSize       = 4
+	domainStartPos   = 0
+	pubKeySize       = 48
+	pubKeyStartPos   = domainStartPos + domainSize
+	roleTypeSize     = 4
+	roleTypeStartPos = pubKeyStartPos + pubKeySize
+)
+
+// legacyNewMsgID is needed only for API backwards-compatibility.
+func legacyNewMsgID(domain spectypes.DomainType, pk []byte, role spectypes.BeaconRole) (mid spectypes.MessageID) {
+	roleByts := make([]byte, 4)
+	binary.LittleEndian.PutUint32(roleByts, uint32(role)) // #nosec G115
+	copy(mid[domainStartPos:domainStartPos+domainSize], domain[:])
+	copy(mid[pubKeyStartPos:pubKeyStartPos+pubKeySize], pk)
+	copy(mid[roleTypeStartPos:roleTypeStartPos+roleTypeSize], roleByts)
+	return mid
+}

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
@@ -24,17 +24,18 @@ var (
 // Controller is an interface for managing pubsub topics
 type Controller interface {
 	// Subscribe subscribes to the given topic
-	Subscribe(logger *zap.Logger, name string) error
+	Subscribe(name string) error
 	// Unsubscribe unsubscribes from the given topic
-	Unsubscribe(logger *zap.Logger, topicName string, hard bool) error
-	// Peers returns the peers subscribed to the given topic
+	Unsubscribe(topicName string, hard bool) error
+	// Peers returns a list of peers we are connected to in the given topic, if topicName
+	// param is an empty string it returns a list of all peers we are connected to.
 	Peers(topicName string) ([]peer.ID, error)
-	// Topics lists all the available topics
+	// Topics lists all topics this node is subscribed to
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
 	// UpdateScoreParams refreshes the score params for every subscribed topic
-	UpdateScoreParams(logger *zap.Logger) error
+	UpdateScoreParams() error
 
 	io.Closer
 }
@@ -81,33 +82,33 @@ func NewTopicsController(
 		subFilter: subFilter,
 	}
 
-	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic(logger))
+	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic())
 
 	return ctrl
 }
 
-func (ctrl *topicsCtrl) onNewTopic(logger *zap.Logger) onTopicJoined {
+func (ctrl *topicsCtrl) onNewTopic() onTopicJoined {
 	return func(ps *pubsub.PubSub, topic *pubsub.Topic) {
 		// initial setup for the topic, should happen only once
 		name := topic.String()
 		if err := ctrl.setupTopicValidator(topic.String()); err != nil {
 			// TODO: close topic?
 			// return err
-			logger.Warn("could not setup topic", zap.String("topic", name), zap.Error(err))
+			ctrl.logger.Warn("could not setup topic", zap.String("topic", name), zap.Error(err))
 		}
 		if ctrl.scoreParamsFactory != nil {
 			if p := ctrl.scoreParamsFactory(name); p != nil {
-				logger.Debug("using scoring params for topic", zap.String("topic", name), zap.Any("params", p))
+				ctrl.logger.Debug("using scoring params for topic", zap.String("topic", name), zap.Any("params", p))
 				if err := topic.SetScoreParams(p); err != nil {
-					// logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
-					logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
+					// ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
+					ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
 				}
 			}
 		}
 	}
 }
 
-func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
+func (ctrl *topicsCtrl) UpdateScoreParams() error {
 	if ctrl.scoreParamsFactory == nil {
 		return fmt.Errorf("scoreParamsFactory is not set")
 	}
@@ -136,13 +137,13 @@ func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
 func (ctrl *topicsCtrl) Close() error {
 	topics := ctrl.ps.GetTopics()
 	for _, tp := range topics {
-		_ = ctrl.Unsubscribe(ctrl.logger, commons.GetTopicBaseName(tp), true)
+		_ = ctrl.Unsubscribe(commons.GetTopicBaseName(tp), true)
 		_ = ctrl.container.Leave(tp)
 	}
 	return nil
 }
 
-// Peers returns the peers subscribed to the given topic
+// Peers returns a list of peers we are connected to in the given topic.
 func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	if name == "" {
 		return ctrl.ps.ListPeers(""), nil
@@ -155,7 +156,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	return topic.ListPeers(), nil
 }
 
-// Topics lists all the available topics
+// Topics lists all topics this node is subscribed to
 func (ctrl *topicsCtrl) Topics() []string {
 	topics := ctrl.ps.GetTopics()
 	for i, tp := range topics {
@@ -166,18 +167,18 @@ func (ctrl *topicsCtrl) Topics() []string {
 
 // Subscribe subscribes to the given topic, it can handle multiple concurrent calls.
 // it will create a single goroutine and channel for every topic
-func (ctrl *topicsCtrl) Subscribe(logger *zap.Logger, name string) error {
+func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = commons.GetTopicFullName(name)
 	ctrl.subFilter.(Whitelist).Register(name)
 	sub, err := ctrl.container.Subscribe(name)
-	defer logger.Debug("subscribing to topic", zap.String("topic", name), zap.Bool("already_subscribed", sub == nil), zap.Error(err))
+	defer ctrl.logger.Debug("subscribing to topic", zap.String("topic", name), zap.Bool("already_subscribed", sub == nil), zap.Error(err))
 	if err != nil {
 		return err
 	}
 	if sub == nil { // already subscribed
 		return nil
 	}
-	go ctrl.start(logger, name, sub)
+	go ctrl.start(name, sub)
 
 	return nil
 }
@@ -197,7 +198,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 		err := topic.Publish(ctx, data)
 		if err == nil {
-			metricPubsubOutbound.WithLabelValues(name).Inc()
+			outboundMessageCounter.Add(ctrl.ctx, 1)
 		}
 	}()
 
@@ -206,7 +207,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 // if hard is true, we will unsubscribe the topic even if there are more subscribers.
-func (ctrl *topicsCtrl) Unsubscribe(logger *zap.Logger, name string, hard bool) error {
+func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 	name = commons.GetTopicFullName(name)
 
 	if !ctrl.container.Unsubscribe(name) {
@@ -216,7 +217,7 @@ func (ctrl *topicsCtrl) Unsubscribe(logger *zap.Logger, name string, hard bool) 
 	if ctrl.msgValidator != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
 		if err != nil {
-			logger.Debug("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
+			ctrl.logger.Debug("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
 		}
 	}
 	ctrl.subFilter.(Whitelist).Deregister(name)
@@ -227,32 +228,32 @@ func (ctrl *topicsCtrl) Unsubscribe(logger *zap.Logger, name string, hard bool) 
 // start will listen to *pubsub.Subscription,
 // if some error happened we try to leave and rejoin the topic
 // the loop stops once a topic is unsubscribed and therefore not listed
-func (ctrl *topicsCtrl) start(logger *zap.Logger, name string, sub *pubsub.Subscription) {
+func (ctrl *topicsCtrl) start(name string, sub *pubsub.Subscription) {
 	for ctrl.ctx.Err() == nil {
-		err := ctrl.listen(logger, sub)
+		err := ctrl.listen(sub)
 		if err == nil {
 			return
 		}
 		// rejoin in case failed
-		logger.Debug("could not listen to topic", zap.String("topic", name), zap.Error(err))
+		ctrl.logger.Debug("could not listen to topic", zap.String("topic", name), zap.Error(err))
 		ctrl.container.Unsubscribe(name)
 		_ = ctrl.container.Leave(name)
 		sub, err = ctrl.container.Subscribe(name)
 		if err == nil {
 			continue
 		}
-		logger.Debug("could not rejoin topic", zap.String("topic", name), zap.Error(err))
+		ctrl.logger.Debug("could not rejoin topic", zap.String("topic", name), zap.Error(err))
 	}
 }
 
 // listen handles incoming messages from the topic
-func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) error {
+func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	ctx, cancel := context.WithCancel(ctrl.ctx)
 	defer cancel()
 
 	topicName := sub.Topic()
 
-	logger = logger.With(zap.String("topic", topicName))
+	logger := ctrl.logger.With(zap.String("topic", topicName))
 	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
 		msg, err := sub.Next(ctx)
@@ -274,10 +275,8 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(m.MsgType), 10),
-			).Inc()
+			inboundMessageCounter.Add(ctrl.ctx, 1,
+				metric.WithAttributes(messageTypeAttribute(uint64(m.MsgType))))
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}

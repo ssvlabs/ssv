@@ -3,7 +3,6 @@ package mock
 import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
 )
 
 // MockConnectionIndex is a mock implementation of the ConnectionIndex interface
@@ -17,7 +16,7 @@ func (m *MockConnectionIndex) Connectedness(id peer.ID) network.Connectedness {
 }
 
 // CanConnect panics if called
-func (m *MockConnectionIndex) CanConnect(id peer.ID) bool {
+func (m *MockConnectionIndex) CanConnect(id peer.ID) error {
 	panic("CanConnect method is not implemented in MockConnectionIndex")
 }
 
@@ -27,6 +26,6 @@ func (m *MockConnectionIndex) AtLimit(dir network.Direction) bool {
 }
 
 // IsBad panics if called
-func (m *MockConnectionIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (m *MockConnectionIndex) IsBad(id peer.ID) bool {
 	panic("IsBad method is not implemented in MockConnectionIndex")
 }

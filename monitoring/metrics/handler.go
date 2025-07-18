@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,40 +18,29 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// Handler handles incoming metrics requests
-type Handler interface {
-	// Start starts an http server, listening to /metrics requests
-	Start(logger *zap.Logger, mux *http.ServeMux, addr string) error
-}
-
-type metricsHandler struct {
-	ctx           context.Context
+type Handler struct {
+	logger        *zap.Logger
 	db            basedb.Database
-	reporter      nodeMetrics
 	enableProf    bool
 	healthChecker HealthChecker
 }
 
-// NewMetricsHandler returns a new metrics handler.
-func NewMetricsHandler(ctx context.Context, db basedb.Database, reporter nodeMetrics, enableProf bool, healthChecker HealthChecker) Handler {
-	if reporter == nil {
-		reporter = nopMetrics{}
-	}
-	mh := metricsHandler{
-		ctx:           ctx,
+// NewHandler returns a new metrics handler.
+func NewHandler(logger *zap.Logger, db basedb.Database, enableProf bool, healthChecker HealthChecker) *Handler {
+	mh := Handler{
+		logger:        logger,
 		db:            db,
-		reporter:      reporter,
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
 	}
 	return &mh
 }
 
-func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr string) error {
-	logger.Info("setup collection", fields.Address(addr), zap.Bool("enableProf", mh.enableProf))
+func (h *Handler) Start(mux *http.ServeMux, addr string) error {
+	h.logger.Info("setup collection", fields.Address(addr), zap.Bool("enableProf", h.enableProf))
 
-	if mh.enableProf {
-		mh.configureProfiling()
+	if h.enableProf {
+		h.configureProfiling()
 		// adding pprof routes manually on an own HTTPMux to avoid lint issue:
 		// `G108: Profiling endpoint is automatically exposed on /debug/pprof (gosec)`
 		mux.HandleFunc("/debug/pprof/", http_pprof.Index)
@@ -69,8 +57,8 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 			EnableOpenMetrics: true,
 		},
 	))
-	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
-	mux.HandleFunc("/health", mh.handleHealth)
+	mux.HandleFunc("/database/count-by-collection", h.handleCountByCollection)
+	mux.HandleFunc("/health", h.handleHealth)
 
 	// Set a high timeout to allow for long-running pprof requests.
 	const timeout = 600 * time.Second
@@ -92,7 +80,7 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 // handleCountByCollection responds with the number of key in the database by collection.
 // Prefix can be a string or a 0x-prefixed hex string.
 // Empty prefix returns the total number of keys in the database.
-func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleCountByCollection(w http.ResponseWriter, r *http.Request) {
 	var response struct {
 		Count int64 `json:"count"`
 	}
@@ -113,7 +101,7 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 		}
 	}
 
-	n, err := mh.db.CountPrefix(prefix)
+	n, err := h.db.CountPrefix(prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -126,9 +114,8 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 	}
 }
 
-func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
-	if err := mh.healthChecker.HealthCheck(); err != nil {
-		mh.reporter.SSVNodeNotHealthy()
+func (h *Handler) handleHealth(res http.ResponseWriter, req *http.Request) {
+	if err := h.healthChecker.HealthCheck(); err != nil {
 		result := map[string][]string{
 			"errors": {err.Error()},
 		}
@@ -138,14 +125,13 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 			http.Error(res, string(raw), http.StatusInternalServerError)
 		}
 	} else {
-		mh.reporter.SSVNodeHealthy()
 		if _, err := fmt.Fprintln(res, ""); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
 
-func (mh *metricsHandler) configureProfiling() {
+func (h *Handler) configureProfiling() {
 	runtime.SetBlockProfileRate(10000)
 	runtime.SetMutexProfileFraction(5)
 }

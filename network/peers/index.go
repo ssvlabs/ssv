@@ -3,13 +3,12 @@ package peers
 import (
 	"io"
 
-	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -36,13 +35,13 @@ type ConnectionIndex interface {
 
 	// CanConnect returns whether we can connect to the given peer,
 	// by checking if it is already connected or if we tried to connect to it recently and failed
-	CanConnect(id peer.ID) bool
+	CanConnect(id peer.ID) error
 
 	// AtLimit checks if the node has reached peers limit
 	AtLimit(dir libp2pnetwork.Direction) bool
 
 	// IsBad returns whether the given peer is bad
-	IsBad(logger *zap.Logger, id peer.ID) bool
+	IsBad(id peer.ID) bool
 }
 
 // ScoreIndex is an interface for managing peers scores
@@ -77,7 +76,7 @@ type PeerInfoIndex interface {
 	PeerInfo(peer.ID) *PeerInfo
 
 	// AddPeerInfo adds/updates the record for the given peer.
-	AddPeerInfo(id peer.ID, address ma.Multiaddr, direction network.Direction)
+	AddPeerInfo(id peer.ID, address ma.Multiaddr, direction libp2pnetwork.Direction)
 
 	// UpdatePeerInfo calls the given function to update the PeerInfo of the given peer.
 	UpdatePeerInfo(id peer.ID, update func(*PeerInfo))
@@ -92,21 +91,21 @@ type PeerInfoIndex interface {
 // SubnetsStats holds a snapshot of subnets stats
 type SubnetsStats struct {
 	AvgConnected int
-	PeersCount   []int
-	Connected    []int
+	PeersCount   [commons.SubnetsCount]int
+	Connected    [commons.SubnetsCount]int
 }
 
 // SubnetsIndex stores information on subnets.
 // it keeps track of subnets but doesn't mind regards actual connections that we have.
 type SubnetsIndex interface {
 	// UpdatePeerSubnets updates the given peer's subnets
-	UpdatePeerSubnets(id peer.ID, s records.Subnets) bool
+	UpdatePeerSubnets(id peer.ID, subnets commons.Subnets) bool
 
 	// GetSubnetPeers returns peers that are interested in the given subnet
-	GetSubnetPeers(s int) []peer.ID
+	GetSubnetPeers(subnet int) []peer.ID
 
-	// GetPeerSubnets returns subnets of the given peer
-	GetPeerSubnets(id peer.ID) records.Subnets
+	// GetPeerSubnets returns subnets of the given peer and whether it was found
+	GetPeerSubnets(id peer.ID) (subnets commons.Subnets, ok bool)
 
 	// GetSubnetsStats collects and returns subnets stats
 	GetSubnetsStats() *SubnetsStats

@@ -14,12 +14,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv-spec/ssv"
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -27,11 +28,12 @@ import (
 
 type CommitteeSpecTest struct {
 	Name                   string
+	ParentName             string
 	Committee              *validator.Committee
 	Input                  []interface{} // Can be a types.Duty or a *types.SignedSSVMessage
 	PostDutyCommitteeRoot  string
 	PostDutyCommittee      spectypes.Root `json:"-"` // Field is ignored by encoding/json
-	OutputMessages         []*types.PartialSignatureMessages
+	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
 	ExpectedError          string
 }
@@ -40,18 +42,21 @@ func (test *CommitteeSpecTest) TestName() string {
 	return test.Name
 }
 
+func (test *CommitteeSpecTest) FullName() string {
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
+}
+
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	logger := logging.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
 
-	broadcastedMsgs := make([]*types.SignedSSVMessage, 0)
+	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
@@ -141,6 +146,7 @@ func (tests *MultiCommitteeSpecTest) Run(t *testing.T) {
 
 	for _, test := range tests.Tests {
 		t.Run(test.TestName(), func(t *testing.T) {
+			test.ParentName = tests.Name
 			test.RunAsPartOfMultiTest(t)
 		})
 	}
@@ -158,7 +164,7 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 }
 
 func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
-	ret := make(map[string]types.Root, len(tests.Tests))
+	ret := make(map[string]spectypes.Root, len(tests.Tests))
 	for _, test := range tests.Tests {
 		err := test.runPreTesting(logger)
 		if err != nil && test.ExpectedError != err.Error() {
@@ -182,9 +188,9 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	//for _, r := range committee.Runners {
-	//	r.BaseRunner.BeaconNetwork = spectypes.BeaconTestNetwork
-	//}
+	for _, r := range committee.Runners {
+		r.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	}
 
 	root, err := committee.GetRoot()
 	require.NoError(t, err)

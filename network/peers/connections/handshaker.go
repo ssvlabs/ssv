@@ -9,14 +9,16 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
-	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 // errPeerWasFiltered is thrown when a peer is filtered during handshake
@@ -29,7 +31,7 @@ var errConsumingMessage = errors.New("error consuming message")
 type HandshakeFilter func(senderID peer.ID, sni *records.NodeInfo) error
 
 // SubnetsProvider returns the subnets of or node
-type SubnetsProvider func() records.Subnets
+type SubnetsProvider func() commons.Subnets
 
 // Handshaker is the interface for handshaking with peers.
 // it uses node info protocol to exchange information with other nodes and decide whether we want to connect.
@@ -38,11 +40,12 @@ type SubnetsProvider func() records.Subnets
 // we accept nodes with user agent as a fallback when the new protocol is not supported.
 type Handshaker interface {
 	Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error
-	Handler(logger *zap.Logger) libp2pnetwork.StreamHandler
+	Handler() libp2pnetwork.StreamHandler
 }
 
 type handshaker struct {
-	ctx context.Context
+	ctx    context.Context
+	logger *zap.Logger
 
 	filters func() []HandshakeFilter
 
@@ -73,9 +76,10 @@ type HandshakerCfg struct {
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []HandshakeFilter) Handshaker {
+func NewHandshaker(ctx context.Context, logger *zap.Logger, cfg *HandshakerCfg, filters func() []HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:             ctx,
+		logger:          logger,
 		streams:         cfg.Streams,
 		nodeInfos:       cfg.NodeInfos,
 		connIdx:         cfg.ConnIdx,
@@ -91,7 +95,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 }
 
 // Handler returns the handshake handler
-func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
+func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	handleHandshake := func(logger *zap.Logger, h *handshaker, stream libp2pnetwork.Stream) error {
 		pid := stream.Conn().RemotePeer()
 		request, respond, done, err := h.streams.HandleStream(logger, stream)
@@ -126,7 +130,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 	return func(stream libp2pnetwork.Stream) {
 		pid := stream.Conn().RemotePeer()
-		logger := logger.With(fields.PeerID(pid))
+		logger := h.logger.With(fields.PeerID(pid))
 
 		// Update PeerInfo with the result of this handshake.
 		var err error
@@ -134,7 +138,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			if r := recover(); r != nil {
 				err = errors.Errorf("panic: %v", r)
 			}
-			h.updatePeerInfo(logger, pid, err)
+			h.updatePeerInfo(pid, err)
 		}()
 
 		// Handle the handshake request.
@@ -170,7 +174,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 		if r := recover(); r != nil {
 			err = errors.Errorf("panic: %v", r)
 		}
-		h.updatePeerInfo(logger, pid, err)
+		h.updatePeerInfo(pid, err)
 	}()
 
 	nodeInfo, err = h.requestNodeInfo(logger, conn)
@@ -187,7 +191,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 	return
 }
 
-func (h *handshaker) updatePeerInfo(logger *zap.Logger, pid peer.ID, handshakeErr error) {
+func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 	h.peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
 		info.LastHandshake = time.Now()
 		info.LastHandshakeError = handshakeErr
@@ -197,7 +201,7 @@ func (h *handshaker) updatePeerInfo(logger *zap.Logger, pid peer.ID, handshakeEr
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
 	if ni.Metadata != nil {
-		subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
+		subnets, err := commons.SubnetsFromString(ni.Metadata.Subnets)
 		if err == nil {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {

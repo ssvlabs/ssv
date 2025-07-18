@@ -9,6 +9,7 @@ import (
 	"log"
 	"path/filepath"
 	"regexp"
+	"slices"
 )
 
 type Element struct {
@@ -123,7 +124,7 @@ func (p *Parser) transformCallExpr(callExpr *ast.CallExpr) {
 	selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
 	if ok {
 		ident, ok := selectorExpr.X.(*ast.Ident)
-		if ok && p.containsIdent(ident.Name) {
+		if ok && slices.Contains(p.RemoveIdentifiers, ident.Name) {
 			emptyIdent := &ast.Ident{}
 			callExpr.Fun = emptyIdent
 			callExpr.Args = []ast.Expr{}
@@ -133,7 +134,7 @@ func (p *Parser) transformCallExpr(callExpr *ast.CallExpr) {
 	// Remove arguments for specified identifiers.
 	newArgs := []ast.Expr{}
 	for _, arg := range callExpr.Args {
-		if ident, ok := arg.(*ast.Ident); !ok || !p.containsIdent(ident.Name) {
+		if ident, ok := arg.(*ast.Ident); !ok || !slices.Contains(p.RemoveIdentifiers, ident.Name) {
 			newArgs = append(newArgs, arg)
 		}
 	}
@@ -148,7 +149,7 @@ func (p *Parser) transformFuncDecl(funcDecl *ast.FuncDecl) {
 			if len(field.Names) == 0 {
 				continue
 			}
-			if !p.containsIdent(field.Names[0].Name) {
+			if !slices.Contains(p.RemoveIdentifiers, field.Names[0].Name) {
 				newList = append(newList, field)
 			}
 		}
@@ -163,7 +164,7 @@ func (p *Parser) transformTypeSpec(typeSpec *ast.TypeSpec) {
 			if funcType, ok := field.Type.(*ast.FuncType); ok {
 				newList := []*ast.Field{}
 				for _, param := range funcType.Params.List {
-					if !p.containsIdent(param.Names[0].Name) {
+					if !slices.Contains(p.RemoveIdentifiers, param.Names[0].Name) {
 						newList = append(newList, param)
 					}
 				}
@@ -171,13 +172,4 @@ func (p *Parser) transformTypeSpec(typeSpec *ast.TypeSpec) {
 			}
 		}
 	}
-}
-
-func (p *Parser) containsIdent(name string) bool {
-	for _, ident := range p.RemoveIdentifiers {
-		if ident == name {
-			return true
-		}
-	}
-	return false
 }

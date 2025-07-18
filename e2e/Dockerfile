@@ -1,10 +1,10 @@
 #
 # Prepare stage.
 #
-FROM golang:1.22-alpine AS prepare
+FROM golang:1.24-alpine AS prepare
 WORKDIR /app
 
-# Copy the go.mod and go.sum first and download the dependencies. 
+# Copy the go.mod and go.sum first and download the dependencies.
 # This layer will be cached unless these files change.
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # Run stage.
 #
-FROM alpine:3.18  
+FROM alpine:3.18
 WORKDIR /app
 
 # Copy the built binary from the previous stage

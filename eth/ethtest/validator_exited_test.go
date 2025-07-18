@@ -87,7 +87,7 @@ func (input *TestValidatorExitedEventsInput) produce() {
 		require.True(input.t, exists)
 		require.NotNil(input.t, valShare)
 
-		_, err = input.boundContract.SimcontractTransactor.ExitValidator(
+		_, err = input.boundContract.ExitValidator(
 			event.auth,
 			valPubKey,
 			event.opsIds,

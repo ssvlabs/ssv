@@ -1,9 +1,8 @@
 package peers
 
 import (
-	"strconv"
+	"fmt"
 	"sync"
-	"time"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -23,6 +22,7 @@ type NetworkKeyProvider func() libp2pcrypto.PrivKey
 
 // peersIndex implements Index interface.
 type peersIndex struct {
+	logger         *zap.Logger
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
@@ -39,13 +39,20 @@ type peersIndex struct {
 }
 
 // NewPeersIndex creates a new Index
-func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
-	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration, gossipScoreIndex GossipScoreIndex) *peersIndex {
+func NewPeersIndex(
+	logger *zap.Logger,
+	network libp2pnetwork.Network,
+	self *records.NodeInfo,
+	maxPeers MaxPeersProvider,
+	netKeyProvider NetworkKeyProvider,
+	gossipScoreIndex GossipScoreIndex,
+) *peersIndex {
 
 	return &peersIndex{
+		logger:           logger,
 		network:          network,
 		scoreIdx:         newScoreIndex(),
-		SubnetsIndex:     NewSubnetsIndex(subnetsCount),
+		SubnetsIndex:     NewSubnetsIndex(),
 		PeerInfoIndex:    NewPeerInfoIndex(),
 		self:             self,
 		selfLock:         &sync.RWMutex{},
@@ -60,7 +67,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - bad gossip score
 // - pruned (that was not expired)
 // - bad score
-func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (pi *peersIndex) IsBad(id peer.ID) bool {
 	if isBad, _ := pi.HasBadGossipScore(id); isBad {
 		return true
 	}
@@ -75,7 +82,7 @@ func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 
 	for _, score := range scores {
 		if score.Value < threshold {
-			logger.Debug("bad peer (low score)")
+			pi.logger.Debug("bad peer (low score)")
 			return true
 		}
 	}
@@ -86,14 +93,14 @@ func (pi *peersIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	return pi.network.Connectedness(id)
 }
 
-func (pi *peersIndex) CanConnect(id peer.ID) bool {
+func (pi *peersIndex) CanConnect(id peer.ID) error {
 	cntd := pi.network.Connectedness(id)
 	switch cntd {
 	case libp2pnetwork.Connected:
-		fallthrough
+		return fmt.Errorf("peer already connected")
 	default:
 	}
-	return true
+	return nil
 }
 
 func (pi *peersIndex) AtLimit(dir libp2pnetwork.Direction) bool {
@@ -155,20 +162,14 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
 
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
-	mySubnets, err := records.Subnets{}.FromString(pi.Self().Metadata.Subnets)
-	if err != nil {
-		mySubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
-	}
 	stats := pi.SubnetsIndex.GetSubnetsStats()
 	if stats == nil {
 		return nil
 	}
-	stats.Connected = make([]int, len(stats.PeersCount))
+
 	var sumConnected int
-	for subnet, count := range stats.PeersCount {
-		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
-		metricsMySubnets.WithLabelValues(strconv.Itoa(subnet)).Set(float64(mySubnets[subnet]))
-		peers := pi.SubnetsIndex.GetSubnetPeers(subnet)
+	for subnet := range stats.PeersCount {
+		peers := pi.GetSubnetPeers(subnet)
 		connectedCount := 0
 		for _, p := range peers {
 			if pi.Connectedness(p) == libp2pnetwork.Connected {
@@ -177,11 +178,9 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 		}
 		stats.Connected[subnet] = connectedCount
 		sumConnected += connectedCount
-		metricsSubnetsConnectedPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(connectedCount))
 	}
-	if len(stats.PeersCount) > 0 {
-		stats.AvgConnected = sumConnected / len(stats.PeersCount)
-	}
+
+	stats.AvgConnected = sumConnected / len(stats.PeersCount)
 
 	return stats
 }

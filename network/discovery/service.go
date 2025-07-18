@@ -2,7 +2,9 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 const (
@@ -34,29 +37,52 @@ type HandleNewPeer func(e PeerEvent)
 
 // Options represents the options passed to create a service
 type Options struct {
-	Host          host.Host
-	DiscV5Opts    *DiscV5Options
-	ConnIndex     peers.ConnectionIndex
-	SubnetsIdx    peers.SubnetsIndex
-	HostAddress   string
-	HostDNS       string
-	NetworkConfig networkconfig.NetworkConfig
+	Host                host.Host
+	DiscV5Opts          *DiscV5Options
+	ConnIndex           peers.ConnectionIndex
+	SubnetsIdx          peers.SubnetsIndex
+	HostAddress         string
+	HostDNS             string
+	SSVConfig           *networkconfig.SSVConfig
+	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
+	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
+}
+
+// Validate checks if the options are valid.
+func (o *Options) Validate() error {
+	if len(o.HostDNS) > 0 && len(o.HostAddress) > 0 {
+		return fmt.Errorf("only one of HostDNS or HostAddress may be set")
+	}
+	return nil
 }
 
 // Service is the interface for discovery
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
-	DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
-	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
-	PublishENR(logger *zap.Logger)
+	RegisterSubnets(subnets ...uint64) (updated bool, err error)
+	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
+	Bootstrap(handler HandleNewPeer) error
+	PublishENR()
 }
 
 // NewService creates new discovery.Service
 func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
+
 	if opts.DiscV5Opts == nil {
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
 	return newDiscV5Service(ctx, logger, &opts)
+}
+
+type DiscoveredPeer struct {
+	peer.AddrInfo
+
+	// Tries keeps track of how many times we tried to connect to this peer.
+	Tries int
+	// LastTry is the last time we tried to connect to this peer.
+	LastTry time.Time
 }

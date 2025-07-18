@@ -4,17 +4,15 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/utils/commons"
-
-	"github.com/ssvlabs/ssv/logging"
-
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	global_config "github.com/ssvlabs/ssv/cli/config"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
+	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 type config struct {
@@ -42,7 +40,7 @@ var StartBootNodeCmd = &cobra.Command{
 			cfg.LogLevelFormat,
 			cfg.LogFormat,
 			&logging.LogFileOptions{
-				FileName:   cfg.LogFilePath,
+				FilePath:   cfg.LogFilePath,
 				MaxSize:    cfg.LogFileSize,
 				MaxBackups: cfg.LogFileBackups,
 			},
@@ -56,15 +54,17 @@ var StartBootNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.Options.Network)
+		networkConfig, err := networkconfig.GetSSVConfigByName(cfg.Options.Network)
 		if err != nil {
 			logger.Fatal("failed to get network config", zap.Error(err))
 		}
-		bootNode, err := bootnode.New(networkConfig, cfg.Options)
+
+		bootNode, err := bootnode.New(logger, networkConfig, cfg.Options)
 		if err != nil {
 			logger.Fatal("failed to set up boot node", zap.Error(err))
 		}
-		if err := bootNode.Start(cmd.Context(), logger); err != nil {
+
+		if err := bootNode.Start(cmd.Context()); err != nil {
 			logger.Fatal("failed to start boot node", zap.Error(err))
 		}
 	},

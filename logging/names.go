@@ -1,18 +1,19 @@
 package logging
 
 const (
-	NameBootNode         = "BootNode"
-	NameController       = "Controller"
-	NameDiscoveryService = "DiscoveryService"
-	NameDutyScheduler    = "DutyScheduler"
-	NameEthClient        = "EthClient"
-	NameMetricsHandler   = "MetricsHandler"
-	NameOperator         = "Operator"
-	NameP2PNetwork       = "P2PNetwork"
-	NameSignerStorage    = "SignerStorage"
-	NameValidator        = "Validator"
-	NameWSServer         = "WSServer"
-	NameConnHandler      = "ConnHandler"
+	NameBootNode            = "BootNode"
+	NameController          = "Controller"
+	NameDiscoveryService    = "DiscoveryService"
+	NameDutyScheduler       = "DutyScheduler"
+	NameEthClient           = "EthClient"
+	NameMetricsHandler      = "MetricsHandler"
+	NameOperator            = "Operator"
+	NameP2PNetwork          = "P2PNetwork"
+	NameSignerStorage       = "SignerStorage"
+	NameValidator           = "Validator"
+	NameWSServer            = "WSServer"
+	NameConnHandler         = "ConnHandler"
+	NameShareMetadataSyncer = "ShareMetadataSyncer"
 
 	NameBadgerDBLog       = "BadgerDBLog"
 	NameBadgerDBReporting = "BadgerDBReporting"
@@ -24,4 +25,5 @@ const (
 	NameScoreInspector    = "ScoreInspector"
 	NameEventHandler      = "EventHandler"
 	NameDutyFetcher       = "DutyFetcher"
+	NameDoppelganger      = "Doppelganger"
 )

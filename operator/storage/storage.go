@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -8,20 +9,22 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-var HashedPrivateKey = "hashed-private-key"
-
 var (
-	storagePrefix         = []byte("operator/")
+	OperatorStoragePrefix = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 	configKey             = []byte("config")
+	hashedPrivkeyDBKey    = "hashed-private-key"
+	pubkeyDBKey           = "public-key"
 )
 
 // Storage represents the interface for ssv node storage
@@ -45,8 +48,11 @@ type Storage interface {
 	Shares() registrystorage.Shares
 	ValidatorStore() registrystorage.ValidatorStore
 
-	GetPrivateKeyHash() (string, bool, error)
-	SavePrivateKeyHash(privKeyHash string) error
+	GetPrivateKeyHash() ([]byte, bool, error)
+	SavePrivateKeyHash(privKeyHash []byte) error
+
+	GetPublicKey() (string, bool, error)
+	SavePublicKey(pubKey string) error
 }
 
 type storage struct {
@@ -60,17 +66,17 @@ type storage struct {
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
+func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
-		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, storagePrefix),
-		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
+		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix),
+		recipientStore: registrystorage.NewRecipientsStorage(logger, db, OperatorStoragePrefix),
 	}
 
 	var err error
 
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +100,7 @@ func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
 	return s.validatorStore
 }
 
-func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
+func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
 	return s.operatorStore.GetOperatorDataByPubKey(r, operatorPubKey)
 }
 
@@ -173,11 +179,11 @@ func (s *storage) DropRegistryData() error {
 // TODO: review what's not needed anymore and delete
 
 func (s *storage) SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) error {
-	return s.db.Using(rw).Set(storagePrefix, lastProcessedBlockKey, offset.Bytes())
+	return s.db.Using(rw).Set(OperatorStoragePrefix, lastProcessedBlockKey, offset.Bytes())
 }
 
 func (s *storage) dropLastProcessedBlock() error {
-	return s.db.DropPrefix(append(storagePrefix, lastProcessedBlockKey...))
+	return s.db.DropPrefix(append(OperatorStoragePrefix, lastProcessedBlockKey...))
 }
 
 func (s *storage) DropOperators() error {
@@ -194,7 +200,7 @@ func (s *storage) DropShares() error {
 
 // GetLastProcessedBlock returns the last processed block.
 func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error) {
-	obj, found, err := s.db.UsingReader(r).Get(storagePrefix, lastProcessedBlockKey)
+	obj, found, err := s.db.UsingReader(r).Get(OperatorStoragePrefix, lastProcessedBlockKey)
 	if !found {
 		return nil, found, nil
 	}
@@ -207,24 +213,51 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 }
 
 // GetPrivateKeyHash return sha256 hashed private key
-func (s *storage) GetPrivateKeyHash() (string, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, []byte(HashedPrivateKey))
+func (s *storage) GetPrivateKeyHash() ([]byte, bool, error) {
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey))
 	if !found {
-		return "", found, nil
+		return nil, found, nil
 	}
 	if err != nil {
-		return "", found, err
+		return nil, found, err
 	}
-	return string(obj.Value), found, nil
+
+	privateKeyHex := string(obj.Value)
+	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
+	if err != nil {
+		// Not passing an error to avoid leaking the private key.
+		return nil, found, fmt.Errorf("expected private key to be hex encoded")
+	}
+
+	return privateKeyBytes, found, nil
 }
 
 // SavePrivateKeyHash saves operator private key hash
-func (s *storage) SavePrivateKeyHash(hashedKey string) error {
-	return s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
+func (s *storage) SavePrivateKeyHash(hashedKey []byte) error {
+	hashedKeyHex := hex.EncodeToString(hashedKey) // key is stored hex-encoded
+	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKeyHex))
+}
+
+// GetPublicKey returns public key.
+func (s *storage) GetPublicKey() (string, bool, error) {
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(pubkeyDBKey))
+	if !found {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+
+	return string(obj.Value), true, nil
+}
+
+// SavePublicKey saves operator public key.
+func (s *storage) SavePublicKey(publicKey string) error {
+	return s.db.Set(OperatorStoragePrefix, []byte(pubkeyDBKey), []byte(publicKey))
 }
 
 func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {
-	obj, found, err := s.db.Using(rw).Get(storagePrefix, configKey)
+	obj, found, err := s.db.Using(rw).Get(OperatorStoragePrefix, configKey)
 	if err != nil {
 		return nil, false, fmt.Errorf("db: %w", err)
 	}
@@ -246,7 +279,7 @@ func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	if err := s.db.Using(rw).Set(storagePrefix, configKey, b); err != nil {
+	if err := s.db.Using(rw).Set(OperatorStoragePrefix, configKey, b); err != nil {
 		return fmt.Errorf("db: %w", err)
 	}
 
@@ -254,5 +287,5 @@ func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
 }
 
 func (s *storage) DeleteConfig(rw basedb.ReadWriter) error {
-	return s.db.Using(rw).Delete(storagePrefix, configKey)
+	return s.db.Using(rw).Delete(OperatorStoragePrefix, configKey)
 }

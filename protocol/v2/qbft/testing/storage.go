@@ -6,11 +6,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var db basedb.Database
@@ -29,17 +29,16 @@ func getDB(logger *zap.Logger) basedb.Database {
 	return db
 }
 
-var allRoles = []convert.RunnerRole{
-	convert.RoleAttester,
-	convert.RoleAggregator,
-	convert.RoleProposer,
-	convert.RoleSyncCommitteeContribution,
-	convert.RoleSyncCommittee,
-	convert.RoleValidatorRegistration,
-	convert.RoleVoluntaryExit,
-	convert.RoleCommittee,
+var allRoles = []spectypes.BeaconRole{
+	spectypes.BNRoleAttester,
+	spectypes.BNRoleAggregator,
+	spectypes.BNRoleProposer,
+	spectypes.BNRoleSyncCommitteeContribution,
+	spectypes.BNRoleSyncCommittee,
+	spectypes.BNRoleValidatorRegistration,
+	spectypes.BNRoleVoluntaryExit,
 }
 
-func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	return qbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
+func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
+	return qbftstorage.NewStoresFromRoles(logger, getDB(logger), allRoles...)
 }

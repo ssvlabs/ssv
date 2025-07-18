@@ -13,9 +13,9 @@ import (
 
 // BootnodeOptions contains options to create the node
 type BootnodeOptions struct {
-	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Bootnode private key (default will generate new)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
-	Port       uint16 `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
+	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Private key for bootnode identity (generated if empty)"`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override bootnode's external IP address"`
+	Port       uint16 `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override bootnode's UDP port"`
 }
 
 // Bootnode represents a bootnode used for tests
@@ -28,9 +28,9 @@ type Bootnode struct {
 }
 
 // NewBootnode creates a new bootnode
-func NewBootnode(pctx context.Context, logger *zap.Logger, networkCfg networkconfig.NetworkConfig, opts *BootnodeOptions) (*Bootnode, error) {
+func NewBootnode(pctx context.Context, logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts *BootnodeOptions) (*Bootnode, error) {
 	ctx, cancel := context.WithCancel(pctx)
-	disc, err := createBootnodeDiscovery(ctx, logger, networkCfg, opts)
+	disc, err := createBootnodeDiscovery(ctx, logger, ssvConfig, opts)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -52,13 +52,13 @@ func (b *Bootnode) Close() error {
 	return nil
 }
 
-func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, networkCfg networkconfig.NetworkConfig, opts *BootnodeOptions) (Service, error) {
+func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts *BootnodeOptions) (Service, error) {
 	privKey, err := utils.ECDSAPrivateKey(logger.Named(logging.NameBootNode), opts.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
 	discOpts := &Options{
-		NetworkConfig: networkCfg,
+		SSVConfig: ssvConfig,
 		DiscV5Opts: &DiscV5Options{
 			IP:         opts.ExternalIP,
 			BindIP:     "", // net.IPv4zero.String()

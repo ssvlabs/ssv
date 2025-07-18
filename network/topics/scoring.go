@@ -5,25 +5,22 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/registry/storage"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // DefaultScoringConfig returns the default scoring config
 func DefaultScoringConfig() *ScoringConfig {
 	return &ScoringConfig{
 		IPColocationWeight: -35.11,
-		OneEpochDuration:   (12 * time.Second) * 32,
 	}
 }
 
@@ -39,7 +36,6 @@ type topicScoreSnapshot struct {
 func scoreInspector(logger *zap.Logger,
 	scoreIdx peers.ScoreIndex,
 	logFrequency int,
-	metrics Metrics,
 	peerConnected func(pid peer.ID) bool,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
@@ -54,9 +50,6 @@ func scoreInspector(logger *zap.Logger,
 			peerScores[pid] = ps.Score
 		}
 		gossipScoreIndex.SetScores(peerScores)
-
-		// Reset metrics before updating them.
-		metrics.ResetPeerScores()
 
 		// Use a "scope cache" for getting a topic's score parameters
 		// otherwise, the factory method would be called multiple times for the same topic
@@ -140,10 +133,6 @@ func scoreInspector(logger *zap.Logger,
 			p7 := peerScores.BehaviourPenalty
 			w7 := peerScoreParams.BehaviourPenaltyWeight
 
-			// Update metrics.
-			metrics.PeerScore(pid, peerScores.Score)
-			metrics.PeerP4Score(pid, p4Impact)
-
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
@@ -216,7 +205,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts := params.NewSubnetTopicOpts(totalValidators, commons.Subnets(), topicCommittees)
+		opts := params.NewSubnetTopicOpts(cfg.NetworkConfig, totalValidators, commons.SubnetsCount, topicCommittees)
 
 		// Generate topic parameters
 		tp, err := params.TopicParams(opts)

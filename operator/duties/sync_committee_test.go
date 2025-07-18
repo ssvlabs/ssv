@@ -11,13 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func setupSyncCommitteeDutiesMock(
@@ -29,30 +28,30 @@ func setupSyncCommitteeDutiesMock(
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
-			return uint64(epoch) / s.network.Beacon.EpochsPerSyncCommitteePeriod()
+			return uint64(epoch) / s.beaconConfig.GetEpochsPerSyncCommitteePeriod()
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Epoch {
-			return phase0.Epoch(period * s.network.Beacon.EpochsPerSyncCommitteePeriod())
+			return phase0.Epoch(period * s.beaconConfig.GetEpochsPerSyncCommitteePeriod())
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Slot {
-			lastEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
+			lastEpoch := s.beaconConfig.FirstEpochOfSyncPeriod(period+1) - 1
 			// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 			// as it will never be included, hence -1.
-			return s.network.Beacon.GetEpochFirstSlot(lastEpoch+1) - 2
+			return s.beaconConfig.GetEpochFirstSlot(lastEpoch+1) - 2
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
-			return phase0.Slot(uint64(epoch) * s.network.Beacon.SlotsPerEpoch())
+			return phase0.Slot(uint64(epoch) * s.beaconConfig.GetSlotsPerEpoch())
 		},
 	).AnyTimes()
 
@@ -61,13 +60,12 @@ func setupSyncCommitteeDutiesMock(
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
 			}
-			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			period := s.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			duties, _ := dutiesMap.Get(period)
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).MinTimes(1)
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
 		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
 			var ssvShare *ssvtypes.SSVShare
@@ -80,7 +78,7 @@ func setupSyncCommitteeDutiesMock(
 								ValidatorIndex: duty.ValidatorIndex,
 							},
 						}
-						firstEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period)
+						firstEpoch := s.beaconConfig.FirstEpochOfSyncPeriod(period)
 						if firstEpoch < minEpoch {
 							minEpoch = firstEpoch
 							ssvShare.SetMinParticipationEpoch(firstEpoch)
@@ -99,9 +97,15 @@ func setupSyncCommitteeDutiesMock(
 		},
 	).AnyTimes()
 
-	s.validatorController.(*MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
-			return indicesFromShares(activeShares)
+	s.validatorController.(*MockValidatorController).EXPECT().FilterIndices(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(afterInit bool, filter func(s *ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
+			var filteredShares []*ssvtypes.SSVShare
+			for _, share := range activeShares {
+				if filter(share) {
+					filteredShares = append(filteredShares, share)
+				}
+			}
+			return indicesFromShares(filteredShares)
 		}).AnyTimes()
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -123,14 +127,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = eligibleShares()
 	)
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -163,7 +160,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
-	currentSlot.Set(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
+	currentSlot.Set(scheduler.beaconConfig.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -172,7 +169,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.network.Beacon.GetEpochFirstSlot(scheduler.network.Beacon.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.beaconConfig.GetEpochFirstSlot(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
 	currentSlot.Set(firstSlotOfNextPeriod)
 	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -184,28 +181,11 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		currentSlot   = &SafeValue[phase0.Slot]{}
-		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
+		handler        = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		currentSlot    = &SafeValue[phase0.Slot]{}
+		waitForDuties  = &SafeValue[bool]{}
+		dutiesMap      = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		eligibleShares = eligibleShares()
 	)
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -223,7 +203,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
 	currentSlot.Set(phase0.Slot(256*32 - 49))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, eligibleShares, dutiesMap, waitForDuties)
 	startFn()
 
 	duties, _ := dutiesMap.Get(0)
@@ -273,24 +253,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
+		activeShares  = eligibleShares()
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
@@ -349,24 +312,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
+		activeShares  = eligibleShares()
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
@@ -429,24 +375,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
+		activeShares  = eligibleShares()
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
@@ -472,7 +401,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -493,7 +422,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
@@ -522,32 +451,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 3,
-				},
-			},
-		}
+		activeShares  = eligibleShares()
 	)
 	currentSlot.Set(phase0.Slot(256*32 - 3))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
@@ -573,7 +477,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -594,7 +498,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: trigger a change in active indices
@@ -632,14 +536,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 		currentSlot   = &SafeValue[phase0.Slot]{}
 		waitForDuties = &SafeValue[bool]{}
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = eligibleShares()
 	)
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -670,13 +567,13 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
-	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration
-	startTime := time.Now()
+	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration when
+	// Beacon head event is observed (block arrival)
 	currentSlot.Set(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
+	startTime := time.Now()
 	ticker.Send(currentSlot.Get())
 
 	// STEP 4: trigger head event (block arrival)
@@ -685,11 +582,96 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 			Slot: currentSlot.Get(),
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.GetSlotDuration()/3)*0.90)) // 10% margin due to flakiness of the test
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
 	require.NoError(t, schedulerPool.Wait())
+}
+
+func eligibleShares() []*ssvtypes.SSVShare {
+	var result []*ssvtypes.SSVShare
+
+	participationShares := []*ssvtypes.SSVShare{
+		{
+			// share that is participating
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 1,
+			},
+			Status:     v1.ValidatorStateActiveOngoing,
+			Liquidated: false,
+		},
+		{
+			// share that is participating
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 2,
+			},
+			Status:     v1.ValidatorStateActiveExiting,
+			Liquidated: false,
+		},
+		{
+			// share that is participating
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 3,
+			},
+			Status:          v1.ValidatorStatePendingQueued,
+			Liquidated:      false,
+			ActivationEpoch: 0,
+		},
+	}
+
+	exitingShares := []*ssvtypes.SSVShare{
+		{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 4,
+			},
+			Status: v1.ValidatorStateExitedUnslashed,
+		},
+		{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 5,
+			},
+			Status: v1.ValidatorStateExitedSlashed,
+		},
+		{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 6,
+			},
+			Status: v1.ValidatorStateWithdrawalDone,
+		},
+		{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+				},
+				ValidatorIndex: 7,
+			},
+			Status: v1.ValidatorStateWithdrawalPossible,
+		},
+	}
+
+	result = append(result, participationShares...)
+	result = append(result, exitingShares...)
+
+	return result
 }

@@ -3,13 +3,15 @@ package logs_catcher
 import (
 	"context"
 	"fmt"
+
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/parser"
-	"go.uber.org/zap"
 )
 
-const MesasgeKey = "msg" // todo: pass to struct/load from config
+const MessageKey = "msg" // todo: pass to struct/load from config
 
 type LogCatcher struct {
 	logger     *zap.Logger
@@ -28,8 +30,8 @@ func (lc *LogCatcher) AddFieldCondition(key string, finder func(string) bool) {
 }
 
 func (lc *LogCatcher) Feed(orig string, fed map[string]any) {
-	ourm, ourok := lc.Fields[MesasgeKey]
-	m, ok := fed[MesasgeKey] // todo: const/config message key name
+	ourm, ourok := lc.Fields[MessageKey]
+	m, ok := fed[MessageKey] // todo: const/config message key name
 	if ourok && ok {
 		if !ourm(fmt.Sprint(m)) {
 			return
@@ -39,7 +41,7 @@ func (lc *LogCatcher) Feed(orig string, fed map[string]any) {
 	//	lc.logger.Info("message is accurate ", zap.String("orig", orig))
 
 	for k, v := range lc.Fields {
-		if k == MesasgeKey {
+		if k == MessageKey {
 			continue
 		}
 		mv, ok := fed[k]
@@ -106,7 +108,7 @@ func FatalListener(ctx context.Context, logger *zap.Logger, cli DockerCLI) error
 
 	var feeders []Feeder
 
-	stopCond := []KeyValue{KV(MesasgeKey, waitFor)}
+	stopCond := []KeyValue{KV(MessageKey, waitFor)}
 	stopCondAction := func(s string) {
 		logger.Info("Stop condition arrived, stopping error checks")
 		errChan <- nil

@@ -1,9 +1,8 @@
 name: Spec tests
 
 on:
-  push:
-    branches:
-      - "**"
+  pull_request:
+    types: [opened, synchronize]
 
   workflow_dispatch:
 
@@ -13,15 +12,15 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"
+          go-version: "1.24.x"
 
       - name: Run spec tests
         run: make spec-test

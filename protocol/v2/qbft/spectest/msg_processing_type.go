@@ -1,6 +1,7 @@
 package qbft
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
@@ -20,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -29,12 +29,11 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
-	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, ks, casts.RunnerRoleToConvertRole(msgId.GetRoleType())), // #nosec G104
+		qbfttesting.TestingConfig(logger, ks),
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
@@ -53,14 +52,13 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
-		_, _, _, err := preInstance.ProcessMsg(logger, spectestingutils.ToProcessingMessage(msg))
+		_, _, _, err := preInstance.ProcessMsg(context.TODO(), logger, spectestingutils.ToProcessingMessage(msg))
 		if err != nil {
 			lastErr = err
 		}
 	}
-
-	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError, "expected %v, but got %v", test.ExpectedError, lastErr)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
@@ -68,8 +66,12 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	postRoot, err := preInstance.State.GetRoot()
 	require.NoError(t, err)
 
-	// broadcasting is asynchronic, so need to wait a bit before checking
-	time.Sleep(time.Millisecond * 5)
+	// broadcasting is asynchronous, so need to wait a bit before checking
+	select {
+	case <-t.Context().Done():
+		return
+	case <-time.After(5 * time.Millisecond):
+	}
 
 	// test output message
 	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs

@@ -1,16 +1,16 @@
 package discovery
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -18,17 +18,20 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 var (
 	testLogger    = zap.NewNop()
-	testCtx       = context.Background()
 	testNetConfig = networkconfig.TestNetwork
 
 	testIP             = "127.0.0.1"
@@ -38,7 +41,7 @@ var (
 )
 
 // Options for the discovery service
-func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkConfig) *Options {
+func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSVConfig) *Options {
 	// Generate key
 	privKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -52,60 +55,37 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 		Port:          testPort,
 		TCPPort:       testTCPPort,
 		NetworkKey:    privKey,
-		Bootnodes:     networkConfig.Bootnodes,
+		Bootnodes:     ssvConfig.Bootnodes,
 		Subnets:       mockSubnets(1),
 		EnableLogging: false,
 	}
 
 	// Discovery options
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
+	subnetsIndex := peers.NewSubnetsIndex()
 	connectionIndex := NewMockConnection()
 
 	return &Options{
-		DiscV5Opts:    discV5Opts,
-		ConnIndex:     connectionIndex,
-		SubnetsIdx:    subnetsIndex,
-		NetworkConfig: networkConfig,
+		DiscV5Opts:          discV5Opts,
+		ConnIndex:           connectionIndex,
+		SubnetsIdx:          subnetsIndex,
+		SSVConfig:           ssvConfig,
+		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
+		TrimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 }
 
 // Testing discovery with a given NetworkConfig
-func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
-	opts := testingDiscoveryOptions(t, netConfig)
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
+func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSVConfig) *DiscV5Service {
+	opts := testingDiscoveryOptions(t, ssvConfig)
+	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
-	require.NotNil(t, service)
-
-	dvs, ok := service.(*DiscV5Service)
-	require.True(t, ok)
-
+	require.NotNil(t, dvs)
 	return dvs
 }
 
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
-	return testingDiscoveryWithNetworkConfig(t, testNetConfig)
-}
-
-// NetworkConfig with fork epoch
-func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
-	n := networkconfig.HoleskyStage
-	return networkconfig.NetworkConfig{
-		Name:                 n.Name,
-		Beacon:               n.Beacon,
-		DomainType:           n.DomainType,
-		GenesisEpoch:         n.GenesisEpoch,
-		RegistrySyncOffset:   n.RegistrySyncOffset,
-		RegistryContractAddr: n.RegistryContractAddr,
-		Bootnodes:            n.Bootnodes,
-	}
-}
-
-// NetworkConfig for staying in post-fork
-func TestingNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
+	return testingDiscoveryWithNetworkConfig(t, testNetConfig.SSVConfig)
 }
 
 // Testing LocalNode
@@ -149,7 +129,7 @@ func NodeWithoutNextDomain(t *testing.T) *enode.Node {
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType, false, commons.Subnets{})
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
@@ -157,16 +137,16 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, commons.ZeroSubnets)
 }
 
-func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
+func NodeWithCustomSubnets(t *testing.T, subnets commons.Subnets) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType, true, subnets)
 }
 
 func CustomNode(t *testing.T,
 	setDomainType bool, domainType spectypes.DomainType,
-	setSubnets bool, subnets []byte) *enode.Node {
+	setSubnets bool, subnets commons.Subnets) *enode.Node {
 
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -181,6 +161,7 @@ func CustomNode(t *testing.T,
 	record := enr.Record{}
 
 	// Set entries
+	record.Set(enr.WithEntry("ssv", true)) // marks node as SSV-related (we filter out SSV-unrelated ones)
 	record.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
 	record.Set(enr.UDP(12000))
 	record.Set(enr.TCP(13000))
@@ -192,8 +173,8 @@ func CustomNode(t *testing.T,
 	}
 	if setSubnets {
 		subnetsVec := bitfield.NewBitvector128()
-		for i, subnet := range subnets {
-			subnetsVec.SetBitAt(uint64(i), subnet > 0)
+		for i := uint64(0); i < commons.SubnetsCount; i++ {
+			subnetsVec.SetBitAt(i, subnets.IsSet(i))
 		}
 		record.Set(enr.WithEntry("subnets", &subnetsVec))
 	}
@@ -288,13 +269,13 @@ func (mc *MockConnection) Connectedness(id peer.ID) network.Connectedness {
 	return network.NotConnected
 }
 
-func (mc *MockConnection) CanConnect(id peer.ID) bool {
+func (mc *MockConnection) CanConnect(id peer.ID) error {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	if can, ok := mc.canConnect[id]; ok {
-		return can
+	if can, ok := mc.canConnect[id]; ok && can {
+		return nil
 	}
-	return false
+	return fmt.Errorf("cannot connect")
 }
 
 func (mc *MockConnection) AtLimit(dir network.Direction) bool {
@@ -303,7 +284,7 @@ func (mc *MockConnection) AtLimit(dir network.Direction) bool {
 	return mc.atLimit
 }
 
-func (mc *MockConnection) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (mc *MockConnection) IsBad(id peer.ID) bool {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 	if bad, ok := mc.isBad[id]; ok {
