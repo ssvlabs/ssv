@@ -3,10 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -156,16 +152,9 @@ func (n *Node) Start() error {
 		}
 	}()
 
-	if n.exporterOptions.Enabled {
-		n.logger.Info("exporter is enabled, duty scheduler will not run")
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
-		n.logger.Info("received shutdown signal")
-	} else {
-		if err := n.dutyScheduler.Wait(); err != nil {
-			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
-		}
+	// TODO: consider not running this if exporter is enabled, ATM it's needed for msg validation
+	if err := n.dutyScheduler.Wait(); err != nil {
+		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
 	}
 
 	if err := n.net.Close(); err != nil {
