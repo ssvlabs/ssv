@@ -27,12 +27,6 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	peerDiscoveryIterationsCounter = observability.NewMetric(
-		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "iterations"),
-			metric.WithUnit("{iteration}"),
-			metric.WithDescription("total number of iterations through discovered nodes")))
-
 	peerDiscoveriesCounter = observability.NewMetric(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "peers"),

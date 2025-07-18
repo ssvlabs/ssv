@@ -69,8 +69,7 @@ type DiscV5Service struct {
 	// are removed from this map after some time passes)
 	trimmedRecently *ttl.Map[peer.ID, struct{}]
 
-	conn       *net.UDPConn
-	sharedConn *SharedUDPConn
+	conn *net.UDPConn
 
 	ssvConfig *networkconfig.SSVConfig
 	subnets   commons.Subnets
@@ -114,9 +113,6 @@ func (dvs *DiscV5Service) Close() error {
 		if err := dvs.conn.Close(); err != nil {
 			return err
 		}
-	}
-	if dvs.sharedConn != nil {
-		close(dvs.sharedConn.Unhandled)
 	}
 	if dvs.dv5Listener != nil {
 		dvs.dv5Listener.Close()
@@ -259,22 +255,17 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		protocolID = DefaultSSVProtocolID
 	}
 
-	// New discovery, with ProtocolID restriction, to be kept post-fork
-	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &SharedUDPConn{udpConn, unhandled}
-	dvs.sharedConn = sharedConn
-
-	dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
+	dv5Cfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID))
 	if err != nil {
 		return err
 	}
 
-	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
+	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not create discV5 listener")
 	}
 
-	dvs.logger.Debug("started discv5 post-fork listener (UDP)",
+	dvs.logger.Debug("started discv5 listener (UDP)",
 		fields.BindIP(bindIP),
 		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
@@ -282,26 +273,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		fields.ProtocolID(protocolID),
 	)
 
-	// Previous discovery, without ProtocolID restriction, to be discontinued after the fork
-	dv5PreForkCfg, err := opts.DiscV5Cfg(dvs.logger)
-	if err != nil {
-		return err
-	}
-
-	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
-	if err != nil {
-		return errors.Wrap(err, "could not create discV5 pre-fork listener")
-	}
-
-	dvs.logger.Debug("started discv5 pre-fork listener (UDP)",
-		fields.BindIP(bindIP),
-		zap.Uint16("UdpPort", opts.Port),
-		fields.ENRLocalNode(localNode),
-		fields.Domain(discOpts.SSVConfig.DomainType),
-	)
-
-	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
-	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
+	dvs.dv5Listener = dv5Listener
+	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	return nil
 }
@@ -393,11 +366,6 @@ func (dvs *DiscV5Service) PublishENR() {
 		dvs.logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
-	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.DomainType)
-	if err != nil {
-		dvs.logger.Error("could not set next domain type", zap.Error(err))
-		return
-	}
 
 	// Acquire publish lock to prevent parallel publishing.
 	// If there's an ongoing goroutine, it would now start publishing the record updated above,
@@ -459,7 +427,6 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 
 		// Satisfy decorations of forks supported by this node.
 		DecorateWithDomainType(records.KeyDomainType, dvs.ssvConfig.DomainType),
-		DecorateWithDomainType(records.KeyNextDomainType, dvs.ssvConfig.DomainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
