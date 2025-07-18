@@ -1,37 +1,32 @@
 package runner
 
 import (
-	"encoding/hex"
-
-	"github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	sigs := state.PreConsensusContainer.Signatures[state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 	var signers []spectypes.OperatorID
-	for op := range sigs {
+
+	for op := range state.PreConsensusContainer.GetSignatures(state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root) {
 		signers = append(signers, op)
 	}
+
 	return signers
 }
 
 func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	var signers []spectypes.OperatorID
+	var (
+		have          = make(map[spectypes.OperatorID]struct{})
+		signersUnique []spectypes.OperatorID
+	)
 
-	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties {
-		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
+	for _, duty := range state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		sigs := state.PostConsensusContainer.GetSignatures(duty.ValidatorIndex, root)
 		for op := range sigs {
-			signers = append(signers, op)
-		}
-	}
-
-	have := make(map[spectypes.OperatorID]struct{})
-	var signersUnique []spectypes.OperatorID
-	for _, opId := range signers {
-		if _, ok := have[opId]; !ok {
-			have[opId] = struct{}{}
-			signersUnique = append(signersUnique, opId)
+			if _, seen := have[op]; !seen {
+				have[op] = struct{}{}
+				signersUnique = append(signersUnique, op)
+			}
 		}
 	}
 
@@ -40,9 +35,8 @@ func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.O
 
 func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
-	valIdx := state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
-	sigs := state.PostConsensusContainer.Signatures[valIdx][ssv.SigningRoot(hex.EncodeToString(root[:]))]
-	for op := range sigs {
+
+	for op := range state.PostConsensusContainer.GetSignatures(state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root) {
 		signers = append(signers, op)
 	}
 
