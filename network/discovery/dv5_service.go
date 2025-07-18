@@ -274,7 +274,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	)
 
 	dvs.dv5Listener = dv5Listener
-	dvs.bootnodes = dv5Cfg.Bootnodes // Just take bootnodes from one of the config since they're equal
+	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	return nil
 }
