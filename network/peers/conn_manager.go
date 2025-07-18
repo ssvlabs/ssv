@@ -8,8 +8,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.

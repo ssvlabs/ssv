@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	opstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -31,7 +31,7 @@ func TestMigration6ExitEpochField(t *testing.T) {
 		require.NoError(t, err)
 
 		err = migration_6_share_exit_epoch.Run(ctx,
-			logging.TestLogger(t),
+			log.TestLogger(t),
 			options,
 			[]byte(migration_6_share_exit_epoch.Name),
 			func(rw basedb.ReadWriter) error { return nil })
@@ -51,7 +51,7 @@ func TestMigration6ExitEpochField(t *testing.T) {
 
 		completedExecuted := false
 		err = migration_6_share_exit_epoch.Run(ctx,
-			logging.TestLogger(t),
+			log.TestLogger(t),
 			options,
 			[]byte(migration_6_share_exit_epoch.Name),
 			func(rw basedb.ReadWriter) error {
@@ -72,7 +72,7 @@ func TestMigration6ExitEpochField(t *testing.T) {
 		require.NoError(t, err)
 
 		err = migration_6_share_exit_epoch.Run(ctx,
-			logging.TestLogger(t),
+			log.TestLogger(t),
 			options,
 			[]byte(migration_6_share_exit_epoch.Name),
 			func(rw basedb.ReadWriter) error { return fmt.Errorf("test error") })
@@ -81,7 +81,7 @@ func TestMigration6ExitEpochField(t *testing.T) {
 		assert.Equal(t, "test error", err.Error())
 
 		err = migration_6_share_exit_epoch.Run(ctx,
-			logging.TestLogger(t),
+			log.TestLogger(t),
 			options,
 			[]byte(migration_6_share_exit_epoch.Name),
 			func(rw basedb.ReadWriter) error { return nil })

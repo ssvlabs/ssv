@@ -1,6 +1,9 @@
 package observability
 
-import "go.uber.org/zap"
+import (
+	"github.com/ssvlabs/ssv/observability/log"
+	"go.uber.org/zap"
+)
 
 var logger *zap.Logger
 
@@ -8,6 +11,6 @@ func initLogger(l *zap.Logger) *zap.Logger {
 	if l == nil {
 		l = zap.NewNop()
 	}
-	logger = l.Named("Observability")
+	logger = l.Named(log.NameObservability)
 	return logger
 }

@@ -13,9 +13,8 @@ import (
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability/log"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/logging"
 )
 
 const (
@@ -36,7 +35,7 @@ type localDiscovery struct {
 // NewLocalDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
 func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
-	logger = logger.Named(logging.NameDiscoveryService)
+	logger = logger.Named(log.NameDiscoveryService)
 	logger.Debug("configuring mdns")
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)

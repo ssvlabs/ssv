@@ -12,7 +12,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 type event interface {

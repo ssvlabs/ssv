@@ -3,6 +3,7 @@ package eventsyncer
 import (
 	"time"
 
+	"github.com/ssvlabs/ssv/observability/log"
 	"go.uber.org/zap"
 )
 
@@ -12,7 +13,7 @@ type Option func(*EventSyncer)
 // WithLogger enables logging.
 func WithLogger(logger *zap.Logger) Option {
 	return func(es *EventSyncer) {
-		es.logger = logger.Named("EventSyncer")
+		es.logger = logger.Named(log.NameEventSyncer)
 	}
 }
 

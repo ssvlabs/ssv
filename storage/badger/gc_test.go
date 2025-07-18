@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -21,7 +21,7 @@ func TestQuickGC_EmptyDB(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-quickgc-empty")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -36,7 +36,7 @@ func TestQuickGC_WithGarbage(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-quickgc-garbage")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestQuickGC_ErrorWhenClosed(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-quickgc-error")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestFullGC_EmptyDB(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-fullgc-empty")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestFullGC_WithGarbage(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-fullgc-garbage")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestFullGC_ErrorWhenClosed(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-fullgc-error")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestFullGC_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-fullgc-ctx")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestGCLock_MutualExclusion(t *testing.T) {
 	t.Parallel()
 
 	dir := setupTempDir(t, "badger-gc-lock")
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
 
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestPeriodicGC(t *testing.T) {
 func TestPeriodicGC_Cancellation(t *testing.T) {
 	t.Parallel()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	dir := setupTempDir(t, "badger-periodic-gc-cancel")
 	ctx, cancel := context.WithCancel(t.Context())
 	db, err := New(logger, basedb.Options{

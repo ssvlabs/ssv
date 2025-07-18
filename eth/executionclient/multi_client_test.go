@@ -15,6 +15,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -83,7 +84,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, mc)
-	require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
+	require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
 	require.EqualValues(t, customFollowDistance, mc.followDistance)
 	require.EqualValues(t, customTimeout, mc.connectionTimeout)
 	require.EqualValues(t, customReconnectionInterval, mc.reconnectionInitialInterval)

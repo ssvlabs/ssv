@@ -13,3 +13,9 @@ func WithTraces() Option {
 		cfg.traces.enabled = true
 	}
 }
+
+func WithLogger() Option {
+	return func(cfg *Config) {
+		cfg.logger.enabled = true
+	}
+}

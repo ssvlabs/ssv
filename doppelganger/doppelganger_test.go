@@ -8,15 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 func newTestDoppelgangerHandler(t *testing.T) *handler {
 	ctrl := gomock.NewController(t)
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	return NewHandler(&Options{
 		BeaconConfig:      networkconfig.TestNetwork.BeaconConfig,

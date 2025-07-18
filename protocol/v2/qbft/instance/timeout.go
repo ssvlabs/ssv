@@ -7,8 +7,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {

@@ -13,9 +13,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -31,7 +31,7 @@ var (
 )
 
 func TestSaveAndGetPrivateKeyHash(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
@@ -59,7 +59,7 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 }
 
 func TestDropRegistryData(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
@@ -150,7 +150,7 @@ func TestDropRegistryData(t *testing.T) {
 }
 
 func TestNetworkAndLocalEventsConfig(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
@@ -189,7 +189,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 }
 
 func TestGetOperatorsPrefix(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -203,7 +203,7 @@ func TestGetOperatorsPrefix(t *testing.T) {
 }
 
 func TestGetRecipientsPrefix(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -218,7 +218,7 @@ func TestGetRecipientsPrefix(t *testing.T) {
 }
 
 func Test_Config(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -253,7 +253,7 @@ func Test_Config(t *testing.T) {
 }
 
 func Test_LastProcessedBlock(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -278,7 +278,7 @@ func Test_LastProcessedBlock(t *testing.T) {
 }
 
 func Test_OperatorData(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -324,7 +324,7 @@ func Test_OperatorData(t *testing.T) {
 }
 
 func Test_NonceBumping(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()

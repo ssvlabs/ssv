@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -18,10 +17,10 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssv_log "github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils"
 )
 
@@ -56,7 +55,7 @@ type bootNode struct {
 // New is the constructor of ssvNode
 func New(logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts Options) (Node, error) {
 	return &bootNode{
-		logger:      logger.Named(logging.NameBootNode),
+		logger:      logger.Named(ssv_log.NameBootNode),
 		privateKey:  opts.PrivateKey,
 		discv5port:  opts.UDPPort,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
@@ -97,12 +96,12 @@ func (h *handler) httpHandler() func(w http.ResponseWriter, _ *http.Request) {
 func (n *bootNode) Start(ctx context.Context) error {
 	privKey, err := utils.ECDSAPrivateKey(n.logger, n.privateKey)
 	if err != nil {
-		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
+		n.logger.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
 
 	ipAddr, err := network.ExternalIP()
 	// ipAddr = "127.0.0.1"
-	log.Print("TEST Ip addr----", ipAddr)
+	n.logger.Info("TEST Ip addr----", zap.String("ip_addr", ipAddr))
 	if err != nil {
 		n.logger.Fatal("Failed to get ExternalIP", zap.Error(err))
 	}
@@ -132,7 +131,7 @@ func (n *bootNode) Start(ctx context.Context) error {
 	}
 
 	if err := httpServer.ListenAndServe(); err != nil {
-		log.Fatalf("Failed to start server %v", err)
+		n.logger.Fatal("Failed to start server", zap.Error(err))
 	}
 
 	return nil
@@ -162,11 +161,11 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 	}
 	conn, err := net.ListenUDP(networkVersion, udpAddr)
 	if err != nil {
-		log.Fatal(err)
+		n.logger.Fatal(err.Error())
 	}
 	localNode, err := n.createLocalNode(privateKey, ip, port)
 	if err != nil {
-		log.Fatal(err)
+		n.logger.Fatal(err.Error())
 	}
 
 	listener, err := discover.ListenV5(conn, localNode, discover.Config{
@@ -174,7 +173,7 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 		V5ProtocolID: &n.ssvConfig.DiscoveryProtocolID,
 	})
 	if err != nil {
-		log.Fatal(err)
+		n.logger.Fatal(err.Error())
 	}
 
 	return listener

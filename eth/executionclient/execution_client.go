@@ -18,8 +18,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 

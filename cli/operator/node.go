@@ -42,8 +42,6 @@ import (
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/migrations"
@@ -54,6 +52,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/observability"
+	ssv_log "github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -133,11 +133,12 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger ", err)
 		}
 
-		defer logging.CapturePanic(logger)
+		defer ssv_log.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		var observabilityOptions []observability.Option
+		observabilityOptions = append(observabilityOptions, observability.WithLogger())
 		if cfg.MetricsAPIPort > 0 {
 			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
 		}
@@ -818,11 +819,11 @@ func setupGlobal() (*zap.Logger, error) {
 		}
 	}
 
-	err := logging.SetGlobalLogger(
+	err := ssv_log.SetGlobalLogger(
 		cfg.LogLevel,
 		cfg.LogLevelFormat,
 		cfg.LogFormat,
-		&logging.LogFileOptions{
+		&ssv_log.LogFileOptions{
 			FilePath:   cfg.LogFilePath,
 			MaxSize:    cfg.LogFileSize,
 			MaxBackups: cfg.LogFileBackups,
@@ -1195,7 +1196,7 @@ func syncContractEvents(
 }
 
 func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
-	logger = logger.Named(logging.NameMetricsHandler)
+	logger = logger.Named(ssv_log.NameMetricsHandler)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewHandler(logger, db, enableProf, opNode)
 	addr := fmt.Sprintf(":%d", port)

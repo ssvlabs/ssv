@@ -17,7 +17,7 @@ func Test_GivenValueThatDoesNotExceedMaxInt64_WhenRecordUint64Value_ThenRecords(
 	}
 
 	var val uint64 = 100
-	RecordUint64Value(context.TODO(), val, recordF)
+	RecordUint64Value(t.Context(), val, recordF)
 
 	assert.Equal(t, val, uint64(recordedValue))
 }
@@ -31,7 +31,7 @@ func Test_GivenValueThatExceedsMaxInt64_WhenRecordUint64Value_ThenDoesNotRecord(
 	}
 
 	var val uint64 = math.MaxInt64 + 1
-	RecordUint64Value(context.TODO(), val, recordF)
+	RecordUint64Value(t.Context(), val, recordF)
 
 	assert.Equal(t, int64(0), recordedValue)
 }
