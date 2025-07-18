@@ -53,18 +53,28 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	var topics []string
 
-	// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
-	// we don't expect post-fork messages to be sent before the fork.
-	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-		topics = commons.CommitteeTopicID(msg.OperatorIDs)
-	} else {
-		if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-			topics = commons.CommitteeTopicIDAlan(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
-		} else {
-			val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		topics = commons.CommitteeTopicIDAlan(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
+
+		// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
+		// we don't expect post-fork messages to be sent before the fork.
+		if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
+			val, exists := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 			if !exists {
 				return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 			}
+			topics = commons.CommitteeTopicID(val.Operators)
+		} else {
+			topics = commons.CommitteeTopicIDAlan(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
+		}
+	} else {
+		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if !exists {
+			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
+		}
+		if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
+			topics = commons.CommitteeTopicID(val.OperatorIDs())
+		} else {
 			topics = commons.CommitteeTopicIDAlan(val.CommitteeID())
 		}
 	}
