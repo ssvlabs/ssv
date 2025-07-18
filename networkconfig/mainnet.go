@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -33,7 +34,11 @@ var MainnetSSV = &SSVConfig{
 	Forks: []SSVFork{
 		{
 			Name:  AlanFork,
-			Epoch: 0,
+			Epoch: 0, // We don't need to set the real Alan fork epoch because pre-Alan ssv-nodes aren't supported anymore.
+		},
+		{
+			Name:  NetworkTopologyFork,
+			Epoch: math.MaxUint64, // TODO: set correct epoch
 		},
 	},
 }

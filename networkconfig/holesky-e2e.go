@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -21,6 +22,10 @@ var HoleskyE2ESSV = &SSVConfig{
 		{
 			Name:  AlanFork,
 			Epoch: 0,
+		},
+		{
+			Name:  NetworkTopologyFork,
+			Epoch: math.MaxUint64,
 		},
 	},
 }

@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 	"time"
 
@@ -72,6 +73,10 @@ var TestNetwork = &NetworkConfig{
 			{
 				Name:  AlanFork,
 				Epoch: 0,
+			},
+			{
+				Name:  NetworkTopologyFork,
+				Epoch: math.MaxUint64,
 			},
 		},
 	},
@@ -146,6 +151,10 @@ var TestRealNetwork = &NetworkConfig{
 			{
 				Name:  AlanFork,
 				Epoch: 0,
+			},
+			{
+				Name:  NetworkTopologyFork,
+				Epoch: math.MaxUint64,
 			},
 		},
 	},
