@@ -1,4 +1,4 @@
-package observability
+package metrics
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func Test_GivenValueThatDoesNotExceedMaxInt64_WhenRecordUint64Value_ThenRecords(
 }
 
 func Test_GivenValueThatExceedsMaxInt64_WhenRecordUint64Value_ThenDoesNotRecord(t *testing.T) {
-	initLogger(zap.NewNop())
+	InitLogger(zap.NewNop())
 
 	var recordedValue int64
 	recordF := func(ctx context.Context, value int64, options ...metric.RecordOption) {

@@ -35,7 +35,7 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
-	metrics *metrics
+	metrics *metricsRecorder
 }
 
 func NewInstance(
