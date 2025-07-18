@@ -5,12 +5,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 func TestSubFilter(t *testing.T) {
-	l := logging.TestLogger(t)
+	l := log.TestLogger(t)
 	sf := newSubFilter(l, 2)
 
 	require.False(t, sf.CanSubscribe("xxx"))

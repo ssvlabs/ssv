@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -66,7 +67,7 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 	}
 
 	return &slotTicker{
-		logger:       logger.Named("slot_ticker"),
+		logger:       logger.Named(log.NameSlotTicker),
 		timer:        timerProvider(initialDelay),
 		slotDuration: cfg.SlotDuration,
 		genesisTime:  cfg.GenesisTime,

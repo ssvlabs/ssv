@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -17,24 +17,24 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	tracerInFlightMessageCounter = observability.NewMetric(
+	tracerInFlightMessageCounter = metrics.New(
 		meter.Int64Counter(
 			metricName("messages.received"),
 			metric.WithDescription("total number of messages received tracer intercepted")))
 
-	tracerInFlightMessageHist = observability.NewMetric(
+	tracerInFlightMessageHist = metrics.New(
 		meter.Float64Histogram(
 			metricName("messages.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("message processing duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	tracerDBDurationHistogram = observability.NewMetric(
+	tracerDBDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			metricName("db.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("db interaction duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 )
 
 func metricName(name string) string {

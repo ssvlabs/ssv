@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -18,19 +19,19 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	eventsProcessSuccessCounter = observability.NewMetric(
+	eventsProcessSuccessCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "events_processed"),
 			metric.WithUnit("{event}"),
 			metric.WithDescription("total number of successfully processed events(logs)")))
 
-	eventsProcessFailureCounter = observability.NewMetric(
+	eventsProcessFailureCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "events_failed"),
 			metric.WithUnit("{event}"),
 			metric.WithDescription("total number of failures during event(log) processing")))
 
-	lastProcessedBlockGauge = observability.NewMetric(
+	lastProcessedBlockGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "last_processed_block"),
 			metric.WithUnit("{block_number}"),

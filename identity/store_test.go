@@ -7,8 +7,8 @@ import (
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/observability/log"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -19,7 +19,7 @@ var (
 )
 
 func TestSetupPrivateKey(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	tests := []struct {
 		name      string

@@ -14,8 +14,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -249,7 +250,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		return observability.Errorf(span, "failed to fetch sync committee duties: %w", err)
+		return traces.Errorf(span, "failed to fetch sync committee duties: %w", err)
 	}
 
 	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)

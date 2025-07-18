@@ -15,8 +15,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 )
@@ -78,7 +78,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	timeout := 200 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(t.Context())
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockExecutionClient := NewMockExecutionClient(ctrl)
@@ -336,7 +336,7 @@ func TestScheduler_Run(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx, cancel := context.WithCancel(t.Context())
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)
@@ -389,7 +389,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)

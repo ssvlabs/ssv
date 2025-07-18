@@ -6,6 +6,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -35,14 +36,14 @@ var (
 	meter  = otel.Meter(observabilityName)
 	tracer = otel.Tracer(observabilityName)
 
-	validatorStageDurationHistogram = observability.NewMetric(
+	validatorStageDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "stage.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("validator stage(proposal, prepare, commit) duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	roundsChangedCounter = observability.NewMetric(
+	roundsChangedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "duty.rounds_changed"),
 			metric.WithUnit("{change}"),

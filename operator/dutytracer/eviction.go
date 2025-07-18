@@ -7,7 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	model "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 

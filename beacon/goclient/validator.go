@@ -14,7 +14,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 

@@ -10,11 +10,11 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
@@ -162,7 +162,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 	}
 
 	connLogger := func(conn libp2pnetwork.Conn) *zap.Logger {
-		return ch.logger.Named(logging.NameConnHandler).
+		return ch.logger.Named(log.NameConnHandler).
 			With(
 				fields.PeerID(conn.RemotePeer()),
 				zap.String("remote_addr", conn.RemoteMultiaddr().String()),

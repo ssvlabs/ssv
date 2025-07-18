@@ -6,17 +6,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // TestHandshakeTestData is a test for testing data and mocks
 func TestHandshakeTestData(t *testing.T) {
+	testLogger := log.TestLogger(t)
+
 	t.Run("happy flow", func(t *testing.T) {
 		td := getTestingData(t)
 
 		beforeHandshake := time.Now()
-		require.NoError(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+		require.NoError(t, td.Handshaker.Handshake(testLogger, td.Conn))
 
 		pi := td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID)
 		require.NotNil(t, pi)
@@ -29,7 +31,7 @@ func TestHandshakeTestData(t *testing.T) {
 
 		beforeHandshake := time.Now()
 		td.Handshaker.nodeInfos = mock.NodeInfoIndex{}
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+		require.Error(t, td.Handshaker.Handshake(testLogger, td.Conn))
 
 		pi := td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID)
 		require.NotNil(t, pi)
@@ -40,6 +42,6 @@ func TestHandshakeTestData(t *testing.T) {
 	t.Run("wrong StreamController", func(t *testing.T) {
 		td := getTestingData(t)
 		td.Handshaker.streams = mock.StreamController{}
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+		require.Error(t, td.Handshaker.Handshake(testLogger, td.Conn))
 	})
 }
