@@ -398,8 +398,6 @@ github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0b
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/ssvlabs/eth2-key-manager v1.5.5 h1:AzwNowGvcmVpRCVHq10FVnpkVIUpoDo5YbJWNMnYA8Q=
 github.com/ssvlabs/eth2-key-manager v1.5.5/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
-github.com/ssvlabs/ssv v1.2.1-0.20250630180114-f47c33a3b2c7 h1:pVy8o5PnHjDEf8yUNWo7YR58gMOlXnAKO2xtGsd8EcQ=
-github.com/ssvlabs/ssv v1.2.1-0.20250630180114-f47c33a3b2c7/go.mod h1:8L4BaGXJrf/IKqJvAr6Noc5cfYl0gQxh1p0nZhs9VlQ=
 github.com/ssvlabs/ssv v1.2.1-0.20250718114413-488ece516229 h1:gGhfJIVylSujpvdF9sVoyb41Q4f6TfKiBq37oqgbMlY=
 github.com/ssvlabs/ssv v1.2.1-0.20250718114413-488ece516229/go.mod h1:1stKxlijxFVDB3cxkAXFk0yksfLyZdY+SWVh3WqBg5s=
 github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo8=
@@ -502,6 +500,7 @@ go.opentelemetry.io/otel/sdk v1.37.0/go.mod h1:VredYzxUvuo2q3WRcDnKDjbdvmO0sCzOv
 go.opentelemetry.io/otel/sdk/log v0.13.0 h1:I3CGUszjM926OphK8ZdzF+kLqFvfRY/IIoFq/TjwfaQ=
 go.opentelemetry.io/otel/sdk/log v0.13.0/go.mod h1:lOrQyCCXmpZdN7NchXb6DOZZa1N5G1R2tm5GMMTpDBw=
 go.opentelemetry.io/otel/sdk/log/logtest v0.13.0 h1:9yio6AFZ3QD9j9oqshV1Ibm9gPLlHNxurno5BreMtIA=
+go.opentelemetry.io/otel/sdk/log/logtest v0.13.0/go.mod h1:QOGiAJHl+fob8Nu85ifXfuQYmJTFAvcrxL6w5/tu168=
 go.opentelemetry.io/otel/sdk/metric v1.37.0 h1:90lI228XrB9jCMuSdA0673aubgRobVZFhbjxHHspCPc=
 go.opentelemetry.io/otel/sdk/metric v1.37.0/go.mod h1:cNen4ZWfiD37l5NhS+Keb5RXVWZWpRE+9WyVCpbo5ps=
 go.opentelemetry.io/otel/trace v1.37.0 h1:HLdcFNbRQBE2imdSEgm/kwqmQj1Or1l/7bW6mxVK7z4=
@@ -531,6 +530,7 @@ golang.org/x/lint v0.0.0-20190313153728-d0100b6bd8b3/go.mod h1:6SW0HCj/g11FgYtHl
 golang.org/x/mod v0.2.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
 golang.org/x/mod v0.3.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
 golang.org/x/mod v0.25.0 h1:n7a+ZbQKQA/Ysbyb0/6IbB1H/X41mKgbhfv7AfG/44w=
+golang.org/x/mod v0.25.0/go.mod h1:IXM97Txy2VM4PJ3gI61r1YEk/gAj6zAHN3AdZt6S9Ww=
 golang.org/x/net v0.0.0-20180724234803-3673e40ba225/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/net v0.0.0-20180826012351-8a410e7b638d/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
