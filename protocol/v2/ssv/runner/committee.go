@@ -670,12 +670,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
 				if !exists {
-					executionErr = fmt.Errorf("could not find beacon object for validator")
+					executionErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
 					continue
 				}
 				sszObject, exists := validatorObjects[root]
 				if !exists {
-					executionErr = fmt.Errorf("could not find beacon object for validator")
+					executionErr = fmt.Errorf("could not find ssz object for root: %s", root)
 					continue
 				}
 
