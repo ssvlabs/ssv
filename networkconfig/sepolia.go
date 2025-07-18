@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -21,4 +22,14 @@ var SepoliaSSV = &SSVConfig{
 	},
 	TotalEthereumValidators: 1781, // active_validators from https://sepolia.beaconcha.in/index/data on Mar 20, 2025
 	GasLimit36Epoch:         0,
+	Forks: []SSVFork{
+		{
+			Name:  AlanFork,
+			Epoch: 0,
+		},
+		{
+			Name:  NetworkTopologyFork,
+			Epoch: math.MaxUint64,
+		},
+	},
 }

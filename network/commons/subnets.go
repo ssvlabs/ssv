@@ -2,6 +2,8 @@ package commons
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -37,8 +39,12 @@ func SubnetTopicID(subnet uint64) string {
 	return fmt.Sprintf("%d", subnet)
 }
 
-func CommitteeTopicID(cid spectypes.CommitteeID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnet(cid))}
+func CommitteeTopicIDAlan(cid spectypes.CommitteeID) []string {
+	return []string{fmt.Sprintf("%d", CommitteeSubnetAlan(cid))}
+}
+
+func CommitteeTopicID(committee []spectypes.OperatorID) []string {
+	return []string{fmt.Sprintf("%d", CommitteeSubnet(committee))}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -51,9 +57,32 @@ func GetTopicBaseName(topicName string) string {
 	return strings.TrimPrefix(topicName, topicPrefix+".")
 }
 
-// CommitteeSubnet returns the subnet for the given committee
-func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
+// CommitteeSubnetAlan returns the subnet for the given committee
+func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
+	return subnet.Uint64()
+}
+
+func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
+	if len(committee) < 4 {
+		panic(fmt.Sprintf("committee is too short: %v", committee))
+	}
+
+	// TODO: consider caching the calculations (e.g. move them to share similarly to committee ID)
+	var lowestHash *big.Int
+	var operatorBytes [8]byte
+
+	for _, v := range committee {
+		binary.LittleEndian.PutUint64(operatorBytes[:], v)
+		operatorHash := sha256.Sum256(operatorBytes[:])
+		operatorHashNum := new(big.Int).SetBytes(operatorHash[:])
+
+		if lowestHash == nil || operatorHashNum.Cmp(lowestHash) == -1 {
+			lowestHash = operatorHashNum
+		}
+	}
+
+	subnet := new(big.Int).Mod(lowestHash, bigIntSubnetsCount)
 	return subnet.Uint64()
 }
 
