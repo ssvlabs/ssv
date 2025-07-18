@@ -30,4 +30,10 @@ var MainnetSSV = &SSVConfig{
 	},
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
 	GasLimit36Epoch:         385150,  // Aug-09-2025 06:40:23 AM UTC
+	Forks: []SSVFork{
+		{
+			Name:  AlanFork,
+			Epoch: 0,
+		},
+	},
 }

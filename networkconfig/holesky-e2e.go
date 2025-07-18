@@ -17,4 +17,10 @@ var HoleskyE2ESSV = &SSVConfig{
 	Bootnodes:               []string{},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 	GasLimit36Epoch:         0,
+	Forks: []SSVFork{
+		{
+			Name:  AlanFork,
+			Epoch: 0,
+		},
+	},
 }

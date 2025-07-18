@@ -19,4 +19,10 @@ var HoodiStageSSV = &SSVConfig{
 	},
 	TotalEthereumValidators: HoodiSSV.TotalEthereumValidators,
 	GasLimit36Epoch:         0,
+	Forks: []SSVFork{
+		{
+			Name:  AlanFork,
+			Epoch: 0,
+		},
+	},
 }
