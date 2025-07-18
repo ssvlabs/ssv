@@ -56,7 +56,7 @@ func FormatError(err error) map[string]any {
 	return map[string]any{
 		"kind":  reflect.TypeOf(err).String(),
 		"error": err.Error(),
-		"stack": nil, // TODO
+		"stack": nil,
 	}
 }
 

@@ -74,7 +74,7 @@ func (h *ZapHandler) Handle(ctx context.Context, record slog.Record) error {
 		if h.option.AddSource {
 			frame, _ := runtime.CallersFrames([]uintptr{record.PC}).Next()
 			checked.Caller = zapcore.NewEntryCaller(0, frame.File, frame.Line, true)
-			checked.Stack = "" //@TODO
+			checked.Stack = ""
 		} else {
 			checked.Caller = zapcore.EntryCaller{}
 			checked.Stack = ""
