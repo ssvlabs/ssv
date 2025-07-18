@@ -96,7 +96,7 @@ func (km *RemoteKeyManager) AddShare(
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
-	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey); err != nil {
+	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
@@ -169,11 +169,11 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pub
 		}
 	}
 
-	if err := km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey); err != nil {
+	if err := km.removeHighestAttestation(txn, pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
 
-	if err := km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey); err != nil {
+	if err := km.removeHighestProposal(txn, pubKey); err != nil {
 		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
 
@@ -181,10 +181,18 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pub
 }
 
 func (km *RemoteKeyManager) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
+	attLock := km.lock(pubKey, lockAttestation)
+	attLock.Lock()
+	defer attLock.Unlock()
+
 	return km.slashingProtector.IsAttestationSlashable(pubKey, attData)
 }
 
 func (km *RemoteKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+	propLock := km.lock(pubKey, lockProposal)
+	propLock.Lock()
+	defer propLock.Unlock()
+
 	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
 }
 
@@ -198,6 +206,22 @@ func (km *RemoteKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0
 	defer propLock.Unlock()
 
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
+}
+
+func (km *RemoteKeyManager) removeHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	attLock := km.lock(pubKey, lockAttestation)
+	attLock.Lock()
+	defer attLock.Unlock()
+
+	return km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey)
+}
+
+func (km *RemoteKeyManager) removeHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	propLock := km.lock(pubKey, lockProposal)
+	propLock.Lock()
+	defer propLock.Unlock()
+
+	return km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey)
 }
 
 // SignBeaconObject checks slashing conditions locally for attestation and beacon block,
