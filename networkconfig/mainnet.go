@@ -8,9 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-const MainnetName = "mainnet"
-
-var MainnetSSV = &SSVConfig{
+var MainnetSSV = &SSV{
+	Name:                 "mainnet",
 	DomainType:           spectypes.AlanMainnet,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
@@ -30,4 +29,10 @@ var MainnetSSV = &SSVConfig{
 	},
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
 	GasLimit36Epoch:         385150,  // Aug-09-2025 06:40:23 AM UTC
+	Forks: []SSVFork{
+		{
+			Name:  "alan",
+			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
+		},
+	},
 }

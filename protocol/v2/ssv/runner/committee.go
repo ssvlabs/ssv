@@ -59,7 +59,7 @@ type CommitteeRunner struct {
 }
 
 func NewCommitteeRunner(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
@@ -260,7 +260,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	version, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
+	version, _ := cr.BaseRunner.NetworkConfig.Beacon.ForkAtEpoch(epoch)
 
 	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
@@ -418,7 +418,7 @@ listener:
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(
-			cr.BaseRunner.NetworkConfig.GetDomainType(),
+			cr.BaseRunner.NetworkConfig.DomainType,
 			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
@@ -911,7 +911,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 	slot := duty.DutySlot()
 	epoch := cr.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
 
-	dataVersion, _ := cr.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
+	dataVersion, _ := cr.GetBaseRunner().NetworkConfig.Beacon.ForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {

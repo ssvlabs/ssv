@@ -50,11 +50,11 @@ type bootNode struct {
 	externalIP  string
 	tcpPort     uint16
 	dbPath      string
-	ssvConfig   *networkconfig.SSVConfig
+	ssvConfig   *networkconfig.SSV
 }
 
 // New is the constructor of ssvNode
-func New(logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts Options) (Node, error) {
+func New(logger *zap.Logger, ssvConfig *networkconfig.SSV, opts Options) (Node, error) {
 	return &bootNode{
 		logger:      logger.Named(logging.NameBootNode),
 		privateKey:  opts.PrivateKey,
