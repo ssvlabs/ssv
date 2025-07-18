@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -27,7 +26,7 @@ var HoodiStageSSV = &SSVConfig{
 		},
 		{
 			Name:  NetworkTopologyFork,
-			Epoch: math.MaxUint64,
+			Epoch: 27760,
 		},
 	},
 }
