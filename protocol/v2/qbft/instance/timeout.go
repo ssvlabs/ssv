@@ -9,6 +9,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 )
 
 func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {
@@ -16,7 +17,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer span.End()
 
 	if !i.CanProcessMessages() {
-		return observability.Errorf(span, "instance stopped processing timeouts")
+		return traces.Errorf(span, "instance stopped processing timeouts")
 	}
 
 	newRound := i.State.Round + 1
@@ -33,12 +34,12 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
-		return observability.Errorf(span, "could not generate round change msg: %w", err)
+		return traces.Errorf(span, "could not generate round change msg: %w", err)
 	}
 
 	root, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
-		return observability.Errorf(span, "could not calculate root for round change: %w", err)
+		return traces.Errorf(span, "could not calculate root for round change: %w", err)
 	}
 
 	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
@@ -58,7 +59,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		zap.String("reason", "timeout"))
 
 	if err := i.Broadcast(roundChange); err != nil {
-		return observability.Errorf(span, "failed to broadcast round change message: %w", err)
+		return traces.Errorf(span, "failed to broadcast round change message: %w", err)
 	}
 
 	return nil

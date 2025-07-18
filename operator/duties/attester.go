@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -247,7 +248,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		return observability.Errorf(span, "failed to fetch attester duties: %w", err)
+		return traces.Errorf(span, "failed to fetch attester duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))

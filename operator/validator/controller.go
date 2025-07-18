@@ -32,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
@@ -615,7 +616,7 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	dutyID := fields.FormatDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
@@ -677,7 +678,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	dutyID := fields.FormatCommitteeDutyID(committee, c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(duty.Slot),

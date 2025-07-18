@@ -14,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -211,7 +212,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(allEligibleIndices))))
 	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allEligibleIndices)
 	if err != nil {
-		return observability.Errorf(span, "failed to fetch proposer duties: %w", err)
+		return traces.Errorf(span, "failed to fetch proposer duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
