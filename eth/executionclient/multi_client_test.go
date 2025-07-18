@@ -919,57 +919,6 @@ func TestMultiClient_Healthy_AllClientsUnhealthy(t *testing.T) {
 	require.Contains(t, err.Error(), "client2 unhealthy")
 }
 
-func TestMultiClient_BlockByNumber(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := NewMockSingleClientProvider(ctrl)
-
-	mockClient.
-		EXPECT().
-		BlockByNumber(gomock.Any(), big.NewInt(1234)).
-		Return(&ethtypes.Block{}, nil).
-		Times(1)
-
-	mc := &MultiClient{
-		nodeAddrs: []string{"mock1"},
-		clients:   []SingleClientProvider{mockClient},
-		clientsMu: make([]sync.Mutex, 1),
-		logger:    zap.NewNop(),
-		closed:    make(chan struct{}),
-	}
-
-	blk, err := mc.BlockByNumber(t.Context(), big.NewInt(1234))
-	require.NoError(t, err)
-	require.NotNil(t, blk)
-}
-
-func TestMultiClient_BlockByNumber_Error(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := NewMockSingleClientProvider(ctrl)
-
-	mockClient.
-		EXPECT().
-		BlockByNumber(gomock.Any(), big.NewInt(1234)).
-		Return((*ethtypes.Block)(nil), fmt.Errorf("block not found")).
-		Times(1)
-
-	mc := &MultiClient{
-		nodeAddrs: []string{"mock1"},
-		clients:   []SingleClientProvider{mockClient},
-		clientsMu: make([]sync.Mutex, 1),
-		logger:    zap.NewNop(),
-		closed:    make(chan struct{}),
-	}
-
-	blk, err := mc.BlockByNumber(t.Context(), big.NewInt(1234))
-	require.Error(t, err)
-	require.Nil(t, blk)
-	require.Contains(t, err.Error(), "block not found")
-}
-
 func TestMultiClient_HeaderByNumber(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1306,9 +1255,9 @@ func TestMultiClient_Call_Concurrency(t *testing.T) {
 
 	mockClient.
 		EXPECT().
-		BlockByNumber(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, num *big.Int) (*ethtypes.Block, error) {
-			return &ethtypes.Block{}, nil
+		HeaderByNumber(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, num *big.Int) (*ethtypes.Header, error) {
+			return &ethtypes.Header{}, nil
 		}).
 		Times(10)
 
@@ -1326,7 +1275,7 @@ func TestMultiClient_Call_Concurrency(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			defer wg.Done()
-			_, err := mc.BlockByNumber(t.Context(), big.NewInt(1234))
+			_, err := mc.HeaderByNumber(t.Context(), big.NewInt(1234))
 			require.NoError(t, err)
 		}()
 	}
