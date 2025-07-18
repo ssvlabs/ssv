@@ -10,15 +10,15 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/testcontainers/testcontainers-go"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // TestEnvironment manages the complete E2E test infrastructure
@@ -242,7 +242,7 @@ func (env *TestEnvironment) GetBeaconConfig() *networkconfig.Beacon {
 // It calculates the current slot as the middle of the epoch (first slot + SlotsPerEpoch/2)
 func (env *TestEnvironment) SetTestCurrentEpoch(testCurrentEpoch phase0.Epoch) {
 	slotOffset := uint64(testCurrentEpoch)*env.beaconConfig.SlotsPerEpoch + env.beaconConfig.SlotsPerEpoch/2
-	durationOffset := time.Duration(slotOffset) * env.beaconConfig.SlotDuration
+	durationOffset := time.Duration(slotOffset) * env.beaconConfig.SlotDuration // #nosec G115 -- slot offset never exceeds int64
 	env.beaconConfig.GenesisTime = time.Now().Add(-durationOffset)
 }
 
