@@ -8,6 +8,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
 )
 
@@ -33,8 +34,8 @@ func (env *TestEnvironment) setupBasicMockBeaconExpectations() {
 	env.mockBeacon.EXPECT().GetSlotDuration().Return(realConfig.GetSlotDuration()).AnyTimes()
 	env.mockBeacon.EXPECT().GetGenesisTime().Return(realConfig.GetGenesisTime()).AnyTimes()
 
-	env.mockBeacon.EXPECT().ForkAtEpoch(gomock.Any()).DoAndReturn(func(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
-		return realConfig.ForkAtEpoch(epoch)
+	env.mockBeacon.EXPECT().BeaconForkAtEpoch(gomock.Any()).DoAndReturn(func(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+		return realConfig.BeaconForkAtEpoch(epoch)
 	}).AnyTimes()
 
 	env.mockBeacon.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(func(slot phase0.Slot) phase0.Epoch {
