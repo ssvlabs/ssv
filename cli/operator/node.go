@@ -604,15 +604,16 @@ var StartNodeCmd = &cobra.Command{
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
-				var subnet uint64
-				if networkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-					subnet = networkcommons.CommitteeSubnet(v.OperatorIDs())
-				} else {
-					subnet = networkcommons.CommitteeSubnetAlan(v.CommitteeID())
-				}
-				if !mySubnets.IsSet(subnet) {
+				if subnet := networkcommons.CommitteeSubnet(v.OperatorIDs()); !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
+				}
+
+				if networkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+					if alanSubnet := networkcommons.CommitteeSubnet(v.OperatorIDs()); !mySubnets.IsSet(alanSubnet) {
+						mySubnets.Set(alanSubnet)
+						myActiveSubnets++
+					}
 				}
 			}
 			idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)

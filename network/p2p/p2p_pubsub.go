@@ -53,6 +53,8 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	var topics []string
 
+	// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
+	// we don't expect post-fork messages to be sent before the fork.
 	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		topics = commons.CommitteeTopicID(msg.OperatorIDs)
 	} else {
@@ -287,7 +289,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	}
 
 	n.activeCommitteesByCommittee.Delete(encodeCommittee(share.OperatorIDs()))
-	if n.cfg.NetworkConfig.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
+	if n.cfg.NetworkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
 		n.activeCommitteesByCID.Delete(string(cmtid[:]))
 	}
 	return nil

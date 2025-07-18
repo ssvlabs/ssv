@@ -227,6 +227,9 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 
 	// Rule: Check if message was sent in the correct topic
 	var messageTopics []string
+
+	// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
+	// we don't expect post-fork messages to be received before the fork.
 	if mv.netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 		messageTopics = commons.CommitteeTopicID(committeeInfo.committee)
 	} else {

@@ -225,18 +225,24 @@ func filterCommitteesForTopic(netCfg *networkconfig.NetworkConfig, topic string,
 
 	for _, committee := range committees {
 		// Get topic
-		var subnet uint64
-		if netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-			subnet = commons.CommitteeSubnet(committee.Operators)
-		} else {
-			subnet = commons.CommitteeSubnetAlan(committee.ID)
-		}
+		subnet := commons.CommitteeSubnet(committee.Operators)
 		committeeTopic := commons.SubnetTopicID(subnet)
 		committeeTopicFullName := commons.GetTopicFullName(committeeTopic)
 
 		// If it belongs to the topic, add it
 		if topic == committeeTopicFullName {
 			topicCommittees = append(topicCommittees, committee)
+		}
+
+		// Same for pre-fork topic logic
+		if netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+			subnet = commons.CommitteeSubnetAlan(committee.ID)
+			committeeTopic = commons.SubnetTopicID(subnet)
+			committeeTopicFullName = commons.GetTopicFullName(committeeTopic)
+
+			if topic == committeeTopicFullName {
+				topicCommittees = append(topicCommittees, committee)
+			}
 		}
 	}
 	return topicCommittees
