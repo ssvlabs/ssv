@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -772,19 +771,12 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
 
-		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
-
-		logger := c.logger.With([]zap.Field{
-			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
-			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
-		}...)
-
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
 		vc = validator.NewCommittee(
 			ctx,
 			cancel,
-			logger,
+			c.logger,
 			c.networkConfig,
 			operator,
 			committeeRunnerFunc,

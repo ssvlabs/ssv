@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
@@ -57,7 +59,7 @@ func NewCommittee(
 	cancel context.CancelFunc,
 	logger *zap.Logger,
 	networkConfig networkconfig.Network,
-	committeeMember *spectypes.CommitteeMember,
+	operator *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	dutyGuard *CommitteeDutyGuard,
@@ -65,6 +67,13 @@ func NewCommittee(
 	if shares == nil {
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
 	}
+
+	committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
+	logger = logger.Named(logging.NameCommittee).With([]zap.Field{
+		zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
+		zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
+	}...)
+
 	return &Committee{
 		logger:          logger,
 		networkConfig:   networkConfig,
@@ -73,7 +82,7 @@ func NewCommittee(
 		Queues:          make(map[phase0.Slot]queueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		Shares:          shares,
-		CommitteeMember: committeeMember,
+		CommitteeMember: operator,
 		CreateRunnerFn:  createRunnerFn,
 		dutyGuard:       dutyGuard,
 	}

@@ -11,6 +11,7 @@ const (
 	NameP2PNetwork          = "P2PNetwork"
 	NameSignerStorage       = "SignerStorage"
 	NameValidator           = "Validator"
+	NameCommittee           = "Committee"
 	NameWSServer            = "WSServer"
 	NameConnHandler         = "ConnHandler"
 	NameShareMetadataSyncer = "ShareMetadataSyncer"
