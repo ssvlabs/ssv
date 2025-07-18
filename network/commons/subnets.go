@@ -68,6 +68,7 @@ func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 		panic(fmt.Sprintf("committee is too short: %v", committee))
 	}
 
+	// TODO: consider caching the calculations (e.g. move them to share similarly to committee ID)
 	var lowestHash *big.Int
 	var operatorBytes [8]byte
 
