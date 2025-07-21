@@ -340,3 +340,62 @@ func ExportPlotHTML(table []TableRow, committees [][][]int, filename string) err
 	_, err = file.WriteString(html)
 	return err
 }
+
+// GenerateBarChartHTML creates a Chart.js grouped bar chart for period comparison
+func GenerateBarChartHTML(labels []string, effs, corrs []float64, groupLabel string) string {
+	labelsJSON, _ := json.Marshal(labels)
+	effsJSON, _ := json.Marshal(effs)
+	corrsJSON, _ := json.Marshal(corrs)
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Performance Comparison</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h2>Performance Comparison for %s</h2>
+  <canvas id="barChart" width="1000" height="500"></canvas>
+  <script>
+    const labels = %s;
+    const effs = %s;
+    const corrs = %s;
+    const data = {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Effectiveness',
+          data: effs,
+          backgroundColor: 'rgba(54, 162, 235, 0.7)',
+        },
+        {
+          label: 'Correctness',
+          data: corrs,
+          backgroundColor: 'rgba(255, 99, 132, 0.7)',
+        }
+      ]
+    };
+    const config = {
+      type: 'bar',
+      data: data,
+      options: {
+        responsive: false,
+        plugins: {
+          legend: { position: 'top' },
+          title: { display: true, text: 'Performance Comparison for %s' }
+        },
+        scales: {
+          y: {
+            min: Math.min(...effs, ...corrs, 0.95),
+            max: 1,
+            title: { display: true, text: 'Value' }
+          }
+        }
+      }
+    };
+    new Chart(document.getElementById('barChart').getContext('2d'), config);
+  </script>
+</body>
+</html>
+`, groupLabel, string(labelsJSON), string(effsJSON), string(corrsJSON), groupLabel)
+}

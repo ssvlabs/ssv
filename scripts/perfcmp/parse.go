@@ -135,3 +135,38 @@ func FlattenGroup(group [][]int) []int {
 	}
 	return all
 }
+
+// ParseEpochPeriods parses an epochs string like "10-20,25-30;40-70" into a slice of periods, where each period is a slice of [from, to] pairs.
+// E.g., [[ [10,20], [25,30] ], [ [40,70] ]]
+func ParseEpochPeriods(input string) ([][][2]int, error) {
+	periodStrs := strings.Split(input, ";")
+	var periods [][][2]int
+	for _, periodStr := range periodStrs {
+		periodStr = strings.TrimSpace(periodStr)
+		if periodStr == "" {
+			continue
+		}
+		rangeStrs := strings.Split(periodStr, ",")
+		var ranges [][2]int
+		for _, rangeStr := range rangeStrs {
+			rangeStr = strings.TrimSpace(rangeStr)
+			if rangeStr == "" {
+				continue
+			}
+			parts := strings.Split(rangeStr, "-")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid range: %s", rangeStr)
+			}
+			from, err1 := strconv.Atoi(parts[0])
+			to, err2 := strconv.Atoi(parts[1])
+			if err1 != nil || err2 != nil || from > to {
+				return nil, fmt.Errorf("invalid range: %s", rangeStr)
+			}
+			ranges = append(ranges, [2]int{from, to})
+		}
+		if len(ranges) > 0 {
+			periods = append(periods, ranges)
+		}
+	}
+	return periods, nil
+}

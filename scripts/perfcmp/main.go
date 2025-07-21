@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -15,12 +14,12 @@ import (
 
 func main() {
 	var (
-		epochsFlag     = flag.String("epochs", "", "Epoch(s) to analyze, e.g. 1,2,3 or 1-4 or 1-2,4-5")
+		epochsFlag     = flag.String("epochs", "", "Epoch(s) to analyze, e.g. 1,2,3 or 1-4 or 1-2,4-5 or 10-20,25-30;40-70 for multi-period avg")
 		committeesFlag = flag.String("committees", "", "Committees to compare, e.g. 1,2,3,4;5,6,7,8+9,10,11,12 or 1-4;5-12")
 		baseURLFlag    = flag.String("base-url", "https://e2m-hoodi.stage.ops.ssvlabsinternal.com/api/stats", "Base URL for dashboard API")
 		cookieFlag     = flag.String("cookie", "", "vaultAuthCookie value (optional, can also be set in .env as VAULT_AUTH_COOKIE)")
 		csvFlag        = flag.String("csv", "", "CSV output file (optional, if not set, prints to stdout)")
-		averageFlag    = flag.Bool("average", false, "If set, fetch and print/export only the average for the range (requires --epochs to be a single range)")
+		averageFlag    = flag.Bool("average", false, "If set, fetch and print/export only the average for the range (requires --epochs to be a single range or multi-period)")
 		avgFlag        = flag.Bool("avg", false, "Alias for --average")
 		plotFlag       = flag.String("plot", "", "HTML output file for line chart (optional, if not set, uses plot.html)")
 	)
@@ -49,45 +48,86 @@ func main() {
 
 	useAverage := *averageFlag || *avgFlag
 
-	if useAverage {
-		// Parse epoch range
-		parts := strings.Split(*epochsFlag, "-")
-		if len(parts) != 2 {
-			fmt.Fprintln(os.Stderr, "--average/--avg requires --epochs to be a single range, e.g. 28370-28390")
+	if useAverage && strings.Contains(*epochsFlag, ";") {
+		// Multi-period mode
+		if len(committees) != 1 {
+			fmt.Fprintln(os.Stderr, "Multi-period average mode only supports one committee group at a time.")
 			os.Exit(1)
 		}
-		fromEpoch, err1 := strconv.Atoi(parts[0])
-		toEpoch, err2 := strconv.Atoi(parts[1])
-		if err1 != nil || err2 != nil || fromEpoch > toEpoch {
-			fmt.Fprintln(os.Stderr, "invalid epoch range for --average/--avg")
+		periods, err := ParseEpochPeriods(*epochsFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid epochs: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("Range: %d-%d\n", fromEpoch, toEpoch)
-		for i, group := range committees {
-			fmt.Printf("Group %d: %s\n", i+1, CommitteeGroupToIntervalString(group))
-		}
+		fmt.Printf("Periods: %v\n", *epochsFlag)
+		fmt.Printf("Committee: %s\n", CommitteeGroupToIntervalString(committees[0]))
 		fmt.Println("Base URL:", *baseURLFlag)
 
-		var responses []APIResponse
-		for _, group := range committees {
-			ids := FlattenGroup(group)
-			stats, err := FetchStatsRange(*baseURLFlag, ids, fromEpoch, toEpoch, cookie)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error fetching stats for range %d-%d, group %s: %v\n", fromEpoch, toEpoch, CommitteeGroupToIntervalString(group), err)
-				responses = append(responses, APIResponse{})
-				continue
+		var periodLabels []string
+		var effs, corrs []float64
+		for _, period := range periods {
+			totalEff, totalCorr, totalEpochs := 0.0, 0.0, 0
+			labelParts := []string{}
+			for _, r := range period {
+				from, to := r[0], r[1]
+				labelParts = append(labelParts, fmt.Sprintf("%d-%d", from, to))
+				resp, epochs, err := FetchStatsRange(*baseURLFlag, FlattenGroup(committees[0]), from, to, cookie)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error fetching stats for range %d-%d: %v\n", from, to, err)
+					continue
+				}
+				totalEff += resp.Effectiveness * float64(epochs)
+				totalCorr += resp.Correctness * float64(epochs)
+				totalEpochs += epochs
 			}
-			responses = append(responses, *stats)
+			if totalEpochs > 0 {
+				effs = append(effs, totalEff/float64(totalEpochs))
+				corrs = append(corrs, totalCorr/float64(totalEpochs))
+			} else {
+				effs = append(effs, 0)
+				corrs = append(corrs, 0)
+			}
+			periodLabels = append(periodLabels, strings.Join(labelParts, ","))
 		}
+		// Output
 		if *csvFlag != "" {
-			err := ExportAverageCSV(responses, committees, fromEpoch, toEpoch, *csvFlag)
+			file, err := os.Create(*csvFlag)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error exporting CSV: %v\n", err)
 				os.Exit(1)
 			}
+			defer file.Close()
+			fmt.Fprintf(file, "Period,Effectiveness,Correctness\n")
+			for i := range periodLabels {
+				fmt.Fprintf(file, "%s,%.4f,%.4f\n", periodLabels[i], effs[i], corrs[i])
+			}
 			fmt.Printf("Exported to %s\n", *csvFlag)
+		} else if *plotFlag != "" {
+			// Bar chart: periods on X, two bars per period
+			file := *plotFlag
+			if file == "" {
+				file = "plot.html"
+			}
+			f, err := os.Create(file)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error exporting plot HTML: %v\n", err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			html := GenerateBarChartHTML(periodLabels, effs, corrs, CommitteeGroupToIntervalString(committees[0]))
+			_, err = f.WriteString(html)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error writing plot HTML: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("Exported plot to %s\n", file)
 		} else {
-			PrintAverageTable(responses, committees, fromEpoch, toEpoch)
+			fmt.Println()
+			fmt.Printf("%-20s | %-15s | %-15s\n", "Period", "Effectiveness", "Correctness")
+			fmt.Println(strings.Repeat("-", 55))
+			for i := range periodLabels {
+				fmt.Printf("%-20s | %-15.4f | %-15.4f\n", periodLabels[i], effs[i], corrs[i])
+			}
 		}
 		return
 	}
