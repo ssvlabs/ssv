@@ -12,12 +12,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -26,6 +25,11 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+)
+
+const (
+	DefaultGasLimit    = uint64(36_000_000)
+	DefaultGasLimitOld = uint64(30_000_000)
 )
 
 type ValidatorRegistrationRunner struct {
@@ -258,9 +262,20 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
 
+	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
+	// on the current epoch as compared to when this transition is supposed to happen.
+	gasLimit := r.gasLimit
+	if gasLimit == 0 {
+		defaultGasLimit := DefaultGasLimit
+		if r.BaseRunner.NetworkConfig.EstimatedCurrentEpoch() < r.BaseRunner.NetworkConfig.GetGasLimit36Epoch() {
+			defaultGasLimit = DefaultGasLimitOld
+		}
+		gasLimit = defaultGasLimit
+	}
+
 	return &v1.ValidatorRegistration{
 		FeeRecipient: share.FeeRecipientAddress,
-		GasLimit:     r.gasLimit,
+		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.NetworkConfig.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil

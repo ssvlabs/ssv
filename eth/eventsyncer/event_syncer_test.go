@@ -52,11 +52,6 @@ func TestEventSyncer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
-	done := make(chan struct{})
-	defer close(done)
-
 	// Create sim instance with a delay between block execution
 	sim := simTestBackend(testAddr)
 

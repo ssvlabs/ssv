@@ -139,12 +139,12 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return blockSlot, nil
 	}
 
-	block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+	header, err := h.executionClient.HeaderByNumber(ctx, new(big.Int).SetUint64(blockNumber))
 	if err != nil {
 		return 0, err
 	}
 
-	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0)) // #nosec G115
+	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 	for k, v := range h.blockSlots {

@@ -255,19 +255,19 @@ func (m *MockExecutionClient) EXPECT() *MockExecutionClientMockRecorder {
 	return m.recorder
 }
 
-// BlockByNumber mocks base method.
-func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
+// HeaderByNumber mocks base method.
+func (m *MockExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BlockByNumber", ctx, blockNumber)
-	ret0, _ := ret[0].(*types.Block)
+	ret := m.ctrl.Call(m, "HeaderByNumber", ctx, blockNumber)
+	ret0, _ := ret[0].(*types.Header)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// BlockByNumber indicates an expected call of BlockByNumber.
-func (mr *MockExecutionClientMockRecorder) BlockByNumber(ctx, blockNumber any) *gomock.Call {
+// HeaderByNumber indicates an expected call of HeaderByNumber.
+func (mr *MockExecutionClientMockRecorder) HeaderByNumber(ctx, blockNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByNumber", reflect.TypeOf((*MockExecutionClient)(nil).BlockByNumber), ctx, blockNumber)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeaderByNumber", reflect.TypeOf((*MockExecutionClient)(nil).HeaderByNumber), ctx, blockNumber)
 }
 
 // MockValidatorProvider is a mock of ValidatorProvider interface.
