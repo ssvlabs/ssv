@@ -192,7 +192,8 @@ func ExportAverageCSV(responses []APIResponse, committees [][][]int, from, to in
 }
 
 // ExportPlotHTML generates an HTML file with two Chart.js line charts: Effectiveness and Correctness
-func ExportPlotHTML(table []TableRow, committees [][][]int, filename string) error {
+// Accepts groupLabels []string for column headers
+func ExportPlotHTML(table []TableRow, groupLabels []string, filename string) error {
 	if filename == "" {
 		filename = "plot.html"
 	}
@@ -207,14 +208,11 @@ func ExportPlotHTML(table []TableRow, committees [][][]int, filename string) err
 	for i, row := range table {
 		epochs[i] = row.Epoch
 	}
-	intervals := make([]string, len(committees))
-	for i, group := range committees {
-		intervals[i] = CommitteeGroupToIntervalString(group)
-	}
-	effData := make([][]float64, len(committees))
-	corrData := make([][]float64, len(committees))
+	intervals := groupLabels
+	effData := make([][]float64, len(intervals))
+	corrData := make([][]float64, len(intervals))
 	minEff, minCorr := 1.0, 1.0
-	for i := range committees {
+	for i := range intervals {
 		effData[i] = make([]float64, len(table))
 		corrData[i] = make([]float64, len(table))
 		for j, row := range table {
@@ -398,4 +396,78 @@ func GenerateBarChartHTML(labels []string, effs, corrs []float64, groupLabel str
 </body>
 </html>
 `, groupLabel, string(labelsJSON), string(effsJSON), string(corrsJSON), groupLabel)
+}
+
+// GenerateBarChartHTMLMulti creates a Chart.js grouped bar chart for multiple groups and ranges
+func GenerateBarChartHTMLMulti(labels []string, groups []string, effs, corrs [][]float64) string {
+	labelsJSON, _ := json.Marshal(labels)
+	// Prepare datasets
+	datasets := ""
+	colors := []string{
+		"rgba(54, 162, 235, 0.7)",
+		"rgba(255, 99, 132, 0.7)",
+		"rgba(255, 206, 86, 0.7)",
+		"rgba(75, 192, 192, 0.7)",
+		"rgba(153, 102, 255, 0.7)",
+		"rgba(255, 159, 64, 0.7)",
+	}
+	for i, group := range groups {
+		effsJSON, _ := json.Marshal(effs[i])
+		corrsJSON, _ := json.Marshal(corrs[i])
+		datasets += fmt.Sprintf(`
+      {
+        label: '%s Effectiveness',
+        data: %s,
+        backgroundColor: '%s',
+        stack: '%s',
+      },
+      {
+        label: '%s Correctness',
+        data: %s,
+        backgroundColor: '%s',
+        stack: '%s',
+      },`,
+			group, string(effsJSON), colors[i%len(colors)], group,
+			group, string(corrsJSON), colors[(i+1)%len(colors)], group,
+		)
+	}
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Performance Comparison</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h2>Performance Comparison (Averages)</h2>
+  <canvas id="barChart" width="1000" height="500"></canvas>
+  <script>
+    const labels = %s;
+    const data = {
+      labels: labels,
+      datasets: [%s]
+    };
+    const config = {
+      type: 'bar',
+      data: data,
+      options: {
+        responsive: false,
+        plugins: {
+          legend: { position: 'top' },
+          title: { display: true, text: 'Performance Comparison (Averages)' }
+        },
+        scales: {
+          y: {
+            min: 0.9,
+            max: 1,
+            title: { display: true, text: 'Value' }
+          }
+        }
+      }
+    };
+    new Chart(document.getElementById('barChart').getContext('2d'), config);
+  </script>
+</body>
+</html>
+`, string(labelsJSON), datasets)
 }

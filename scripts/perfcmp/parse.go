@@ -170,3 +170,16 @@ func ParseEpochPeriods(input string) ([][][2]int, error) {
 	}
 	return periods, nil
 }
+
+// ParseCommitteeGroups splits --committees string on ';', trims, returns []string (each group as-is, may contain '+')
+func ParseCommitteeGroups(input string) []string {
+	parts := strings.Split(input, ";")
+	var groups []string
+	for _, part := range parts {
+		g := strings.TrimSpace(part)
+		if g != "" {
+			groups = append(groups, g)
+		}
+	}
+	return groups
+}
