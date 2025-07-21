@@ -22,6 +22,7 @@ func main() {
 		csvFlag        = flag.String("csv", "", "CSV output file (optional, if not set, prints to stdout)")
 		averageFlag    = flag.Bool("average", false, "If set, fetch and print/export only the average for the range (requires --epochs to be a single range)")
 		avgFlag        = flag.Bool("avg", false, "Alias for --average")
+		plotFlag       = flag.String("plot", "", "HTML output file for line chart (optional, if not set, uses plot.html)")
 	)
 	flag.Parse()
 
@@ -117,6 +118,20 @@ func main() {
 			row.GroupStats = append(row.GroupStats, *stats)
 		}
 		table = append(table, row)
+	}
+
+	if *plotFlag != "" || (len(*plotFlag) == 0 && os.Getenv("PLOT_HTML") != "") {
+		plotFile := *plotFlag
+		if plotFile == "" {
+			plotFile = "plot.html"
+		}
+		err := ExportPlotHTML(table, committees, plotFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error exporting plot HTML: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Exported plot to %s\n", plotFile)
+		return
 	}
 
 	if *csvFlag != "" {
