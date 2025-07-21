@@ -9,8 +9,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // ECDSAPrivateKey extracts the ecdsa.PrivateKey from the given string or generate a new key

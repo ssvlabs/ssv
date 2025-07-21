@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -18,19 +19,19 @@ const (
 var (
 	meter = otel.Meter(observabilityComponentName)
 
-	connectedCounter = observability.NewMetric(
+	connectedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "connected"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("total number of connected peers")))
 
-	disconnectedCounter = observability.NewMetric(
+	disconnectedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "disconnected"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("total number of disconnected peers")))
 
-	filteredCounter = observability.NewMetric(
+	filteredCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "filtered"),
 			metric.WithUnit("{connection}"),

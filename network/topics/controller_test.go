@@ -25,13 +25,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
@@ -42,7 +42,7 @@ import (
 // TODO: fix this test to run post-fork
 func TestTopicManager(t *testing.T) {
 	// TODO: reduce running time of this test, use channels instead of long timeouts
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	// TODO: rework this test to use message validation
 	t.Run("happy flow", func(t *testing.T) {

@@ -5,24 +5,23 @@ import (
 	"os"
 	"path/filepath"
 
+	ssv_log "github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/logging"
 )
 
 var generateOperatorKeysCmd = &cobra.Command{
 	Use:   "generate-operator-keys",
 	Short: "generates ssv operator keys",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
+		if err := ssv_log.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
 			log.Fatal(err)
 		}
 
-		logger := zap.L().Named(logging.NameExportKeys)
+		logger := zap.L().Named(ssv_log.NameExportKeys)
 		passwordFilePath, _ := cmd.Flags().GetString("password-file")
 		privateKeyFilePath, _ := cmd.Flags().GetString("operator-key-file")
 

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 func Test_genesisForClient(t *testing.T) {
 	ctx := t.Context()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {

@@ -16,8 +16,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -63,7 +63,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			logger := logging.TestLogger(t)
+			logger := log.TestLogger(t)
 
 			sharesStorage := NewMockshareStorage(ctrl)
 			sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil, tc.sharesStorageErr).AnyTimes()

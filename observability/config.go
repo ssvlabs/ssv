@@ -9,8 +9,13 @@ type (
 		enabled bool
 	}
 
+	loggerConfig struct {
+		enabled bool
+	}
+
 	Config struct {
 		traces  tracesConfig
 		metrics metricsConfig
+		logger  loggerConfig
 	}
 )

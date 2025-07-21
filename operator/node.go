@@ -10,10 +10,10 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/fee_recipient"
@@ -66,7 +66,7 @@ type Node struct {
 // New is the constructor of Node
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	node := &Node{
-		logger:           logger.Named(logging.NameOperator),
+		logger:           logger.Named(log.NameOperator),
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,

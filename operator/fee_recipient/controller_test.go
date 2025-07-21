@@ -17,8 +17,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/slotticker/mocks"
@@ -30,7 +30,7 @@ import (
 )
 
 func TestSubmitProposal(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -127,7 +127,7 @@ func TestSubmitProposal(t *testing.T) {
 }
 
 func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 

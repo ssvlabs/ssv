@@ -16,14 +16,14 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // setupDB creates a BadgerDB instance for testing with given options and handles cleanup.
 func setupDB(t *testing.T, options basedb.Options) *DB {
 	t.Helper()
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	db, err := NewInMemory(logger, options)
 
@@ -543,7 +543,7 @@ func TestDBCreation(t *testing.T) {
 	t.Parallel()
 
 	t.Run("create disk-based DB", func(t *testing.T) {
-		logger := logging.TestLogger(t)
+		logger := log.TestLogger(t)
 		dir := setupTempDir(t, "badger-test")
 
 		options := basedb.Options{
@@ -568,7 +568,7 @@ func TestDBCreation(t *testing.T) {
 	})
 
 	t.Run("create with GC enabled", func(t *testing.T) {
-		logger := logging.TestLogger(t)
+		logger := log.TestLogger(t)
 		dir := setupTempDir(t, "badger-gc-test")
 
 		ctx, cancel := context.WithCancel(t.Context())
@@ -623,7 +623,7 @@ func TestDBCreation(t *testing.T) {
 // TestCreationDB_OpenError verifies error handling when badger.Open fails
 // This test simulates an error by providing a file path instead of a directory
 func TestCreationDB_OpenError(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	dir := setupTempDir(t, "badger-perm-test")
 

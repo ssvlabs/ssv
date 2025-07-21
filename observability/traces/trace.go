@@ -1,4 +1,4 @@
-package observability
+package traces
 
 import (
 	"context"
@@ -11,12 +11,21 @@ import (
 	"go.uber.org/zap"
 )
 
+var logger *zap.Logger
+
 const traceIDByteLen = 16
 
-// TraceContext returns a new context with a deterministic trace ID based on the input string.
+func InitLogger(l *zap.Logger) {
+	if l == nil {
+		l = zap.NewNop()
+	}
+	logger = l
+}
+
+// Context returns a new context with a deterministic trace ID based on the input string.
 // Useful for generating consistent trace IDs for the same logical operation (e.g., by duty ID),
 // which helps in correlating spans across distributed by network components.
-func TraceContext(ctx context.Context, str string) context.Context {
+func Context(ctx context.Context, str string) context.Context {
 	traceStrSha := sha256.Sum256([]byte(str))
 
 	var traceID trace.TraceID

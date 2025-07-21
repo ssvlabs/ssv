@@ -17,7 +17,7 @@ import (
 	model "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"

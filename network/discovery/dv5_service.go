@@ -13,12 +13,12 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
@@ -81,7 +81,7 @@ type DiscV5Service struct {
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		logger:              logger.Named(logging.NameDiscoveryService),
+		logger:              logger.Named(log.NameDiscoveryService),
 		ctx:                 ctx,
 		cancel:              cancel,
 		conns:               opts.ConnIndex,

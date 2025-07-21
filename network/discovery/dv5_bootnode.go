@@ -5,9 +5,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils"
 )
 
@@ -53,7 +53,7 @@ func (b *Bootnode) Close() error {
 }
 
 func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts *BootnodeOptions) (Service, error) {
-	privKey, err := utils.ECDSAPrivateKey(logger.Named(logging.NameBootNode), opts.PrivateKey)
+	privKey, err := utils.ECDSAPrivateKey(logger.Named(log.NameBootNode), opts.PrivateKey)
 	if err != nil {
 		return nil, err
 	}

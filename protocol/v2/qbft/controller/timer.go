@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -19,7 +20,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 
 	timeoutData, err := msg.GetTimeoutData()
 	if err != nil {
-		return observability.Errorf(span, "failed to get timeout data: %w", err)
+		return traces.Errorf(span, "failed to get timeout data: %w", err)
 	}
 
 	span.SetAttributes(
@@ -29,7 +30,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 
 	instance := c.StoredInstances.FindInstance(timeoutData.Height)
 	if instance == nil {
-		return observability.Errorf(span, "instance is nil")
+		return traces.Errorf(span, "instance is nil")
 	}
 
 	if timeoutData.Round < instance.State.Round {
@@ -47,7 +48,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 	}
 
 	if err := instance.UponRoundTimeout(ctx, logger); err != nil {
-		return observability.Errorf(span, "failed to handle round timeout: %w", err)
+		return traces.Errorf(span, "failed to handle round timeout: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")

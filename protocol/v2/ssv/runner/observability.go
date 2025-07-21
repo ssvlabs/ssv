@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -33,41 +34,41 @@ var (
 	tracer = otel.Tracer(observabilityName)
 	meter  = otel.Meter(observabilityName)
 
-	consensusDurationHistogram = observability.NewMetric(
+	consensusDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "consensus.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("consensus duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	preConsensusDurationHistogram = observability.NewMetric(
+	preConsensusDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "pre_consensus.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("pre consensus duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	postConsensusDurationHistogram = observability.NewMetric(
+	postConsensusDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "post_consensus.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("post consensus duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	dutyDurationHistogram = observability.NewMetric(
+	dutyDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "duty.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("duty duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	submissionsGauge = observability.NewMetric(
+	submissionsGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "submissions"),
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("number of duty submissions")))
 
-	failedSubmissionCounter = observability.NewMetric(
+	failedSubmissionCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "submissions.failed"),
 			metric.WithUnit("{submission}"),

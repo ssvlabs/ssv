@@ -122,6 +122,14 @@ func (m *MockDatabase) Update(fn func(basedb.Txn) error) error {
 	return nil
 }
 
+func (m *MockDatabase) FullGC(arg0 context.Context) error {
+	return nil
+}
+
+func (m *MockDatabase) QuickGC(arg0 context.Context) error {
+	return nil
+}
+
 type MockTxn struct {
 	mock.Mock
 }

@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 var _ Provider = &MultiClient{}

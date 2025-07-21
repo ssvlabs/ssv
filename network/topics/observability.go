@@ -6,6 +6,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -16,13 +17,13 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	inboundMessageCounter = observability.NewMetric(
+	inboundMessageCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "in"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of inbound messages")))
 
-	outboundMessageCounter = observability.NewMetric(
+	outboundMessageCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "out"),
 			metric.WithUnit("{message}"),
