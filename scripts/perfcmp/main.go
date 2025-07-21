@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -48,19 +49,68 @@ func main() {
 
 	useAverage := *averageFlag || *avgFlag
 
-	if useAverage && strings.Contains(*epochsFlag, ";") {
-		// Multi-period mode
-		if len(committees) != 1 {
-			fmt.Fprintln(os.Stderr, "Multi-period average mode only supports one committee group at a time.")
-			os.Exit(1)
+	if useAverage {
+		// Multi-period or single-range average mode
+		var periods [][][2]int
+		if strings.Contains(*epochsFlag, ";") {
+			// Multi-period
+			if len(committees) != 1 {
+				fmt.Fprintln(os.Stderr, "Multi-period average mode only supports one committee group at a time.")
+				os.Exit(1)
+			}
+			periods, err = ParseEpochPeriods(*epochsFlag)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "invalid epochs: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Printf("Periods: %v\n", *epochsFlag)
+			fmt.Printf("Committee: %s\n", CommitteeGroupToIntervalString(committees[0]))
+		} else if strings.Contains(*epochsFlag, ",") || strings.Contains(*epochsFlag, "-") {
+			// Single period, possibly multiple ranges (e.g. 10-20,25-30 or 381000-381010)
+			periods = make([][][2]int, 1)
+			if strings.Contains(*epochsFlag, ",") {
+				// Multiple ranges in one period
+				parts := strings.Split(*epochsFlag, ",")
+				for _, part := range parts {
+					part = strings.TrimSpace(part)
+					if part == "" {
+						continue
+					}
+					rangeParts := strings.Split(part, "-")
+					if len(rangeParts) != 2 {
+						fmt.Fprintf(os.Stderr, "invalid range: %s\n", part)
+						os.Exit(1)
+					}
+					from, err1 := strconv.Atoi(rangeParts[0])
+					to, err2 := strconv.Atoi(rangeParts[1])
+					if err1 != nil || err2 != nil || from > to {
+						fmt.Fprintf(os.Stderr, "invalid range: %s\n", part)
+						os.Exit(1)
+					}
+					periods[0] = append(periods[0], [2]int{from, to})
+				}
+			} else if strings.Contains(*epochsFlag, "-") {
+				// Single range
+				rangeParts := strings.Split(*epochsFlag, "-")
+				if len(rangeParts) != 2 {
+					fmt.Fprintf(os.Stderr, "invalid range: %s\n", *epochsFlag)
+					os.Exit(1)
+				}
+				from, err1 := strconv.Atoi(rangeParts[0])
+				to, err2 := strconv.Atoi(rangeParts[1])
+				if err1 != nil || err2 != nil || from > to {
+					fmt.Fprintf(os.Stderr, "invalid range: %s\n", *epochsFlag)
+					os.Exit(1)
+				}
+				periods[0] = append(periods[0], [2]int{from, to})
+			}
+			if len(committees) != 1 {
+				fmt.Fprintln(os.Stderr, "Average mode with single range only supports one committee group at a time.")
+				os.Exit(1)
+			}
+			fmt.Printf("Period: %v\n", *epochsFlag)
+			fmt.Printf("Committee: %s\n", CommitteeGroupToIntervalString(committees[0]))
 		}
-		periods, err := ParseEpochPeriods(*epochsFlag)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "invalid epochs: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Periods: %v\n", *epochsFlag)
-		fmt.Printf("Committee: %s\n", CommitteeGroupToIntervalString(committees[0]))
 		fmt.Println("Base URL:", *baseURLFlag)
 
 		var periodLabels []string
