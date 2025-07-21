@@ -17,9 +17,10 @@ import (
 const DefaultRequestTimeout = 10 * time.Second
 
 const (
-	pathPublicKeys = "/api/v1/eth2/publicKeys"
-	pathKeystores  = "/eth/v1/keystores"
-	pathSign       = "/api/v1/eth2/sign/"
+	PathPublicKeys = "/api/v1/eth2/publicKeys"
+	PathKeystores  = "/eth/v1/keystores"
+	PathSign       = "/api/v1/eth2/sign/"
+	PathUpCheck    = "/upcheck"
 )
 
 type Web3Signer struct {
@@ -55,7 +56,7 @@ func (w3s *Web3Signer) ListKeys(ctx context.Context) (ListKeysResponse, error) {
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
-		Path(pathPublicKeys).
+		Path(PathPublicKeys).
 		ToJSON(&resp).
 		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
 		Fetch(ctx)
@@ -80,7 +81,7 @@ func (w3s *Web3Signer) ImportKeystore(ctx context.Context, req ImportKeystoreReq
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
-		Path(pathKeystores).
+		Path(PathKeystores).
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
@@ -106,7 +107,7 @@ func (w3s *Web3Signer) DeleteKeystore(ctx context.Context, req DeleteKeystoreReq
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
-		Path(pathKeystores).
+		Path(PathKeystores).
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
@@ -142,7 +143,7 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
-		Path(pathSign + sharePubKey.String()).
+		Path(PathSign + sharePubKey.String()).
 		BodyJSON(req).
 		Post().
 		Accept("application/json").
@@ -162,6 +163,17 @@ func (w3s *Web3Signer) handleWeb3SignerErr(err error, errResp string) error {
 	}
 
 	return HTTPResponseError{Err: err, Status: http.StatusInternalServerError, ErrText: errResp}
+}
+
+// UpCheck checks if Web3Signer is up and running
+func (w3s *Web3Signer) UpCheck(ctx context.Context) error {
+	err := requests.
+		URL(w3s.baseURL).
+		Client(w3s.httpClient).
+		Path(PathUpCheck).
+		CheckStatus(http.StatusOK).
+		Fetch(ctx)
+	return w3s.handleWeb3SignerErr(err)
 }
 
 // applyTLSConfig clones the existing transport and applies the TLS configuration to the HTTP client.
