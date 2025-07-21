@@ -53,3 +53,40 @@ func FetchStats(baseURL string, committees []int, epoch int, cookie string) (*AP
 	}
 	return &parsed.Data, nil
 }
+
+// FetchStatsRange fetches stats for a committee group over a range using from/to
+func FetchStatsRange(baseURL string, committees []int, from, to int, cookie string) (*APIResponse, error) {
+	committeesStrs := make([]string, len(committees))
+	for i, c := range committees {
+		committeesStrs[i] = strconv.Itoa(c)
+	}
+	url := fmt.Sprintf("%s?committees=%s&from=%d&to=%d", baseURL, strings.Join(committeesStrs, ","), from, to)
+
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	if cookie != "" {
+		req.Header.Set("Cookie", cookie)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http get: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("http status: %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+	var parsed struct {
+		Data APIResponse `json:"Data"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("json: %w", err)
+	}
+	return &parsed.Data, nil
+}

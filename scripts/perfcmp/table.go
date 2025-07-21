@@ -102,3 +102,89 @@ func ExportTableCSV(table []TableRow, committees [][][]int, filename string) err
 	}
 	return nil
 }
+
+// PrintAverageTable prints a single-row summary for a range
+func PrintAverageTable(responses []APIResponse, committees [][][]int, from, to int) {
+	headers := []string{"Range"}
+	intervals := make([]string, len(committees))
+	for i, group := range committees {
+		intervals[i] = CommitteeGroupToIntervalString(group)
+		headers = append(headers, fmt.Sprintf("%s Effectiveness", intervals[i]))
+		headers = append(headers, fmt.Sprintf("%s Correctness", intervals[i]))
+	}
+	if len(committees) == 2 {
+		headers = append(headers, "Effectiveness Diff", "Correctness Diff")
+	}
+
+	fmt.Println()
+	fmt.Println(strings.Join(headers, " | "))
+	fmt.Println(strings.Repeat("-", 16*len(headers)))
+	fields := []string{fmt.Sprintf("%d-%d", from, to)}
+	for _, stats := range responses {
+		fields = append(fields,
+			fmt.Sprintf("%.4f", stats.Effectiveness),
+			fmt.Sprintf("%.4f", stats.Correctness),
+		)
+	}
+	if len(responses) == 2 {
+		effDiff := responses[0].Effectiveness - responses[1].Effectiveness
+		corrDiff := responses[0].Correctness - responses[1].Correctness
+		fields = append(fields,
+			fmt.Sprintf("%.4f", effDiff),
+			fmt.Sprintf("%.4f", corrDiff),
+		)
+	}
+	fmt.Println(strings.Join(fields, " | "))
+}
+
+// ExportAverageCSV writes a single-row summary for a range to CSV
+func ExportAverageCSV(responses []APIResponse, committees [][][]int, from, to int, filename string) error {
+	headers := []string{"Range"}
+	intervals := make([]string, len(committees))
+	for i, group := range committees {
+		intervals[i] = CommitteeGroupToIntervalString(group)
+		headers = append(headers, fmt.Sprintf("%s Effectiveness", intervals[i]))
+		headers = append(headers, fmt.Sprintf("%s Correctness", intervals[i]))
+	}
+	if len(committees) == 2 {
+		headers = append(headers, "Effectiveness Diff", "Correctness Diff")
+	}
+
+	var file *os.File
+	var err error
+	if filename == "" {
+		file = os.Stdout
+	} else {
+		file, err = os.Create(filename)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+	}
+	w := csv.NewWriter(file)
+	defer w.Flush()
+
+	if err := w.Write(headers); err != nil {
+		return err
+	}
+
+	fields := []string{fmt.Sprintf("%d-%d", from, to)}
+	for _, stats := range responses {
+		fields = append(fields,
+			fmt.Sprintf("%.4f", stats.Effectiveness),
+			fmt.Sprintf("%.4f", stats.Correctness),
+		)
+	}
+	if len(responses) == 2 {
+		effDiff := responses[0].Effectiveness - responses[1].Effectiveness
+		corrDiff := responses[0].Correctness - responses[1].Correctness
+		fields = append(fields,
+			fmt.Sprintf("%.4f", effDiff),
+			fmt.Sprintf("%.4f", corrDiff),
+		)
+	}
+	if err := w.Write(fields); err != nil {
+		return err
+	}
+	return nil
+}
