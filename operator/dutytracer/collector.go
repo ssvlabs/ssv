@@ -864,59 +864,65 @@ func (c *Collector) checkAndPublishQuorum(msg *spectypes.PartialSignatureMessage
 			trace.publishedQuorums[partialMsg.ValidatorIndex] = make(map[spectypes.BeaconRole]string)
 		}
 
-		// Check attester role quorum
-		if attesterSigners := c.countUniqueSignersForValidatorAndRoot(trace.Attester, partialMsg.ValidatorIndex, partialMsg.SigningRoot); uint64(len(attesterSigners)) >= threshold {
-			signersKey := c.signersToKey(attesterSigners)
-			lastPublished := trace.publishedQuorums[partialMsg.ValidatorIndex][spectypes.BNRoleAttester]
+		// Check quorum for both attester and sync committee roles
+		c.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, msg, partialMsg, validatorPK, threshold)
+		c.checkAndPublishQuorumForRole(trace, spectypes.BNRoleSyncCommittee, msg, partialMsg, validatorPK, threshold)
+	}
+}
 
-			c.logger.Debug("DecidedListener: attester quorum check",
-				zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
-				zap.String("signers_key", signersKey),
-				zap.String("last_published", lastPublished),
-				zap.Bool("will_publish", lastPublished == ""))
+// checkAndPublishQuorumForRole checks if quorum is reached for a specific role and publishes if it's the first time
+func (c *Collector) checkAndPublishQuorumForRole(
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	msg *spectypes.PartialSignatureMessages,
+	partialMsg *spectypes.PartialSignatureMessage,
+	validatorPK spectypes.ValidatorPK,
+	threshold uint64,
+) {
+	var signerData []*model.SignerData
+	var roleLogName string
 
-			// Only publish the FIRST time quorum is reached, not for every signer set change
-			if lastPublished == "" {
-				trace.publishedQuorums[partialMsg.ValidatorIndex][spectypes.BNRoleAttester] = signersKey
+	switch role {
+	case spectypes.BNRoleAttester:
+		signerData = trace.Attester
+		roleLogName = "attester"
+	case spectypes.BNRoleSyncCommittee:
+		signerData = trace.SyncCommittee
+		roleLogName = "sync committee"
+	default:
+		return
+	}
 
-				decidedInfo := DecidedInfo{
-					PubKey:  validatorPK,
-					Slot:    msg.Slot,
-					Role:    spectypes.BNRoleAttester,
-					Signers: attesterSigners,
-				}
-				c.decidedListener.OnDecided(decidedInfo)
+	signers := c.countUniqueSignersForValidatorAndRoot(signerData, partialMsg.ValidatorIndex, partialMsg.SigningRoot)
+	if uint64(len(signers)) < threshold {
+		return
+	}
 
-				c.logger.Info("DecidedListener: published attester decision",
-					zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
-					zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
-					zap.Any("signers", attesterSigners))
-			}
+	signersKey := c.signersToKey(signers)
+	lastPublished := trace.publishedQuorums[partialMsg.ValidatorIndex][role]
+
+	c.logger.Debug("DecidedListener: "+roleLogName+" quorum check",
+		zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
+		zap.String("signers_key", signersKey),
+		zap.String("last_published", lastPublished),
+		zap.Bool("will_publish", lastPublished == ""))
+
+	// Only publish the FIRST time quorum is reached, not for every signer set change
+	if lastPublished == "" {
+		trace.publishedQuorums[partialMsg.ValidatorIndex][role] = signersKey
+
+		decidedInfo := DecidedInfo{
+			PubKey:  validatorPK,
+			Slot:    msg.Slot,
+			Role:    role,
+			Signers: signers,
 		}
+		c.decidedListener.OnDecided(decidedInfo)
 
-		// Check sync committee role quorum (if applicable)
-		if syncCommSigners := c.countUniqueSignersForValidatorAndRoot(trace.SyncCommittee, partialMsg.ValidatorIndex, partialMsg.SigningRoot); uint64(len(syncCommSigners)) >= threshold {
-			signersKey := c.signersToKey(syncCommSigners)
-			lastPublished := trace.publishedQuorums[partialMsg.ValidatorIndex][spectypes.BNRoleSyncCommittee]
-
-			// Only publish the FIRST time quorum is reached, not for every signer set change
-			if lastPublished == "" {
-				trace.publishedQuorums[partialMsg.ValidatorIndex][spectypes.BNRoleSyncCommittee] = signersKey
-
-				decidedInfo := DecidedInfo{
-					PubKey:  validatorPK,
-					Slot:    msg.Slot,
-					Role:    spectypes.BNRoleSyncCommittee,
-					Signers: syncCommSigners,
-				}
-				c.decidedListener.OnDecided(decidedInfo)
-
-				c.logger.Info("DecidedListener: published sync committee decision",
-					zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
-					zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
-					zap.Any("signers", syncCommSigners))
-			}
-		}
+		c.logger.Info("DecidedListener: published "+roleLogName+" decision",
+			zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
+			zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
+			zap.Any("signers", signers))
 	}
 }
 
