@@ -49,11 +49,11 @@ func TestTimeoutForRound(t *testing.T) {
 }
 
 func setupTestBeaconConfig() *networkconfig.Beacon {
-	config := networkconfig.TestNetwork.Beacon
+	config := *networkconfig.TestNetwork.Beacon
 	config.SlotDuration = 120 * time.Millisecond
 	config.GenesisTime = time.Now()
 
-	return config
+	return &config
 }
 
 func setupTimer(
