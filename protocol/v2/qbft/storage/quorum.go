@@ -51,6 +51,17 @@ func (q *Quorum) validateOperators() error {
 		return fmt.Errorf("invalid signers/committee size: %d/%d", len(q.Signers), len(q.Committee))
 	}
 
+	committeeSet := make(map[spectypes.OperatorID]struct{})
+	for _, id := range q.Committee {
+		committeeSet[id] = struct{}{}
+	}
+
+	for _, id := range q.Signers {
+		if _, ok := committeeSet[id]; !ok {
+			return fmt.Errorf("signer %d is not in committee", id)
+		}
+	}
+
 	return nil
 }
 
