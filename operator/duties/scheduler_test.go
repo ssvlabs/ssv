@@ -22,12 +22,16 @@ import (
 )
 
 const (
-	baseDuration               = 1 * time.Millisecond
-	slotDuration               = 15 * baseDuration
-	timeout                    = 20 * baseDuration
-	noActionTimeout            = 7 * baseDuration
-	clockError                 = baseDuration
-	testBlockPropagateDelay    = baseDuration
+	baseDuration            = 1 * time.Millisecond
+	slotDuration            = 15 * baseDuration
+	timeout                 = 20 * baseDuration
+	noActionTimeout         = 7 * baseDuration
+	clockError              = baseDuration
+	testBlockPropagateDelay = baseDuration
+	// testSlotTickerTriggerDelay is used to wait for the slot ticker to be triggered
+	// in the attester, sync committee, and cluster handlers.
+	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
+	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
 	testSlotTickerTriggerDelay = baseDuration
 	testEpochsPerSCPeriod      = 4
 	testSlotsPerEpoch          = 12

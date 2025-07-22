@@ -156,7 +156,7 @@ func (s *SSV) ForkAtEpoch(epoch phase0.Epoch) SSVFork {
 	}
 
 	if currentFork == nil {
-		panic(fmt.Sprintf("misconfiguration: no forks matching epoch %d: ", epoch))
+		panic(fmt.Sprintf("misconfiguration: no forks matching epoch %d", epoch))
 	}
 
 	return *currentFork
