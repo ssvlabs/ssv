@@ -2,6 +2,7 @@ package ssv
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -126,36 +127,29 @@ func NewProposerChecker(
 }
 
 func (v *proposerChecker) CheckValue(value []byte) error {
-	cd := &spectypes.ValidatorConsensusData{}
-	if err := cd.Decode(value); err != nil {
-		return errors.Wrap(err, "failed decoding consensus data")
-	}
-	if err := cd.Validate(); err != nil {
-		return errors.Wrap(err, "invalid value")
+	cd, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex)
+	if err != nil {
+		return err
 	}
 
-	if err := dutyValueCheck(&cd.Duty, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex); err != nil {
-		return errors.Wrap(err, "duty invalid")
+	var block interface {
+		Slot() (phase0.Slot, error)
 	}
 
 	if blockData, _, err := cd.GetBlindedBlockData(); err == nil {
-		slot, err := blockData.Slot()
-		if err != nil {
-			return errors.Wrap(err, "failed to get slot from blinded block data")
-		}
-
-		return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
-	}
-	if blockData, _, err := cd.GetBlockData(); err == nil {
-		slot, err := blockData.Slot()
-		if err != nil {
-			return errors.Wrap(err, "failed to get slot from block data")
-		}
-
-		return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
+		block = blockData
+	} else if blockData, _, err := cd.GetBlockData(); err == nil {
+		block = blockData
+	} else {
+		return errors.New("no block data")
 	}
 
-	return errors.New("no block data")
+	slot, err := block.Slot()
+	if err != nil {
+		return errors.Wrap(err, "failed to get slot from block data")
+	}
+
+	return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
 }
 
 type aggregatorChecker struct {
@@ -177,19 +171,8 @@ func NewAggregatorChecker(
 }
 
 func (v *aggregatorChecker) CheckValue(value []byte) error {
-	cd := &spectypes.ValidatorConsensusData{}
-	if err := cd.Decode(value); err != nil {
-		return errors.Wrap(err, "failed decoding consensus data")
-	}
-	if err := cd.Validate(); err != nil {
-		return errors.Wrap(err, "invalid value")
-	}
-
-	if err := dutyValueCheck(&cd.Duty, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex); err != nil {
-		return errors.Wrap(err, "duty invalid")
-	}
-
-	return nil
+	_, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex)
+	return err
 }
 
 type syncCommitteeContributionChecker struct {
@@ -211,43 +194,40 @@ func NewSyncCommitteeContributionChecker(
 }
 
 func (v *syncCommitteeContributionChecker) CheckValue(value []byte) error {
-	cd := &spectypes.ValidatorConsensusData{}
-	if err := cd.Decode(value); err != nil {
-		return errors.Wrap(err, "failed decoding consensus data")
-	}
-	if err := cd.Validate(); err != nil {
-		return errors.Wrap(err, "invalid value")
-	}
-
-	if err := dutyValueCheck(&cd.Duty, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex); err != nil {
-		return errors.Wrap(err, "duty invalid")
-	}
-
-	return nil
+	_, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex)
+	return err
 }
 
-func dutyValueCheck(
-	duty *spectypes.ValidatorDuty,
+func checkValidatorConsensusData(
+	value []byte,
 	beaconConfig networkconfig.Beacon,
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) error {
-	if beaconConfig.EstimatedEpochAtSlot(duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return errors.New("duty epoch is into far future")
+) (*spectypes.ValidatorConsensusData, error) {
+	cd := &spectypes.ValidatorConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
+	}
+	if err := cd.Validate(); err != nil {
+		return cd, fmt.Errorf("invalid value: %w", err)
 	}
 
-	if expectedType != duty.Type {
-		return errors.New("wrong beacon role type")
+	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
+		return cd, fmt.Errorf("duty epoch is in the far future")
 	}
 
-	if !bytes.Equal(validatorPK[:], duty.PubKey[:]) {
-		return errors.New("wrong validator pk")
+	if expectedType != cd.Duty.Type {
+		return cd, fmt.Errorf("wrong beacon role type")
 	}
 
-	if validatorIndex != duty.ValidatorIndex {
-		return errors.New("wrong validator index")
+	if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
+		return cd, fmt.Errorf("wrong validator pk")
 	}
 
-	return nil
+	if validatorIndex != cd.Duty.ValidatorIndex {
+		return cd, fmt.Errorf("wrong validator index")
+	}
+
+	return cd, nil
 }

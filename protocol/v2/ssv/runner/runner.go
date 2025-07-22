@@ -391,3 +391,7 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	}
 	return nil
 }
+
+type nopValueChecker struct{}
+
+func (nopValueChecker) CheckValue(value []byte) error { return nil }

@@ -34,7 +34,8 @@ type Instance struct {
 
 	forceStop  bool
 	StartValue []byte
-	spData     *ssvtypes.SlashingProtectionData
+	// spData is used for spectypes.BeaconVote, it contains source and target epochs from the duty encoded in StartValue
+	spData *ssvtypes.SlashingProtectionData
 
 	metrics *metrics
 }

@@ -1163,7 +1163,7 @@ func SetupRunners(
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.GetDomainType(),
-			ValueChecker: nil, // is set per role type
+			ValueChecker: valueChecker, // is set per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
@@ -1172,7 +1172,6 @@ func SetupRunners(
 			Timer:       roundtimer.New(ctx, options.NetworkConfig, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
-		config.ValueChecker = valueChecker
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.GetDomainType(), share.ValidatorPubKey[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], operator, config, options.OperatorSigner, options.FullNode)

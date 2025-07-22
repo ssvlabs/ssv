@@ -36,7 +36,6 @@ type ValidatorRegistrationRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       ssv.ValueChecker
 
 	gasLimit uint64
 }
@@ -291,7 +290,7 @@ func (r *ValidatorRegistrationRunner) GetState() *State {
 }
 
 func (r *ValidatorRegistrationRunner) GetValChecker() ssv.ValueChecker {
-	return r.valCheck
+	return nopValueChecker{}
 }
 
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
