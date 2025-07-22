@@ -157,7 +157,12 @@ func FetchEpochsBatchGroups(baseURL string, groups []string, from, to int, cooki
 	}
 	result := make(map[string]map[int]APIResponse)
 	for _, group := range groups {
-		url := fmt.Sprintf("%s?committees=%s&from=%d&to=%d", batchURL, group, from, to)
+		var url string
+		if strings.EqualFold(group, "all") {
+			url = fmt.Sprintf("%s?from=%d&to=%d", batchURL, from, to)
+		} else {
+			url = fmt.Sprintf("%s?committees=%s&from=%d&to=%d", batchURL, group, from, to)
+		}
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
@@ -201,7 +206,12 @@ func FetchEpochsBatchGroups(baseURL string, groups []string, from, to int, cooki
 func FetchAverageGroups(baseURL string, groups []string, from, to int, cookie string) (map[string]APIResponse, []string, error) {
 	result := make(map[string]APIResponse)
 	for _, group := range groups {
-		url := fmt.Sprintf("%s?committees=%s&from=%d&to=%d", baseURL, group, from, to)
+		var url string
+		if strings.EqualFold(group, "all") {
+			url = fmt.Sprintf("%s?from=%d&to=%d", baseURL, from, to)
+		} else {
+			url = fmt.Sprintf("%s?committees=%s&from=%d&to=%d", baseURL, group, from, to)
+		}
 		client := &http.Client{}
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
