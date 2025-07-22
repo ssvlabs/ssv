@@ -143,7 +143,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.beaconConfig.EpochFirstSlot(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.beaconConfig.FirstSlotAtEpoch(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
 	waitForSlotN(scheduler.beaconConfig, firstSlotOfNextPeriod)
 	ticker.Send(firstSlotOfNextPeriod)
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)

@@ -82,11 +82,6 @@ func (b *Beacon) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	return uint64(slot)%b.SlotsPerEpoch == 0
 }
 
-// EpochFirstSlot returns the beacon node first slot in epoch
-func (b *Beacon) EpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
-}
-
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
 func (b *Beacon) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
 	return uint64(epoch) / b.EpochsPerSyncCommitteePeriod
@@ -102,7 +97,7 @@ func (b *Beacon) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 	lastEpoch := b.FirstEpochOfSyncPeriod(period+1) - 1
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
-	return b.EpochFirstSlot(lastEpoch+1) - 2
+	return b.FirstSlotAtEpoch(lastEpoch+1) - 2
 }
 
 func (b *Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
