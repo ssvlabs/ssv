@@ -834,7 +834,7 @@ func (c *Collector) checkAndPublishQuorum(msg *spectypes.PartialSignatureMessage
 		return
 	}
 
-	threshold := uint64(len(committee.Operators))*2/3 + 1 // Simple majority
+	threshold := uint64(len(committee.Operators))*2/3 + 1
 
 	// Track published quorums to avoid duplicates (validator -> role -> signers hash)
 	if trace.publishedQuorums == nil {
@@ -901,7 +901,8 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	signersKey := c.signersToKey(signers)
 	lastPublished := trace.publishedQuorums[partialMsg.ValidatorIndex][role]
 
-	c.logger.Debug("DecidedListener: "+roleLogName+" quorum check",
+	c.logger.Debug("DecidedListener: quorum check",
+		zap.String("role", roleLogName),
 		zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
 		zap.String("signers_key", signersKey),
 		zap.String("last_published", lastPublished),
@@ -919,7 +920,8 @@ func (c *Collector) checkAndPublishQuorumForRole(
 		}
 		c.decidedListener.OnDecided(decidedInfo)
 
-		c.logger.Info("DecidedListener: published "+roleLogName+" decision",
+		c.logger.Info("DecidedListener: data sent to listener feed",
+			zap.String("role", roleLogName),
 			zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
 			zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
 			zap.Any("signers", signers))
