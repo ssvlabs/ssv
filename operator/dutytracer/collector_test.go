@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -1290,6 +1292,193 @@ func TestCollector_GetCommitteeID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, committeeID, spectypes.CommitteeID{1})
 	require.Equal(t, index, phase0.ValidatorIndex(1))
+}
+
+func TestCollector_PublishDecidedsToListener(t *testing.T) {
+	logger := zap.NewNop()
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	const (
+		slot      = phase0.Slot(100)
+		vIndex1   = phase0.ValidatorIndex(10)
+		vIndex2   = phase0.ValidatorIndex(20)
+		operator1 = spectypes.OperatorID(1)
+		operator2 = spectypes.OperatorID(2)
+		operator3 = spectypes.OperatorID(3)
+		operator4 = spectypes.OperatorID(4)
+	)
+
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+
+	committee := &storage.Committee{
+		ID:        committeeID,
+		Operators: []spectypes.OperatorID{operator1, operator2, operator3, operator4}, // 4 operators = need 3 for quorum
+	}
+
+	var validatorPK1 spectypes.ValidatorPK
+	copy(validatorPK1[:], []byte("validator_pk_1_padded_to_48_bytes_exactly_here"))
+	var validatorPK2 spectypes.ValidatorPK
+	copy(validatorPK2[:], []byte("validator_pk_2_padded_to_48_bytes_exactly_here"))
+
+	share1 := &ssvtypes.SSVShare{}
+	share1.ValidatorPubKey = validatorPK1
+	share2 := &ssvtypes.SSVShare{}
+	share2.ValidatorPubKey = validatorPK2
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+	validators.EXPECT().ValidatorByIndex(vIndex1).Return(share1, true).AnyTimes()
+	validators.EXPECT().ValidatorByIndex(vIndex2).Return(share2, true).AnyTimes()
+
+	listener := &mockDecidedListener{}
+	dutyStore := new(mockDutyTraceStore)
+	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, listener)
+
+	signingRoot := [32]byte{1, 2, 3, 4, 5}
+	fakeSig := [96]byte{}
+
+	t.Run("first validator reaches quorum", func(t *testing.T) {
+		listener.Reset()
+
+		// Send partial signatures from 3 operators for validator1 (reaches quorum)
+		// Send each operator's signature separately
+		operators := []spectypes.OperatorID{operator1, operator2, operator3}
+		for _, op := range operators {
+			partSigMessages := &spectypes.PartialSignatureMessages{
+				Slot: slot,
+				Messages: []*spectypes.PartialSignatureMessage{
+					{ValidatorIndex: vIndex1, Signer: op, PartialSignature: fakeSig[:], SigningRoot: signingRoot},
+				},
+			}
+
+			partSigMessagesData, err := partSigMessages.Encode()
+			require.NoError(t, err)
+
+			partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
+			err = collector.Collect(t.Context(), partSigMsg, dummyVerify)
+			require.NoError(t, err)
+		}
+
+		// Verify listener was called once (after reaching quorum)
+		calls := listener.GetCalls()
+		require.Len(t, calls, 1)
+
+		// Verify the call has correct data
+		call := calls[0]
+		assert.Equal(t, validatorPK1, call.PubKey)
+		assert.Equal(t, slot, call.Slot)
+		assert.Equal(t, spectypes.BNRoleAttester, call.Role)
+		assert.ElementsMatch(t, []spectypes.OperatorID{operator1, operator2, operator3}, call.Signers)
+	})
+
+	t.Run("additional signers don't trigger duplicate publication", func(t *testing.T) {
+		listener.Reset()
+
+		// Send signature from 4th operator for same validator1 (should not trigger new publication)
+		partSigMessages := &spectypes.PartialSignatureMessages{
+			Slot: slot,
+			Messages: []*spectypes.PartialSignatureMessage{
+				{ValidatorIndex: vIndex1, Signer: operator4, PartialSignature: fakeSig[:], SigningRoot: signingRoot},
+			},
+		}
+
+		partSigMessagesData, err := partSigMessages.Encode()
+		require.NoError(t, err)
+
+		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
+		err = collector.Collect(t.Context(), partSigMsg, dummyVerify)
+		require.NoError(t, err)
+
+		// Verify listener was NOT called (deduplication working)
+		calls := listener.GetCalls()
+		require.Len(t, calls, 0)
+	})
+
+	t.Run("second validator reaches quorum", func(t *testing.T) {
+		listener.Reset()
+
+		// Send partial signatures from 3 operators for validator2 (reaches quorum)
+		operators := []spectypes.OperatorID{operator1, operator2, operator3}
+		for _, op := range operators {
+			partSigMessages := &spectypes.PartialSignatureMessages{
+				Slot: slot,
+				Messages: []*spectypes.PartialSignatureMessage{
+					{ValidatorIndex: vIndex2, Signer: op, PartialSignature: fakeSig[:], SigningRoot: signingRoot},
+				},
+			}
+
+			partSigMessagesData, err := partSigMessages.Encode()
+			require.NoError(t, err)
+
+			partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
+			err = collector.Collect(t.Context(), partSigMsg, dummyVerify)
+			require.NoError(t, err)
+		}
+
+		// Verify listener was called once for the new validator
+		calls := listener.GetCalls()
+		require.Len(t, calls, 1)
+
+		// Verify the call has correct data for validator2
+		call := calls[0]
+		assert.Equal(t, validatorPK2, call.PubKey)
+		assert.Equal(t, slot, call.Slot)
+		assert.Equal(t, spectypes.BNRoleAttester, call.Role)
+		assert.ElementsMatch(t, []spectypes.OperatorID{operator1, operator2, operator3}, call.Signers)
+	})
+
+	t.Run("insufficient signers don't trigger publication", func(t *testing.T) {
+		listener.Reset()
+
+		// Send partial signatures from only 2 operators for a new validator (below quorum)
+		operators := []spectypes.OperatorID{operator1, operator2}
+		for _, op := range operators {
+			partSigMessages := &spectypes.PartialSignatureMessages{
+				Slot: slot + 1, // Different slot to avoid conflicts
+				Messages: []*spectypes.PartialSignatureMessage{
+					{ValidatorIndex: vIndex1, Signer: op, PartialSignature: fakeSig[:], SigningRoot: signingRoot},
+				},
+			}
+
+			partSigMessagesData, err := partSigMessages.Encode()
+			require.NoError(t, err)
+
+			partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
+			err = collector.Collect(t.Context(), partSigMsg, dummyVerify)
+			require.NoError(t, err)
+		}
+
+		// Verify listener was NOT called (insufficient quorum)
+		calls := listener.GetCalls()
+		require.Len(t, calls, 0)
+	})
+}
+
+// mockDecidedListener captures calls to OnDecided for testing
+type mockDecidedListener struct {
+	calls []DecidedInfo
+	mu    sync.Mutex
+}
+
+func (m *mockDecidedListener) OnDecided(msg DecidedInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = append(m.calls, msg)
+}
+
+func (m *mockDecidedListener) GetCalls() []DecidedInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]DecidedInfo{}, m.calls...)
+}
+
+func (m *mockDecidedListener) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.calls = nil
 }
 
 type mockDutyTraceStore struct {
