@@ -290,7 +290,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 		}
 	}
 
-	for _, topic := range topics {
+	for topic := range topicSet {
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			return err
 		}

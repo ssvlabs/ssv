@@ -71,7 +71,7 @@ type marshaledConfig struct {
 	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 	GasLimit36Epoch         phase0.Epoch      `json:"GasLimit36Epoch,omitempty" yaml:"GasLimit36Epoch,omitempty"`
-	Forks                   []SSVFork         `json:"forks,omitempty" yaml:"Forks,omitempty"`
+	Forks                   []SSVFork         `json:"Forks,omitempty" yaml:"Forks,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
@@ -155,12 +155,13 @@ func (s *SSVConfig) SSVForkAtEpoch(epoch phase0.Epoch) ForkName {
 
 	for _, fork := range s.Forks {
 		if epoch >= fork.Epoch && (currentFork == nil || fork.Epoch > currentFork.Epoch) {
+			fork := fork
 			currentFork = &fork
 		}
 	}
 
 	if currentFork == nil {
-		panic(fmt.Sprintf("misconfiguration: no forks matching epoch %d: ", epoch))
+		panic(fmt.Sprintf("misconfiguration: no forks matching epoch %d", epoch))
 	}
 
 	return currentFork.Name

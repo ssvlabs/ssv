@@ -57,17 +57,14 @@ func GetTopicBaseName(topicName string) string {
 	return strings.TrimPrefix(topicName, topicPrefix+".")
 }
 
-// CommitteeSubnetAlan returns the subnet for the given committee
+// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
 func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
 	return subnet.Uint64()
 }
 
+// CommitteeSubnet returns the subnet for the given committee. It requires committee to be valid.
 func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
-	if len(committee) < 4 {
-		panic(fmt.Sprintf("committee is too short: %v", committee))
-	}
-
 	// TODO: consider caching the calculations (e.g. move them to share similarly to committee ID)
 	var lowestHash *big.Int
 	var operatorBytes [8]byte
