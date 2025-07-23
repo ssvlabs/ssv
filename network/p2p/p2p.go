@@ -94,8 +94,8 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeCommitteesByCID       *hashmap.Map[string, validatorStatus]
-	activeCommitteesByCommittee *hashmap.Map[string, validatorStatus]
+	activeCommitteesByCID *hashmap.Map[string, validatorStatus]
+	activeCommittees      *hashmap.Map[string, validatorStatus]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
@@ -129,22 +129,22 @@ func New(
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	n := &p2pNetwork{
-		parentCtx:                   cfg.Ctx,
-		ctx:                         ctx,
-		cancel:                      cancel,
-		logger:                      logger.Named(logging.NameP2PNetwork),
-		cfg:                         cfg,
-		msgRouter:                   cfg.Router,
-		msgValidator:                cfg.MessageValidator,
-		state:                       stateClosed,
-		activeCommitteesByCID:       hashmap.New[string, validatorStatus](),
-		activeCommitteesByCommittee: hashmap.New[string, validatorStatus](),
-		nodeStorage:                 cfg.NodeStorage,
-		operatorPKHashToPKCache:     hashmap.New[string, []byte](),
-		operatorSigner:              cfg.OperatorSigner,
-		operatorDataStore:           cfg.OperatorDataStore,
-		discoveredPeersPool:         ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
-		trimmedRecently:             ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
+		parentCtx:               cfg.Ctx,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		logger:                  logger.Named(logging.NameP2PNetwork),
+		cfg:                     cfg,
+		msgRouter:               cfg.Router,
+		msgValidator:            cfg.MessageValidator,
+		state:                   stateClosed,
+		activeCommitteesByCID:   hashmap.New[string, validatorStatus](),
+		activeCommittees:        hashmap.New[string, validatorStatus](),
+		nodeStorage:             cfg.NodeStorage,
+		operatorPKHashToPKCache: hashmap.New[string, []byte](),
+		operatorSigner:          cfg.OperatorSigner,
+		operatorDataStore:       cfg.OperatorDataStore,
+		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
+		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err

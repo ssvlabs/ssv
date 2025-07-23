@@ -148,7 +148,7 @@ func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	updatedSubnets := n.persistentSubnets
 
-	n.activeCommitteesByCommittee.Range(func(encodedCommittee string, status validatorStatus) bool {
+	n.activeCommittees.Range(func(encodedCommittee string, status validatorStatus) bool {
 		committee := decodeCommittee(encodedCommittee)
 		subnet := commons.CommitteeSubnet(committee)
 		updatedSubnets.Set(subnet)
@@ -189,7 +189,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID, committee []spectypes.OperatorID) error {
 	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid), fields.OperatorIDs(committee))
 
-	status, found := n.activeCommitteesByCommittee.GetOrSet(encodeCommittee(committee), validatorStatusSubscribing)
+	status, found := n.activeCommittees.GetOrSet(encodeCommittee(committee), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
@@ -219,7 +219,7 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID, committee []s
 		}
 	}
 
-	n.activeCommitteesByCommittee.Set(encodeCommittee(committee), validatorStatusSubscribed)
+	n.activeCommittees.Set(encodeCommittee(committee), validatorStatusSubscribed)
 	if n.cfg.NetworkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
 		n.activeCommitteesByCID.Set(string(cid[:]), validatorStatusSubscribed)
 	}
@@ -296,7 +296,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 		}
 	}
 
-	n.activeCommitteesByCommittee.Delete(encodeCommittee(share.OperatorIDs()))
+	n.activeCommittees.Delete(encodeCommittee(share.OperatorIDs()))
 	if n.cfg.NetworkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
 		n.activeCommitteesByCID.Delete(string(cmtid[:]))
 	}

@@ -11,6 +11,34 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+func BenchmarkCommitteeSubnet(b *testing.B) {
+	committee := []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		CommitteeSubnet(committee)
+	}
+}
+
+func BenchmarkCommitteeSubnetAlan(b *testing.B) {
+	cid := [32]byte{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		CommitteeSubnetAlan(cid)
+	}
+}
+
+func BenchmarkCommitteeSubnetNoAllocAlan(b *testing.B) {
+	var out big.Int
+	cid := [32]byte{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		CommitteeSubnetNoAllocAlan(&out, cid)
+	}
+}
+
 func TestCommitteeSubnet(t *testing.T) {
 	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
 

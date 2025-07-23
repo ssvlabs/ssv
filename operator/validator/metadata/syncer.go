@@ -111,8 +111,7 @@ func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, erro
 
 	// Load non-liquidated shares.
 	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated(), func(share *ssvtypes.SSVShare) bool {
-		networkcommons.CommitteeSubnetNoAlloc(subnetsBuf, share.OperatorIDs())
-		if ownSubnets.IsSet(subnetsBuf.Uint64()) {
+		if ownSubnets.IsSet(networkcommons.CommitteeSubnet(share.OperatorIDs())) {
 			return true
 		}
 
@@ -303,8 +302,7 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.
 			return true
 		}
 
-		networkcommons.CommitteeSubnetNoAlloc(subnetsBuf, share.OperatorIDs())
-		subnet := subnetsBuf.Uint64()
+		subnet := networkcommons.CommitteeSubnet(share.OperatorIDs())
 		if !ownSubnets.IsSet(subnet) {
 			if s.netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
 				return true
@@ -366,8 +364,7 @@ func (s *Syncer) selfSubnets(buf *big.Int) networkcommons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
-		networkcommons.CommitteeSubnetNoAlloc(localBuf, v.OperatorIDs())
-		mySubnets.Set(localBuf.Uint64())
+		mySubnets.Set(networkcommons.CommitteeSubnet(v.OperatorIDs()))
 
 		if s.netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
 			networkcommons.CommitteeSubnetNoAllocAlan(localBuf, v.CommitteeID())
