@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -94,7 +95,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, beaconNode, commons.ZeroSubnets)
+			syncer := NewSyncer(logger, networkconfig.TestNetwork, sharesStorage, validatorStore, beaconNode, commons.ZeroSubnets)
 			_, err := syncer.Sync(t.Context(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
@@ -638,6 +639,7 @@ func TestWithUpdateInterval(t *testing.T) {
 	// Create a Syncer with the WithSyncInterval option
 	syncer := NewSyncer(
 		logger,
+		networkconfig.TestNetwork,
 		mockShareStorage,
 		mockValidatorStore,
 		mockBeaconNode,

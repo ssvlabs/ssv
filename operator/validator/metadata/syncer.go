@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -45,6 +46,7 @@ const (
 
 type Syncer struct {
 	logger            *zap.Logger
+	netCfg            *networkconfig.NetworkConfig
 	shareStorage      shareStorage
 	validatorStore    selfValidatorStore
 	beaconNode        beacon.BeaconNode
@@ -66,6 +68,7 @@ type selfValidatorStore interface {
 
 func NewSyncer(
 	logger *zap.Logger,
+	netCfg *networkconfig.NetworkConfig,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
 	beaconNode beacon.BeaconNode,
@@ -74,6 +77,7 @@ func NewSyncer(
 ) *Syncer {
 	u := &Syncer{
 		logger:            logger.Named(logging.NameShareMetadataSyncer),
+		netCfg:            netCfg,
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
 		beaconNode:        beaconNode,
@@ -107,9 +111,17 @@ func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, erro
 
 	// Load non-liquidated shares.
 	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated(), func(share *ssvtypes.SSVShare) bool {
-		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
-		subnet := subnetsBuf.Uint64()
-		return ownSubnets.IsSet(subnet)
+		networkcommons.CommitteeSubnetNoAlloc(subnetsBuf, share.OperatorIDs())
+		if ownSubnets.IsSet(subnetsBuf.Uint64()) {
+			return true
+		}
+
+		if s.netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+			networkcommons.CommitteeSubnetNoAllocAlan(subnetsBuf, share.CommitteeID())
+			return ownSubnets.IsSet(subnetsBuf.Uint64())
+		}
+
+		return false
 	})
 	if len(shares) == 0 {
 		s.logger.Info("could not find non-liquidated own subnets validator shares on initial metadata retrieval")
@@ -291,10 +303,18 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.
 			return true
 		}
 
-		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
+		networkcommons.CommitteeSubnetNoAlloc(subnetsBuf, share.OperatorIDs())
 		subnet := subnetsBuf.Uint64()
 		if !ownSubnets.IsSet(subnet) {
-			return true
+			if s.netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
+				return true
+			}
+
+			networkcommons.CommitteeSubnetNoAllocAlan(subnetsBuf, share.CommitteeID())
+			alanSubnet := subnetsBuf.Uint64()
+			if !ownSubnets.IsSet(alanSubnet) {
+				return true
+			}
 		}
 
 		// Fetch new and stale shares only.
@@ -346,8 +366,13 @@ func (s *Syncer) selfSubnets(buf *big.Int) networkcommons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
-		networkcommons.SetCommitteeSubnet(localBuf, v.CommitteeID())
+		networkcommons.CommitteeSubnetNoAlloc(localBuf, v.OperatorIDs())
 		mySubnets.Set(localBuf.Uint64())
+
+		if s.netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+			networkcommons.CommitteeSubnetNoAllocAlan(localBuf, v.CommitteeID())
+			mySubnets.Set(localBuf.Uint64())
+		}
 	}
 
 	return mySubnets

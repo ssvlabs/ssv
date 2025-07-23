@@ -65,6 +65,18 @@ func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
 
 // CommitteeSubnet returns the subnet for the given committee. It requires committee to be valid.
 func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
+	subnet := new(big.Int)
+	CommitteeSubnetNoAlloc(subnet, committee)
+	return subnet.Uint64()
+}
+
+// CommitteeSubnetNoAllocAlan returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
+func CommitteeSubnetNoAllocAlan(bigInt *big.Int, cid spectypes.CommitteeID) {
+	bigInt.SetBytes(cid[:])
+	bigInt.Mod(bigInt, bigIntSubnetsCount)
+}
+
+func CommitteeSubnetNoAlloc(bigInt *big.Int, committee []spectypes.OperatorID) {
 	// TODO: consider caching the calculations (e.g. move them to share similarly to committee ID)
 	var lowestHash *big.Int
 	var operatorBytes [8]byte
@@ -79,14 +91,7 @@ func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 		}
 	}
 
-	subnet := new(big.Int).Mod(lowestHash, bigIntSubnetsCount)
-	return subnet.Uint64()
-}
-
-// SetCommitteeSubnet returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
-func SetCommitteeSubnet(bigInt *big.Int, cid spectypes.CommitteeID) {
-	bigInt.SetBytes(cid[:])
-	bigInt.Mod(bigInt, bigIntSubnetsCount)
+	bigInt.Mod(lowestHash, bigIntSubnetsCount)
 }
 
 // Topics returns the available topics for this fork.

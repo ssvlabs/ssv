@@ -14,7 +14,7 @@ import (
 func TestCommitteeSubnet(t *testing.T) {
 	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
 
-	bigInst := new(big.Int)
+	bigInt := new(big.Int)
 	for i := 0; i < 2*SubnetsCount; i++ {
 		var cid spectypes.CommitteeID
 		if _, err := crand.Read(cid[:]); err != nil {
@@ -24,9 +24,9 @@ func TestCommitteeSubnet(t *testing.T) {
 		// Get result from CommitteeSubnetAlan
 		expected := CommitteeSubnetAlan(cid)
 
-		// Get result from SetCommitteeSubnet
-		SetCommitteeSubnet(bigInst, cid)
-		actual := bigInst.Uint64()
+		// Get result from CommitteeSubnetNoAllocAlan
+		CommitteeSubnetNoAllocAlan(bigInt, cid)
+		actual := bigInt.Uint64()
 
 		require.Equal(t, expected, actual)
 	}
