@@ -167,13 +167,15 @@ func (w3s *Web3Signer) handleWeb3SignerErr(err error, errResp string) error {
 
 // UpCheck checks if Web3Signer is up and running
 func (w3s *Web3Signer) UpCheck(ctx context.Context) error {
+	var errResp string
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
 		Path(PathUpCheck).
 		CheckStatus(http.StatusOK).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
 		Fetch(ctx)
-	return w3s.handleWeb3SignerErr(err)
+	return w3s.handleWeb3SignerErr(err, errResp)
 }
 
 // applyTLSConfig clones the existing transport and applies the TLS configuration to the HTTP client.
