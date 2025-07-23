@@ -32,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -50,7 +51,7 @@ type CommitteeRunner struct {
 	beacon              beacon.BeaconNode
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
-	valCheck            specqbft.ProposedValueCheckF
+	valCheck            ssv.ValueChecker
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
 	measurements        measurementsStore
@@ -66,7 +67,7 @@ func NewCommitteeRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	dutyGuard CommitteeDutyGuard,
 	doppelgangerHandler DoppelgangerProvider,
 ) (Runner, error) {
@@ -151,7 +152,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       specqbft.ProposedValueCheckF
+		valCheck       ssv.ValueChecker
 	}
 
 	// Create object and marshal
@@ -176,7 +177,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       specqbft.ProposedValueCheckF
+		valCheck       ssv.ValueChecker
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -203,7 +204,7 @@ func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return cr.beacon
 }
 
-func (cr *CommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (cr *CommitteeRunner) GetValChecker() ssv.ValueChecker {
 	return cr.valCheck
 }
 
@@ -1019,7 +1020,12 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Target:    attData.Target,
 	}
 
-	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
+	spData := &ssvtypes.SlashingProtectionData{
+		SourceEpoch: attData.Source.Epoch,
+		TargetEpoch: attData.Target.Epoch,
+	}
+
+	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote, spData); err != nil {
 		return observability.Errorf(span, "failed to start new duty runner instance: %w", err)
 	}
 
