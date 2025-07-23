@@ -13,6 +13,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
@@ -119,17 +120,17 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	currentBlock, err := ec.client.BlockNumber(ctx)
+	finalizedHeader, err := ec.client.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_blockNumber"),
 			zap.Error(err))
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
-	if currentBlock < ec.followDistance {
+	if finalizedHeader.Number.Uint64() < ec.followDistance {
 		return nil, nil, ErrNothingToSync
 	}
-	toBlock := currentBlock - ec.followDistance
+	toBlock := finalizedHeader.Number.Uint64() - ec.followDistance
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}
@@ -490,6 +491,23 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 			toBlock := header.Number.Uint64() - ec.followDistance
 			if toBlock < fromBlock {
 				continue
+			}
+
+			finalizedHeader, err := ec.client.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
+			if err != nil {
+				ec.logger.Error(elResponseErrMsg,
+					zap.String("method", "eth_getBlockByNumber"),
+					zap.Error(err))
+				return fromBlock, fmt.Errorf("get finalized header: %w", err)
+			}
+
+			if finalizedHeader.Number.Uint64() < toBlock {
+				ec.logger.Info("finalized block is behind, using it as toBlock", zap.Uint64("finalized_block", finalizedHeader.Number.Uint64()), zap.Uint64("toBlock", toBlock))
+				toBlock = finalizedHeader.Number.Uint64()
+				if toBlock < fromBlock {
+					ec.logger.Info("finalized block is behind, cannot continue", zap.Uint64("finalized_block", finalizedHeader.Number.Uint64()), zap.Uint64("fromBlock", fromBlock))
+					continue
+				}
 			}
 
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
