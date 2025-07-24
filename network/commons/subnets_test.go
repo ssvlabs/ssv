@@ -82,7 +82,7 @@ func TestCommitteeSubnet(t *testing.T) {
 		committeeID := spectypes.CommitteeID(bytes.Repeat([]byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}, 4))
 
 		actual := CommitteeSubnetAlan(committeeID)
-		expected := uint64(committeeID[7] % 128) // 0xef % 128 == 0xef % 0x80 == 0x6f
+		expected := uint64(committeeID[31] % 128) // 0xef % 128 == 0xef % 0x80 == 0x6f
 
 		require.Equal(t, expected, actual)
 	})
