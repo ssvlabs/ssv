@@ -143,7 +143,11 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 			}
 			gc.uniqueRegistrationsMu.Lock()
 			uniqueCnt := len(gc.uniqueRegistrations)
-			minSendsCnt := slices.Min(slices.Collect(maps.Values(gc.uniqueRegistrations)))
+			values := slices.Collect(maps.Values(gc.uniqueRegistrations))
+			minSendsCnt := 0
+			if len(values) > 0 {
+				minSendsCnt = slices.Min(values)
+			}
 			gc.uniqueRegistrationsMu.Unlock()
 			gc.log.Info(fmt.Sprintf("unique validator-registrations sent: %d, minSends: %d", uniqueCnt, minSendsCnt))
 		}
