@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math/big"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -439,6 +441,71 @@ func (ec *ExecutionClient) isClosed() bool {
 	}
 }
 
+// Simple in-memory cache to compare logs received from two different sources
+type logAnalyzer struct {
+	logger            *zap.Logger
+	lastReceivedBlock uint64
+	missingFromBatch  map[uint64]map[uint]bool
+	filterLogCount    uint64
+	batchLogCount     uint64
+}
+
+func newLogAnalyzer(logger *zap.Logger) *logAnalyzer {
+	return &logAnalyzer{
+		logger:            logger.Named("logAnalyzer"),
+		lastReceivedBlock: 0,
+		missingFromBatch:  make(map[uint64]map[uint]bool),
+	}
+}
+
+func (l *logAnalyzer) receivedFromBatch(blocklogs BlockLogs) {
+	// save headblock
+	l.lastReceivedBlock = max(l.lastReceivedBlock, blocklogs.BlockNumber)
+	l.batchLogCount += uint64(len(blocklogs.Logs))
+
+	if inner, ok := l.missingFromBatch[blocklogs.BlockNumber]; ok {
+		for _, log := range blocklogs.Logs {
+			delete(inner, log.Index)
+		}
+		if len(inner) == 0 {
+			delete(l.missingFromBatch, blocklogs.BlockNumber)
+		}
+	}
+}
+
+func (l *logAnalyzer) receivedFromFilter(log ethtypes.Log) {
+	l.filterLogCount++
+
+	// setdefault
+	if _, ok := l.missingFromBatch[log.BlockNumber]; !ok {
+		l.missingFromBatch[log.BlockNumber] = make(map[uint]bool)
+	}
+	// mark as unseen
+	l.missingFromBatch[log.BlockNumber][log.Index] = true
+}
+
+func (l *logAnalyzer) logReport() {
+	missingLogs := make([]zap.Field, 0)
+	for blockNumber, inner := range l.missingFromBatch {
+		if blockNumber < l.lastReceivedBlock {
+			indexes := slices.Collect(maps.Keys(inner))
+			key := fmt.Sprintf("block:%d", blockNumber)
+			missingLogs = append(missingLogs, zap.Uints(key, indexes))
+			delete(l.missingFromBatch, blockNumber)
+		}
+	}
+	if len(missingLogs) > 0 {
+		l.logger.Warn("missing logs from batch receiver", missingLogs...)
+	}
+
+	// Log periodic statistics for monitoring
+	l.logger.Debug("log analyzer stats",
+		zap.Uint64("filter_logs", l.filterLogCount),
+		zap.Uint64("batch_logs", l.batchLogCount),
+		zap.Uint64("last_received_block", l.lastReceivedBlock),
+		zap.Int("pending_blocks", len(l.missingFromBatch)))
+}
+
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
 // streamLogsToChan *always* returns the next block to process.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
@@ -469,6 +536,23 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 	}
 	defer sub.Unsubscribe()
 
+	// Benchmark the quality of the logs we've received from SubscribeNewHead + FilterLogs
+	// against SubscribeFilterLogs
+	logAnalyzer := newLogAnalyzer(ec.logger)
+	query := ethereum.FilterQuery{
+		Addresses: []ethcommon.Address{ec.contractAddress},
+		FromBlock: new(big.Int).SetUint64(fromBlock),
+	}
+	logsFromFilter := make(chan ethtypes.Log)
+	subF, errF := ec.client.SubscribeFilterLogs(ctx, query, logsFromFilter)
+	if errF != nil {
+		ec.logger.Error("unable to subscribe to FilterLogs, benchmark won't work", zap.Error(errF))
+		// continue anyway, we can still stream logs from SubscribeNewHead
+	}
+	defer subF.Unsubscribe()
+	analyzerTicker := time.NewTicker(1 * time.Minute)
+	defer analyzerTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -494,6 +578,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
+				logAnalyzer.receivedFromBatch(block)
 				logCh <- block
 				fromBlock = block.BlockNumber + 1
 			}
@@ -504,6 +589,12 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 
 			fromBlock = toBlock + 1
 			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+
+		case log := <-logsFromFilter:
+			logAnalyzer.receivedFromFilter(log)
+
+		case <-analyzerTicker.C:
+			logAnalyzer.logReport()
 		}
 	}
 }
