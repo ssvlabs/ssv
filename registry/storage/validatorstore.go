@@ -564,8 +564,11 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 	}
 	slices.Sort(committee.Operators)
 
-	committee.Subnet = shares[0].CommitteeSubnet()
-	committee.SubnetAlan = shares[0].CommitteeSubnetAlan()
+	// Some test shares might have zero length committee
+	if len(shares[0].Committee) > 0 {
+		committee.Subnet = shares[0].CommitteeSubnet()
+		committee.SubnetAlan = shares[0].CommitteeSubnetAlan()
+	}
 
 	return committee
 }

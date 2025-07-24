@@ -48,9 +48,9 @@ type SSVShare struct {
 
 	// committeeID is a cached value for committee ID so we don't recompute it every time.
 	committeeID atomic.Pointer[spectypes.CommitteeID]
-	// committeeID is a cached value for committee subnet so we don't recompute it every time.
+	// committeeSubnet is a cached value for committee subnet so we don't recompute it every time.
 	committeeSubnet atomic.Pointer[uint64]
-	// committeeID is a cached value for committee subnet in Alan fork so we don't recompute it every time.
+	// committeeSubnetAlan is a cached value for committee subnet in Alan fork so we don't recompute it every time.
 	committeeSubnetAlan atomic.Pointer[uint64]
 
 	// minParticipationEpoch is the epoch at which the validator can start participating.
