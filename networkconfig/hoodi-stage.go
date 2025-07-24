@@ -26,7 +26,7 @@ var HoodiStageSSV = &SSVConfig{
 		},
 		{
 			Name:  NetworkTopologyFork,
-			Epoch: 27765,
+			Epoch: 29100,
 		},
 	},
 }
