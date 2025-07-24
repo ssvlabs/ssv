@@ -46,7 +46,6 @@ func NewVoluntaryExitRunner(
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 ) (Runner, error) {
-
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
 	}

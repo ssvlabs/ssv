@@ -261,7 +261,6 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 
 // Sanitizes a pubsub.TopicScoreParams by assigning default values in case a parameter is NaN or Inf
 func sanitizeTopicParams(params *pubsub.TopicScoreParams) *pubsub.TopicScoreParams {
-
 	sanitizeParameter := func(value float64, defaultValue float64) float64 {
 		if math.IsNaN(value) || math.IsInf(value, 0) {
 			return defaultValue

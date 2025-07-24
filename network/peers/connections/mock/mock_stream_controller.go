@@ -19,9 +19,8 @@ type StreamController struct {
 func (m StreamController) Request(logger *zap.Logger, peerID peer.ID, protocol protocol.ID, msg []byte) ([]byte, error) {
 	if len(m.MockRequest) != 0 {
 		return m.MockRequest, nil
-	} else {
-		return nil, errors.New("error")
 	}
+	return nil, errors.New("error")
 }
 
 func (m StreamController) HandleStream(logger *zap.Logger, stream core.Stream) ([]byte, streams.StreamResponder, func(), error) {

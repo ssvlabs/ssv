@@ -23,6 +23,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -44,8 +47,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -1120,7 +1121,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			if tc.mockSharesStorageExpect != nil {
 				tc.mockSharesStorageExpect(mockSharesStorage)
 			} else {
-				var shares []*types.SSVShare
+				shares := make([]*types.SSVShare, 0, len(tc.metadataAfter))
 				for _, metadata := range tc.metadataAfter {
 					share := &types.SSVShare{}
 					share.SharePubKey = make([]byte, 48)

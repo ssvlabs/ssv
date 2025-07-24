@@ -18,9 +18,8 @@ type NodeInfoIndex struct {
 func (m NodeInfoIndex) SelfSealed() ([]byte, error) {
 	if len(m.MockSelfSealed) != 0 {
 		return m.MockSelfSealed, nil
-	} else {
-		return nil, errors.New("error")
 	}
+	return nil, errors.New("error")
 }
 
 func (m NodeInfoIndex) Self() *records.NodeInfo {

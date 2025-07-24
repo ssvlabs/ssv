@@ -127,9 +127,8 @@ func (m NodeStorage) DropShares() error {
 func (m NodeStorage) GetPrivateKeyHash() ([]byte, bool, error) {
 	if m.MockPrivateKeyHash != nil {
 		return m.MockPrivateKeyHash, true, nil
-	} else {
-		return nil, false, errors.New("error")
 	}
+	return nil, false, errors.New("error")
 }
 
 func (m NodeStorage) SavePrivateKeyHash(privKeyHash []byte) error {
@@ -139,9 +138,8 @@ func (m NodeStorage) SavePrivateKeyHash(privKeyHash []byte) error {
 func (m NodeStorage) GetPublicKey() (string, bool, error) {
 	if m.MockPublicKey != "" {
 		return m.MockPublicKey, true, nil
-	} else {
-		return "", false, errors.New("error")
 	}
+	return "", false, errors.New("error")
 }
 
 func (m NodeStorage) SavePublicKey(publicKey string) error {

@@ -17,7 +17,6 @@ type gossipScoreIndex struct {
 }
 
 func NewGossipScoreIndex() *gossipScoreIndex {
-
 	graylistThreshold := params.PeerScoreThresholds().GraylistThreshold
 
 	return &gossipScoreIndex{

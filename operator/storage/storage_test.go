@@ -112,7 +112,6 @@ func TestDropRegistryData(t *testing.T) {
 			FeeRecipient: fr,
 		})
 		require.NoError(t, err)
-
 	}
 
 	// Check that everything was saved.

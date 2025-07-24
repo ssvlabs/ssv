@@ -138,7 +138,6 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootVerifySignature(
 	round specqbft.Round,
 	root [32]byte,
 ) error {
-
 	if err := i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, round, root); err != nil {
 		return err
 	}

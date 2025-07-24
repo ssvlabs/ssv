@@ -38,11 +38,10 @@ type SyncResults []SyncResult
 
 // String method was created for logging purposes
 func (s SyncResults) String() string {
-	var v []string
+	v := make([]string, 0, len(s))
 	for _, m := range s {
 		var sm *spectypes.SignedSSVMessage
 		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-
 			decMsg, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
 			if err != nil {
 				v = append(v, fmt.Sprintf("(%v)", err))

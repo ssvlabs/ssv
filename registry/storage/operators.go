@@ -175,7 +175,7 @@ func (s *operatorsStorage) operatorsExist(
 	r basedb.Reader,
 	ids []spectypes.OperatorID,
 ) (bool, error) {
-	var keys [][]byte
+	keys := make([][]byte, 0, len(ids))
 	for _, id := range ids {
 		keys = append(keys, buildOperatorKey(id))
 	}

@@ -127,7 +127,6 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 
 		pubKeys = append(pubKeys, validatorData.operatorsShares[i].pub.Serialize()...)
 		encryptedShares = append(encryptedShares, cipherText...)
-
 	}
 
 	toSign := fmt.Sprintf("%s:%d", owner.String(), nonce)
