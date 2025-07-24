@@ -5,6 +5,8 @@ import (
 	"math/big"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -18,22 +20,15 @@ import (
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
-type ExitDescriptor struct {
-	OwnValidator   bool
-	PubKey         phase0.BLSPubKey
-	ValidatorIndex phase0.ValidatorIndex
-	BlockNumber    uint64
-}
-
 type VoluntaryExitHandler struct {
 	baseHandler
 	duties          *dutystore.VoluntaryExitDuties
-	validatorExitCh <-chan ExitDescriptor
+	validatorExitCh <-chan registrystorage.ExitDescriptor
 	dutyQueue       []*spectypes.ValidatorDuty
 	blockSlots      map[uint64]phase0.Slot
 }
 
-func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
+func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan registrystorage.ExitDescriptor) *VoluntaryExitHandler {
 	return &VoluntaryExitHandler{
 		duties:          duties,
 		validatorExitCh: validatorExitCh,

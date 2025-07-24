@@ -30,7 +30,42 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	require.NoError(t, err)
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(zap.NewNop(), db, []byte("test"))
+
+	// Add test validator shares to the storage
+	validator1PK := spectypes.ValidatorPK{1}
+	validator2PK := spectypes.ValidatorPK{2}
+
+	err = sharesStorage.Save(nil, &types.SSVShare{
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+		Share: spectypes.Share{
+			ValidatorIndex:  phase0.ValidatorIndex(1),
+			ValidatorPubKey: validator1PK,
+		},
+	})
+	require.NoError(t, err)
+
+	err = sharesStorage.Save(nil, &types.SSVShare{
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+		Share: spectypes.Share{
+			ValidatorIndex:  phase0.ValidatorIndex(2),
+			ValidatorPubKey: validator2PK,
+		},
+	})
+	require.NoError(t, err)
+
+	vstore, err := registrystorage.NewValidatorStore(
+		zap.NewNop(),
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
 
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
@@ -137,7 +172,29 @@ func TestCommitteeDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	require.NoError(t, err)
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(zap.NewNop(), db, []byte("test"))
+
+	// Add the validator share to the storage
+	err = sharesStorage.Save(nil, &types.SSVShare{
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+		Share: spectypes.Share{
+			ValidatorIndex:  index,
+			ValidatorPubKey: validatorPK,
+		},
+	})
+	require.NoError(t, err)
+
+	vstore, err := registrystorage.NewValidatorStore(
+		zap.NewNop(),
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
 
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
@@ -296,7 +353,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.NotNil(t, dd)
 	require.Len(t, dd, 2)
 
-	signers := []spectypes.OperatorID{}
+	var signers []spectypes.OperatorID
 	for _, decided := range dd {
 		signers = append(signers, decided.Signers...)
 	}
@@ -315,14 +372,32 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	dutyStore := store.New(db)
 	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
 	require.NoError(t, err)
-	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
-	shares.Save(db, &types.SSVShare{
+
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	require.NoError(t, err)
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(zap.NewNop(), db, []byte("test"))
+
+	// Add the validator share to the storage before creating ValidatorStore
+	share := &types.SSVShare{
 		Status: eth2apiv1.ValidatorStateActiveOngoing,
 		Share: spectypes.Share{
 			ValidatorIndex:  index1,
 			ValidatorPubKey: validatorPK7,
 		},
-	})
+	}
+	err = sharesStorage.Save(db, share)
+	require.NoError(t, err)
+
+	vstore, err := registrystorage.NewValidatorStore(
+		zap.NewNop(),
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
+
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
 	// Create a new trace
@@ -384,7 +459,38 @@ func TestValidatorDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK1[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	require.NoError(t, err)
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(zap.NewNop(), db, []byte("test"))
+
+	// Add the validator shares to the storage
+	err = sharesStorage.Save(nil, &types.SSVShare{
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+		Share: spectypes.Share{
+			ValidatorIndex:  index,
+			ValidatorPubKey: validatorPK1,
+		},
+	})
+	require.NoError(t, err)
+
+	err = sharesStorage.Save(nil, &types.SSVShare{
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+		Share: spectypes.Share{
+			ValidatorIndex:  phase0.ValidatorIndex(2),
+			ValidatorPubKey: validatorPK2,
+		},
+	})
+	require.NoError(t, err)
+
+	vstore, err := registrystorage.NewValidatorStore(
+		zap.NewNop(),
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
 
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 

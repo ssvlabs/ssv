@@ -19,6 +19,7 @@ import (
 	types "github.com/ethereum/go-ethereum/core/types"
 	types0 "github.com/ssvlabs/ssv-spec/types"
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
+	storage "github.com/ssvlabs/ssv/registry/storage"
 	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 )
@@ -293,61 +294,61 @@ func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 	return m.recorder
 }
 
-// SelfParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types1.SSVShare {
+// GetAllValidators mocks base method.
+func (m *MockValidatorProvider) GetAllValidators() []*storage.ValidatorSnapshot {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SelfParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types1.SSVShare)
+	ret := m.ctrl.Call(m, "GetAllValidators")
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
 	return ret0
 }
 
-// SelfParticipatingValidators indicates an expected call of SelfParticipatingValidators.
-func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch any) *gomock.Call {
+// GetAllValidators indicates an expected call of GetAllValidators.
+func (mr *MockValidatorProviderMockRecorder) GetAllValidators() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfParticipatingValidators), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllValidators", reflect.TypeOf((*MockValidatorProvider)(nil).GetAllValidators))
 }
 
-// SelfValidators mocks base method.
-func (m *MockValidatorProvider) SelfValidators() []*types1.SSVShare {
+// GetSelfParticipatingValidators mocks base method.
+func (m *MockValidatorProvider) GetSelfParticipatingValidators(epoch phase0.Epoch, opts storage.ParticipationOptions) []*storage.ValidatorSnapshot {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SelfValidators")
-	ret0, _ := ret[0].([]*types1.SSVShare)
+	ret := m.ctrl.Call(m, "GetSelfParticipatingValidators", epoch, opts)
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
 	return ret0
 }
 
-// SelfValidators indicates an expected call of SelfValidators.
-func (mr *MockValidatorProviderMockRecorder) SelfValidators() *gomock.Call {
+// GetSelfParticipatingValidators indicates an expected call of GetSelfParticipatingValidators.
+func (mr *MockValidatorProviderMockRecorder) GetSelfParticipatingValidators(epoch, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfValidators))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).GetSelfParticipatingValidators), epoch, opts)
 }
 
-// Validator mocks base method.
-func (m *MockValidatorProvider) Validator(pubKey []byte) (*types1.SSVShare, bool) {
+// GetSelfValidators mocks base method.
+func (m *MockValidatorProvider) GetSelfValidators() []*storage.ValidatorSnapshot {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Validator", pubKey)
-	ret0, _ := ret[0].(*types1.SSVShare)
+	ret := m.ctrl.Call(m, "GetSelfValidators")
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetSelfValidators indicates an expected call of GetSelfValidators.
+func (mr *MockValidatorProviderMockRecorder) GetSelfValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfValidators", reflect.TypeOf((*MockValidatorProvider)(nil).GetSelfValidators))
+}
+
+// GetValidator mocks base method.
+func (m *MockValidatorProvider) GetValidator(id storage.ValidatorID) (*storage.ValidatorSnapshot, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidator", id)
+	ret0, _ := ret[0].(*storage.ValidatorSnapshot)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
-// Validator indicates an expected call of Validator.
-func (mr *MockValidatorProviderMockRecorder) Validator(pubKey any) *gomock.Call {
+// GetValidator indicates an expected call of GetValidator.
+func (mr *MockValidatorProviderMockRecorder) GetValidator(id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockValidatorProvider)(nil).Validator), pubKey)
-}
-
-// Validators mocks base method.
-func (m *MockValidatorProvider) Validators() []*types1.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Validators")
-	ret0, _ := ret[0].([]*types1.SSVShare)
-	return ret0
-}
-
-// Validators indicates an expected call of Validators.
-func (mr *MockValidatorProviderMockRecorder) Validators() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockValidatorProvider)(nil).Validators))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockValidatorProvider)(nil).GetValidator), id)
 }
 
 // MockValidatorController is a mock of ValidatorController interface.

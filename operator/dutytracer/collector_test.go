@@ -21,7 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -380,12 +380,12 @@ func TestCommitteeDuty(t *testing.T) {
 	var committeeID spectypes.CommitteeID
 	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
 
-	committee := &storage.Committee{
+	committee := &registrystorage.CommitteeSnapshot{
 		ID:        committeeID,
 		Operators: []spectypes.OperatorID{1, 2, 3, 4},
 	}
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
-	validators.EXPECT().Committee(committeeID).Return(committee, true)
+	validators.EXPECT().GetCommittee(committeeID).Return(committee, true)
 
 	dutyStore := new(mockDutyTraceStore)
 	tracer := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
@@ -436,7 +436,7 @@ func TestCommitteeDuty(t *testing.T) {
 		assert.Equal(t, committeeID, committeeID)
 	}
 
-	validators.EXPECT().Committee(committeeID).Return(committee, true)
+	validators.EXPECT().GetCommittee(committeeID).Return(committee, true)
 
 	{ // TC 1b - process partial sig messages with sc root
 		fakeSig := [96]byte{}
@@ -841,7 +841,20 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	require.NoError(t, err)
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(zap.NewNop(), db, []byte("test"))
+
+	vstore, err := registrystorage.NewValidatorStore(
+		zap.NewNop(),
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
 
 	var committeeID = spectypes.CommitteeID{1}
 
@@ -946,7 +959,20 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	require.NoError(t, err)
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(zap.NewNop(), db, []byte("test"))
+
+	vstore, err := registrystorage.NewValidatorStore(
+		zap.NewNop(),
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
 
 	var vPubKey = spectypes.ValidatorPK{1}
 	var role = spectypes.BNRoleAggregator
@@ -1010,7 +1036,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
-			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
+			vstore.EXPECT().GetValidatorIndex(registrystorage.ValidatorPubKey(vPubKey)).Return(phase0.ValidatorIndex(1), true)
 
 			trace, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
 			require.NoError(t, err)
@@ -1031,7 +1057,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
-			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
+			vstore.EXPECT().GetValidatorIndex(registrystorage.ValidatorPubKey(vPubKey)).Return(phase0.ValidatorIndex(1), true)
 
 			trace, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
 			require.ErrorIs(t, err, innerErr)
@@ -1046,7 +1072,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 
 			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
-			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true).AnyTimes()
+			vstore.EXPECT().GetValidatorIndex(registrystorage.ValidatorPubKey(vPubKey)).Return(phase0.ValidatorIndex(1), true).AnyTimes()
 
 			_, _, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
 			require.NoError(t, err)
@@ -1284,7 +1310,7 @@ func TestCollector_GetCommitteeID(t *testing.T) {
 	slotToCommittee.Set(slot, spectypes.CommitteeID{1})
 	collector.validatorIndexToCommitteeLinks.Set(phase0.ValidatorIndex(1), slotToCommittee)
 
-	vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
+	vstore.EXPECT().GetValidatorIndex(registrystorage.ValidatorPubKey(vPubKey)).Return(phase0.ValidatorIndex(1), true)
 
 	committeeID, index, err := collector.GetCommitteeID(slot, vPubKey)
 	require.NoError(t, err)

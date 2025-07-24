@@ -66,7 +66,7 @@ func TestUpdateDoppelgangerState(t *testing.T) {
 func TestCheckLiveness(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
 
-	// Prepare doppelganger state
+	// Prepare doppelgänger state
 	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 1}
 	dg.validatorsState[2] = &doppelgangerState{remainingEpochs: 1}
 

@@ -356,11 +356,11 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	var pubkeys []spectypes.ValidatorPK
 
 	for _, index := range request.Indices {
-		share, found := e.validators.ValidatorByIndex(phase0.ValidatorIndex(index))
+		validatorSnapshot, found := e.validators.GetValidator(registrystorage.ValidatorIndex(index))
 		if !found {
 			return api.BadRequestError(fmt.Errorf("validator not found: %d", index))
 		}
-		pubkeys = append(pubkeys, share.ValidatorPubKey)
+		pubkeys = append(pubkeys, validatorSnapshot.Share.ValidatorPubKey)
 	}
 
 	for _, req := range request.PubKeys {

@@ -41,17 +41,26 @@ func TestMsgValidator(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	ns, err := operatorstorage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
 	require.NoError(t, ns.Shares().Save(nil, share))
 
 	committeeID := share.CommitteeID()
 
+	validatorStore, err := storage.NewValidatorStore(
+		logger,
+		ns.Shares(),
+		ns,
+		networkconfig.TestNetwork,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
+
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
 	mv := validation.New(
 		networkconfig.TestNetwork,
-		ns.ValidatorStore(),
+		validatorStore,
 		ns,
 		dutystore.New(),
 		signatureVerifier,

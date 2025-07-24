@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ssvlabs/ssv/registry/storage"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/registry/storage"
+
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
