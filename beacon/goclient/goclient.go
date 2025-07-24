@@ -136,6 +136,9 @@ type GoClient struct {
 	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
 	// participating validators
 	registrations map[phase0.BLSPubKey]*validatorRegistration
+	// TODO
+	uniqueRegistrationsMu sync.Mutex
+	uniqueRegistrations   map[phase0.BLSPubKey]int
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.

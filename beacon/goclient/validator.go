@@ -121,6 +121,17 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 				end := min(start+chunkSize, len(registrations))
 				chunk := registrations[start:end]
 
+				// TODO
+				for _, registration := range chunk {
+					pk, err := registration.PubKey()
+					if err != nil {
+						panic(fmt.Sprintf("%s", err))
+					}
+					gc.uniqueRegistrationsMu.Lock()
+					gc.uniqueRegistrations[pk] += 1
+					gc.uniqueRegistrationsMu.Unlock()
+				}
+
 				reqStart := time.Now()
 				err := gc.multiClient.SubmitValidatorRegistrations(ctx, chunk)
 				recordRequestDuration(ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
@@ -130,6 +141,11 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 				}
 				gc.log.Info("submitted validator registrations", fields.Slot(currentSlot), fields.Count(len(chunk)), fields.Duration(reqStart))
 			}
+			gc.uniqueRegistrationsMu.Lock()
+			uniqueCnt := len(gc.uniqueRegistrations)
+			minSendsCnt := slices.Min(slices.Collect(maps.Values(gc.uniqueRegistrations)))
+			gc.uniqueRegistrationsMu.Unlock()
+			gc.log.Info(fmt.Sprintf("unique validator-registrations sent: %d, minSends: %d", uniqueCnt, minSendsCnt))
 		}
 	}
 }
