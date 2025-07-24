@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -12,9 +13,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/routing"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging"
 )
 
@@ -125,6 +126,11 @@ func (md *localDiscovery) Close() error {
 		return err
 	}
 	return nil
+}
+
+// Mock method to follow interface.
+func (md *localDiscovery) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error) {
+	return nil, nil
 }
 
 func (dvs *localDiscovery) UpdateDomainType(domain spectypes.DomainType) error {
