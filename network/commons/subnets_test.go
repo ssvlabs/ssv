@@ -29,13 +29,20 @@ func BenchmarkCommitteeSubnetAlan(b *testing.B) {
 	}
 }
 
-func BenchmarkCommitteeSubnetNoAllocAlan(b *testing.B) {
+// BenchmarkCommitteeSubnetAlan_PrevImpl benchmarks previous implementation of committee calculation without allocations.
+// The implementation has been removed in favor of sync pool, but it's kept in this benchmark to allow comparison.
+func BenchmarkCommitteeSubnetAlan_PrevImpl(b *testing.B) {
+	prevImpl := func(bigInt *big.Int, cid spectypes.CommitteeID) {
+		bigInt.SetBytes(cid[:])
+		bigInt.Mod(bigInt, bigIntSubnetsCount)
+	}
+
 	var out big.Int
 	cid := [32]byte{}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		CommitteeSubnetNoAllocAlan(&out, cid)
+		prevImpl(&out, cid)
 	}
 }
 
@@ -52,8 +59,12 @@ func TestCommitteeSubnet(t *testing.T) {
 		// Get result from CommitteeSubnetAlan
 		expected := CommitteeSubnetAlan(cid)
 
+		f := func(out *big.Int, cid spectypes.CommitteeID) {
+			out.SetBytes(cid[:])
+			out.Mod(out, bigIntSubnetsCount)
+		}
 		// Get result from CommitteeSubnetNoAllocAlan
-		CommitteeSubnetNoAllocAlan(bigInt, cid)
+		f(bigInt, cid)
 		actual := bigInt.Uint64()
 
 		require.Equal(t, expected, actual)

@@ -58,20 +58,18 @@ func GetTopicBaseName(topicName string) string {
 	return strings.TrimPrefix(topicName, topicPrefix+".")
 }
 
-// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
-func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
-	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
-	return subnet.Uint64()
-}
-
-// CommitteeSubnetNoAllocAlan returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
-func CommitteeSubnetNoAllocAlan(out *big.Int, cid spectypes.CommitteeID) {
-	out.SetBytes(cid[:])
-	out.Mod(out, bigIntSubnetsCount)
-}
-
 var bigIntPool = sync.Pool{
 	New: func() any { return new(big.Int) },
+}
+
+// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
+func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
+	bi := bigIntPool.Get().(*big.Int)
+	defer bigIntPool.Put(bi)
+
+	bi.SetBytes(cid[:])
+	bi.Mod(bi, bigIntSubnetsCount)
+	return bi.Uint64()
 }
 
 // CommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).
@@ -84,6 +82,10 @@ func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 	lowest := bigIntPool.Get().(*big.Int)
 	hashNum := bigIntPool.Get().(*big.Int)
 	result := bigIntPool.Get().(*big.Int)
+
+	defer bigIntPool.Put(lowest)
+	defer bigIntPool.Put(hashNum)
+	defer bigIntPool.Put(result)
 
 	binary.LittleEndian.PutUint64(operatorBytes[:], committee[0])
 	hash = sha256.Sum256(operatorBytes[:])
@@ -101,10 +103,6 @@ func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 
 	result.Mod(lowest, bigIntSubnetsCount)
 	subnet := result.Uint64()
-
-	bigIntPool.Put(hashNum)
-	bigIntPool.Put(lowest)
-	bigIntPool.Put(result)
 
 	return subnet
 }
