@@ -201,6 +201,7 @@ func New(
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
 		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
+		uniqueRegistrations:                map[phase0.BLSPubKey]int{},
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
