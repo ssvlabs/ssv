@@ -105,7 +105,7 @@ func TestCommitteeSubnetAlan(t *testing.T) {
 			out.SetBytes(cid[:])
 			out.Mod(out, bigIntSubnetsCount)
 		}
-		// Get result from CommitteeSubnetNoAllocAlan
+		// Get expected result
 		f(bigInt, cid)
 		expected := bigInt.Uint64()
 
