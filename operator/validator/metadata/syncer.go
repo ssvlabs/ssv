@@ -109,15 +109,7 @@ func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, erro
 
 	// Load non-liquidated shares.
 	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated(), func(share *ssvtypes.SSVShare) bool {
-		if ownSubnets.IsSet(share.CommitteeSubnet()) {
-			return true
-		}
-
-		if s.netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
-			return ownSubnets.IsSet(share.CommitteeSubnetAlan())
-		}
-
-		return false
+		return s.shareInOwnSubnets(share, ownSubnets)
 	})
 	if len(shares) == 0 {
 		s.logger.Info("could not find non-liquidated own subnets validator shares on initial metadata retrieval")
@@ -297,14 +289,8 @@ func (s *Syncer) nextBatchFromDB(_ context.Context) beacon.ValidatorMetadataMap 
 			return true
 		}
 
-		if !ownSubnets.IsSet(share.CommitteeSubnet()) {
-			if s.netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
-				return true
-			}
-
-			if !ownSubnets.IsSet(share.CommitteeSubnetAlan()) {
-				return true
-			}
+		if !s.shareInOwnSubnets(share, ownSubnets) {
+			return true
 		}
 
 		// Fetch new and stale shares only.
@@ -359,4 +345,16 @@ func (s *Syncer) selfSubnets() networkcommons.Subnets {
 	}
 
 	return mySubnets
+}
+
+func (s *Syncer) shareInOwnSubnets(share *ssvtypes.SSVShare, ownSubnets networkcommons.Subnets) bool {
+	if ownSubnets.IsSet(share.CommitteeSubnet()) {
+		return true
+	}
+
+	if s.netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+		return ownSubnets.IsSet(share.CommitteeSubnetAlan())
+	}
+
+	return false
 }
