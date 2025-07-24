@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,17 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
+
+type DecidedInfo struct {
+	PubKey  spectypes.ValidatorPK
+	Slot    phase0.Slot
+	Role    spectypes.BeaconRole
+	Signers []spectypes.OperatorID
+}
+
+type DecidedListener interface {
+	OnDecided(msg DecidedInfo)
+}
 
 type Collector struct {
 	logger *zap.Logger
@@ -53,6 +65,8 @@ type Collector struct {
 
 	inFlightCommittee hashmap.Map[spectypes.CommitteeID, struct{}]
 	inFlightValidator hashmap.Map[spectypes.ValidatorPK, struct{}]
+
+	decidedListener DecidedListener
 }
 
 type DomainDataProvider interface {
@@ -65,6 +79,7 @@ func New(
 	client DomainDataProvider,
 	store DutyTraceStore,
 	beaconNetwork *networkconfig.BeaconConfig,
+	decidedListener DecidedListener,
 ) *Collector {
 
 	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration
@@ -81,6 +96,7 @@ func New(
 		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttl)),
 		inFlightCommittee:              hashmap.Map[spectypes.CommitteeID, struct{}]{},
 		inFlightValidator:              hashmap.Map[spectypes.ValidatorPK, struct{}]{},
+		decidedListener:                decidedListener,
 	}
 
 	return collector
@@ -628,6 +644,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			return nil
 		}
 	case spectypes.SSVPartialSignatureMsgType:
+		c.logger.Debug("DecidedListener: processing partial signature message",
+			zap.String("msg_id", msg.MsgID.String()))
+
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
 		if err != nil {
@@ -667,6 +686,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			defer trace.Unlock()
 
 			c.processPartialSigCommittee(startTime, pSigMessages, committeeID, trace)
+			c.checkAndPublishQuorum(pSigMessages, committeeID, trace)
 
 			if late {
 				_ = c.inFlightCommittee.Delete(committeeID)
@@ -783,6 +803,7 @@ type committeeDutyTrace struct {
 	sync.Mutex
 	syncCommitteeRoot phase0.Root
 	model.CommitteeDutyTrace
+	publishedQuorums map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string
 }
 
 func (dt *committeeDutyTrace) trace() *model.CommitteeDutyTrace {
@@ -799,4 +820,157 @@ func getOrCreateRound(trace *model.ConsensusTrace, rnd uint64) *model.RoundTrace
 	}
 
 	return trace.Rounds[rnd-1]
+}
+
+// checkAndPublishQuorum detects when quorum is reached and publishes decisions to websocket.
+// IMPORTANT: trace must be locked by the caller before calling this function.
+func (c *Collector) checkAndPublishQuorum(msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID, trace *committeeDutyTrace) {
+	if c.decidedListener == nil {
+		return
+	}
+
+	committee, found := c.validators.Committee(committeeID)
+	if !found || len(committee.Operators) == 0 {
+		return
+	}
+
+	threshold := uint64(len(committee.Operators))*2/3 + 1
+
+	// Track published quorums to avoid duplicates (validator -> role -> signers hash)
+	if trace.publishedQuorums == nil {
+		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
+	}
+
+	// Check each validator in the partial signature for quorum
+	for _, partialMsg := range msg.Messages {
+		validator, exists := c.validators.ValidatorByIndex(partialMsg.ValidatorIndex)
+		if !exists {
+			c.logger.Debug("DecidedListener: validator not found by index",
+				zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)))
+			continue
+		}
+
+		var validatorPK spectypes.ValidatorPK
+		copy(validatorPK[:], validator.ValidatorPubKey[:])
+
+		c.logger.Debug("DecidedListener: processing validator for quorum check",
+			zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
+			zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
+			zap.Uint64("signer", partialMsg.Signer),
+			zap.Uint64("threshold", threshold))
+
+		// Initialize tracking for this validator if needed
+		if trace.publishedQuorums[partialMsg.ValidatorIndex] == nil {
+			trace.publishedQuorums[partialMsg.ValidatorIndex] = make(map[spectypes.BeaconRole]string)
+		}
+
+		// Check quorum for both attester and sync committee roles
+		c.checkAndPublishQuorumForRole(trace, spectypes.BNRoleAttester, msg, partialMsg, validatorPK, threshold)
+		c.checkAndPublishQuorumForRole(trace, spectypes.BNRoleSyncCommittee, msg, partialMsg, validatorPK, threshold)
+	}
+}
+
+// checkAndPublishQuorumForRole checks if quorum is reached for a specific role and publishes if it's the first time
+func (c *Collector) checkAndPublishQuorumForRole(
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	msg *spectypes.PartialSignatureMessages,
+	partialMsg *spectypes.PartialSignatureMessage,
+	validatorPK spectypes.ValidatorPK,
+	threshold uint64,
+) {
+	var signerData []*model.SignerData
+	var roleLogName string
+
+	switch role {
+	case spectypes.BNRoleAttester:
+		signerData = trace.Attester
+		roleLogName = "attester"
+	case spectypes.BNRoleSyncCommittee:
+		signerData = trace.SyncCommittee
+		roleLogName = "sync committee"
+	default:
+		return
+	}
+
+	signers := c.countUniqueSignersForValidatorAndRoot(signerData, partialMsg.ValidatorIndex, partialMsg.SigningRoot)
+	if uint64(len(signers)) < threshold {
+		return
+	}
+
+	signersKey := c.signersToKey(signers)
+	lastPublished := trace.publishedQuorums[partialMsg.ValidatorIndex][role]
+
+	c.logger.Debug("DecidedListener: quorum check",
+		zap.String("role", roleLogName),
+		zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
+		zap.String("signers_key", signersKey),
+		zap.String("last_published", lastPublished),
+		zap.Bool("will_publish", lastPublished == ""))
+
+	// Only publish the FIRST time quorum is reached, not for every signer set change
+	if lastPublished == "" {
+		trace.publishedQuorums[partialMsg.ValidatorIndex][role] = signersKey
+
+		decidedInfo := DecidedInfo{
+			PubKey:  validatorPK,
+			Slot:    msg.Slot,
+			Role:    role,
+			Signers: signers,
+		}
+		c.decidedListener.OnDecided(decidedInfo)
+
+		c.logger.Info("DecidedListener: data sent to listener feed",
+			zap.String("role", roleLogName),
+			zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
+			zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
+			zap.Any("signers", signers))
+	}
+}
+
+// countUniqueSignersForValidatorAndRoot counts unique signers for a specific validator and signing root
+func (c *Collector) countUniqueSignersForValidatorAndRoot(signerData []*model.SignerData, validatorIndex phase0.ValidatorIndex, signingRoot phase0.Root) []spectypes.OperatorID {
+	signers := make(map[spectypes.OperatorID]struct{})
+
+	c.logger.Debug("DecidedListener: counting signers for validator",
+		zap.Uint64("validator_index", uint64(validatorIndex)),
+		zap.String("signing_root", fmt.Sprintf("%x", signingRoot[:])),
+		zap.Int("total_signer_data_entries", len(signerData)))
+
+	for i, data := range signerData {
+		// Check if this validator index is in the signer data
+		for _, vIdx := range data.ValidatorIdx {
+			if vIdx == validatorIndex {
+				signers[data.Signer] = struct{}{}
+				c.logger.Debug("DecidedListener: found signer for validator",
+					zap.Uint64("validator_index", uint64(validatorIndex)),
+					zap.Uint64("signer", data.Signer),
+					zap.Int("signer_data_entry", i))
+				break
+			}
+		}
+	}
+
+	// Convert map to sorted slice
+	var result []spectypes.OperatorID
+	for signer := range signers {
+		result = append(result, signer)
+	}
+	slices.Sort(result)
+
+	c.logger.Debug("DecidedListener: final unique signers for validator",
+		zap.Uint64("validator_index", uint64(validatorIndex)),
+		zap.Any("signers", result),
+		zap.Int("count", len(result)))
+
+	return result
+}
+
+// signersToKey creates a string key from sorted signers for deduplication
+func (c *Collector) signersToKey(signers []spectypes.OperatorID) string {
+	var parts []string
+	for _, signer := range signers {
+		parts = append(parts, fmt.Sprintf("%d", signer))
+	}
+	return strings.Join(parts, ",")
 }
