@@ -39,7 +39,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 			lastErr = err
 			continue
 		}
-		err = v.ProcessMessage(context.TODO(), logger, dmsg)
+		err = v.ProcessMessage(context.TODO(), dmsg)
 		if err != nil {
 			lastErr = err
 		}
