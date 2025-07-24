@@ -125,7 +125,7 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 				for _, registration := range chunk {
 					pk, err := registration.PubKey()
 					if err != nil {
-						panic(fmt.Sprintf("%s", err))
+						panic(fmt.Sprintf("registration.PubKey(): %s", err))
 					}
 					gc.uniqueRegistrationsMu.Lock()
 					gc.uniqueRegistrations[pk] += 1
@@ -140,6 +140,13 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 					break
 				}
 				gc.log.Info("submitted validator registrations", fields.Slot(currentSlot), fields.Count(len(chunk)), fields.Duration(reqStart))
+				for _, reg := range chunk {
+					pk, err := reg.PubKey()
+					if err != nil {
+						panic(fmt.Sprintf("reg.PubKey(): %s", err))
+					}
+					gc.log.Info("submitted validator registrations, for validator with pubkey", fields.PubKey(pk[:]))
+				}
 			}
 			gc.uniqueRegistrationsMu.Lock()
 			uniqueCnt := len(gc.uniqueRegistrations)
