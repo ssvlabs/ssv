@@ -92,6 +92,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					share2.ValidatorIndex,
 					share3.ValidatorIndex,
 				},
+				Subnet:     commons.CommitteeSubnet(committee),
+				SubnetAlan: commons.CommitteeSubnetAlan(id),
 			}, true
 		}
 

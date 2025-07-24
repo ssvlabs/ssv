@@ -271,15 +271,12 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.DBOptions.Ctx = cmd.Context()
 		var db basedb.Database
-		switch cfg.DBOptions.Engine {
-		case "pebble":
+		if cfg.ExporterOptions.Enabled {
 			logger.Info("using pebble db")
 			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
-		case "badger":
+		} else {
 			logger.Info("using badger db")
 			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
-		default:
-			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
 		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -492,6 +489,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metadataSyncer := metadata.NewSyncer(
 			logger,
+			networkConfig,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
 			consensusClient,
@@ -604,13 +602,13 @@ var StartNodeCmd = &cobra.Command{
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
-				if subnet := networkcommons.CommitteeSubnet(v.OperatorIDs()); !mySubnets.IsSet(subnet) {
+				if subnet := v.CommitteeSubnet(); !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
 				}
 
 				if networkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
-					if alanSubnet := networkcommons.CommitteeSubnet(v.OperatorIDs()); !mySubnets.IsSet(alanSubnet) {
+					if alanSubnet := v.CommitteeSubnetAlan(); !mySubnets.IsSet(alanSubnet) {
 						mySubnets.Set(alanSubnet)
 						myActiveSubnets++
 					}

@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -94,7 +95,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, beaconNode, commons.ZeroSubnets)
+			syncer := NewSyncer(logger, networkconfig.TestNetwork, sharesStorage, validatorStore, beaconNode, commons.ZeroSubnets)
 			_, err := syncer.Sync(t.Context(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
@@ -250,6 +251,8 @@ func TestSyncer_SyncAll(t *testing.T) {
 		return results, nil
 	}).AnyTimes()
 
+	committee := []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}}
+
 	// Subtest: No shares returned by shareStorage.List
 	t.Run("NoShares", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
@@ -280,6 +283,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 
 		syncer := &Syncer{
 			logger:         logger,
+			netCfg:         networkconfig.TestNetwork,
 			shareStorage:   mockShareStorage,
 			validatorStore: mockValidatorStore,
 			beaconNode:     defaultMockBeaconNode,
@@ -289,6 +293,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 		share1 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+				Committee:       committee,
 			},
 			Status:     eth2apiv1.ValidatorStatePendingInitialized,
 			Liquidated: false,
@@ -296,6 +301,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 		share2 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x2},
+				Committee:       committee,
 			},
 			Status:     eth2apiv1.ValidatorStateUnknown,
 			Liquidated: false,
@@ -335,6 +341,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 
 		syncer := &Syncer{
 			logger:         logger,
+			netCfg:         networkconfig.TestNetwork,
 			shareStorage:   mockShareStorage,
 			validatorStore: mockValidatorStore,
 			beaconNode:     errMockBeaconNode,
@@ -344,6 +351,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 		share1 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+				Committee:       committee,
 			},
 			Status:     eth2apiv1.ValidatorStateUnknown, // Lacks BeaconMetadata
 			Liquidated: false,
@@ -351,6 +359,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 		share2 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x2},
+				Committee:       committee,
 			},
 			Status:     eth2apiv1.ValidatorStatePendingInitialized,
 			Liquidated: false,
@@ -390,6 +399,8 @@ func TestSyncer_Stream(t *testing.T) {
 		return results, nil
 	}).AnyTimes()
 
+	committee := []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}}
+
 	// Subtest: Stream sends updates and stops when context is canceled
 	t.Run("SendsUpdatesAndStopsOnContextCancel", func(t *testing.T) {
 		// Mocks
@@ -399,6 +410,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
+			netCfg:            networkconfig.TestNetwork,
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
@@ -416,6 +428,7 @@ func TestSyncer_Stream(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorIndex:  1,
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+				Committee:       committee,
 			},
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
 			ActivationEpoch: 0,
@@ -493,6 +506,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
+			netCfg:            networkconfig.TestNetwork,
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        errMockBeaconNode,
@@ -509,6 +523,7 @@ func TestSyncer_Stream(t *testing.T) {
 		share1 := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x1},
+				Committee:       committee,
 			},
 			Status:     eth2apiv1.ValidatorStatePendingInitialized,
 			Liquidated: false,
@@ -566,6 +581,7 @@ func TestSyncer_Stream(t *testing.T) {
 		// Syncer instance
 		syncer := &Syncer{
 			logger:            logger,
+			netCfg:            networkconfig.TestNetwork,
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
@@ -638,6 +654,7 @@ func TestWithUpdateInterval(t *testing.T) {
 	// Create a Syncer with the WithSyncInterval option
 	syncer := NewSyncer(
 		logger,
+		networkconfig.TestNetwork,
 		mockShareStorage,
 		mockValidatorStore,
 		mockBeaconNode,

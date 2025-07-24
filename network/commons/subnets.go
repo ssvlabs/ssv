@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"math/bits"
 	"strings"
+	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -39,12 +40,10 @@ func SubnetTopicID(subnet uint64) string {
 	return fmt.Sprintf("%d", subnet)
 }
 
+// CommitteeTopicIDAlan returns topics for given committee ID.
+// There's no similar post-fork function because post-fork requires operator IDs for calculation.
 func CommitteeTopicIDAlan(cid spectypes.CommitteeID) []string {
 	return []string{fmt.Sprintf("%d", CommitteeSubnetAlan(cid))}
-}
-
-func CommitteeTopicID(committee []spectypes.OperatorID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnet(committee))}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -57,39 +56,53 @@ func GetTopicBaseName(topicName string) string {
 	return strings.TrimPrefix(topicName, topicPrefix+".")
 }
 
-// CommitteeSubnetAlan returns the subnet for the given committee
-func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
-	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
-	return subnet.Uint64()
+var bigIntPool = sync.Pool{
+	New: func() any { return new(big.Int) },
 }
 
+// CommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).
+// It requires committee to be valid and have length >=1.
+// It uses sync.Pool to reduce heap allocations.
 func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
-	if len(committee) < 4 {
-		panic(fmt.Sprintf("committee is too short: %v", committee))
-	}
-
-	// TODO: consider caching the calculations (e.g. move them to share similarly to committee ID)
-	var lowestHash *big.Int
 	var operatorBytes [8]byte
+	var hash [32]byte
 
-	for _, v := range committee {
-		binary.LittleEndian.PutUint64(operatorBytes[:], v)
-		operatorHash := sha256.Sum256(operatorBytes[:])
-		operatorHashNum := new(big.Int).SetBytes(operatorHash[:])
+	lowest := bigIntPool.Get().(*big.Int)
+	hashNum := bigIntPool.Get().(*big.Int)
+	result := bigIntPool.Get().(*big.Int)
 
-		if lowestHash == nil || operatorHashNum.Cmp(lowestHash) == -1 {
-			lowestHash = operatorHashNum
+	defer bigIntPool.Put(lowest)
+	defer bigIntPool.Put(hashNum)
+	defer bigIntPool.Put(result)
+
+	binary.LittleEndian.PutUint64(operatorBytes[:], committee[0])
+	hash = sha256.Sum256(operatorBytes[:])
+	lowest.SetBytes(hash[:])
+
+	for i := 1; i < len(committee); i++ {
+		binary.LittleEndian.PutUint64(operatorBytes[:], committee[i])
+		hash = sha256.Sum256(operatorBytes[:])
+		hashNum.SetBytes(hash[:])
+
+		if hashNum.Cmp(lowest) < 0 {
+			lowest.Set(hashNum)
 		}
 	}
 
-	subnet := new(big.Int).Mod(lowestHash, bigIntSubnetsCount)
-	return subnet.Uint64()
+	result.Mod(lowest, bigIntSubnetsCount)
+	subnet := result.Uint64()
+
+	return subnet
 }
 
-// SetCommitteeSubnet returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
-func SetCommitteeSubnet(bigInt *big.Int, cid spectypes.CommitteeID) {
-	bigInt.SetBytes(cid[:])
-	bigInt.Mod(bigInt, bigIntSubnetsCount)
+// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
+func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
+	bi := bigIntPool.Get().(*big.Int)
+	defer bigIntPool.Put(bi)
+
+	bi.SetBytes(cid[:])
+	bi.Mod(bi, bigIntSubnetsCount)
+	return bi.Uint64()
 }
 
 // Topics returns the available topics for this fork.

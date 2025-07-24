@@ -1,7 +1,10 @@
 package commons
 
 import (
+	"bytes"
 	crand "crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"math/big"
 	"strings"
 	"testing"
@@ -11,10 +14,84 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+func BenchmarkCommitteeSubnet(b *testing.B) {
+	committee := []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		CommitteeSubnet(committee)
+	}
+}
+
+func BenchmarkCommitteeSubnetAlan(b *testing.B) {
+	cid := [32]byte{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		CommitteeSubnetAlan(cid)
+	}
+}
+
+// BenchmarkCommitteeSubnetAlan_PrevImpl benchmarks previous implementation of committee calculation without allocations.
+// The implementation has been removed in favor of sync pool, but it's kept in this benchmark to allow comparison.
+func BenchmarkCommitteeSubnetAlan_PrevImpl(b *testing.B) {
+	prevImpl := func(bigInt *big.Int, cid spectypes.CommitteeID) {
+		bigInt.SetBytes(cid[:])
+		bigInt.Mod(bigInt, bigIntSubnetsCount)
+	}
+
+	var out big.Int
+	cid := [32]byte{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		prevImpl(&out, cid)
+	}
+}
+
 func TestCommitteeSubnet(t *testing.T) {
 	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
 
-	bigInst := new(big.Int)
+	t.Run("after Alan fork", func(t *testing.T) {
+		operators := []spectypes.OperatorID{
+			1, // sha256(0100000000000000)=7c9fa136d4413fa6173637e883b6998d32e1d675f88cddff9dcbcf331820f4b8
+			2, // sha256(0200000000000000)=d86e8112f3c4c4442126f8e9f44f16867da487f29052bf91b810457db34209a4
+			3, // sha256(0300000000000000)=35be322d094f9d154a8aba4733b8497f180353bd7ae7b0a15f90b586b549f28b
+			4, // sha256(0400000000000000)=f0a0278e4372459cca6159cd5e71cfee638302a7b9ca9b05c34181ac0a65ac5d
+		}
+
+		actual := CommitteeSubnet(operators)
+
+		var hashes [][32]byte
+		for _, operator := range operators {
+			var operatorBytes [8]byte
+			binary.LittleEndian.PutUint64(operatorBytes[:], operator)
+			hash := sha256.Sum256(operatorBytes[:])
+
+			t.Logf("sha256(%x)=%x", operatorBytes, hash)
+			hashes = append(hashes, hash)
+		}
+
+		lowestHash := hashes[2] // pre-calculated (lowest hash is 35be322d094f9d154a8aba4733b8497f180353bd7ae7b0a15f90b586b549f28b)
+		expected := new(big.Int).Mod(new(big.Int).SetBytes(lowestHash[:]), bigIntSubnetsCount).Uint64()
+
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("in Alan fork", func(t *testing.T) {
+		committeeID := spectypes.CommitteeID(bytes.Repeat([]byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}, 4))
+
+		actual := CommitteeSubnetAlan(committeeID)
+		expected := uint64(committeeID[31] % 128) // 0xef % 128 == 0xef % 0x80 == 0x6f
+
+		require.Equal(t, expected, actual)
+	})
+}
+
+func TestCommitteeSubnetAlan(t *testing.T) {
+	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
+
+	bigInt := new(big.Int)
 	for i := 0; i < 2*SubnetsCount; i++ {
 		var cid spectypes.CommitteeID
 		if _, err := crand.Read(cid[:]); err != nil {
@@ -22,11 +99,15 @@ func TestCommitteeSubnet(t *testing.T) {
 		}
 
 		// Get result from CommitteeSubnetAlan
-		expected := CommitteeSubnetAlan(cid)
+		actual := CommitteeSubnetAlan(cid)
 
-		// Get result from SetCommitteeSubnet
-		SetCommitteeSubnet(bigInst, cid)
-		actual := bigInst.Uint64()
+		f := func(out *big.Int, cid spectypes.CommitteeID) {
+			out.SetBytes(cid[:])
+			out.Mod(out, bigIntSubnetsCount)
+		}
+		// Get expected result
+		f(bigInt, cid)
+		expected := bigInt.Uint64()
 
 		require.Equal(t, expected, actual)
 	}
