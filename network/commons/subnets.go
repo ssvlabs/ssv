@@ -40,12 +40,10 @@ func SubnetTopicID(subnet uint64) string {
 	return fmt.Sprintf("%d", subnet)
 }
 
+// CommitteeTopicIDAlan returns topics for given committee ID.
+// There's no similar post-fork function because post-fork requires operator IDs for calculation.
 func CommitteeTopicIDAlan(cid spectypes.CommitteeID) []string {
 	return []string{fmt.Sprintf("%d", CommitteeSubnetAlan(cid))}
-}
-
-func CommitteeTopicID(committee []spectypes.OperatorID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnet(committee))}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -60,16 +58,6 @@ func GetTopicBaseName(topicName string) string {
 
 var bigIntPool = sync.Pool{
 	New: func() any { return new(big.Int) },
-}
-
-// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
-func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
-	bi := bigIntPool.Get().(*big.Int)
-	defer bigIntPool.Put(bi)
-
-	bi.SetBytes(cid[:])
-	bi.Mod(bi, bigIntSubnetsCount)
-	return bi.Uint64()
 }
 
 // CommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).
@@ -105,6 +93,16 @@ func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 	subnet := result.Uint64()
 
 	return subnet
+}
+
+// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
+func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
+	bi := bigIntPool.Get().(*big.Int)
+	defer bigIntPool.Put(bi)
+
+	bi.SetBytes(cid[:])
+	bi.Mod(bi, bigIntSubnetsCount)
+	return bi.Uint64()
 }
 
 // Topics returns the available topics for this fork.

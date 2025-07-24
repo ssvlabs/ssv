@@ -602,13 +602,13 @@ var StartNodeCmd = &cobra.Command{
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
-				if subnet := networkcommons.CommitteeSubnet(v.OperatorIDs()); !mySubnets.IsSet(subnet) {
+				if subnet := v.CommitteeSubnet(); !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
 				}
 
 				if networkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
-					if alanSubnet := networkcommons.CommitteeSubnetAlan(v.CommitteeID()); !mySubnets.IsSet(alanSubnet) {
+					if alanSubnet := v.CommitteeSubnetAlan(); !mySubnets.IsSet(alanSubnet) {
 						mySubnets.Set(alanSubnet)
 						myActiveSubnets++
 					}
