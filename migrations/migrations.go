@@ -82,7 +82,7 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 		if err != nil {
 			return applied, err
 		}
-		if bytes.Equal(obj.Value, migrationCompleted) {
+		if bytes.Equal(obj.Value(), migrationCompleted) {
 			logger.Debug("migration already applied, skipping", fields.Name(migration.Name))
 			continue
 		}

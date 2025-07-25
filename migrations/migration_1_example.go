@@ -29,9 +29,9 @@ var migration_1_example = Migration{
 				return err
 			}
 			if !found {
-				return errors.Errorf("the key %s is not found", string(obj.Key))
+				return errors.Errorf("the key %s is not found", string(obj.Key()))
 			}
-			logger.Debug("migration_1_example: key found", zap.String("key", string(obj.Key)), zap.String("value", string(obj.Value)))
+			logger.Debug("migration_1_example: key found", zap.String("key", string(obj.Key())), zap.String("value", string(obj.Value())))
 			return completed(txn)
 		})
 	},

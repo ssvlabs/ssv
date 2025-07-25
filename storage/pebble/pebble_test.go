@@ -39,11 +39,11 @@ func TestPebbleDB_GetDelete(t *testing.T) {
 	obj, exists, err := db.Get(prefix, key)
 	require.NoError(t, err)
 	assert.True(t, exists)
-	assert.Equal(t, key, obj.Key)
-	assert.Equal(t, value, obj.Value)
+	assert.Equal(t, key, obj.Key())
+	assert.Equal(t, value, obj.Value())
 
 	// Test Get non-existent key
-	obj, exists, err = db.Get(prefix, []byte("non-existent"))
+	_, exists, err = db.Get(prefix, []byte("non-existent"))
 	require.NoError(t, err)
 	assert.False(t, exists)
 
@@ -52,7 +52,7 @@ func TestPebbleDB_GetDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify deletion
-	obj, exists, err = db.Get(prefix, key)
+	_, exists, err = db.Get(prefix, key)
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
@@ -89,8 +89,8 @@ func TestPebbleDB_GetMany(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, retrieved, len(keys))
 	for i, obj := range retrieved {
-		assert.Equal(t, keys[i], obj.Key)
-		assert.Equal(t, values[i], obj.Value)
+		assert.Equal(t, keys[i], obj.Key())
+		assert.Equal(t, values[i], obj.Value())
 	}
 
 	// Test GetMany with non-existent keys
@@ -125,8 +125,8 @@ func TestPebbleDB_GetAll(t *testing.T) {
 	err := db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 		assert.Equal(t, count, i)
 		count++
-		assert.Contains(t, testData, string(obj.Key))
-		assert.Equal(t, testData[string(obj.Key)], string(obj.Value))
+		assert.Contains(t, testData, string(obj.Key()))
+		assert.Equal(t, testData[string(obj.Key())], string(obj.Value()))
 		return nil
 	})
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestPebbleDB_Txn(t *testing.T) {
 	obj, exists, err := db.Get(prefix, key)
 	require.NoError(t, err)
 	assert.True(t, exists)
-	assert.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value())
 
 	// Test transaction rollback
 	err = db.Update(func(txn basedb.Txn) error {
@@ -182,7 +182,7 @@ func TestPebbleDB_Txn(t *testing.T) {
 	obj, exists, err = db.Get(prefix, key)
 	require.NoError(t, err)
 	assert.True(t, exists)
-	assert.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value())
 }
 
 func TestPebbleDB_PrefixOperations(t *testing.T) {
@@ -226,24 +226,24 @@ func TestPebbleDB_SetMany(t *testing.T) {
 	})
 
 	prefix := []byte("test-prefix")
-	testData := []basedb.Obj{
-		{Key: []byte("key1"), Value: []byte("value1")},
-		{Key: []byte("key2"), Value: []byte("value2")},
-		{Key: []byte("key3"), Value: []byte("value3")},
+	testData := []Obj{
+		{key: []byte("key1"), value: []byte("value1")},
+		{key: []byte("key2"), value: []byte("value2")},
+		{key: []byte("key3"), value: []byte("value3")},
 	}
 
 	// Test SetMany
-	err := db.SetMany(prefix, len(testData), func(i int) (basedb.Obj, error) {
-		return testData[i], nil
+	err := db.SetMany(prefix, len(testData), func(i int) (key, value []byte, err error) {
+		return testData[i].key, testData[i].value, nil
 	})
 	require.NoError(t, err)
 
 	// Verify the data was written
 	for _, expected := range testData {
-		obj, exists, err := db.Get(prefix, expected.Key)
+		obj, exists, err := db.Get(prefix, expected.Key())
 		require.NoError(t, err)
 		assert.True(t, exists)
-		assert.Equal(t, expected.Value, obj.Value)
+		assert.Equal(t, expected.Value(), obj.Value())
 	}
 }
 
@@ -330,7 +330,7 @@ func TestPebbleDB_DropPrefix(t *testing.T) {
 	obj, found, err := db.Get(prefix2, []byte("key1"))
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, []byte("value3"), obj.Value)
+	assert.Equal(t, []byte("value3"), obj.Value())
 }
 
 func TestPebbleDB_Update(t *testing.T) {
@@ -350,7 +350,7 @@ func TestPebbleDB_Update(t *testing.T) {
 	obj, found, err := db.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value())
 
 	// Test error handling
 	expectedErr := errors.New("update error")
@@ -393,7 +393,7 @@ func TestPebbleDB_Using(t *testing.T) {
 	obj, found, err := rw.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value())
 }
 
 func TestPebbleDB_UsingReader(t *testing.T) {
@@ -428,5 +428,5 @@ func TestPebbleDB_UsingReader(t *testing.T) {
 	obj, found, err := r.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value())
 }

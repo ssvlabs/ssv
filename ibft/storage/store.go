@@ -89,7 +89,7 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 
 	// filter and collect keys
 	err := i.db.UsingReader(tx).GetAll(prefix, func(i int, o basedb.Obj) error {
-		keySet = append(keySet, o.Key)
+		keySet = append(keySet, o.Key())
 		return nil
 	})
 
@@ -207,8 +207,8 @@ func (i *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]
 		err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
 			re := qbftstorage.ParticipantsRangeEntry{
 				Slot:    slot,
-				PubKey:  spectypes.ValidatorPK(o.Key),
-				Signers: decodeOperators(o.Value),
+				PubKey:  spectypes.ValidatorPK(o.Key()),
+				Signers: decodeOperators(o.Value()),
 			}
 			ee = append(ee, re)
 			return nil
@@ -294,7 +294,7 @@ func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte
 	if !found {
 		return nil, found, nil
 	}
-	return obj.Value, found, nil
+	return obj.Value(), found, nil
 }
 
 func (i *participantStorage) ID() string {

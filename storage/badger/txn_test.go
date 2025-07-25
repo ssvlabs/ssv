@@ -154,11 +154,11 @@ func TestTxnSetMany(t *testing.T) {
 	t.Run("set multiple items", func(t *testing.T) {
 		itemCount := 10
 
-		err := txn.SetMany(prefix, itemCount, func(i int) (basedb.Obj, error) {
-			key := []byte(fmt.Sprintf("key-%d", i))
-			value := []byte(fmt.Sprintf("value-%d", i))
+		err := txn.SetMany(prefix, itemCount, func(i int) (key, value []byte, err error) {
+			key = []byte(fmt.Sprintf("key-%d", i))
+			value = []byte(fmt.Sprintf("value-%d", i))
 
-			return basedb.Obj{Key: key, Value: value}, nil
+			return key, value, nil
 		})
 
 		require.NoError(t, err)
@@ -178,12 +178,12 @@ func TestTxnSetMany(t *testing.T) {
 	t.Run("error handling", func(t *testing.T) {
 		expectedErr := errors.New("generator error")
 
-		err := txn.SetMany(prefix, 5, func(i int) (basedb.Obj, error) {
+		err := txn.SetMany(prefix, 5, func(i int) (key, value []byte, err error) {
 			if i == 3 {
-				return basedb.Obj{}, expectedErr
+				return nil, nil, expectedErr
 			}
 
-			return basedb.Obj{Key: []byte{byte(i)}, Value: []byte{byte(i)}}, nil
+			return []byte{byte(i)}, []byte{byte(i)}, nil
 		})
 
 		assert.Equal(t, expectedErr, err)
@@ -195,11 +195,8 @@ func TestTxnSetMany(t *testing.T) {
 		txnClosed := db.Begin().(*badgerTxn)
 		txnClosed.Discard()
 
-		err := txnClosed.SetMany(prefix, 3, func(i int) (basedb.Obj, error) {
-			return basedb.Obj{
-				Key:   []byte(fmt.Sprintf("key-%d", i)),
-				Value: []byte(fmt.Sprintf("value-%d", i)),
-			}, nil
+		err := txnClosed.SetMany(prefix, 3, func(i int) (key, value []byte, err error) {
+			return []byte(fmt.Sprintf("key-%d", i)), []byte(fmt.Sprintf("value-%d", i)), nil
 		})
 
 		require.Error(t, err)
@@ -279,7 +276,7 @@ func TestTxnGetMany(t *testing.T) {
 
 		results := make(map[string][]byte)
 		err := txn.GetMany(prefix, keysToGet, func(obj basedb.Obj) error {
-			results[string(obj.Key)] = obj.Value
+			results[string(obj.Key())] = obj.Value()
 			return nil
 		})
 
@@ -312,7 +309,7 @@ func TestTxnGetMany(t *testing.T) {
 
 		results := make(map[string][]byte)
 		err := txn.GetMany(prefix, keysToGet, func(obj basedb.Obj) error {
-			results[string(obj.Key)] = obj.Value
+			results[string(obj.Key())] = obj.Value()
 
 			return nil
 		})
@@ -366,7 +363,7 @@ func TestTxnGetAll(t *testing.T) {
 
 		keys := make(map[string]struct{}, 20)
 		for _, item := range items {
-			keys[string(item.Key)] = struct{}{}
+			keys[string(item.Key())] = struct{}{}
 		}
 
 		assert.Equal(t, 20, len(keys))

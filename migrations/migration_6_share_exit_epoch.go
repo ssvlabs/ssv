@@ -20,10 +20,14 @@ const migration_6_Name = "migration_6_share_exit_epoch"
 var migration_6_share_exit_epoch = Migration{
 	Name: migration_6_Name,
 	Run: func(ctx context.Context, l *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
+		type dbObject struct {
+			key   []byte
+			value []byte
+		}
 		var (
 			oldSharesFullPrefix = append(opstorage.OperatorStoragePrefix, oldSharesPrefix...)
 			oldShares           = make(map[string]*migration_6_OldStorageShare)
-			sharesToPersist     []basedb.Obj
+			sharesToPersist     []dbObject
 		)
 
 		logger := l.With(zap.String("migration_name", migration_6_Name))
@@ -32,7 +36,7 @@ var migration_6_share_exit_epoch = Migration{
 
 		err := opt.Db.GetAll(oldSharesFullPrefix, func(i int, obj basedb.Obj) error {
 			oldShare := &migration_6_OldStorageShare{}
-			if err := oldShare.Decode(obj.Value); err != nil {
+			if err := oldShare.Decode(obj.Value()); err != nil {
 				return fmt.Errorf("error: '%w' decoding share: %v", err, obj.Value)
 			}
 
@@ -50,9 +54,9 @@ var migration_6_share_exit_epoch = Migration{
 				return fmt.Errorf("error: '%w' encoding new share: %v", err, share)
 			}
 
-			sharesToPersist = append(sharesToPersist, basedb.Obj{
-				Key:   key,
-				Value: value,
+			sharesToPersist = append(sharesToPersist, dbObject{
+				key:   key,
+				value: value,
 			})
 
 			return nil
@@ -65,8 +69,8 @@ var migration_6_share_exit_epoch = Migration{
 			With(zap.Int("shares_len", len(sharesToPersist))).
 			Debug("shares fetched. Persisting new shares")
 
-		err = opt.Db.SetMany(opstorage.OperatorStoragePrefix, len(sharesToPersist), func(i int) (basedb.Obj, error) {
-			return sharesToPersist[i], nil
+		err = opt.Db.SetMany(opstorage.OperatorStoragePrefix, len(sharesToPersist), func(i int) (key, value []byte, err error) {
+			return sharesToPersist[i].key, sharesToPersist[i].value, nil
 		})
 		if err != nil {
 			return fmt.Errorf("error during 'SetMany' operation, err: '%w'", err)
