@@ -11,6 +11,8 @@ const forkName = "alan"
 
 type Network interface {
 	NetworkName() string
+	GasLimit36Fork() bool
+	NetworkTopologyFork() bool
 	Beacon
 	SSV
 }
@@ -32,4 +34,12 @@ func (n NetworkConfig) String() string {
 
 func (n NetworkConfig) NetworkName() string {
 	return fmt.Sprintf("%s:%s", n.Name, forkName)
+}
+
+func (n NetworkConfig) GasLimit36Fork() bool {
+	return n.EstimatedCurrentEpoch() >= n.SSVConfig.Forks.GasLimit36
+}
+
+func (n NetworkConfig) NetworkTopologyFork() bool {
+	return n.EstimatedCurrentEpoch() >= n.SSVConfig.Forks.NetworkTopology
 }

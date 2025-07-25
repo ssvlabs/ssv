@@ -43,6 +43,21 @@ func (m *MockNetwork) EXPECT() *MockNetworkMockRecorder {
 	return m.recorder
 }
 
+// BeaconForkAtEpoch mocks base method.
+func (m *MockNetwork) BeaconForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeaconForkAtEpoch", epoch)
+	ret0, _ := ret[0].(spec.DataVersion)
+	ret1, _ := ret[1].(*phase0.Fork)
+	return ret0, ret1
+}
+
+// BeaconForkAtEpoch indicates an expected call of BeaconForkAtEpoch.
+func (mr *MockNetworkMockRecorder) BeaconForkAtEpoch(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeaconForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).BeaconForkAtEpoch), epoch)
+}
+
 // EpochDuration mocks base method.
 func (m *MockNetwork) EpochDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -183,19 +198,18 @@ func (mr *MockNetworkMockRecorder) FirstSlotAtEpoch(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FirstSlotAtEpoch", reflect.TypeOf((*MockNetwork)(nil).FirstSlotAtEpoch), epoch)
 }
 
-// ForkAtEpoch mocks base method.
-func (m *MockNetwork) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+// GasLimit36Fork mocks base method.
+func (m *MockNetwork) GasLimit36Fork() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForkAtEpoch", epoch)
-	ret0, _ := ret[0].(spec.DataVersion)
-	ret1, _ := ret[1].(*phase0.Fork)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "GasLimit36Fork")
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
-// ForkAtEpoch indicates an expected call of ForkAtEpoch.
-func (mr *MockNetworkMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
+// GasLimit36Fork indicates an expected call of GasLimit36Fork.
+func (mr *MockNetworkMockRecorder) GasLimit36Fork() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).ForkAtEpoch), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit36Fork", reflect.TypeOf((*MockNetwork)(nil).GasLimit36Fork))
 }
 
 // GetDomainType mocks base method.
@@ -238,20 +252,6 @@ func (m *MockNetwork) GetEpochsPerSyncCommitteePeriod() uint64 {
 func (mr *MockNetworkMockRecorder) GetEpochsPerSyncCommitteePeriod() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetwork)(nil).GetEpochsPerSyncCommitteePeriod))
-}
-
-// GetGasLimit36Epoch mocks base method.
-func (m *MockNetwork) GetGasLimit36Epoch() phase0.Epoch {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGasLimit36Epoch")
-	ret0, _ := ret[0].(phase0.Epoch)
-	return ret0
-}
-
-// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
-func (mr *MockNetworkMockRecorder) GetGasLimit36Epoch() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockNetwork)(nil).GetGasLimit36Epoch))
 }
 
 // GetGenesisTime mocks base method.
@@ -420,4 +420,18 @@ func (m *MockNetwork) NetworkName() string {
 func (mr *MockNetworkMockRecorder) NetworkName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkName", reflect.TypeOf((*MockNetwork)(nil).NetworkName))
+}
+
+// NetworkTopologyFork mocks base method.
+func (m *MockNetwork) NetworkTopologyFork() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NetworkTopologyFork")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// NetworkTopologyFork indicates an expected call of NetworkTopologyFork.
+func (mr *MockNetworkMockRecorder) NetworkTopologyFork() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkTopologyFork", reflect.TypeOf((*MockNetwork)(nil).NetworkTopologyFork))
 }
