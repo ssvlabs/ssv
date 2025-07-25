@@ -24,15 +24,15 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 
 	// Set genesis time far enough in the past so that small block numbers
 	// (used as seconds-since-epoch in test headers) are always after genesis.
 	//
 	// Ensure genesis is not in the future relative to mocked block timestamps (1,2,5... seconds).
-	scheduler.beaconConfig.GenesisTime = time.Unix(0, 0)
+	//
 	// Use 1-second slots so that block number == slot in the test’s 1:1 mapping assertion.
-	scheduler.beaconConfig.SlotDuration = time.Second
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
