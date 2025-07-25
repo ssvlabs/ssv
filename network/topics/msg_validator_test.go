@@ -15,15 +15,15 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -97,7 +97,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.CommitteeTopicIDAlan(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		topicID := share.CommitteeTopicID()[0]
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -159,7 +159,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.CommitteeTopicIDAlan(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		topicID := share.CommitteeTopicID()[0]
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
