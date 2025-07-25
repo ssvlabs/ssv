@@ -339,7 +339,7 @@ func (s *Syncer) selfSubnets() networkcommons.Subnets {
 	for _, v := range myValidators {
 		mySubnets.Set(v.CommitteeSubnet())
 
-		if s.netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+		if !s.netCfg.NetworkTopologyFork() {
 			mySubnets.Set(v.CommitteeSubnetAlan())
 		}
 	}
@@ -352,7 +352,7 @@ func (s *Syncer) shareInOwnSubnets(share *ssvtypes.SSVShare, ownSubnets networkc
 		return true
 	}
 
-	if s.netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+	if !s.netCfg.NetworkTopologyFork() {
 		return ownSubnets.IsSet(share.CommitteeSubnetAlan())
 	}
 

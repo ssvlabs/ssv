@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -17,15 +16,9 @@ var HoleskyE2ESSV = &SSVConfig{
 	RegistrySyncOffset:      big.NewInt(405579),
 	Bootnodes:               []string{},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
-	GasLimit36Epoch:         0,
-	Forks: []SSVFork{
-		{
-			Name:  AlanFork,
-			Epoch: 0,
-		},
-		{
-			Name:  NetworkTopologyFork,
-			Epoch: math.MaxUint64,
-		},
+	Forks: SSVForks{
+		Alan:            0,
+		GasLimit36:      0,
+		NetworkTopology: 0,
 	},
 }

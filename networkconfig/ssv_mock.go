@@ -12,7 +12,6 @@ package networkconfig
 import (
 	reflect "reflect"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -53,32 +52,4 @@ func (m *MockSSV) GetDomainType() types.DomainType {
 func (mr *MockSSVMockRecorder) GetDomainType() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainType", reflect.TypeOf((*MockSSV)(nil).GetDomainType))
-}
-
-// GetGasLimit36Epoch mocks base method.
-func (m *MockSSV) GetGasLimit36Epoch() phase0.Epoch {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGasLimit36Epoch")
-	ret0, _ := ret[0].(phase0.Epoch)
-	return ret0
-}
-
-// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
-func (mr *MockSSVMockRecorder) GetGasLimit36Epoch() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockSSV)(nil).GetGasLimit36Epoch))
-}
-
-// SSVForkAtEpoch mocks base method.
-func (m *MockSSV) SSVForkAtEpoch(epoch phase0.Epoch) ForkName {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SSVForkAtEpoch", epoch)
-	ret0, _ := ret[0].(ForkName)
-	return ret0
-}
-
-// SSVForkAtEpoch indicates an expected call of SSVForkAtEpoch.
-func (mr *MockSSVMockRecorder) SSVForkAtEpoch(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SSVForkAtEpoch", reflect.TypeOf((*MockSSV)(nil).SSVForkAtEpoch), epoch)
 }

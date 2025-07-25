@@ -607,7 +607,7 @@ var StartNodeCmd = &cobra.Command{
 					myActiveSubnets++
 				}
 
-				if networkConfig.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+				if !networkConfig.NetworkTopologyFork() {
 					if alanSubnet := v.CommitteeSubnetAlan(); !mySubnets.IsSet(alanSubnet) {
 						mySubnets.Set(alanSubnet)
 						myActiveSubnets++

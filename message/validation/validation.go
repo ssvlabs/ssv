@@ -230,7 +230,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 
 	// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
 	// we don't expect post-fork messages to be received before the fork.
-	if mv.netCfg.CurrentSSVFork() >= networkconfig.NetworkTopologyFork {
+	if mv.netCfg.NetworkTopologyFork() {
 		messageTopics = []string{commons.SubnetTopicID(committeeInfo.subnet)}
 	} else {
 		messageTopics = []string{commons.SubnetTopicID(committeeInfo.subnetAlan)}
