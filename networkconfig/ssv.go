@@ -47,7 +47,7 @@ type SSV struct {
 	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
 	// to 36_000_000.
 	GasLimit36Epoch phase0.Epoch
-	Forks           SSVForks
+	Forks           []SSVFork
 }
 
 type SSVForks struct {
