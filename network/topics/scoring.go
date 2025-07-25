@@ -234,7 +234,7 @@ func filterCommitteesForTopic(netCfg *networkconfig.NetworkConfig, topic string,
 		}
 
 		// Same for pre-fork topic logic
-		if netCfg.CurrentSSVFork() < networkconfig.NetworkTopologyFork {
+		if !netCfg.NetworkTopologyFork() {
 			alanCommitteeTopic := commons.SubnetTopicID(committee.SubnetAlan)
 			alanCommitteeTopicFullName := commons.GetTopicFullName(alanCommitteeTopic)
 

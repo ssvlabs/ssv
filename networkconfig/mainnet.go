@@ -30,15 +30,9 @@ var MainnetSSV = &SSVConfig{
 		"enr:-Li4QH7FwJcL8gJj0zHAITXqghMkG-A5bfWh2-3Q7vosy9D1BS8HZk-1ITuhK_rfzG3v_UtBDI6uNJZWpdcWfrQFCxKGAYnQ1DRCh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQKeSDcZWSaY9FC723E9yYX1Li18bswhLNlxBZdLfgOKp4N0Y3CCE4mDdWRwgg-h",
 	},
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
-	GasLimit36Epoch:         385150,  // Aug-09-2025 06:40:23 AM UTC
-	Forks: []SSVFork{
-		{
-			Name:  AlanFork,
-			Epoch: 0, // We don't need to set the real Alan fork epoch because pre-Alan ssv-nodes aren't supported anymore.
-		},
-		{
-			Name:  NetworkTopologyFork,
-			Epoch: math.MaxUint64, // TODO: set correct epoch
-		},
+	Forks: SSVForks{
+		Alan:            0,      // We don't need to set the real Alan fork epoch because pre-Alan ssv-nodes aren't supported anymore.
+		GasLimit36:      385150, // Aug-09-2025 06:40:23 AM UTC
+		NetworkTopology: math.MaxUint64,
 	},
 }

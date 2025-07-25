@@ -35,8 +35,6 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 
 type SSV interface {
 	GetDomainType() spectypes.DomainType
-	GetGasLimit36Epoch() phase0.Epoch
-	SSVForkAtEpoch(epoch phase0.Epoch) ForkName
 }
 
 type SSVConfig struct {
@@ -48,10 +46,13 @@ type SSVConfig struct {
 	// TotalEthereumValidators value needs to be maintained — consider getting it from external API
 	// with default or per-network value(s) as fallback
 	TotalEthereumValidators int
-	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
-	// to 36_000_000.
-	GasLimit36Epoch phase0.Epoch
-	Forks           []SSVFork
+	Forks                   SSVForks
+}
+
+type SSVForks struct {
+	Alan            phase0.Epoch
+	GasLimit36      phase0.Epoch
+	NetworkTopology phase0.Epoch // the name may be changed in the future
 }
 
 func (s *SSVConfig) String() string {
@@ -70,8 +71,7 @@ type marshaledConfig struct {
 	Bootnodes               []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
-	GasLimit36Epoch         phase0.Epoch      `json:"GasLimit36Epoch,omitempty" yaml:"GasLimit36Epoch,omitempty"`
-	Forks                   []SSVFork         `json:"Forks,omitempty" yaml:"Forks,omitempty"`
+	Forks                   SSVForks          `json:"Forks,omitempty" yaml:"Forks,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
@@ -83,7 +83,6 @@ func (s *SSVConfig) marshal() *marshaledConfig {
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
-		GasLimit36Epoch:         s.GasLimit36Epoch,
 		Forks:                   s.Forks,
 	}
 }
@@ -113,7 +112,6 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
 		TotalEthereumValidators: aux.TotalEthereumValidators,
-		GasLimit36Epoch:         aux.GasLimit36Epoch,
 		Forks:                   aux.Forks,
 	}
 
@@ -140,29 +138,4 @@ func (s *SSVConfig) UnmarshalJSON(data []byte) error {
 
 func (s *SSVConfig) GetDomainType() spectypes.DomainType {
 	return s.DomainType
-}
-
-func (s *SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
-	return s.GasLimit36Epoch
-}
-
-func (s *SSVConfig) SSVForkAtEpoch(epoch phase0.Epoch) ForkName {
-	if len(s.Forks) == 0 {
-		panic("misconfiguration: config must have SSV forks")
-	}
-
-	var currentFork *SSVFork
-
-	for _, fork := range s.Forks {
-		if epoch >= fork.Epoch && (currentFork == nil || fork.Epoch > currentFork.Epoch) {
-			fork := fork
-			currentFork = &fork
-		}
-	}
-
-	if currentFork == nil {
-		panic(fmt.Sprintf("misconfiguration: no forks matching epoch %d", epoch))
-	}
-
-	return currentFork.Name
 }
