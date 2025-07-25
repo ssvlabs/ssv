@@ -1601,9 +1601,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.GetSlotStartTime(slot)
-		topicID := "incorrect"
+		incorrectTopicID := "incorrect"
 
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, incorrectTopicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrIncorrectTopic.Error())
 	})
 
