@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -48,7 +49,7 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
+		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -75,7 +76,7 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
+		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 		if err != nil {
 			t.Fatal(err)
 		}

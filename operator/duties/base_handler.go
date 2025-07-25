@@ -17,7 +17,7 @@ type dutyHandler interface {
 		logger *zap.Logger,
 		beaconNode BeaconNode,
 		executionClient ExecutionClient,
-		beaconConfig networkconfig.Beacon,
+		beaconConfig *networkconfig.Beacon,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
@@ -34,7 +34,7 @@ type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        networkconfig.Beacon
+	beaconConfig        *networkconfig.Beacon
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	dutiesExecutor      DutiesExecutor
@@ -51,7 +51,7 @@ func (h *baseHandler) Setup(
 	logger *zap.Logger,
 	beaconNode BeaconNode,
 	executionClient ExecutionClient,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,

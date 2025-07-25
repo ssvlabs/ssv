@@ -59,7 +59,7 @@ type Migrations []Migration
 type Options struct {
 	Db              basedb.Database
 	DbPath          string
-	BeaconConfig    *networkconfig.BeaconConfig
+	BeaconConfig    *networkconfig.Beacon
 	OperatorPrivKey keys.OperatorPrivateKey
 }
 

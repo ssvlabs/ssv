@@ -47,14 +47,14 @@ type slashingProtector interface {
 // or proposal is slashable.
 type SlashingProtector struct {
 	logger      *zap.Logger
-	beaconCfg   networkconfig.Beacon
+	beaconCfg   *networkconfig.Beacon
 	signerStore Storage
 	protection  *slashingprotection.NormalProtection
 }
 
 func NewSlashingProtector(
 	logger *zap.Logger,
-	beaconCfg networkconfig.Beacon,
+	beaconCfg *networkconfig.Beacon,
 	signerStore Storage,
 	protection *slashingprotection.NormalProtection,
 ) *SlashingProtector {
