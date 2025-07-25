@@ -44,14 +44,13 @@ type SSV struct {
 	// TotalEthereumValidators value needs to be maintained — consider getting it from external API
 	// with default or per-network value(s) as fallback
 	TotalEthereumValidators int
-	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
-	// to 36_000_000.
-	GasLimit36Epoch phase0.Epoch
-	Forks           []SSVFork
+	Forks                   SSVForks
 }
 
 type SSVForks struct {
-	Alan       phase0.Epoch
+	Alan phase0.Epoch
+	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
+	// to 36_000_000.
 	GasLimit36 phase0.Epoch
 }
 
@@ -72,8 +71,7 @@ type marshaledConfig struct {
 	Bootnodes               []string          `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"discovery_protocol_id,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"total_ethereum_validators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
-	GasLimit36Epoch         phase0.Epoch      `json:"gas_limit_36_epoch,omitempty" yaml:"GasLimit36Epoch,omitempty"`
-	Forks                   []SSVFork         `json:"forks,omitempty" yaml:"Forks,omitempty"`
+	Forks                   SSVForks          `json:"forks,omitempty" yaml:"Forks,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
@@ -86,7 +84,6 @@ func (s *SSV) marshal() *marshaledConfig {
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
-		GasLimit36Epoch:         s.GasLimit36Epoch,
 		Forks:                   s.Forks,
 	}
 }
@@ -117,7 +114,6 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
 		TotalEthereumValidators: aux.TotalEthereumValidators,
-		GasLimit36Epoch:         aux.GasLimit36Epoch,
 		Forks:                   aux.Forks,
 	}
 
@@ -140,29 +136,4 @@ func (s *SSV) UnmarshalJSON(data []byte) error {
 	}
 
 	return s.unmarshalFromConfig(aux)
-}
-
-type SSVFork struct {
-	Name  string
-	Epoch phase0.Epoch
-}
-
-func (s *SSV) ForkAtEpoch(epoch phase0.Epoch) SSVFork {
-	if len(s.Forks) == 0 {
-		panic("misconfiguration: config must have SSV forks")
-	}
-
-	var currentFork *SSVFork
-
-	for _, fork := range s.Forks {
-		if epoch >= fork.Epoch && (currentFork == nil || fork.Epoch > currentFork.Epoch) {
-			currentFork = &fork
-		}
-	}
-
-	if currentFork == nil {
-		panic(fmt.Sprintf("misconfiguration: no forks matching epoch %d", epoch))
-	}
-
-	return *currentFork
 }

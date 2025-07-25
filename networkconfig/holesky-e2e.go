@@ -15,11 +15,8 @@ var HoleskyE2ESSV = &SSV{
 	RegistrySyncOffset:      big.NewInt(405579),
 	Bootnodes:               []string{},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
-	GasLimit36Epoch:         0,
-	Forks: []SSVFork{
-		{
-			Name:  "alan",
-			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
-		},
+	Forks: SSVForks{
+		Alan:       0,
+		GasLimit36: 0,
 	},
 }

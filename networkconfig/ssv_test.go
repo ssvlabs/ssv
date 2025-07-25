@@ -27,12 +27,9 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		GasLimit36Epoch:      0,
-		Forks: []SSVFork{
-			{
-				Name:  "alan",
-				Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
-			},
+		Forks: SSVForks{
+			Alan:       0,
+			GasLimit36: 0,
 		},
 	}
 
@@ -60,7 +57,6 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
 	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
-	assert.Equal(t, originalConfig.GasLimit36Epoch, unmarshaledConfig.GasLimit36Epoch)
 	assert.Equal(t, originalConfig.Forks, unmarshaledConfig.Forks)
 }
 
@@ -73,12 +69,9 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		GasLimit36Epoch:      0,
-		Forks: []SSVFork{
-			{
-				Name:  "alan",
-				Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
-			},
+		Forks: SSVForks{
+			Alan:       0,
+			GasLimit36: 0,
 		},
 	}
 
@@ -103,7 +96,6 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
 	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
-	assert.Equal(t, originalConfig.GasLimit36Epoch, unmarshaledConfig.GasLimit36Epoch)
 	assert.Equal(t, originalConfig.Forks, unmarshaledConfig.Forks)
 
 	// Compare the original and remarshaled YAML bytes
@@ -173,12 +165,9 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			GasLimit36Epoch:      0,
-			Forks: []SSVFork{
-				{
-					Name:  "alan",
-					Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
-				},
+			Forks: SSVForks{
+				Alan:       0,
+				GasLimit36: 0,
 			},
 		}
 
@@ -201,7 +190,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "e33a9b6e70deaf1eaa7ab60d74885863403eadf3d87bb6c122e42eebe87d0369"
+		expectedJSONHash := "407e3b49376168be772a54bb921d99703ae5acc294c6b4260f51553c2c86f875"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -215,12 +204,9 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			GasLimit36Epoch:      0,
-			Forks: []SSVFork{
-				{
-					Name:  "alan",
-					Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
-				},
+			Forks: SSVForks{
+				Alan:       0,
+				GasLimit36: 0,
 			},
 		}
 

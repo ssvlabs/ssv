@@ -19,12 +19,14 @@ func (n Network) String() string {
 	return string(jsonBytes)
 }
 
+const alanForkName = "alan"
+
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with fork name.
 func (n Network) StorageName() string {
-	return fmt.Sprintf("%s:%s", n.SSV.Name, n.CurrentSSVFork().Name)
+	return fmt.Sprintf("%s:%s", n.SSV.Name, alanForkName) // TODO: decide what forks change DB fork name
 }
 
-func (n Network) CurrentSSVFork() SSVFork {
-	return n.SSV.ForkAtEpoch(n.EstimatedCurrentEpoch())
+func (n Network) GasLimit36Fork() bool {
+	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.GasLimit36
 }

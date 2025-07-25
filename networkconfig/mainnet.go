@@ -28,11 +28,8 @@ var MainnetSSV = &SSV{
 		"enr:-Li4QH7FwJcL8gJj0zHAITXqghMkG-A5bfWh2-3Q7vosy9D1BS8HZk-1ITuhK_rfzG3v_UtBDI6uNJZWpdcWfrQFCxKGAYnQ1DRCh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQKeSDcZWSaY9FC723E9yYX1Li18bswhLNlxBZdLfgOKp4N0Y3CCE4mDdWRwgg-h",
 	},
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
-	GasLimit36Epoch:         385150,  // Aug-09-2025 06:40:23 AM UTC
-	Forks: []SSVFork{
-		{
-			Name:  "alan",
-			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
-		},
+	Forks: SSVForks{
+		Alan:       0,      // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
+		GasLimit36: 385150, // Aug-09-2025 06:40:23 AM UTC
 	},
 }
