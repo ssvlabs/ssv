@@ -11,6 +11,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1605,6 +1606,80 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, incorrectTopicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrIncorrectTopic.Error())
+	})
+
+	// Receive a message with Alan and network topology fork topics.
+	t.Run("network topology fork topic", func(t *testing.T) {
+		alanSSVCfg := *netCfg.SSVConfig
+		alanSSVCfg.Forks.NetworkTopology = math.MaxUint64
+
+		alanNetCfg := &networkconfig.NetworkConfig{
+			Name:         netCfg.Name,
+			BeaconConfig: netCfg.BeaconConfig,
+			SSVConfig:    &alanSSVCfg,
+		}
+
+		networkTopologySSVConfig := *netCfg.SSVConfig
+		networkTopologySSVConfig.Forks.NetworkTopology = 0
+
+		networkTopologyNetCfg := &networkconfig.NetworkConfig{
+			Name:         netCfg.Name,
+			BeaconConfig: netCfg.BeaconConfig,
+			SSVConfig:    &networkTopologySSVConfig,
+		}
+
+		tt := []struct {
+			name  string
+			topic string
+			cfg   *networkconfig.NetworkConfig
+			err   error
+		}{
+			{
+				name:  "Alan topic / Alan config",
+				topic: shares.active.CommitteeTopicIDAlan()[0],
+				cfg:   alanNetCfg,
+				err:   nil,
+			},
+			{
+				name:  "Alan topic / network topology config",
+				topic: shares.active.CommitteeTopicIDAlan()[0],
+				cfg:   networkTopologyNetCfg,
+				err:   ErrIncorrectTopic,
+			},
+			{
+				name:  "network topology topic / Alan config",
+				topic: shares.active.CommitteeTopicID()[0],
+				cfg:   alanNetCfg,
+				err:   ErrIncorrectTopic,
+			},
+			{
+				name:  "network topology topic / network topology config",
+				topic: shares.active.CommitteeTopicID()[0],
+				cfg:   networkTopologyNetCfg,
+				err:   nil,
+			},
+		}
+
+		var i atomic.Uint64
+
+		for _, tc := range tt {
+			t.Run(tc.name, func(t *testing.T) {
+				validator := New(tc.cfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
+
+				signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+
+				receivedAt := netCfg.GetSlotStartTime(slot)
+
+				_, err = validator.handleSignedSSVMessage(signedSSVMessage, tc.topic, peerID, receivedAt)
+				if tc.err != nil {
+					require.ErrorContains(t, err, tc.err.Error())
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
 	})
 
 	// Receive nil signed ssv message
