@@ -238,6 +238,8 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 		zap.Float64("score", bestScore)).
 		Debug("successfully fetched attestation data")
 
+	recordAttestationDataClientSelection(ctx, bestClientAddr)
+
 	return bestAttestationData, nil
 }
 
@@ -277,6 +279,8 @@ func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot)
 		zap.String("client_addr", gc.multiClient.Address()),
 		fields.BlockRoot(resp.Data.BeaconBlockRoot),
 	).Debug("successfully fetched attestation data")
+
+	recordAttestationDataClientSelection(ctx, gc.multiClient.Address())
 
 	return resp.Data, nil
 }
