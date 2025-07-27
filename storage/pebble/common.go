@@ -2,6 +2,7 @@ package pebble
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/cockroachdb/pebble"
@@ -71,13 +72,12 @@ func manyGetter(logger *zap.Logger, keys [][]byte, dbFetch func(key []byte) ([]b
 	return nil
 }
 
-func allGetter(logger *zap.Logger, iter *pebble.Iterator, prefix []byte, fn func(int, basedb.Obj) error) error {
+func allGetter(iter *pebble.Iterator, prefix []byte, fn func(int, basedb.Obj) error) error {
 	var i int
 	for iter.First(); iter.Valid(); iter.Next() {
 		value, err := iter.ValueAndErr()
 		if err != nil {
-			logger.Error("failed to get value", zap.Error(err), zap.String("key", string(iter.Key())))
-			continue
+			return fmt.Errorf("get value from db for key: %s: %w", string(iter.Key()), err)
 		}
 
 		// Since the returned key and value are only valid until the next
