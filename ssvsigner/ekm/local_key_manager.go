@@ -64,7 +64,7 @@ type LocalKeyManager struct {
 func NewLocalKeyManager(
 	logger *zap.Logger,
 	db basedb.Database,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
 	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()

@@ -83,7 +83,7 @@ func TestCheckPeer(t *testing.T) {
 		}
 	)
 
-	var checkPeerTestSSVConfig = &networkconfig.SSVConfig{
+	var checkPeerTestSSVConfig = &networkconfig.SSV{
 		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 	}
 

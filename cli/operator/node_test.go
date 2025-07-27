@@ -21,11 +21,11 @@ func Test_verifyConfig(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	network := networkconfig.TestNetwork
-	nodeStorage, err := operatorstorage.NewNodeStorage(network, logger, db)
+	netCfg := networkconfig.TestNetwork
+	nodeStorage, err := operatorstorage.NewNodeStorage(netCfg.Beacon, logger, db)
 	require.NoError(t, err)
 
-	testNetworkName := network.NetworkName()
+	testNetworkName := netCfg.StorageName()
 
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{

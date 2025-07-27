@@ -66,7 +66,7 @@ type storage struct {
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
+func NewNodeStorage(beaconCfg *networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,

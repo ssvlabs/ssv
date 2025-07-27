@@ -56,7 +56,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork.SSVConfig, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork.SSV, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -146,7 +146,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		return nil, err
 	}
 
-	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
 		return nil, err
 	}
