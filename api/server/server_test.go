@@ -135,6 +135,7 @@ func TestNew(t *testing.T) {
 		node,
 		validators,
 		exporter,
+		nil, // logAnalyzer
 		false,
 	)
 
@@ -170,6 +171,7 @@ func TestRun_ActualExecution(t *testing.T) {
 		&handlers.Node{},
 		&handlers.Validators{},
 		&handlers.Exporter{},
+		nil, // logAnalyzer
 		false,
 	)
 
@@ -235,6 +237,7 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 		&handlers.Node{},
 		&handlers.Validators{},
 		&handlers.Exporter{},
+		nil, // logAnalyzer
 		true,
 	)
 

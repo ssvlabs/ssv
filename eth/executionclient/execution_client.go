@@ -13,6 +13,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
@@ -28,6 +29,8 @@ import (
 type Provider interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
+	StreamFilterLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log
+	StreamFinalizedLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
 	Filterer() (*contract.ContractFilterer, error)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
 	ChainID(ctx context.Context) (*big.Int, error)
@@ -40,6 +43,8 @@ type Provider interface {
 type SingleClientProvider interface {
 	Provider
 	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
+	StreamFilterLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log
+	StreamFinalizedLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
 	streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (nextBlockToProcess uint64, err error)
 }
 
@@ -484,23 +489,47 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
+			ec.logger.Debug("received new head",
+				zap.Uint64("header_number", header.Number.Uint64()),
+				zap.Uint64("follow_distance", ec.followDistance),
+				zap.Uint64("from_block", fromBlock))
+
 			if header.Number.Uint64() < ec.followDistance {
+				ec.logger.Debug("skipping head: header number less than follow distance",
+					zap.Uint64("header_number", header.Number.Uint64()),
+					zap.Uint64("follow_distance", ec.followDistance))
 				continue
 			}
 			toBlock := header.Number.Uint64() - ec.followDistance
 			if toBlock < fromBlock {
+				ec.logger.Debug("skipping head: toBlock less than fromBlock",
+					zap.Uint64("to_block", toBlock),
+					zap.Uint64("from_block", fromBlock))
 				continue
 			}
 
+			ec.logger.Debug("processing blocks range",
+				zap.Uint64("from_block", fromBlock),
+				zap.Uint64("to_block", toBlock))
+
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+			blocksProcessed := 0
 			for block := range logStream {
+				ec.logger.Debug("streaming block logs",
+					zap.Uint64("block", block.BlockNumber),
+					zap.Int("log_count", len(block.Logs)))
 				logCh <- block
 				fromBlock = block.BlockNumber + 1
+				blocksProcessed++
 			}
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
 				return fromBlock, fmt.Errorf("fetch logs: %w", err)
 			}
+
+			ec.logger.Debug("completed blocks range processing",
+				zap.Int("blocks_processed", blocksProcessed),
+				zap.Uint64("next_from_block", toBlock+1))
 
 			fromBlock = toBlock + 1
 			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
@@ -561,4 +590,163 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 
 func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	return ec.client.ChainID(ctx)
+}
+
+// StreamFilterLogs streams ongoing logs from the given block to the given channel.
+// Unlike StreamLogs, this method uses a direct stream subscription from the node.
+func (ec *ExecutionClient) StreamFilterLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log {
+	// Small buffer to reduce blocking to avoid connection timeouts to the node.
+	bufferSize := 100
+	logCh := make(chan ethtypes.Log, bufferSize)
+
+	go func() {
+		defer close(logCh)
+
+		ec.logger.Debug("starting filter logs subscription",
+			zap.Uint64("from_block", fromBlock),
+			zap.String("contract_address", ec.contractAddress.Hex()))
+
+		query := ethereum.FilterQuery{
+			Addresses: []ethcommon.Address{ec.contractAddress},
+			FromBlock: new(big.Int).SetUint64(fromBlock),
+		}
+
+		// Create a buffered channel to filter out removed logs
+		filterCh := make(chan ethtypes.Log, cap(logCh))
+		sub, err := ec.client.SubscribeFilterLogs(ctx, query, filterCh)
+		if err != nil {
+			ec.logger.Error("failed to subscribe to filter logs", zap.Error(err))
+			return
+		}
+		defer sub.Unsubscribe()
+
+		ec.logger.Debug("filter logs subscription established, waiting for logs")
+
+		for {
+			select {
+			case <-ctx.Done():
+				ec.logger.Debug("filter logs subscription cancelled due to context")
+				return
+			case <-ec.closed:
+				ec.logger.Debug("filter logs subscription closed due to client shutdown")
+				return
+			case log := <-filterCh:
+				// Filter out removed logs (indicates blockchain reorganization)
+				if log.Removed {
+					ec.logger.Warn("filter log is removed (reorg detected)",
+						zap.String("block_hash", log.BlockHash.Hex()),
+						fields.TxHash(log.TxHash),
+						zap.Uint("log_index", log.Index))
+					continue
+				}
+				logCh <- log
+			case err := <-sub.Err():
+				if err != nil {
+					ec.logger.Error("filter logs subscription error", zap.Error(err))
+				} else {
+					ec.logger.Debug("filter logs subscription closed normally")
+				}
+				return
+			}
+		}
+	}()
+
+	return logCh
+}
+
+// StreamFinalizedLogs streams logs from finalized blocks to detect finalized events.
+// This method subscribes to new heads and fetches logs from finalized blocks when they advance.
+func (ec *ExecutionClient) StreamFinalizedLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+	logCh := make(chan BlockLogs, 10) // Smaller buffer since finalized blocks come slower
+
+	go func() {
+		defer close(logCh)
+
+		heads := make(chan *ethtypes.Header)
+		sub, err := ec.client.SubscribeNewHead(ctx, heads)
+		if err != nil {
+			ec.logger.Error("failed to subscribe to new heads for finalized logs", zap.Error(err))
+			return
+		}
+		defer sub.Unsubscribe()
+
+		var lastFinalizedBlock uint64
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ec.closed:
+				return
+			case err := <-sub.Err():
+				if err != nil {
+					ec.logger.Error("finalized logs subscription error", zap.Error(err))
+				}
+				return
+			case <-heads:
+				// Fetch the current finalized block
+				finalizedHeader, err := ec.client.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
+				if err != nil {
+					ec.logger.Debug("failed to fetch finalized header", zap.Error(err))
+					continue
+				}
+
+				finalizedBlockNum := finalizedHeader.Number.Uint64()
+
+				// Skip if finalized block hasn't advanced
+				if finalizedBlockNum <= lastFinalizedBlock {
+					continue
+				}
+
+				// Fetch logs for the newly finalized block
+				ec.logger.Debug("fetching logs for finalized block", zap.Uint64("block", finalizedBlockNum))
+
+				query := ethereum.FilterQuery{
+					Addresses: []ethcommon.Address{ec.contractAddress},
+					FromBlock: new(big.Int).SetUint64(finalizedBlockNum),
+					ToBlock:   new(big.Int).SetUint64(finalizedBlockNum),
+				}
+
+				logs, err := ec.client.FilterLogs(ctx, query)
+				if err != nil {
+					ec.logger.Error("failed to fetch finalized logs",
+						zap.Uint64("block", finalizedBlockNum),
+						zap.Error(err))
+					continue
+				}
+
+				// Filter out removed logs (indicates blockchain reorganization)
+				validLogs := make([]ethtypes.Log, 0, len(logs))
+				for _, log := range logs {
+					if log.Removed {
+						ec.logger.Warn("finalized log is removed (reorg detected)",
+							zap.String("block_hash", log.BlockHash.Hex()),
+							fields.TxHash(log.TxHash),
+							zap.Uint("log_index", log.Index))
+						continue
+					}
+					validLogs = append(validLogs, log)
+				}
+
+				blockLogs := BlockLogs{
+					BlockNumber: finalizedBlockNum,
+					Logs:        validLogs,
+				}
+
+				select {
+				case logCh <- blockLogs:
+					lastFinalizedBlock = finalizedBlockNum
+					ec.logger.Debug("emitted finalized logs",
+						zap.Uint64("block", finalizedBlockNum),
+						zap.Int("log_count", len(logs)))
+				case <-ctx.Done():
+					return
+				case <-ec.closed:
+					return
+				}
+			}
+		}
+	}()
+
+	return logCh
 }

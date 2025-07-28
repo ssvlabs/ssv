@@ -74,6 +74,34 @@ func (mr *MockExecutionClientMockRecorder) HeaderByNumber(ctx, blockNumber any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeaderByNumber", reflect.TypeOf((*MockExecutionClient)(nil).HeaderByNumber), ctx, blockNumber)
 }
 
+// StreamFilterLogs mocks base method.
+func (m *MockExecutionClient) StreamFilterLogs(ctx context.Context, fromBlock uint64) <-chan types.Log {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamFilterLogs", ctx, fromBlock)
+	ret0, _ := ret[0].(<-chan types.Log)
+	return ret0
+}
+
+// StreamFilterLogs indicates an expected call of StreamFilterLogs.
+func (mr *MockExecutionClientMockRecorder) StreamFilterLogs(ctx, fromBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamFilterLogs", reflect.TypeOf((*MockExecutionClient)(nil).StreamFilterLogs), ctx, fromBlock)
+}
+
+// StreamFinalizedLogs mocks base method.
+func (m *MockExecutionClient) StreamFinalizedLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamFinalizedLogs", ctx, fromBlock)
+	ret0, _ := ret[0].(<-chan executionclient.BlockLogs)
+	return ret0
+}
+
+// StreamFinalizedLogs indicates an expected call of StreamFinalizedLogs.
+func (mr *MockExecutionClientMockRecorder) StreamFinalizedLogs(ctx, fromBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamFinalizedLogs", reflect.TypeOf((*MockExecutionClient)(nil).StreamFinalizedLogs), ctx, fromBlock)
+}
+
 // StreamLogs mocks base method.
 func (m *MockExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs {
 	m.ctrl.T.Helper()
