@@ -791,6 +791,16 @@ func hasFeeRecipient(block any) (bool, error) {
 			return false, fmt.Errorf("electra blinded block, body or execution payload header is nil")
 		}
 		return b.Body.ExecutionPayloadHeader.FeeRecipient != zeroRecipient, nil
+	case *apiv1deneb.BlockContents:
+		if b == nil || b.Block == nil || b.Block.Body == nil || b.Block.Body.ExecutionPayload == nil {
+			return false, fmt.Errorf("deneb block contents, block, body or execution payload is nil")
+		}
+		return b.Block.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
+	case *apiv1electra.BlockContents:
+		if b == nil || b.Block == nil || b.Block.Body == nil || b.Block.Body.ExecutionPayload == nil {
+			return false, fmt.Errorf("electra block contents, block, body or execution payload is nil")
+		}
+		return b.Block.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
 	default:
 		return false, fmt.Errorf("unsupported block type %T", block)
 	}
