@@ -186,10 +186,12 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		}
 
 		if err = r.GetBeaconNode().SubmitProposalPreparation(ctx, feeRecipients); err != nil {
+			span.RecordError(err)
 			logger.Warn("failed to submit proposal preparation, continuing with original block data", zap.Error(err))
 		} else {
 			obj, ver, err = r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 			if err != nil {
+				span.RecordError(err)
 				logger.Warn("failed to get beacon block after proposal preparation, continuing with original block data", zap.Error(err))
 			}
 		}
