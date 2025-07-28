@@ -264,20 +264,20 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 		remoteKeysSet[remoteKey] = struct{}{}
 	}
 
-	var missing []phase0.BLSPubKey
+	var missingKeys []phase0.BLSPubKey
 	for _, key := range localKeys {
 		if _, ok := remoteKeysSet[key]; !ok {
-			missing = append(missing, key)
+			missingKeys = append(missingKeys, key)
 		}
 	}
 
 	c.logger.Debug("missing keys check completed",
 		zap.Int("remote_count", len(remoteKeys)),
 		zap.Int("local_count", len(localKeys)),
-		zap.Int("missing_count", len(missing)),
+		zap.Int("missing_count", len(missingKeys)),
 	)
 
-	return missing, nil
+	return missingKeys, nil
 }
 
 // applyTLSConfig applies the given TLS configuration to the HTTP client.
