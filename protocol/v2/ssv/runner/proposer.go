@@ -12,6 +12,7 @@ import (
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
@@ -174,6 +175,24 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 			fields.BlockTime(time.Since(start)),
 			zap.Error(err))
 		return observability.Errorf(span, "%s: %w", errMsg, err)
+	}
+
+	// Check if the block has a fee recipient. If not, submit preparations and try again.
+	if hasRecipient, _ := hasFeeRecipient(obj); !hasRecipient {
+		logger.Warn("fee recipient missing from beacon block, resubmitting proposal preparation")
+
+		feeRecipients := map[phase0.ValidatorIndex]bellatrix.ExecutionAddress{
+			r.GetShare().ValidatorIndex: r.GetShare().FeeRecipientAddress,
+		}
+
+		if err = r.GetBeaconNode().SubmitProposalPreparation(ctx, feeRecipients); err != nil {
+			logger.Warn("failed to submit proposal preparation, continuing with original block data", zap.Error(err))
+		} else {
+			obj, ver, err = r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+			if err != nil {
+				logger.Warn("failed to get beacon block after proposal preparation, continuing with original block data", zap.Error(err))
+			}
+		}
 	}
 
 	// Log essentials about the retrieved block.
@@ -733,4 +752,46 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 	}
 
 	return
+}
+
+// hasFeeRecipient inspects the given block and returns true if its execution payload
+// (or execution payload header for blinded blocks) contains a non-zero fee recipient address.
+// Returns an error if the block type is unsupported or incomplete.
+func hasFeeRecipient(block any) (bool, error) {
+	zeroRecipient := bellatrix.ExecutionAddress{}
+
+	switch b := block.(type) {
+	case *capella.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return false, fmt.Errorf("capella block, body or execution payload is nil")
+		}
+		return b.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
+	case *deneb.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return false, fmt.Errorf("deneb block, body or execution payload is nil")
+		}
+		return b.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
+	case *electra.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return false, fmt.Errorf("electra block, body or execution payload is nil")
+		}
+		return b.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
+	case *apiv1capella.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return false, fmt.Errorf("capella blinded block, body or execution payload header is nil")
+		}
+		return b.Body.ExecutionPayloadHeader.FeeRecipient != zeroRecipient, nil
+	case *apiv1deneb.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return false, fmt.Errorf("deneb blinded block, body or execution payload header is nil")
+		}
+		return b.Body.ExecutionPayloadHeader.FeeRecipient != zeroRecipient, nil
+	case *apiv1electra.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return false, fmt.Errorf("electra blinded block, body or execution payload header is nil")
+		}
+		return b.Body.ExecutionPayloadHeader.FeeRecipient != zeroRecipient, nil
+	default:
+		return false, fmt.Errorf("unsupported block type %T", block)
+	}
 }
