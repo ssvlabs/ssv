@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	MaxAPIRange = 1000 // Maximum allowed block range for API queries
+	MaxAPIRange   = 1000 // Maximum allowed block range for API queries
+	healthyStatus = "healthy"
 )
 
 // ParameterError represents a parameter validation error.
@@ -307,12 +308,12 @@ func (h *APIHandler) Health(w http.ResponseWriter, r *http.Request) error {
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		health.Status = "unhealthy"
 		h.logger.Error("storage health check failed", zap.Error(err))
-	} else if errors.Is(err, ErrNotFound) && health.Status == "healthy" {
+	} else if errors.Is(err, ErrNotFound) && health.Status == healthyStatus {
 		health.Status = "no_data"
 	}
 
 	// Add queue health warnings
-	if health.Status == "healthy" {
+	if health.Status == healthyStatus {
 		for queueType, depth := range health.QueueDepths {
 			maxQueueSize := 5000 // Default from constants
 			if float64(depth)/float64(maxQueueSize) > 0.8 {

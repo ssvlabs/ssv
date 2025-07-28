@@ -10,26 +10,17 @@ import (
 	"time"
 
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
+
+	"github.com/ssvlabs/ssv/eth/executionclient"
 )
 
 func TestAPIHandler_Health(t *testing.T) {
-	handler, store := testAPIHandler(t)
+	handler, _, analyzer := testAPIHandler(t)
 
-	// We need to get the analyzer to simulate some log processing
-	// to update internal stats. Since testAPIHandler creates the analyzer,
-	// let me get access to it by updating the test helper.
-	logger := zaptest.NewLogger(t)
-	analyzer := testLogAnalyzer(t)
-	store = analyzer.GetStore()
-	handler = NewAPIHandler(logger, store, analyzer)
-
-	// Simulate processing finalized logs to block 100 to update internal stats
 	finalizedLogs := executionclient.BlockLogs{
 		BlockNumber: 100,
-		Logs:        []ethtypes.Log{}, // Empty logs is fine for health check
+		Logs:        []ethtypes.Log{},
 	}
 	errCh := analyzer.RecordFinalizedLogs(finalizedLogs)
 	require.NoError(t, <-errCh)
@@ -46,10 +37,9 @@ func TestAPIHandler_Health(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	require.Equal(t, "healthy", response["status"])
-	require.Equal(t, float64(100), response["lastFinalizedBlock"]) // JSON numbers are float64
+	require.Equal(t, healthyStatus, response["status"])
+	require.Equal(t, float64(100), response["lastFinalizedBlock"])
 
-	// Verify additional comprehensive health fields are present
 	require.Contains(t, response, "queueDepths")
 	require.Contains(t, response, "processedLogCounts")
 	require.Contains(t, response, "features")
@@ -57,7 +47,7 @@ func TestAPIHandler_Health(t *testing.T) {
 
 // TestAPIHandler_ParameterValidation consolidates all parameter validation tests
 func TestAPIHandler_ParameterValidation(t *testing.T) {
-	handler, _ := testAPIHandler(t)
+	handler, _, _ := testAPIHandler(t)
 
 	invalidParamTests := []struct {
 		name     string
@@ -100,7 +90,7 @@ func TestAPIHandler_ParameterValidation(t *testing.T) {
 
 // TestAPIHandler_Stats consolidates all stats endpoint tests
 func TestAPIHandler_Stats(t *testing.T) {
-	handler, store := testAPIHandler(t)
+	handler, store, _ := testAPIHandler(t)
 	ctx := context.Background()
 
 	// Setup test data
@@ -205,7 +195,7 @@ func TestAPIHandler_Stats(t *testing.T) {
 }
 
 func TestAPIHandler_Stats_ErrorCases(t *testing.T) {
-	handler, _ := testAPIHandler(t)
+	handler, _, _ := testAPIHandler(t)
 
 	tests := []struct {
 		name  string
@@ -229,7 +219,7 @@ func TestAPIHandler_Stats_ErrorCases(t *testing.T) {
 
 // TestAPIHandler_ProblematicBlocks consolidates all problematic blocks endpoint tests
 func TestAPIHandler_ProblematicBlocks(t *testing.T) {
-	handler, store := testAPIHandler(t)
+	handler, store, _ := testAPIHandler(t)
 	ctx := context.Background()
 
 	// Setup test data

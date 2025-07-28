@@ -222,9 +222,10 @@ func TestLogAnalyzer_IntegrationScenario(t *testing.T) {
 		// Find each block in results
 		var normalStats, problematicStats *BlockAnalysisStats
 		for _, stats := range response.BlockStats {
-			if stats.BlockNumber == normalBlock {
+			switch stats.BlockNumber {
+			case normalBlock:
 				normalStats = stats
-			} else if stats.BlockNumber == problematicBlock {
+			default:
 				problematicStats = stats
 			}
 		}

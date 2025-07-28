@@ -61,12 +61,12 @@ func computeLogHash(log ethtypes.Log) string {
 	hasher.Reset()
 
 	// Hash address, topics, data, and transaction hash
-	hasher.Write(log.Address.Bytes())
+	_, _ = hasher.Write(log.Address.Bytes())
 	for _, topic := range log.Topics {
-		hasher.Write(topic.Bytes())
+		_, _ = hasher.Write(topic.Bytes())
 	}
-	hasher.Write(log.Data)
-	hasher.Write(log.TxHash.Bytes())
+	_, _ = hasher.Write(log.Data)
+	_, _ = hasher.Write(log.TxHash.Bytes())
 
 	hashBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(hashBytes, hasher.Sum64())

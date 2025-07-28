@@ -46,19 +46,19 @@ func testStore(t *testing.T) LogAnalyzerStore {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		db.Close()
+		_ = db.Close()
 	})
 
 	return NewLogAnalyzerStore(db)
 }
 
-func testAPIHandler(t *testing.T) (*APIHandler, LogAnalyzerStore) {
+func testAPIHandler(t *testing.T) (*APIHandler, LogAnalyzerStore, *LogAnalyzer) {
 	t.Helper()
 	logger := zaptest.NewLogger(t)
 	analyzer := testLogAnalyzer(t)
 	store := analyzer.GetStore()
 	handler := NewAPIHandler(logger, store, analyzer)
-	return handler, store
+	return handler, store, analyzer
 }
 
 func createTestLog(opts TestLogOptions) ethtypes.Log {
@@ -109,23 +109,8 @@ func testInternalLog(blockNumber uint64, index uint, address, txHash string) Int
 	return ToInternalLog(ethLog)
 }
 
-func testBlockLogs(blockNumber uint64, numLogs int) executionclient.BlockLogs {
-	logs := make([]ethtypes.Log, numLogs)
-	for i := 0; i < numLogs; i++ {
-		logs[i] = testLog(blockNumber, uint(i), "0x1234", "0xabcd")
-	}
-	return executionclient.BlockLogs{
-		BlockNumber: blockNumber,
-		Logs:        logs,
-	}
-}
-
 func simpleTestLog(blockNumber uint64) ethtypes.Log {
 	return createTestLog(TestLogOptions{BlockNumber: blockNumber})
-}
-
-func simpleTestInternalLog(blockNumber uint64) InternalLog {
-	return ToInternalLog(simpleTestLog(blockNumber))
 }
 
 func simpleTestBlockLogs(blockNumber uint64) executionclient.BlockLogs {
