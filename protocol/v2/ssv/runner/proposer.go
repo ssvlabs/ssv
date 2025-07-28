@@ -177,8 +177,23 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return observability.Errorf(span, "%s: %w", errMsg, err)
 	}
 
+	// Log essentials about the retrieved block.
+	blockSummary, summarizeErr := summarizeBlock(obj)
+	const eventMsg = "🧊 got beacon block proposal"
+	logger.Info(eventMsg,
+		zap.String("block_hash", blockSummary.Hash.String()),
+		zap.Stringer("fee_recipient", blockSummary.FeeRecipient),
+		zap.Bool("blinded", blockSummary.Blinded),
+		zap.Duration("proposer_delay", r.proposerDelay),
+		fields.Took(time.Since(start)),
+		zap.NamedError("summarize_err", summarizeErr))
+	span.AddEvent(eventMsg, trace.WithAttributes(
+		observability.BeaconBlockHashAttribute(blockSummary.Hash),
+		observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
+	))
+
 	// Check if the block has a fee recipient. If not, submit preparations and try again.
-	if hasRecipient, _ := hasFeeRecipient(obj); !hasRecipient {
+	if summarizeErr == nil && blockSummary.FeeRecipient == (bellatrix.ExecutionAddress{}) {
 		logger.Warn("fee recipient missing from beacon block, resubmitting proposal preparation")
 
 		feeRecipients := map[phase0.ValidatorIndex]bellatrix.ExecutionAddress{
@@ -193,23 +208,24 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 			if err != nil {
 				span.RecordError(err)
 				logger.Warn("failed to get beacon block after proposal preparation, continuing with original block data", zap.Error(err))
+			} else {
+				// Log essentials about the retrieved block.
+				blockSummary, summarizeErr = summarizeBlock(obj)
+				const eventMsg = "🧊 got beacon block proposal after proposal preparation"
+				logger.Info(eventMsg,
+					zap.String("block_hash", blockSummary.Hash.String()),
+					zap.Stringer("fee_recipient", blockSummary.FeeRecipient),
+					zap.Bool("blinded", blockSummary.Blinded),
+					zap.Duration("proposer_delay", r.proposerDelay),
+					fields.Took(time.Since(start)),
+					zap.NamedError("summarize_err", summarizeErr))
+				span.AddEvent(eventMsg, trace.WithAttributes(
+					observability.BeaconBlockHashAttribute(blockSummary.Hash),
+					observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
+				))
 			}
 		}
 	}
-
-	// Log essentials about the retrieved block.
-	blockSummary, summarizeErr := summarizeBlock(obj)
-	const eventMsg = "🧊 got beacon block proposal"
-	logger.Info(eventMsg,
-		zap.String("block_hash", blockSummary.Hash.String()),
-		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("proposer_delay", r.proposerDelay),
-		fields.Took(time.Since(start)),
-		zap.NamedError("summarize_err", summarizeErr))
-	span.AddEvent(eventMsg, trace.WithAttributes(
-		observability.BeaconBlockHashAttribute(blockSummary.Hash),
-		observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
-	))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
@@ -646,11 +662,12 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-// blockSummary contains essentials about a block. Useful for logging.
+// blockSummary contains essentials about a block. Useful for logging and zero fee recipient check
 type blockSummary struct {
-	Hash    phase0.Hash32
-	Blinded bool
-	Version spec.DataVersion
+	Hash         phase0.Hash32
+	Blinded      bool
+	Version      spec.DataVersion
+	FeeRecipient bellatrix.ExecutionAddress
 }
 
 // summarizeBlock returns a blockSummary for the given block.
@@ -706,6 +723,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
 		summary.Version = spec.DataVersionCapella
 
 	case *deneb.BeaconBlock:
@@ -713,6 +731,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
 		summary.Version = spec.DataVersionDeneb
 
 	case *electra.BeaconBlock:
@@ -720,6 +739,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
 		summary.Version = spec.DataVersionElectra
 
 	case *apiv1electra.BlockContents:
@@ -733,6 +753,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
 		summary.Blinded = true
 		summary.Version = spec.DataVersionCapella
 
@@ -741,6 +762,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
 		summary.Blinded = true
 		summary.Version = spec.DataVersionDeneb
 
@@ -749,61 +771,10 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
 		summary.Blinded = true
 		summary.Version = spec.DataVersionElectra
 	}
 
 	return
-}
-
-// hasFeeRecipient inspects the given block and returns true if its execution payload
-// (or execution payload header for blinded blocks) contains a non-zero fee recipient address.
-// Returns an error if the block type is unsupported or incomplete.
-func hasFeeRecipient(block any) (bool, error) {
-	zeroRecipient := bellatrix.ExecutionAddress{}
-
-	switch b := block.(type) {
-	case *capella.BeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return false, fmt.Errorf("capella block, body or execution payload is nil")
-		}
-		return b.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
-	case *deneb.BeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return false, fmt.Errorf("deneb block, body or execution payload is nil")
-		}
-		return b.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
-	case *electra.BeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return false, fmt.Errorf("electra block, body or execution payload is nil")
-		}
-		return b.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
-	case *apiv1capella.BlindedBeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return false, fmt.Errorf("capella blinded block, body or execution payload header is nil")
-		}
-		return b.Body.ExecutionPayloadHeader.FeeRecipient != zeroRecipient, nil
-	case *apiv1deneb.BlindedBeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return false, fmt.Errorf("deneb blinded block, body or execution payload header is nil")
-		}
-		return b.Body.ExecutionPayloadHeader.FeeRecipient != zeroRecipient, nil
-	case *apiv1electra.BlindedBeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return false, fmt.Errorf("electra blinded block, body or execution payload header is nil")
-		}
-		return b.Body.ExecutionPayloadHeader.FeeRecipient != zeroRecipient, nil
-	case *apiv1deneb.BlockContents:
-		if b == nil || b.Block == nil || b.Block.Body == nil || b.Block.Body.ExecutionPayload == nil {
-			return false, fmt.Errorf("deneb block contents, block, body or execution payload is nil")
-		}
-		return b.Block.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
-	case *apiv1electra.BlockContents:
-		if b == nil || b.Block == nil || b.Block.Body == nil || b.Block.Body.ExecutionPayload == nil {
-			return false, fmt.Errorf("electra block contents, block, body or execution payload is nil")
-		}
-		return b.Block.Body.ExecutionPayload.FeeRecipient != zeroRecipient, nil
-	default:
-		return false, fmt.Errorf("unsupported block type %T", block)
-	}
 }
