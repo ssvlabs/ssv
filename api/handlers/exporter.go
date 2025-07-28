@@ -353,7 +353,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(errors.New("either pubkeys or indices is required"))
 	}
 
-	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.Indices))
+	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.Indices)+len(request.PubKeys))
 
 	for _, index := range request.Indices {
 		share, found := e.validators.ValidatorByIndex(phase0.ValidatorIndex(index))

@@ -977,7 +977,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	started, err := c.validatorStart(v)
 	if err != nil {
 		validatorErrorsCounter.Add(c.ctx, 1)
-		return false, fmt.Errorf("could not start validator")
+		return false, fmt.Errorf("could not start validator: %w", err)
 	}
 
 	return started, nil
