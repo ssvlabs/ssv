@@ -162,6 +162,10 @@ type GoClient struct {
 	// voluntaryExitDomainCached is voluntary exit domain value calculated lazily and re-used
 	// since it doesn't change over time
 	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
+
+	// TODO
+	uniqueRegistrationsMu sync.Mutex
+	uniqueRegistrations   map[phase0.BLSPubKey]int
 }
 
 // New init new client and go-client instance
@@ -196,6 +200,7 @@ func New(
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
+		uniqueRegistrations:                map[phase0.BLSPubKey]int{},
 	}
 
 	if opt.BeaconNodeAddr == "" {
