@@ -3,7 +3,6 @@ package eventhandler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"net/http/httptest"
@@ -32,14 +31,11 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
-	"github.com/ssvlabs/ssv/exporter"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
-	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -1349,22 +1345,21 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network networkconfig.Network, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, networkConfig networkconfig.Network, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
 
-	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	if network == nil {
-		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, &utils.SlotValue{})
+	if networkConfig == nil {
+		networkConfig = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, &utils.SlotValue{})
 	}
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, network, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1375,18 +1370,27 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		validatorCtrl := mocks.NewMockController(ctrl)
-
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 		require.NoError(t, err)
+
+		validatorStore, err := registrystorage.NewValidatorStore(
+			logger,
+			nodeStorage.Shares(),
+			nodeStorage,
+			networkConfig,
+			operatorDataStore.GetOperatorID,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		parser := eventparser.New(contractFilterer)
 
 		eh, err := New(
 			nodeStorage,
 			parser,
-			validatorCtrl,
-			network,
+			networkConfig,
+			validatorStore,
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
@@ -1398,19 +1402,20 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			return nil, nil, err
 		}
 
+		validatorCtrl := mocks.NewMockController(ctrl)
 		return eh, validatorCtrl, nil
 	}
 
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:           ctx,
-		NetworkConfig:     network,
-		DB:                db,
-		RegistryStorage:   nodeStorage,
-		BeaconSigner:      keyManager,
-		StorageMap:        storageMap,
-		OperatorDataStore: operatorDataStore,
-		ValidatorsMap:     validators.New(ctx),
-	}, exporter.Options{})
+	validatorStore, err := registrystorage.NewValidatorStore(
+		logger,
+		nodeStorage.Shares(),
+		nodeStorage,
+		networkConfig,
+		operatorDataStore.GetOperatorID,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
@@ -1420,8 +1425,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	eh, err := New(
 		nodeStorage,
 		parser,
-		validatorCtrl,
-		network,
+		networkConfig,
+		validatorStore,
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
@@ -1439,7 +1444,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
@@ -1472,16 +1477,6 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 	}
 
 	return nodeStorage, operatorData
-}
-
-func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
-	var vLogOperatorAdded ethtypes.Log
-	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
-	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(contract.ContractMetaData.ABI))
-	require.NoError(t, err)
-	require.NotNil(t, contractAbi)
-	return vLogOperatorAdded
 }
 
 func simTestBackend(testAddresses []*ethcommon.Address) *simulator.Backend {

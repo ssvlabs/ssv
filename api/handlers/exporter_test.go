@@ -11,6 +11,12 @@ import (
 	"testing"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
+	"go.uber.org/mock/gomock"
+
+	"github.com/ssvlabs/ssv/registry/storage/mocks"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +32,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // mockParticipantStore is a basic mock for qbftstorage.ParticipantStore.
@@ -1239,7 +1244,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 	tests := []struct {
 		name            string
 		request         map[string]any
-		setupMock       func(*mockTraceStore, *mockValidatorStore)
+		setupMock       func(*mockTraceStore, *mocks.MockValidatorStore)
 		expectedStatus  int
 		validateErrResp func(*testing.T, error)
 		validateResp    func(*testing.T, *httptest.ResponseRecorder)
@@ -1250,7 +1255,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"from": 100,
 				"to":   100,
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (traces []*exportertypes.CommitteeDutyTrace, err error) {
 					traces = []*exportertypes.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
@@ -1278,7 +1283,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":           100,
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error) {
 					return makeCommitteeDutyTrace(slot), nil
 				}
@@ -1324,7 +1329,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"from": 100,
 				"to":   100,
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuties")
 				}
@@ -1343,7 +1348,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":           100,
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error) {
 					return nil, fmt.Errorf("forced error on GetCommitteeDuty")
 				}
@@ -1357,10 +1362,13 @@ func TestExporterCommitteeTraces(t *testing.T) {
 		},
 	}
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newMockTraceStore()
-			validatorStore := newMockValidatorStore()
+			validatorStore := mocks.NewMockValidatorStore(ctrl)
 			if tt.setupMock != nil {
 				tt.setupMock(store, validatorStore)
 			}
@@ -1389,8 +1397,11 @@ func TestExporterCommitteeTraces(t *testing.T) {
 }
 
 func TestExporterCommitteeTraces_InvalidJSON(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	store := newMockTraceStore()
-	validatorStore := newMockValidatorStore()
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
 	exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
 
 	req := httptest.NewRequest(http.MethodPost, "/traces/committee", strings.NewReader("{invalid"))
@@ -1423,7 +1434,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 	tests := []struct {
 		name           string
 		request        map[string]any
-		setupMock      func(*mockTraceStore, *mockValidatorStore)
+		setupMock      func(*mockTraceStore, *mocks.MockValidatorStore)
 		expectedStatus int
 		validateResp   func(*testing.T, *httptest.ResponseRecorder)
 	}{
@@ -1435,7 +1446,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"PROPOSER"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
@@ -1468,16 +1479,20 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"PROPOSER"},
 				"indices": []uint64{1},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
 
-				validatorStore.ValidatorByIndexFunc = func(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
-					share := &ssvtypes.SSVShare{}
-					copy(share.ValidatorPubKey[:], pkBytes)
-					return share, true
+				validatorSnapshot := &registrystorage.ValidatorSnapshot{
+					Share: ssvtypes.SSVShare{
+						Share: spectypes.Share{
+							ValidatorPubKey: pk,
+							ValidatorIndex:  1,
+						},
+					},
 				}
+				validatorStore.EXPECT().GetValidator(gomock.Any()).Return(validatorSnapshot, true).AnyTimes()
 
 				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
 					return &dutytracer.ValidatorDutyTrace{
@@ -1508,7 +1523,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"to":    200,
 				"roles": []string{"PROPOSER"},
 			},
-			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			setupMock:      func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {},
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				var resp struct {
@@ -1527,10 +1542,8 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"PROPOSER"},
 				"indices": []uint64{1},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				validatorStore.ValidatorByIndexFunc = func(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
-					return nil, false
-				}
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
+				validatorStore.EXPECT().GetValidator(gomock.Any()).Return(nil, false).AnyTimes()
 			},
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -1550,7 +1563,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"ATTESTER"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
@@ -1608,7 +1621,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"ATTESTER"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
@@ -1638,7 +1651,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"ATTESTER"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
@@ -1668,7 +1681,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"SYNC_COMMITTEE"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
@@ -1693,7 +1706,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"PROPOSER"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
@@ -1718,7 +1731,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"PROPOSER"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			setupMock:      func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {},
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				var resp struct {
@@ -1737,7 +1750,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
-			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			setupMock:      func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {},
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				var resp struct {
@@ -1756,7 +1769,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"roles":   []string{"PROPOSER"},
 				"pubkeys": []string{"0x1234"},
 			},
-			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			setupMock:      func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {},
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				var resp struct {
@@ -1776,17 +1789,21 @@ func TestExporterValidatorTraces(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 				"indices": []int{1},
 			},
-			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				validatorStore.ValidatorByIndexFunc = func(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
-					pubkey := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
-					var pk spectypes.ValidatorPK
-					copy(pk[:], pubkey)
-					return &ssvtypes.SSVShare{
+			setupMock: func(store *mockTraceStore, validatorStore *mocks.MockValidatorStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				validatorSnapshot := &registrystorage.ValidatorSnapshot{
+					Share: ssvtypes.SSVShare{
 						Share: spectypes.Share{
 							ValidatorPubKey: pk,
+							ValidatorIndex:  1,
 						},
-					}, true
+					},
 				}
+				validatorStore.EXPECT().GetValidator(gomock.Any()).Return(validatorSnapshot, true).AnyTimes()
+
 				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
 					return &dutytracer.ValidatorDutyTrace{}, nil
 				}
@@ -1800,11 +1817,16 @@ func TestExporterValidatorTraces(t *testing.T) {
 		},
 	}
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newMockTraceStore()
-			validatorStore := newMockValidatorStore()
-			tt.setupMock(store, validatorStore)
+			validatorStore := mocks.NewMockValidatorStore(ctrl)
+			if tt.setupMock != nil {
+				tt.setupMock(store, validatorStore)
+			}
 
 			exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
 
@@ -1832,8 +1854,11 @@ func TestExporterValidatorTraces(t *testing.T) {
 }
 
 func TestExporterValidatorTraces_InvalidJSON(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	store := newMockTraceStore()
-	validatorStore := newMockValidatorStore()
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
 	exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
 
 	req := httptest.NewRequest(http.MethodPost, "/traces/validator", strings.NewReader("{invalid"))
@@ -1859,100 +1884,4 @@ func TestExporterValidatorTraces_InvalidJSON(t *testing.T) {
 
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Contains(t, resp.Message, "invalid character")
-}
-
-// mockValidatorStore is a mock implementation of storage.ValidatorStore
-type mockValidatorStore struct {
-	ValidatorByIndexFunc        func(phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool)
-	CommitteeFunc               func(spectypes.CommitteeID) (*storage.Committee, bool)
-	CommitteesFunc              func() []*storage.Committee
-	OperatorCommitteesFunc      func(operatorID uint64) []*storage.Committee
-	ValidatorIndexFunc          func(pubkey spectypes.ValidatorPK) (phase0.ValidatorIndex, bool)
-	ValidatorFunc               func(pubKey []byte) (*ssvtypes.SSVShare, bool)
-	ValidatorsFunc              func() []*ssvtypes.SSVShare
-	ParticipatingValidatorsFunc func(epoch phase0.Epoch) []*ssvtypes.SSVShare
-	OperatorValidatorsFunc      func(id spectypes.OperatorID) []*ssvtypes.SSVShare
-	ParticipatingCommitteesFunc func(epoch phase0.Epoch) []*storage.Committee
-	WithOperatorIDFunc          func(operatorID func() spectypes.OperatorID) storage.SelfValidatorStore
-}
-
-func newMockValidatorStore() *mockValidatorStore {
-	return &mockValidatorStore{}
-}
-
-func (m *mockValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
-	if m.ValidatorByIndexFunc != nil {
-		return m.ValidatorByIndexFunc(index)
-	}
-	return nil, false
-}
-
-func (m *mockValidatorStore) Committee(id spectypes.CommitteeID) (*storage.Committee, bool) {
-	if m.CommitteeFunc != nil {
-		return m.CommitteeFunc(id)
-	}
-	return nil, false
-}
-
-func (m *mockValidatorStore) Committees() []*storage.Committee {
-	if m.CommitteesFunc != nil {
-		return m.CommitteesFunc()
-	}
-	return nil
-}
-
-func (m *mockValidatorStore) OperatorCommittees(operatorID uint64) []*storage.Committee {
-	if m.OperatorCommitteesFunc != nil {
-		return m.OperatorCommitteesFunc(operatorID)
-	}
-	return nil
-}
-
-func (m *mockValidatorStore) ValidatorIndex(pubkey spectypes.ValidatorPK) (phase0.ValidatorIndex, bool) {
-	if m.ValidatorIndexFunc != nil {
-		return m.ValidatorIndexFunc(pubkey)
-	}
-	return 0, false
-}
-
-func (m *mockValidatorStore) Validator(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-	if m.ValidatorFunc != nil {
-		return m.ValidatorFunc(pubKey)
-	}
-	return nil, false
-}
-
-func (m *mockValidatorStore) Validators() []*ssvtypes.SSVShare {
-	if m.ValidatorsFunc != nil {
-		return m.ValidatorsFunc()
-	}
-	return nil
-}
-
-func (m *mockValidatorStore) ParticipatingValidators(epoch phase0.Epoch) []*ssvtypes.SSVShare {
-	if m.ParticipatingValidatorsFunc != nil {
-		return m.ParticipatingValidatorsFunc(epoch)
-	}
-	return nil
-}
-
-func (m *mockValidatorStore) OperatorValidators(id spectypes.OperatorID) []*ssvtypes.SSVShare {
-	if m.OperatorValidatorsFunc != nil {
-		return m.OperatorValidatorsFunc(id)
-	}
-	return nil
-}
-
-func (m *mockValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.Committee {
-	if m.ParticipatingCommitteesFunc != nil {
-		return m.ParticipatingCommitteesFunc(epoch)
-	}
-	return nil
-}
-
-func (m *mockValidatorStore) WithOperatorID(operatorID func() spectypes.OperatorID) storage.SelfValidatorStore {
-	if m.WithOperatorIDFunc != nil {
-		return m.WithOperatorIDFunc(operatorID)
-	}
-	return nil
 }

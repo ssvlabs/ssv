@@ -30,13 +30,13 @@ import (
 )
 
 type CommitteeObserver struct {
+	ValidatorStore registrystorage.ValidatorStore
+	Storage        *storage.ParticipantStores
 	sync.Mutex
 
 	msgID             spectypes.MessageID
 	logger            *zap.Logger
-	Storage           *storage.ParticipantStores
 	beaconConfig      networkconfig.Beacon
-	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
@@ -137,10 +137,11 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
 		}
 
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
+		snapshot, exists := ncv.ValidatorStore.GetValidator(registrystorage.ValidatorIndex(key.ValidatorIndex))
 		if !exists {
 			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
 		}
+		validator := &snapshot.Share
 
 		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
 		if len(beaconRoles) == 0 {
@@ -242,17 +243,17 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 	}
 
 	for _, msg := range partialMsgs.Messages {
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
+		validatorSnapshot, exists := ncv.ValidatorStore.GetValidator(registrystorage.ValidatorIndex(msg.ValidatorIndex))
 		if !exists {
-			return fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
+			return fmt.Errorf("could not find share for validatorSnapshot with index %d", msg.ValidatorIndex)
 		}
 		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
-			container = ssv.NewPartialSigContainer(validator.Quorum())
+			container = ssv.NewPartialSigContainer(validatorSnapshot.Share.Quorum())
 			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			if err := ncv.resolveDuplicateSignature(container, msg, validator); err != nil {
+			if err := ncv.resolveDuplicateSignature(container, msg, &validatorSnapshot.Share); err != nil {
 				return err
 			}
 		} else {
@@ -278,15 +279,18 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 	}
 
 	for _, msg := range signedMsg.Messages {
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
+		snapshot, exists := ncv.ValidatorStore.GetValidator(registrystorage.ValidatorIndex(msg.ValidatorIndex))
 		if !exists {
 			return nil, fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
 		}
+		validator := &snapshot.Share
+
 		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
 			container = ssv.NewPartialSigContainer(validator.Quorum())
 			slotValidators[msg.ValidatorIndex] = container
 		}
+
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
 			_ = ncv.resolveDuplicateSignature(container, msg, validator)
 		} else {

@@ -13,7 +13,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -27,7 +26,7 @@ var (
 	pubkeyDBKey           = "public-key"
 )
 
-// Storage represents the interface for ssv node storage
+// Storage defines the minimal interface for node storage
 type Storage interface {
 	// TODO: de-anonymize the sub-storages, like Shares() below
 
@@ -46,7 +45,6 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
-	ValidatorStore() registrystorage.ValidatorStore
 
 	GetPrivateKeyHash() ([]byte, bool, error)
 	SavePrivateKeyHash(privKeyHash []byte) error
@@ -62,21 +60,19 @@ type storage struct {
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
 	shareStore     registrystorage.Shares
-	validatorStore registrystorage.ValidatorStore
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
+func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
 		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix),
 		recipientStore: registrystorage.NewRecipientsStorage(logger, db, OperatorStoragePrefix),
 	}
-
 	var err error
 
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, OperatorStoragePrefix)
+	stg.shareStore, err = registrystorage.NewSharesStorage(db, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -94,10 +90,6 @@ func (s *storage) BeginRead() basedb.ReadTxn {
 
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
-}
-
-func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
-	return s.validatorStore
 }
 
 func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {

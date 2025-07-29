@@ -363,7 +363,7 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 
 func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID, trace *committeeDutyTrace) {
 	// add operator ids to the trace
-	cmt, found := c.validators.Committee(committeeID)
+	cmt, found := c.validators.GetCommittee(committeeID)
 	if found && len(cmt.Operators) > 0 {
 		trace.OperatorIDs = cmt.Operators
 	}

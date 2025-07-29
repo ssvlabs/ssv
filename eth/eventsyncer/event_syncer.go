@@ -38,7 +38,7 @@ type ExecutionClient interface {
 }
 
 type EventHandler interface {
-	HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
+	HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, triggerCallbacks bool) (uint64, error)
 }
 
 // EventSyncer syncs registry contract events from the given ExecutionClient

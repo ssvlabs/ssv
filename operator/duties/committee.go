@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -112,10 +114,15 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 ) committeeDutiesMap {
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
-	selfValidators := h.validatorProvider.SelfParticipatingValidators(epoch)
+	selfValidatorSnapshots := h.validatorProvider.GetSelfParticipatingValidators(epoch, registrystorage.ParticipationOptions{
+		IncludeLiquidated: false,
+		IncludeExited:     false,
+		OnlyAttesting:     true,
+	})
 
 	validatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
-	for _, validatorShare := range selfValidators {
+	for _, snapshot := range selfValidatorSnapshots {
+		validatorShare := &snapshot.Share
 		cd := committeeDuty{
 			id:          validatorShare.CommitteeID(),
 			operatorIDs: validatorShare.OperatorIDs(),
@@ -194,8 +201,12 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 }
 
 func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch phase0.Epoch) bool {
-	share, found := h.validatorProvider.Validator(duty.PubKey[:])
-	if !found || !share.IsParticipatingAndAttesting(epoch) {
+	snapshot, found := h.validatorProvider.GetValidator(registrystorage.ValidatorPubKey(duty.PubKey))
+	if !found {
+		return false
+	}
+	share := &snapshot.Share
+	if !share.IsParticipatingAndAttesting(epoch) {
 		return false
 	}
 
@@ -219,8 +230,12 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 }
 
 func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
-	share, found := h.validatorProvider.Validator(duty.PubKey[:])
-	if !found || !share.IsParticipating(h.beaconConfig, epoch) {
+	snapshot, found := h.validatorProvider.GetValidator(registrystorage.ValidatorPubKey(duty.PubKey))
+	if !found {
+		return false
+	}
+	share := &snapshot.Share
+	if !share.IsParticipating(h.beaconConfig, epoch) {
 		return false
 	}
 

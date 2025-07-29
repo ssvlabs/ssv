@@ -93,6 +93,7 @@ type ControllerOptions struct {
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
 	ProposerDelay              time.Duration
+	KeyManager                 ekm.KeyManager
 
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
@@ -114,12 +115,10 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	IndicesChangeChan() chan struct{}
-	ValidatorExitChan() <-chan duties.ExitDescriptor
+	ValidatorExitChan() <-chan registrystorage.ExitDescriptor
 
+	// TODO: remove it and use callbacks?
 	StopValidator(pubKey spectypes.ValidatorPK) error
-	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
-	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient common.Address) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
@@ -160,6 +159,7 @@ type controller struct {
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
+	keyManager     ekm.KeyManager
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -190,7 +190,7 @@ type controller struct {
 	domainCache *validator.DomainCache
 
 	indicesChangeCh chan struct{}
-	validatorExitCh chan duties.ExitDescriptor
+	validatorExitCh chan registrystorage.ExitDescriptor
 
 	traceCollector *dutytracer.Collector
 }
@@ -241,6 +241,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		operatorDataStore: options.OperatorDataStore,
 		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
+		keyManager:        options.KeyManager,
 		network:           options.Network,
 		traceCollector:    options.DutyTraceCollector,
 
@@ -269,12 +270,15 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
 		),
 		indicesChangeCh:         make(chan struct{}),
-		validatorExitCh:         make(chan duties.ExitDescriptor),
+		validatorExitCh:         make(chan registrystorage.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
 
 		messageValidator: options.MessageValidator,
 	}
+
+	// Register lifecycle callbacks with ValidatorStore
+	ctrl.registerValidatorStoreCallbacks()
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
@@ -287,28 +291,133 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	return &ctrl
 }
 
+// registerValidatorStoreCallbacks sets up the lifecycle callbacks for ValidatorStore
+func (c *controller) registerValidatorStoreCallbacks() {
+	callbacks := registrystorage.ValidatorLifecycleCallbacks{
+		OnValidatorAdded: func(ctx context.Context, snapshot *registrystorage.ValidatorSnapshot) error {
+			// For new validators, we don't need to do anything special here
+			// as they will be initialized and started through OnValidatorStarted
+			c.logger.Debug("validator added to store",
+				fields.PubKey(snapshot.Share.ValidatorPubKey[:]),
+				zap.Bool("has_metadata", snapshot.Share.HasBeaconMetadata()))
+			return nil
+		},
+
+		OnValidatorStarted: func(ctx context.Context, snapshot *registrystorage.ValidatorSnapshot) error {
+			// This is called when a validator should start participating
+			c.logger.Debug("validator should start", fields.PubKey(snapshot.Share.ValidatorPubKey[:]))
+
+			// Make a copy of the share for thread safety
+			share := snapshot.Share.Copy()
+
+			// Start the validator asynchronously to avoid blocking
+			go func() {
+				started, err := c.onShareStart(share)
+				if err != nil {
+					c.logger.Error("failed to start validator from lifecycle callback",
+						fields.PubKey(share.ValidatorPubKey[:]),
+						zap.Error(err))
+					return
+				}
+				if started {
+					c.logger.Debug("validator started from lifecycle callback",
+						fields.PubKey(share.ValidatorPubKey[:]))
+
+					// Notify indices change
+					if !c.reportIndicesChange(ctx) {
+						c.logger.Error("failed to notify indices change")
+					}
+				}
+			}()
+
+			return nil
+		},
+
+		OnValidatorStopped: func(ctx context.Context, pubKey spectypes.ValidatorPK) error {
+			c.logger.Debug("validator should stop", fields.PubKey(pubKey[:]))
+
+			// Stop the validator asynchronously to avoid blocking
+			go func() {
+				c.onShareStop(pubKey)
+			}()
+
+			return nil
+		},
+
+		OnValidatorUpdated: func(ctx context.Context, snapshot *registrystorage.ValidatorSnapshot) error {
+			c.logger.Debug("validator updated", fields.PubKey(snapshot.Share.ValidatorPubKey[:]))
+
+			// Update fee recipient if it changed
+			if v, found := c.validatorsMap.GetValidator(snapshot.Share.ValidatorPubKey); found {
+				v.Share.SetFeeRecipient(snapshot.Share.FeeRecipientAddress)
+			}
+
+			return nil
+		},
+
+		OnValidatorRemoved: func(ctx context.Context, pubKey spectypes.ValidatorPK) error {
+			c.logger.Debug("validator removed", fields.PubKey(pubKey[:]))
+
+			// Stop the validator asynchronously
+			go func() {
+				c.onShareStop(pubKey)
+			}()
+
+			return nil
+		},
+
+		OnValidatorExited: func(ctx context.Context, descriptor registrystorage.ExitDescriptor) error {
+			c.logger.Debug("validator exited",
+				fields.PubKey(descriptor.PubKey[:]),
+				zap.Uint64("block_number", descriptor.BlockNumber))
+
+			// Send to exit channel asynchronously
+			go func() {
+				select {
+				case c.validatorExitCh <- descriptor:
+					c.logger.Debug("sent validator exit descriptor")
+				case <-time.After(2 * c.networkConfig.GetSlotDuration()):
+					c.logger.Error("timeout sending validator exit descriptor")
+				}
+			}()
+
+			return nil
+		},
+
+		OnIndicesChanged: func(ctx context.Context) error {
+			if !c.reportIndicesChange(ctx) {
+				return fmt.Errorf("failed to report indices change")
+			}
+			return nil
+		},
+	}
+
+	c.validatorStore.RegisterLifecycleCallbacks(callbacks)
+}
+
 func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChangeCh
 }
 
-func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
+func (c *controller) ValidatorExitChan() <-chan registrystorage.ExitDescriptor {
 	return c.validatorExitCh
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
-	operatorShares := uint64(0)
-	active, total := uint64(0), uint64(0)
-	c.sharesStorage.Range(nil, func(s *ssvtypes.SSVShare) bool {
-		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
-			operatorShares++
-		}
-		if s.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
+	// Use ValidatorStore for statistics
+	allValidators := c.validatorStore.GetAllValidators()
+	operatorValidators := c.validatorStore.GetSelfValidators()
+
+	active := uint64(0)
+	epoch := c.networkConfig.EstimatedCurrentEpoch()
+
+	for _, snapshot := range allValidators {
+		if snapshot.Share.IsParticipating(c.networkConfig, epoch) {
 			active++
 		}
-		total++
-		return true
-	})
-	return total, active, operatorShares, nil
+	}
+
+	return uint64(len(allValidators)), active, uint64(len(operatorValidators)), nil
 }
 
 func (c *controller) handleRouterMessages() {
@@ -355,10 +464,9 @@ func (c *controller) handleRouterMessages() {
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
-	spectypes.RoleCommittee:  64,
-	spectypes.RoleProposer:   4,
-	spectypes.RoleAggregator: 4,
-	//spectypes.BNRoleSyncCommittee:             4,
+	spectypes.RoleCommittee:                 64,
+	spectypes.RoleProposer:                  4,
+	spectypes.RoleAggregator:                4,
 	spectypes.RoleSyncCommitteeContribution: 4,
 }
 
@@ -436,23 +544,23 @@ func (c *controller) handleNonCommitteeMessages(
 	return nil
 }
 
-// StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators(ctx context.Context) {
-	// TODO: Pass context whereever the execution flow may be blocked.
+// StartValidators loads all persisted shares and sets up the corresponding validators
+func (c *controller) StartValidators(context.Context) {
+	// Get own validators from ValidatorStore
+	ownValidators := c.validatorStore.GetSelfValidators()
 
-	// Load non-liquidated shares.
-	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
-	if len(shares) == 0 {
+	if len(ownValidators) == 0 {
 		close(c.committeeValidatorSetup)
 		c.logger.Info("could not find validators")
+
 		return
 	}
 
+	// Convert snapshots to shares
 	var ownShares []*ssvtypes.SSVShare
-	for _, share := range shares {
-		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
-			ownShares = append(ownShares, share)
-		}
+	for _, snapshot := range ownValidators {
+		share := snapshot.Share.Copy()
+		ownShares = append(ownShares, share)
 	}
 
 	if c.validatorCommonOpts.ExporterOptions.Enabled {
@@ -538,74 +646,6 @@ func (c *controller) StartNetworkHandlers() {
 		go c.handleRouterMessages()
 	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
-}
-
-// startEligibleValidators starts validators that transitioned to eligible to start due to a metadata update.
-func (c *controller) startEligibleValidators(ctx context.Context, pubKeys []spectypes.ValidatorPK) (count int) {
-	// Build a map for quick lookup to ensure only explicitly listed validators start.
-	validatorsSet := make(map[spectypes.ValidatorPK]struct{}, len(pubKeys))
-	for _, v := range pubKeys {
-		validatorsSet[v] = struct{}{}
-	}
-
-	// Filtering shares again ensures:
-	// 1. Validators still exist (not removed or liquidated).
-	// 2. They belong to this operator (ownership check).
-
-	// Note: A validator might be removed from storage after being fetched but before starting.
-	// In this case, it could still be added to validatorsMap despite no longer existing in sharesStorage,
-	// leading to unnecessary tracking.
-	operatorID := c.operatorDataStore.GetOperatorID()
-	shares := c.sharesStorage.List(
-		nil,
-		registrystorage.ByOperatorID(operatorID),
-		registrystorage.ByNotLiquidated(),
-		func(share *ssvtypes.SSVShare) bool {
-			_, exists := validatorsSet[share.ValidatorPubKey]
-			return exists
-		},
-	)
-
-	startedValidators := 0
-
-	for _, share := range shares {
-		select {
-		case <-ctx.Done():
-			c.logger.Warn("context cancelled, stopping validator start loop")
-			return startedValidators
-		default:
-		}
-
-		// Start validator (if not already started).
-		// TODO: why its in the map if not started?
-		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			started, err := c.startValidator(v)
-			if err != nil {
-				c.logger.Warn("could not start validator", zap.Error(err))
-			}
-			if started {
-				startedValidators++
-			}
-			vc, found := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
-			if found {
-				vc.AddShare(&v.Share.Share)
-			}
-		} else {
-			c.logger.Info("starting new validator", fields.PubKey(share.ValidatorPubKey[:]))
-
-			started, err := c.onShareStart(share)
-			if err != nil {
-				c.logger.Warn("could not start newly active validator", zap.Error(err))
-				continue
-			}
-			if started {
-				startedValidators++
-				c.logger.Debug("started share after metadata sync", zap.Bool("started", started))
-			}
-		}
-	}
-
-	return startedValidators
 }
 
 // GetValidator returns a validator instance from ValidatorsMap
@@ -756,13 +796,16 @@ func (c *controller) FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShar
 	if afterInit {
 		<-c.committeeValidatorSetup
 	}
+
+	allValidators := c.validatorStore.GetAllValidators()
 	var indices []phase0.ValidatorIndex
-	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if filter(share) {
-			indices = append(indices, share.ValidatorIndex)
+
+	for _, snapshot := range allValidators {
+		if filter(&snapshot.Share) {
+			indices = append(indices, snapshot.Share.ValidatorIndex)
 		}
-		return true
-	})
+	}
+
 	return indices
 }
 
@@ -1002,30 +1045,17 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 		return nil
 	}
 
-	// Identify validators that changed state (eligible to start, slashed, or exited) after the metadata update.
-	eligibleToStart, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges()
-
-	// Start only the validators that became eligible to start as a result of the metadata update.
-	if len(eligibleToStart) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
-		c.logger.Debug("validators state changed after metadata sync",
-			zap.Int("eligible_to_start_count", len(eligibleToStart)),
-			zap.Int("slashed_count", len(slashedShares)),
-			zap.Int("exited_count", len(exitedShares)),
-		)
+	// Update ValidatorStore with the new metadata
+	changedMetadata, err := c.validatorStore.UpdateValidatorsMetadata(ctx, syncBatch.After)
+	if err != nil {
+		return fmt.Errorf("update validators metadata: %w", err)
 	}
 
-	if len(eligibleToStart) > 0 {
-		startedValidators := c.startEligibleValidators(ctx, eligibleToStart)
-		if startedValidators > 0 {
-			c.logger.Debug("started new eligible validators", zap.Int("started_validators", startedValidators))
-
-			// Refresh duties only if there are started validators.
-			if !c.reportIndicesChange(ctx) {
-				c.logger.Error("failed to notify indices change")
-			}
-		} else {
-			c.logger.Warn("no eligible validators started despite metadata changes")
-		}
+	// Only log if there were actual changes
+	if len(changedMetadata) > 0 {
+		c.logger.Debug("validators metadata updated",
+			zap.Int("total_in_batch", len(syncBatch.After)),
+			zap.Int("actually_changed", len(changedMetadata)))
 	}
 
 	return nil
@@ -1051,36 +1081,16 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			start := time.Now()
-			validatorsPerStatus := make(map[validatorStatus]uint32)
 
-			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
-				if share.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
-					validatorsPerStatus[statusParticipating]++
-				}
-				if !share.HasBeaconMetadata() {
-					validatorsPerStatus[statusNotFound]++
-				} else if share.IsActive() {
-					validatorsPerStatus[statusActive]++
-				} else if share.Slashed() {
-					validatorsPerStatus[statusSlashed]++
-				} else if share.Exited() {
-					validatorsPerStatus[statusExiting]++
-				} else if !share.Activated() {
-					validatorsPerStatus[statusNotActivated]++
-				} else if share.Pending() {
-					validatorsPerStatus[statusPending]++
-				} else if share.ValidatorIndex == 0 {
-					validatorsPerStatus[statusNoIndex]++
-				} else {
-					validatorsPerStatus[statusUnknown]++
-				}
-			}
-			for status, count := range validatorsPerStatus {
+			statusReport := c.validatorStore.GetValidatorStatusReport()
+
+			for status, count := range statusReport {
 				c.logger.
 					With(zap.String("status", string(status))).
 					With(zap.Uint32("count", count)).
 					With(zap.Duration("elapsed_time", time.Since(start))).
 					Info("recording validator status")
+
 				recordValidatorStatus(ctx, count, status)
 			}
 		case <-ctx.Done():
@@ -1088,7 +1098,52 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			return
 		}
 	}
+}
 
+func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
+	logger := c.logger.Named("TaskExecutor").With(
+		zap.String("task", "StopValidator"),
+		fields.PubKey(pubKey[:]))
+
+	// ValidatorStore will handle the removal and trigger OnValidatorStopped callback
+	// which will call onShareStop asynchronously
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	err := c.validatorStore.OnShareRemoved(c.ctx, pubKey, opts)
+	if err != nil {
+		logger.Error("failed to remove validator", zap.Error(err))
+		return err
+	}
+
+	validatorsRemovedCounter.Add(c.ctx, 1)
+	logger.Info("validator removal initiated")
+	return nil
+}
+
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
+	logger := c.logger.Named("TaskExecutor").With(
+		zap.String("task", "ExitValidator"),
+		fields.PubKey(pubKey[:]),
+		fields.BlockNumber(blockNumber),
+		zap.Uint64("validator_index", uint64(validatorIndex)),
+		zap.Bool("own_validator", ownValidator))
+
+	// ValidatorStore will handle the exit and trigger OnValidatorExited callback
+	var pk spectypes.ValidatorPK
+	copy(pk[:], pubKey[:])
+
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	err := c.validatorStore.OnValidatorExited(c.ctx, pk, blockNumber, opts)
+	if err != nil {
+		logger.Error("failed to process validator exit", zap.Error(err))
+		return err
+	}
+
+	logger.Info("validator exit initiated")
+	return nil
 }
 
 func SetupCommitteeRunners(

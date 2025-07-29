@@ -7,6 +7,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -93,15 +95,17 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 
 func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	if lf.Role == spectypes.RoleCommittee {
-		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
+		c, ok := mv.validatorStore.GetCommittee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
 		if ok {
 			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
 		}
 	} else {
-		// get the validator index from the msgid
-		v, ok := mv.validatorStore.Validator(lf.DutyExecutorID)
+		var validatorPK spectypes.ValidatorPK
+		copy(validatorPK[:], lf.DutyExecutorID)
+
+		snapshot, ok := mv.validatorStore.GetValidator(registrystorage.ValidatorPubKey(validatorPK))
 		if ok {
-			lf.DutyID = fmt.Sprintf("%v-e%v-s%v-v%v", lf.Role.String(), mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot, v.ValidatorIndex)
+			lf.DutyID = fmt.Sprintf("%v-e%v-s%v-v%v", lf.Role.String(), mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot, snapshot.Share.ValidatorIndex)
 		}
 	}
 }

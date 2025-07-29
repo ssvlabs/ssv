@@ -34,7 +34,7 @@ import (
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
@@ -106,7 +106,7 @@ type p2pNetwork struct {
 
 	libConnManager connmgrcore.ConnManager
 
-	nodeStorage             operatorstorage.Storage
+	validatorStore          registrystorage.ValidatorStore
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
 	operatorSigner          keys.OperatorSigner
 	operatorDataStore       operatordatastore.OperatorDataStore
@@ -137,7 +137,7 @@ func New(
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
-		nodeStorage:             cfg.NodeStorage,
+		validatorStore:          cfg.ValidatorStore,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
