@@ -144,20 +144,21 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	span.SetStatus(codes.Ok, "")
 }
 
-// blockSlot returns slot that happens (corresponds to) at the same time as block,
-// it prevents calling execution client multiple times if there are several validator exit events on the same block
+// blockSlot returns slot that happens (corresponds to) at the same time as block.
+// It caches the result to avoid calling execution client multiple times when there are several
+// validator exit events present in the same block.
 func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
 	blockSlot, ok := h.blockSlots[blockNumber]
 	if ok {
 		return blockSlot, nil
 	}
 
-	block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+	header, err := h.executionClient.HeaderByNumber(ctx, new(big.Int).SetUint64(blockNumber))
 	if err != nil {
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0)) // #nosec G115
+	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 

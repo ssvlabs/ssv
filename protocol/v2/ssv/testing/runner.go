@@ -11,8 +11,6 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -22,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -190,7 +189,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			rStorage,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
-			validator.DefaultGasLimitOld,
+			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
@@ -446,7 +445,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			nil, // recipientStorage is unused in these tests
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
-			validator.DefaultGasLimitOld,
+			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(

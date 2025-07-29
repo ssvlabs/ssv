@@ -271,15 +271,12 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.DBOptions.Ctx = cmd.Context()
 		var db basedb.Database
-		switch cfg.DBOptions.Engine {
-		case "pebble":
+		if cfg.ExporterOptions.Enabled {
 			logger.Info("using pebble db")
 			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
-		case "badger":
+		} else {
 			logger.Info("using badger db")
 			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
-		default:
-			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
 		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -512,7 +509,7 @@ var StartNodeCmd = &cobra.Command{
 				dstore := &dutytracer.DutyTraceStoreMetrics{
 					Store: dutytracestore.New(db),
 				}
-				collector = dutytracer.New(cmd.Context(), logger,
+				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
 					dstore, networkConfig.BeaconConfig)
 
@@ -586,7 +583,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeProber.AddNode("event syncer", eventSyncer)
 		}
 
-		if _, err := metadataSyncer.SyncOnStartup(cmd.Context()); err != nil {
+		if _, err := metadataSyncer.SyncAll(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
 		}
 

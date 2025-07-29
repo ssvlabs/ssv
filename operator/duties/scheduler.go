@@ -59,7 +59,7 @@ type BeaconNode interface {
 }
 
 type ExecutionClient interface {
-	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error)
+	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
 }
 
 // ValidatorProvider represents the component that controls validators via the scheduler
@@ -238,7 +238,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 					With(fields.BlockRoot(headEvent.Block)).
 					Info("received head event. Processing...")
 
-				headEventHandler(headEvent)
+				headEventHandler(ctx, headEvent)
 			}
 		}
 	}()
@@ -299,7 +299,11 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 			finalTime := s.beaconConfig.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 			if waitDuration > 0 {
-				time.Sleep(waitDuration)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(waitDuration):
+				}
 			}
 
 			s.advanceHeadSlot(slot)
@@ -308,8 +312,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 }
 
 // HandleHeadEvent handles the "head" events from the beacon node.
-func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.HeadEvent) {
-	return func(event *eth2apiv1.HeadEvent) {
+func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1.HeadEvent) {
+	return func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
 
 		if event.Slot != s.beaconConfig.EstimatedCurrentSlot() {
@@ -378,7 +382,11 @@ func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.HeadEvent) {
 
 			// We give the block some time to propagate around the rest of the
 			// nodes before kicking off duties for the block's slot.
-			time.Sleep(s.blockPropagateDelay)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(s.blockPropagateDelay):
+			}
 
 			s.advanceHeadSlot(event.Slot)
 		}
