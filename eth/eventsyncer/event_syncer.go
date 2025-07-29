@@ -127,6 +127,9 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 			return 0, fmt.Errorf("failed to fetch historical events: %w", err)
 		}
 
+		// Intercept fetchLogs and forward a copy to the log analyzer.
+		fetchLogs = es.analyzeLogStream(fetchLogs)
+
 		lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogs, false)
 		if err != nil {
 			return 0, fmt.Errorf("handle historical block events: %w", err)
@@ -166,6 +169,30 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	return 0, fmt.Errorf("highest block is too old (%d)", lastProcessedBlock)
 }
 
+// Intercept StreamLogs and forward a copy to the log analyzer.
+func (es *EventSyncer) analyzeLogStream(logStream <-chan executionclient.BlockLogs) <-chan executionclient.BlockLogs {
+	if es.logAnalyzer == nil {
+		return logStream
+	}
+
+	analyzedLogStream := make(chan executionclient.BlockLogs)
+	go func() {
+		defer close(analyzedLogStream)
+		es.logger.Debug("started batch logs stream interceptor")
+		for blockLogs := range logStream {
+			es.logger.Debug("batch logs stream received block",
+				zap.Uint64("block", blockLogs.BlockNumber),
+				zap.Int("log_count", len(blockLogs.Logs)))
+			// Analyze the logs
+			es.logAnalyzer.RecordBlockLogs(blockLogs)
+			// Pass through to the event handler
+			analyzedLogStream <- blockLogs
+		}
+		es.logger.Debug("batch logs stream interceptor closed")
+	}()
+	return analyzedLogStream
+}
+
 // SyncOngoing streams and processes ongoing events as they come since the given fromBlock.
 func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error {
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
@@ -177,22 +204,7 @@ func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error 
 		es.logger.Info("setting up log analyzer with three streams", fields.FromBlock(fromBlock))
 
 		// Intercept StreamLogs and forward a copy to the log analyzer.
-		analyzedLogStream := make(chan executionclient.BlockLogs)
-		go func() {
-			defer close(analyzedLogStream)
-			es.logger.Debug("started batch logs stream interceptor")
-			for blockLogs := range logStream {
-				es.logger.Debug("batch logs stream received block",
-					zap.Uint64("block", blockLogs.BlockNumber),
-					zap.Int("log_count", len(blockLogs.Logs)))
-				// Analyze the logs
-				es.logAnalyzer.RecordBlockLogs(blockLogs)
-				// Pass through to the event handler
-				analyzedLogStream <- blockLogs
-			}
-			es.logger.Debug("batch logs stream interceptor closed")
-		}()
-		logStream = analyzedLogStream
+		logStream = es.analyzeLogStream(logStream)
 
 		// Also start a second subscription to the filter logs
 		// to compare them with the logs from the block stream.

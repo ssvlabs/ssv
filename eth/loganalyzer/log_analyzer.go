@@ -18,6 +18,7 @@ const (
 	DefaultMaxQueueSize       = 5000
 	DefaultRetentionBlocks    = 1000
 	QueueFullWarningThreshold = 0.8
+	DefaultEvictionThreshold  = 100
 )
 
 // LogAnalyzerStats holds internal statistics for the LogAnalyzer.
@@ -465,6 +466,19 @@ func (l *LogAnalyzer) processLogRequest(request LogRequest) {
 
 func (l *LogAnalyzer) postProcess(logType LogType, blockNumber uint64) {
 	if logType != FinalizedLogType {
+		// Prevent memory leaks in case we stopped receiving finalized blocks
+		if blockNumber > DefaultEvictionThreshold {
+			blockToDelete := blockNumber - DefaultEvictionThreshold
+			l.logger.Info("deleting old logs without comparison to prevent memory leaks",
+				zap.Uint64("block", blockToDelete))
+			if err := l.store.DeleteLogs(l.ctx, blockToDelete); err != nil {
+				l.stats.StorageErrors++
+				l.logger.Error("failed to delete temporary logs",
+					zap.Uint64("block", blockToDelete),
+					zap.Error(err))
+			}
+			l.removeOldBlocks(blockToDelete)
+		}
 		return
 	}
 	l.compareLogsForBlock(blockNumber)
