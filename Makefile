@@ -60,7 +60,7 @@ unit-test:
 .PHONY: ssvsigner-test
 ssvsigner-test:
 	@echo "Running ssv-signer unit tests"
-	@cd ssvsigner && go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 ./...
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "ssvsigner/e2e"`
 
 .PHONY: spec-test
 spec-test:

@@ -115,12 +115,12 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	isDecided, err := IsDecidedMsg(c.CommitteeMember, msg)
+	isDecided, err := c.IsDecidedMsg(msg)
 	if err != nil {
 		return nil, err
 	}
 	if isDecided {
-		return c.UponDecided(logger, msg)
+		return c.UponDecided(msg)
 	}
 
 	isFutureMsg := c.isFutureMessage(msg)
