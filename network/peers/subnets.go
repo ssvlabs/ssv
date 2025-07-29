@@ -126,26 +126,26 @@ func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubne
 	return scores
 }
 
-func scoreSubnet(connected, min, max int) float64 {
+func scoreSubnet(connectedSubnets, minSubnets, maxSubnets int) float64 {
 	// scarcityFactor is the factor by which the score is increased for
 	// subnets with fewer than the desired minimum number of peers.
 	const scarcityFactor = 2.0
 
-	if connected <= 0 {
+	if connectedSubnets <= 0 {
 		return 2.0 * scarcityFactor
 	}
 
-	if connected > max {
+	if connectedSubnets > maxSubnets {
 		// Linear scaling when connected is above the desired maximum.
-		return -1.0 * (float64(connected-max) / float64(2*(max-min)))
+		return -1.0 * (float64(connectedSubnets-maxSubnets) / float64(2*(maxSubnets-minSubnets)))
 	}
 
-	if connected < min {
+	if connectedSubnets < minSubnets {
 		// Proportional scaling when connected is less than the desired minimum.
-		return 1.0 + (float64(min-connected)/float64(min))*scarcityFactor
+		return 1.0 + (float64(minSubnets-connectedSubnets)/float64(minSubnets))*scarcityFactor
 	}
 
 	// Linear scaling when connected is between min and max.
-	proportion := float64(connected-min) / float64(max-min)
+	proportion := float64(connectedSubnets-minSubnets) / float64(maxSubnets-minSubnets)
 	return 1 - proportion
 }

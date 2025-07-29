@@ -91,9 +91,9 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 		IPColocationFactorWeight:    psp.IPColocationFactorWeight,
 		IPColocationFactorThreshold: psp.IPColocationFactorThreshold,
 		IPColocationFactorWhitelist: psp.IPColocationFactorWhitelist,
-		BehaviourPenaltyWeight:      psp.BehaviourPenaltyWeight,
-		BehaviourPenaltyThreshold:   psp.BehaviourPenaltyThreshold,
-		BehaviourPenaltyDecay:       psp.BehaviourPenaltyDecay,
+		BehaviorPenaltyWeight:       psp.BehaviourPenaltyWeight,
+		BehaviorPenaltyThreshold:    psp.BehaviourPenaltyThreshold,
+		BehaviorPenaltyDecay:        psp.BehaviourPenaltyDecay,
 		DecayInterval:               psp.DecayInterval,
 		DecayToZero:                 psp.DecayToZero,
 		RetainScore:                 psp.RetainScore,
@@ -109,14 +109,14 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 
 type peerScoreParamsSerializable struct {
 	// Topics map[string]*TopicScoreParams
-	TopicScoreCap                                                            float64
-	AppSpecificWeight                                                        float64
-	IPColocationFactorWeight                                                 float64
-	IPColocationFactorThreshold                                              int
-	IPColocationFactorWhitelist                                              []*net.IPNet
-	BehaviourPenaltyWeight, BehaviourPenaltyThreshold, BehaviourPenaltyDecay float64
-	DecayInterval                                                            time.Duration
-	DecayToZero                                                              float64
-	RetainScore                                                              time.Duration
-	SeenMsgTTL                                                               time.Duration
+	TopicScoreCap                                                         float64
+	AppSpecificWeight                                                     float64
+	IPColocationFactorWeight                                              float64
+	IPColocationFactorThreshold                                           int
+	IPColocationFactorWhitelist                                           []*net.IPNet
+	BehaviorPenaltyWeight, BehaviorPenaltyThreshold, BehaviorPenaltyDecay float64
+	DecayInterval                                                         time.Duration
+	DecayToZero                                                           float64
+	RetainScore                                                           time.Duration
+	SeenMsgTTL                                                            time.Duration
 }

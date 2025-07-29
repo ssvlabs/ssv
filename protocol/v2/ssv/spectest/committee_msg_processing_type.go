@@ -88,11 +88,9 @@ func (test *CommitteeSpecTest) Run(t *testing.T) {
 }
 
 func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
-
 	var lastErr error
 
 	for _, input := range test.Input {
-
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:

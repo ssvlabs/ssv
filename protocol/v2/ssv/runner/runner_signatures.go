@@ -122,7 +122,6 @@ func (b *BaseRunner) validateValidatorIndexInPartialSigMsg(
 
 func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, signature spectypes.Signature, root [32]byte,
 	committee []*spectypes.ShareMember) error {
-
 	for _, n := range committee {
 		if n.Signer == signer {
 			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
@@ -146,7 +145,6 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
-
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {

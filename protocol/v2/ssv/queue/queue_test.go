@@ -247,7 +247,6 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 			return msg.Body.(*qbft.Message).MsgType != qbft.CommitMsgType
 		})
 		require.NotNil(t, popped)
-
 	}()
 
 	// Simulate delay before pushing messages.

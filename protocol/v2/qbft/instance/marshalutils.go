@@ -2,9 +2,9 @@ package instance
 
 import "encoding/json"
 
-/////////////////////// JSON Marshalling for Tests ///////////////////////
+/////////////////////// JSON Marshaling for Tests ///////////////////////
 
-// region: JSON Marshalling for Instance
+// region: JSON Marshaling for Instance
 
 // MarshalJSON is a custom JSON marshaller for Instance
 func (i *Instance) MarshalJSON() ([]byte, error) {
@@ -17,13 +17,13 @@ func (i *Instance) MarshalJSON() ([]byte, error) {
 			ForceStop: i.forceStop,
 			Alias:     (*Alias)(i),
 		})
-	} else {
-		return json.Marshal(&struct {
-			*Alias
-		}{
-			Alias: (*Alias)(i),
-		})
 	}
+
+	return json.Marshal(&struct {
+		*Alias
+	}{
+		Alias: (*Alias)(i),
+	})
 }
 
 // UnmarshalJSON is a custom JSON unmarshaller for Instance
@@ -44,4 +44,4 @@ func (i *Instance) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// endregion: JSON Marshalling for Instance
+// endregion: JSON Marshaling for Instance
