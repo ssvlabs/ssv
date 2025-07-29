@@ -9,7 +9,6 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -159,10 +158,6 @@ func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {
 
 func (s *SSVShare) MinParticipationEpoch() phase0.Epoch {
 	return s.minParticipationEpoch
-}
-
-func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
-	s.FeeRecipientAddress = feeRecipient
 }
 
 // CommitteeID safely retrieves or computes the CommitteeID.

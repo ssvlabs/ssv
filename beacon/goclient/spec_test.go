@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -15,7 +15,7 @@ func Test_specForClient(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(nil)
+		mockServer := mocks.NewServer(nil)
 		defer mockServer.Close()
 
 		client, err := New(

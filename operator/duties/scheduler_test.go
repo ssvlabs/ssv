@@ -74,8 +74,8 @@ type mockSlotTickerService struct {
 
 func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot]) (*Scheduler, *zap.Logger, *mockSlotTickerService, time.Duration, context.CancelFunc, *pool.ContextPool, func()) {
 	ctrl := gomock.NewController(t)
-	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 200 * time.Millisecond
+	// A 2s timeout ensures the test passes, even with mockSlotTicker overhead.
+	timeout := 2 * time.Second
 
 	ctx, cancel := context.WithCancel(t.Context())
 	logger := logging.TestLogger(t)
@@ -157,39 +157,40 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.ValidatorDuty, executeDutiesCallSize)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
 		func(_ context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+
 			executeDutiesBuffer <- duty
 
-			// Check if all expected duties have been received
+			// Once all expected duties have been received, build an array of duties and send it
+			// over executeDutiesCall channel.
 			if len(executeDutiesBuffer) == executeDutiesCallSize {
-				// Build the array of duties
 				var duties []*spectypes.ValidatorDuty
 				for i := 0; i < executeDutiesCallSize; i++ {
 					d := <-executeDutiesBuffer
 					duties = append(duties, d)
 				}
-
-				// Send the array of duties to executeDutiesCall
 				executeDutiesCall <- duties
 			}
 			return nil
 		},
-	).AnyTimes()
+	)
 }
 
 func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
 
+	// We are not super interested in checking the exact number of ExecuteDuty calls, hence allow
+	// AnyTimes of these calls here.
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
 		func(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 			return nil
 		},
-	).AnyTimes()
+	)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
 		func(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 			logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
 			executeDutiesBuffer <- &committeeDuty{id: committeeID, duty: duty}
@@ -210,7 +211,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 				executeDutiesCall <- duties
 			}
 		},
-	).AnyTimes()
+	)
 }
 
 func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
@@ -238,10 +239,10 @@ func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan stru
 func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration, expectedDuties []*spectypes.ValidatorDuty) {
 	select {
 	case <-fetchDutiesCall:
-		require.FailNow(t, "unexpected duties call")
+		require.FailNow(t, "unexpected fetch-duties call")
 	case duties := <-executeDutiesCall:
 		logger.Debug("duties executed", zap.Any("duties", duties))
-		logger.Debug("expected duties", zap.Any("duties", expectedDuties))
+		logger.Debug("duties expected", zap.Any("duties", expectedDuties))
 		require.Len(t, duties, len(expectedDuties))
 		for _, e := range expectedDuties {
 			found := false
@@ -253,7 +254,9 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 			}
 			require.True(t, found)
 		}
-
+		// Wait a tiny bit more to make sure no more duties are coming (mock expectations will catch that
+		// if that's the case).
+		time.Sleep(1 * time.Millisecond)
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duty to be executed")
 	}
@@ -410,7 +413,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	s := NewScheduler(logger, opts)
 
 	// add multiple mock duty handlers
-	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
+	s.handlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 	err := s.Start(ctx)
@@ -423,5 +426,4 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Channel is jammed")
 	}
-
 }
