@@ -245,11 +245,14 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 	go func() {
 		defer close(logs)
+		mc.logger.Debug("MultiClient StreamLogs goroutine started", zap.Uint64("from_block", fromBlock))
 		for {
 			select {
 			case <-ctx.Done():
+				mc.logger.Debug("MultiClient StreamLogs context cancelled")
 				return
 			case <-mc.closed:
+				mc.logger.Debug("MultiClient StreamLogs closed")
 				return
 			default:
 				// Update healthyCh of all nodes and make sure at least one of them is available.
@@ -257,10 +260,17 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					mc.logger.Fatal("no healthy clients", zap.Error(err))
 				}
 
+				mc.logger.Debug("MultiClient calling streamLogsToChan", zap.Uint64("from_block", fromBlock))
+
 				// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
 				f := func(client SingleClientProvider) (any, error) {
+					mc.logger.Debug("MultiClient executing streamLogsToChan function")
 					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
+					mc.logger.Debug("MultiClient streamLogsToChan returned",
+						zap.Uint64("next_block", nextBlockToProcess),
+						zap.Error(err))
 					if isInterruptedError(err) {
+						mc.logger.Debug("MultiClient got interrupted error", zap.Error(err))
 						return nil, err
 					}
 
@@ -269,7 +279,9 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				}
 
 				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
+				mc.logger.Debug("MultiClient call returned", zap.Error(err))
 				if err == nil {
+					mc.logger.Warn("MultiClient StreamLogs exiting with nil error - this should never happen!")
 					return
 				}
 

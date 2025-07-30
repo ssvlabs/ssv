@@ -314,19 +314,28 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 		for {
 			select {
 			case <-ctx.Done():
+				ec.logger.Debug("ExecutionClient StreamLogs context cancelled")
 				return
 			case <-ec.closed:
+				ec.logger.Debug("ExecutionClient StreamLogs client closed")
 				return
 			default:
+				ec.logger.Debug("ExecutionClient calling streamLogsToChan", zap.Uint64("from_block", fromBlock))
 				nextBlockToProcess, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				ec.logger.Debug("ExecutionClient streamLogsToChan returned",
+					zap.Uint64("next_block", nextBlockToProcess),
+					zap.Error(err))
+
 				if isInterruptedError(err) {
 					// This is a valid way to terminate, no need to log this error.
+					ec.logger.Debug("ExecutionClient got interrupted error, exiting normally")
 					return
 				}
 				// streamLogsToChan should never return without an error, so we treat a nil error as
 				// an error by itself.
 				if err == nil {
 					err = errors.New("streamLogsToChan halted without an error")
+					ec.logger.Warn("ExecutionClient detected nil error from streamLogsToChan - converting to error", zap.Error(err))
 				}
 
 				tries++
@@ -448,6 +457,7 @@ func (ec *ExecutionClient) isClosed() bool {
 // streamLogsToChan *always* returns the next block to process.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+	ec.logger.Debug("streamLogsToChan started", zap.Uint64("from_block", fromBlock))
 	heads := make(chan *ethtypes.Header)
 
 	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
@@ -470,20 +480,26 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "SubscribeNewHead"),
 			zap.Error(err))
+		ec.logger.Debug("streamLogsToChan returning due to SubscribeNewHead error")
 		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
 	defer sub.Unsubscribe()
 
+	ec.logger.Debug("streamLogsToChan entering main loop")
 	for {
 		select {
 		case <-ctx.Done():
+			ec.logger.Debug("streamLogsToChan context cancelled")
 			return fromBlock, context.Canceled
 
 		case <-ec.closed:
+			ec.logger.Debug("streamLogsToChan client closed")
 			return fromBlock, ErrClosed
 
 		case err := <-sub.Err():
+			ec.logger.Debug("streamLogsToChan subscription error", zap.Error(err))
 			if err == nil {
+				ec.logger.Debug("streamLogsToChan returning ErrClosed due to nil subscription error")
 				return fromBlock, ErrClosed
 			}
 			return fromBlock, fmt.Errorf("subscription: %w", err)
@@ -518,12 +534,22 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 				ec.logger.Debug("streaming block logs",
 					zap.Uint64("block", block.BlockNumber),
 					zap.Int("log_count", len(block.Logs)))
-				logCh <- block
+
+				select {
+				case logCh <- block:
+					ec.logger.Debug("streamLogsToChan successfully sent block to channel", zap.Uint64("block", block.BlockNumber))
+				case <-ctx.Done():
+					ec.logger.Debug("streamLogsToChan context cancelled while sending block")
+					return fromBlock, context.Canceled
+				}
 				fromBlock = block.BlockNumber + 1
 				blocksProcessed++
 			}
+			ec.logger.Debug("streamLogsToChan finished processing logStream", zap.Int("blocks_processed", blocksProcessed))
+
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
+				ec.logger.Debug("streamLogsToChan returning due to fetch error", zap.Error(err))
 				return fromBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 
