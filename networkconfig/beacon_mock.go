@@ -42,6 +42,21 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 	return m.recorder
 }
 
+// BeaconForkAtEpoch mocks base method.
+func (m *MockBeacon) BeaconForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BeaconForkAtEpoch", epoch)
+	ret0, _ := ret[0].(spec.DataVersion)
+	ret1, _ := ret[1].(*phase0.Fork)
+	return ret0, ret1
+}
+
+// BeaconForkAtEpoch indicates an expected call of BeaconForkAtEpoch.
+func (mr *MockBeaconMockRecorder) BeaconForkAtEpoch(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeaconForkAtEpoch", reflect.TypeOf((*MockBeacon)(nil).BeaconForkAtEpoch), epoch)
+}
+
 // EpochDuration mocks base method.
 func (m *MockBeacon) EpochDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -180,21 +195,6 @@ func (m *MockBeacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
 func (mr *MockBeaconMockRecorder) FirstSlotAtEpoch(epoch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FirstSlotAtEpoch", reflect.TypeOf((*MockBeacon)(nil).FirstSlotAtEpoch), epoch)
-}
-
-// ForkAtEpoch mocks base method.
-func (m *MockBeacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForkAtEpoch", epoch)
-	ret0, _ := ret[0].(spec.DataVersion)
-	ret1, _ := ret[1].(*phase0.Fork)
-	return ret0, ret1
-}
-
-// ForkAtEpoch indicates an expected call of ForkAtEpoch.
-func (mr *MockBeaconMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockBeacon)(nil).ForkAtEpoch), epoch)
 }
 
 // GetEpochFirstSlot mocks base method.

@@ -54,6 +54,8 @@ type Committee struct {
 	Operators  []spectypes.OperatorID
 	Validators []*types.SSVShare
 	Indices    []phase0.ValidatorIndex
+	Subnet     uint64
+	SubnetAlan uint64
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
@@ -561,6 +563,12 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		committee.Indices = append(committee.Indices, share.ValidatorIndex)
 	}
 	slices.Sort(committee.Operators)
+
+	// Some test shares might have zero length committee
+	if len(shares[0].Committee) > 0 {
+		committee.Subnet = shares[0].CommitteeSubnet()
+		committee.SubnetAlan = shares[0].CommitteeSubnetAlan()
+	}
 
 	return committee
 }
