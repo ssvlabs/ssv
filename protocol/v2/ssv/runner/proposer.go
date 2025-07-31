@@ -192,41 +192,6 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
 	))
 
-	// Check if the block has a fee recipient. If not, submit preparations and try again.
-	if summarizeErr == nil && blockSummary.FeeRecipient == (bellatrix.ExecutionAddress{}) {
-		logger.Warn("fee recipient missing from beacon block, resubmitting proposal preparation")
-
-		feeRecipients := map[phase0.ValidatorIndex]bellatrix.ExecutionAddress{
-			r.GetShare().ValidatorIndex: r.GetShare().FeeRecipientAddress,
-		}
-
-		if err = r.GetBeaconNode().SubmitProposalPreparation(ctx, feeRecipients); err != nil {
-			span.RecordError(err)
-			logger.Warn("failed to submit proposal preparation, continuing with original block data", zap.Error(err))
-		} else {
-			obj, ver, err = r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
-			if err != nil {
-				span.RecordError(err)
-				logger.Warn("failed to get beacon block after proposal preparation, continuing with original block data", zap.Error(err))
-			} else {
-				// Log essentials about the retrieved block.
-				blockSummary, summarizeErr = summarizeBlock(obj)
-				const eventMsg = "🧊 got beacon block proposal after proposal preparation"
-				logger.Info(eventMsg,
-					zap.String("block_hash", blockSummary.Hash.String()),
-					zap.Stringer("fee_recipient", blockSummary.FeeRecipient),
-					zap.Bool("blinded", blockSummary.Blinded),
-					zap.Duration("proposer_delay", r.proposerDelay),
-					fields.Took(time.Since(start)),
-					zap.NamedError("summarize_err", summarizeErr))
-				span.AddEvent(eventMsg, trace.WithAttributes(
-					observability.BeaconBlockHashAttribute(blockSummary.Hash),
-					observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
-				))
-			}
-		}
-	}
-
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
 		return observability.Errorf(span, "could not marshal beacon block: %w", err)
