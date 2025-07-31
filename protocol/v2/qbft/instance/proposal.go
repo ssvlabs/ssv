@@ -174,7 +174,6 @@ func (i *Instance) isProposalJustification(
 		if !previouslyPrepared {
 			return nil
 		} else {
-
 			// check prepare quorum
 			if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgs) {
 				return errors.New("prepares has no quorum")

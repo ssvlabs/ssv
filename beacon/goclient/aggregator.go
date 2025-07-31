@@ -2,7 +2,6 @@ package goclient
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"net/http"
 	"time"
@@ -29,12 +28,6 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
 	if err := gc.waitToSlotTwoThirds(ctx, slot); err != nil {
 		return nil, 0, fmt.Errorf("wait for 2/3 of slot: %w", err)
-	}
-
-	// differ from spec because we need to subscribe to subnet
-	isAggregator := gc.isAggregator(committeeLength, slotSig)
-	if !isAggregator {
-		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
 	}
 
 	attData, _, err := gc.GetAttestationData(ctx, slot)
@@ -182,28 +175,7 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 	return nil
 }
 
-// IsAggregator returns true if the signature is from the input validator. The committee
-// count is provided as an argument rather than imported implementation from spec. Having
-// committee count as an argument allows cheaper computation at run time.
-//
-// Spec pseudocode definition:
-//
-//	def is_aggregator(state: BeaconState, slot: Slot, index: CommitteeIndex, slot_signature: BLSSignature) -> bool:
-//	 committee = get_beacon_committee(state, slot, index)
-//	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
-//	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
-func (gc *GoClient) isAggregator(committeeCount uint64, slotSig []byte) bool {
-	modulo := committeeCount / gc.beaconConfig.TargetAggregatorsPerCommittee
-	if modulo == 0 {
-		// Modulo must be at least 1.
-		modulo = 1
-	}
-
-	b := Hash(slotSig)
-	return binary.LittleEndian.Uint64(b[:8])%modulo == 0
-}
-
-// waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after slot start time)
+// waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
 func (gc *GoClient) waitToSlotTwoThirds(ctx context.Context, slot phase0.Slot) error {
 	config := gc.getBeaconConfig()
 	oneInterval := config.IntervalDuration()
