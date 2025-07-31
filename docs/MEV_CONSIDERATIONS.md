@@ -49,8 +49,8 @@ To understand how MEV fits with the SSV cluster, here is some background on the 
 - QBFT consensus phase might require several rounds to complete in case there is a fault with the
   chosen round leader, each round can take up to `RoundTimeout` (currently set to 2s on SSV-protocol 
   level, which also means there will be 2 rounds at most because Ethereum block must be proposed 
-  within 4s from slot start) meaning if round-1 doesn't complete in under `RoundTimeout` another 
-  leader will be chosen to try and complete QBFT in round-2, etc.
+  within 4s from slot start) meaning if round 1 doesn't complete in under `RoundTimeout` another 
+  leader will be chosen to try and complete QBFT in round 2, etc.
 - once QBFT completes successfully, Operator needs to submit the signed block to Beacon node to 
   propagate it throughout Ethereum network (call it `BlockSubmissionTime`)
 - there is some time spent on executing various code to "glue" this whole thing together 
@@ -97,8 +97,8 @@ const blockSubmissionTime = 1000 * time.Millisecond
 const proposerDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
 ```
 but on top of that, another consideration Operator needs to take into account is QBFT round timeout, specifically 
-round-1 timeout. For proposer duty round-1 times out at ~2s after slot start time (so that proposer duty can execute 2
-QBFT rounds, if necessary, and still complete before that desirable 4s after slot start deadline). To avoid round-1 timing out
+round 1 timeout. For proposer duty round 1 times out at ~2s after slot start time (so that proposer duty can execute 2
+QBFT rounds, if necessary, and still complete before that desirable 4s after slot start deadline). To avoid round 1 timing out
 we'd want the following equation to hold:
 ```go
 RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + MiscellaneousTime < 2s
