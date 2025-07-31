@@ -348,7 +348,10 @@ func (gc *GoClient) submitProposalPreparationBatches(
 // If it receives no proposal until context is canceled,
 // it returns an error.
 //
-// If using one client, it just returns the fetched proposal.
+// If using one client, it just returns the fetched proposal
+// if it has a fee recipient. Otherwise, it tries to submit
+// a proposal preparation for this validator and request
+// a new block with a fee recipient using a strict deadline.
 func (gc *GoClient) getProposal(
 	ctx context.Context,
 	slot phase0.Slot,
