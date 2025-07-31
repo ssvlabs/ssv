@@ -533,7 +533,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	)
 	logger = logger.With(fields.Slot(signedMsg.Slot))
 
-	// TODO: (Alan) revert?
 	indices := make([]uint64, len(signedMsg.Messages))
 	signers := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {

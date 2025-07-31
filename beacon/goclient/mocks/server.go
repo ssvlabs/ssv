@@ -1,4 +1,4 @@
-package tests
+package mocks
 
 import (
 	"encoding/json"
@@ -10,8 +10,8 @@ import (
 
 type requestCallback = func(r *http.Request, resp json.RawMessage) (json.RawMessage, error)
 
-func MockServer(onRequestFn requestCallback) *httptest.Server {
-	mockResponses := MockResponses()
+func NewServer(onRequestFn requestCallback) *httptest.Server {
+	mockResponses := ServerResponses()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp, ok := mockResponses[r.URL.Path]
@@ -34,9 +34,9 @@ func MockServer(onRequestFn requestCallback) *httptest.Server {
 	}))
 }
 
-func MockResponses() map[string]json.RawMessage {
+func ServerResponses() map[string]json.RawMessage {
 	var responses map[string]json.RawMessage
-	f, err := os.Open("./tests/mock-beacon-responses.json")
+	f, err := os.Open("./mocks/mock-beacon-responses.json")
 	defer func() {
 		_ = f.Close()
 	}()
