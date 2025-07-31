@@ -320,7 +320,7 @@ func (gc *GoClient) submitProposalPreparationBatches(
 	preparations []*eth2apiv1.ProposalPreparation,
 ) {
 	const batchSize = 500
-
+	submitted := 0
 	for start := 0; start < len(preparations); start += batchSize {
 		end := start + batchSize
 		if end > len(preparations) {
@@ -338,7 +338,13 @@ func (gc *GoClient) submitProposalPreparationBatches(
 			)
 			continue
 		}
+		submitted += len(batch)
 	}
+
+	gc.log.Debug("✅ successfully submitted proposal preparations",
+		zap.Int("submitted", submitted),
+		zap.Int("total", len(preparations)),
+	)
 }
 
 // getProposal fetches proposals from beacon nodes and
@@ -427,8 +433,7 @@ func (gc *GoClient) getProposal(
 			address, ok := (*feeRecipients)[validatorIndex]
 			if !ok {
 				logger.Warn("fee recipient address for validator not found",
-					fields.ValidatorIndex(validatorIndex),
-					zap.Error(err))
+					fields.ValidatorIndex(validatorIndex))
 				return
 			}
 
@@ -460,8 +465,7 @@ func (gc *GoClient) getProposal(
 			}
 
 			if !b {
-				logger.Warn("received a proposal after preparation submission but it still doesn't have a fee recipient, hence using the first block",
-					zap.Error(err))
+				logger.Warn("received a proposal after preparation submission but it still doesn't have a fee recipient, hence using the first block")
 			}
 
 			proposalCh <- newProposal.Data

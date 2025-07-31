@@ -104,7 +104,6 @@ func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
 		return fmt.Errorf("submit preparations: %w", err)
 	}
 
-	rc.logger.Debug("✅ successfully submitted proposal preparations", zap.Int("total", len(shares)))
 	return nil
 }
 
