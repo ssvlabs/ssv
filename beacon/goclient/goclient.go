@@ -16,6 +16,7 @@ import (
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	eth2clientmulti "github.com/attestantio/go-eth2-client/multi"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/rs/zerolog"
@@ -170,6 +171,8 @@ type GoClient struct {
 	// voluntaryExitDomainCached is voluntary exit domain value calculated lazily and re-used
 	// since it doesn't change over time
 	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
+
+	feeRecipientsCache atomic.Pointer[map[phase0.ValidatorIndex]bellatrix.ExecutionAddress]
 }
 
 // New init new client and go-client instance
@@ -376,6 +379,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.Uint64("data_version", uint64(dataVersion)),
 				zap.Stringer("config", currentConfig),
 			)
+
+			if feeRecipients := gc.feeRecipientsCache.Load(); feeRecipients != nil {
+				if err := gc.SubmitProposalPreparation(ctx, *feeRecipients); err != nil {
+					logger.Error("failed to submit proposal preparations after client restart", zap.Error(err))
+				}
+			}
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",

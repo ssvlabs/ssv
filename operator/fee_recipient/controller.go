@@ -2,6 +2,7 @@ package fee_recipient
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -94,43 +95,17 @@ func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
 		storage.ByActiveValidator(),
 	)
 
-	const batchSize = 500
-	var submitted int
-	for start := 0; start < len(shares); start += batchSize {
-		end := start + batchSize
-		if end > len(shares) {
-			end = len(shares)
-		}
-		batch := shares[start:end]
-
-		count, err := rc.submit(ctx, batch)
-		if err != nil {
-			rc.logger.Warn("could not submit proposal preparation batch",
-				zap.Int("start_index", start),
-				zap.Error(err),
-			)
-			continue
-		}
-		submitted += count
-	}
-
-	rc.logger.Debug("✅  successfully submitted proposal preparations",
-		zap.Int("submitted", submitted),
-		zap.Int("total", len(shares)),
-	)
-	return nil
-}
-
-func (rc *recipientController) submit(ctx context.Context, shares []*types.SSVShare) (int, error) {
 	m, err := rc.toProposalPreparation(shares)
 	if err != nil {
-		return 0, errors.Wrap(err, "could not build proposal preparation batch")
+		return fmt.Errorf("build preparations: %w", err)
 	}
-	err = rc.beaconClient.SubmitProposalPreparation(ctx, m)
-	if err != nil {
-		return 0, errors.Wrap(err, "could not submit proposal preparation batch")
+
+	if err = rc.beaconClient.SubmitProposalPreparation(ctx, m); err != nil {
+		return fmt.Errorf("submit preparations: %w", err)
 	}
-	return len(m), nil
+
+	rc.logger.Debug("✅ successfully submitted proposal preparations", zap.Int("total", len(shares)))
+	return nil
 }
 
 func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {

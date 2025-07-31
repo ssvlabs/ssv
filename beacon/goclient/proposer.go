@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -19,6 +20,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -61,12 +64,8 @@ func (gc *GoClient) GetBeaconBlock(
 	copy(graffiti[:], graffitiBytes[:])
 
 	reqStart := time.Now()
-	proposalResp, err := gc.multiClient.Proposal(ctx, &api.ProposalOpts{
-		Slot:                   slot,
-		RandaoReveal:           sig,
-		Graffiti:               graffiti,
-		SkipRandaoVerification: false,
-	})
+
+	beaconBlock, err := gc.getProposal(ctx, slot, graffitiBytes, randao)
 	recordRequestDuration(ctx, "Proposal", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
 
 	if err != nil {
@@ -76,20 +75,12 @@ func (gc *GoClient) GetBeaconBlock(
 		)
 		return nil, DataVersionNil, fmt.Errorf("failed to get proposal: %w", err)
 	}
-	if proposalResp == nil {
+	if beaconBlock == nil {
 		gc.log.Error(clNilResponseErrMsg,
 			zap.String("api", "Proposal"),
 		)
 		return nil, DataVersionNil, fmt.Errorf("proposal response is nil")
 	}
-	if proposalResp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Proposal"),
-		)
-		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
-	}
-
-	beaconBlock := proposalResp.Data
 
 	if beaconBlock.Blinded {
 		switch beaconBlock.Version {
@@ -319,7 +310,473 @@ func (gc *GoClient) SubmitProposalPreparation(
 		})
 	}
 
-	return gc.multiClientSubmit(ctx, "SubmitProposalPreparations", func(ctx context.Context, client Client) error {
-		return client.SubmitProposalPreparations(ctx, preparations)
-	})
+	gc.submitProposalPreparationBatches(ctx, preparations)
+	gc.feeRecipientsCache.Store(&feeRecipients)
+	return nil
+}
+
+func (gc *GoClient) submitProposalPreparationBatches(
+	ctx context.Context,
+	preparations []*eth2apiv1.ProposalPreparation,
+) {
+	const batchSize = 500
+
+	for start := 0; start < len(preparations); start += batchSize {
+		end := start + batchSize
+		if end > len(preparations) {
+			end = len(preparations)
+		}
+		batch := preparations[start:end]
+
+		err := gc.multiClientSubmit(ctx, "SubmitProposalPreparations", func(ctx context.Context, client Client) error {
+			return client.SubmitProposalPreparations(ctx, batch)
+		})
+		if err != nil {
+			gc.log.Warn("could not submit proposal preparation batch",
+				zap.Int("start_index", start),
+				zap.Error(err),
+			)
+			continue
+		}
+	}
+}
+
+// getProposal fetches proposals from beacon nodes and
+// returns the first received one with a fee recipient set,
+// or, if none, it returns the first received proposal.
+//
+// If it receives no proposal until context is canceled,
+// it returns an error.
+//
+// If using one client, it just returns the fetched proposal.
+func (gc *GoClient) getProposal(
+	ctx context.Context,
+	slot phase0.Slot,
+	graffitiBytes []byte,
+	randao []byte,
+) (*api.VersionedProposal, error) {
+	sig := phase0.BLSSignature{}
+	copy(sig[:], randao[:])
+
+	graffiti := [32]byte{}
+	copy(graffiti[:], graffitiBytes[:])
+
+	if len(gc.clients) == 1 {
+		start := time.Now()
+
+		logger := gc.log.With(fields.Address(gc.clients[0].Address()))
+
+		p, err := gc.clients[0].Proposal(ctx, &api.ProposalOpts{
+			Slot:                   slot,
+			RandaoReveal:           sig,
+			Graffiti:               graffiti,
+			SkipRandaoVerification: false,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		b, err := hasFeeRecipient(p.Data)
+		if err != nil {
+			// If we cannot check fee recipient, either the block is malformed
+			// or hasFeeRecipient doesn't count all cases.
+			// So we just log it, return the block we received,
+			// and let the caller decide what to do with it.
+			logger.Warn("failed to check fee recipient", zap.Error(err))
+			return p.Data, nil
+		}
+
+		if b {
+			return p.Data, nil
+		}
+
+		feeRecipients := gc.feeRecipientsCache.Load()
+		if feeRecipients == nil {
+			// The cache shouldn't be empty because proposal preparations are submitted on the node start,
+			// but it's better to check it to avoid nil pointer dereference.
+			logger.Warn("received a proposal without fee recipients but the fee recipients data hasn't been built yet")
+			return p.Data, nil
+		}
+
+		// Although proposal preparations are submitted on client restart,
+		// the client may return no fee recipient because we submit them
+		// in batches and don't interrupt the process on error.
+		// So, given the load on the node on restart, it's possible
+		// that registrations haven't been submitted, although it's unlikely.
+		// Therefore, we can afford to try to submit them again
+		// and request another block using a strict deadline.
+		logger.Warn("received a proposal without fee recipients, trying to submit a preparation and get a new one")
+
+		preparationsCtx, cancel := context.WithDeadline(ctx, start.Add(gc.beaconConfig.SlotDuration/6))
+		defer cancel()
+
+		proposalCh := make(chan *api.VersionedProposal, 1)
+
+		go func() {
+			defer close(proposalCh)
+
+			validatorIndex, err := getValidatorIndex(p.Data)
+			if err != nil {
+				logger.Warn("failed to get validator index", zap.Error(err))
+				return
+			}
+
+			address, ok := (*feeRecipients)[validatorIndex]
+			if !ok {
+				logger.Warn("fee recipient address for validator not found",
+					fields.ValidatorIndex(validatorIndex),
+					zap.Error(err))
+				return
+			}
+
+			proposalPreparation := map[phase0.ValidatorIndex]bellatrix.ExecutionAddress{
+				validatorIndex: address,
+			}
+
+			if err := gc.SubmitProposalPreparation(preparationsCtx, proposalPreparation); err != nil {
+				logger.Warn("failed to submit proposal preparation", zap.Error(err))
+				return
+			}
+
+			newProposal, err := gc.clients[0].Proposal(preparationsCtx, &api.ProposalOpts{
+				Slot:                   slot,
+				RandaoReveal:           sig,
+				Graffiti:               graffiti,
+				SkipRandaoVerification: false,
+			})
+			if err != nil {
+				logger.Warn("failed to get proposal after preparation submission", zap.Error(err))
+				return
+			}
+
+			b, err := hasFeeRecipient(newProposal.Data)
+			if err != nil {
+				logger.Warn("received a proposal after preparation submission but failed to check fee recipient",
+					zap.Error(err))
+				return
+			}
+
+			if !b {
+				logger.Warn("received a proposal after preparation submission but it still doesn't have a fee recipient, hence using the first block",
+					zap.Error(err))
+			}
+
+			proposalCh <- newProposal.Data
+		}()
+
+		select {
+		case <-preparationsCtx.Done():
+			logger.Warn("preparation submission and requesting new proposal timed out, using the first received proposal")
+			return p.Data, nil
+		case proposal, ok := <-proposalCh:
+			if !ok {
+				// The error should have already been logged.
+				logger.Warn("failed to submit preparation submission and request a new proposal")
+				return p.Data, nil
+			}
+
+			logger.Info("received new proposal with fee recipient", fields.Address(mustGetFeeRecipient(proposal).String()))
+			return proposal, nil
+		}
+	}
+
+	// Although we re-submit proposal preparation on client restart,
+	// the spec doesn't guarantee it will be used:
+	//
+	// https://ethereum.github.io/beacon-APIs/#/Validator/prepareBeaconProposer
+	// > Note that there is no guarantee that the beacon node will
+	// > use the supplied fee recipient when creating a block proposal,
+	// > so on receipt of a proposed block the validator should confirm
+	// > that it finds the fee recipient within the block acceptable before signing it.
+	//
+	// So we nevertheless try to find a proposal with a fee recipient.
+	proposalsWithFeeRecipient := make(chan *api.VersionedProposal, len(gc.clients))
+	proposals := make(chan *api.VersionedProposal, len(gc.clients))
+
+	var wg sync.WaitGroup
+
+	requestCtx, requestCancel := context.WithCancel(ctx)
+	defer requestCancel()
+
+	for _, client := range gc.clients {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			proposalResp, err := client.Proposal(requestCtx, &api.ProposalOpts{
+				Slot:                   slot,
+				RandaoReveal:           sig,
+				Graffiti:               graffiti,
+				SkipRandaoVerification: false,
+			})
+
+			if err != nil {
+				gc.log.Warn("failed to get proposal", fields.Address(client.Address()), zap.Error(err))
+				return
+			}
+
+			b, err := hasFeeRecipient(proposalResp.Data)
+			if err != nil {
+				// If we cannot check fee recipient, either the block is malformed
+				// or hasFeeRecipient doesn't count all cases.
+				// So we just log it, consider the block without fee recipient,
+				// and let the caller decide what to do with it.
+				gc.log.Warn("failed to check fee recipient", fields.Address(client.Address()), zap.Error(err))
+			}
+
+			proposals <- proposalResp.Data
+			if b {
+				proposalsWithFeeRecipient <- proposalResp.Data
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(proposals)
+		close(proposalsWithFeeRecipient)
+	}()
+
+	select {
+	case p, ok := <-proposalsWithFeeRecipient:
+		if !ok {
+			// All request goroutines have finished, but we didn't get any proposal with fee recipient.
+
+			// proposalsWithFeeRecipient is closed after proposals, so this should never block.
+			if p, ok = <-proposals; ok {
+				// If we have one without fee recipient, it's better that nothing, so we use it.
+				gc.log.Warn("no proposals with fee recipient found")
+				return p, nil
+			}
+
+			// We don't have any proposals, so we got some error.
+			// The errors have been logged, so we don't need to return them.
+			return nil, fmt.Errorf("all requests failed")
+		}
+		// Got a proposal with fee recipient. It is good enough, we can use it.
+		return p, nil
+	case <-ctx.Done():
+		// Ran out of time. Check if we got any proposal.
+		select {
+		case p, ok := <-proposals:
+			if ok {
+				// If we have one without fee recipient, it's better that nothing, so we use it.
+				gc.log.Warn("no proposals with fee recipient found")
+				return p, nil
+			}
+			// Ran out of time and then all requests immediately finished.
+			// This should probably never happen, but it's better to make sure we won't return a nil proposal.
+			return nil, ctx.Err()
+		default:
+			// We still don't have any proposals, but requests haven't finished yet.
+			// However, we don't have more time, so we have to return an error.
+			// Probably, there are some connection issues or the node is overloaded.
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func hasFeeRecipient(block any) (bool, error) {
+	var zeroAddress bellatrix.ExecutionAddress
+
+	address, err := getFeeRecipient(block)
+	if err != nil {
+		return false, err
+	}
+
+	return address != zeroAddress, nil
+}
+
+func mustGetFeeRecipient(block any) bellatrix.ExecutionAddress {
+	b, err := getFeeRecipient(block)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func getFeeRecipient(block any) (bellatrix.ExecutionAddress, error) {
+	if block == nil {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("block is nil")
+	}
+	switch b := block.(type) {
+	case *api.VersionedProposal:
+		if b.Blinded {
+			switch b.Version {
+			case spec.DataVersionCapella:
+				return getFeeRecipient(b.CapellaBlinded)
+			case spec.DataVersionDeneb:
+				return getFeeRecipient(b.DenebBlinded)
+			case spec.DataVersionElectra:
+				return getFeeRecipient(b.ElectraBlinded)
+			default:
+				return bellatrix.ExecutionAddress{}, fmt.Errorf("unsupported blinded block version %d", b.Version)
+			}
+		}
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return getFeeRecipient(b.Capella)
+		case spec.DataVersionDeneb:
+			if b.Deneb == nil {
+				return bellatrix.ExecutionAddress{}, fmt.Errorf("deneb block contents is nil")
+			}
+			return getFeeRecipient(b.Deneb.Block)
+		case spec.DataVersionElectra:
+			if b.Electra == nil {
+				return bellatrix.ExecutionAddress{}, fmt.Errorf("electra block contents is nil")
+			}
+			return getFeeRecipient(b.Electra.Block)
+		default:
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("unsupported block version %d", b.Version)
+		}
+
+	case *api.VersionedBlindedProposal:
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return getFeeRecipient(b.Capella)
+		case spec.DataVersionDeneb:
+			return getFeeRecipient(b.Deneb)
+		case spec.DataVersionElectra:
+			return getFeeRecipient(b.Electra)
+		default:
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("unsupported blinded block version %d", b.Version)
+		}
+
+	case *capella.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("block, body or execution payload is nil")
+		}
+		return b.Body.ExecutionPayload.FeeRecipient, nil
+
+	case *deneb.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("block, body or execution payload is nil")
+		}
+		return b.Body.ExecutionPayload.FeeRecipient, nil
+
+	case *electra.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("block, body or execution payload is nil")
+		}
+		return b.Body.ExecutionPayload.FeeRecipient, nil
+
+	case *apiv1electra.BlockContents:
+		return getFeeRecipient(b.Block)
+
+	case *apiv1deneb.BlockContents:
+		return getFeeRecipient(b.Block)
+
+	case *apiv1capella.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		return b.Body.ExecutionPayloadHeader.FeeRecipient, nil
+
+	case *apiv1deneb.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		return b.Body.ExecutionPayloadHeader.FeeRecipient, nil
+
+	case *apiv1electra.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return bellatrix.ExecutionAddress{}, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		return b.Body.ExecutionPayloadHeader.FeeRecipient, nil
+	}
+
+	return bellatrix.ExecutionAddress{}, fmt.Errorf("unsupported block type %T", block)
+}
+
+func getValidatorIndex(block any) (phase0.ValidatorIndex, error) {
+	if block == nil {
+		return 0, fmt.Errorf("block is nil")
+	}
+	switch b := block.(type) {
+	case *api.VersionedProposal:
+		if b.Blinded {
+			switch b.Version {
+			case spec.DataVersionCapella:
+				return getValidatorIndex(b.CapellaBlinded)
+			case spec.DataVersionDeneb:
+				return getValidatorIndex(b.DenebBlinded)
+			case spec.DataVersionElectra:
+				return getValidatorIndex(b.ElectraBlinded)
+			default:
+				return 0, fmt.Errorf("unsupported blinded block version %d", b.Version)
+			}
+		}
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return getValidatorIndex(b.Capella)
+		case spec.DataVersionDeneb:
+			if b.Deneb == nil {
+				return 0, fmt.Errorf("deneb block contents is nil")
+			}
+			return getValidatorIndex(b.Deneb.Block)
+		case spec.DataVersionElectra:
+			if b.Electra == nil {
+				return 0, fmt.Errorf("electra block contents is nil")
+			}
+			return getValidatorIndex(b.Electra.Block)
+		default:
+			return 0, fmt.Errorf("unsupported block version %d", b.Version)
+		}
+
+	case *api.VersionedBlindedProposal:
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return getValidatorIndex(b.Capella)
+		case spec.DataVersionDeneb:
+			return getValidatorIndex(b.Deneb)
+		case spec.DataVersionElectra:
+			return getValidatorIndex(b.Electra)
+		default:
+			return 0, fmt.Errorf("unsupported blinded block version %d", b.Version)
+		}
+
+	case *capella.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return 0, fmt.Errorf("block, body or execution payload is nil")
+		}
+		return b.ProposerIndex, nil
+
+	case *deneb.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return 0, fmt.Errorf("block, body or execution payload is nil")
+		}
+		return b.ProposerIndex, nil
+
+	case *electra.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return 0, fmt.Errorf("block, body or execution payload is nil")
+		}
+		return b.ProposerIndex, nil
+
+	case *apiv1electra.BlockContents:
+		return getValidatorIndex(b.Block)
+
+	case *apiv1deneb.BlockContents:
+		return getValidatorIndex(b.Block)
+
+	case *apiv1capella.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return 0, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		return b.ProposerIndex, nil
+
+	case *apiv1deneb.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return 0, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		return b.ProposerIndex, nil
+
+	case *apiv1electra.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return 0, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		return b.ProposerIndex, nil
+	}
+
+	return 0, fmt.Errorf("unsupported block type %T", block)
 }
