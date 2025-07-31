@@ -63,11 +63,7 @@ func (gc *GoClient) GetBeaconBlock(
 	graffiti := [32]byte{}
 	copy(graffiti[:], graffitiBytes[:])
 
-	reqStart := time.Now()
-
 	beaconBlock, err := gc.getProposal(ctx, slot, graffitiBytes, randao)
-	recordRequestDuration(ctx, "Proposal", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
-
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Proposal"),
@@ -332,7 +328,7 @@ func (gc *GoClient) submitProposalPreparationBatches(
 			return client.SubmitProposalPreparations(ctx, batch)
 		})
 		if err != nil {
-			gc.log.Warn("could not submit proposal preparation batch",
+			gc.log.Error("could not submit proposal preparation batch",
 				zap.Int("start_index", start),
 				zap.Error(err),
 			)
@@ -341,10 +337,24 @@ func (gc *GoClient) submitProposalPreparationBatches(
 		submitted += len(batch)
 	}
 
-	gc.log.Debug("✅ successfully submitted proposal preparations",
-		zap.Int("submitted", submitted),
-		zap.Int("total", len(preparations)),
-	)
+	switch {
+	case submitted == len(preparations):
+		gc.log.Debug("✅ successfully submitted all proposal preparations",
+			zap.Int("total", len(preparations)),
+		)
+
+	case submitted > 0:
+		gc.log.Warn("⚠️ partially submitted proposal preparations",
+			zap.Int("submitted", submitted),
+			zap.Int("errored", len(preparations)-submitted),
+			zap.Int("total", len(preparations)),
+		)
+
+	default:
+		gc.log.Error("❗️couldn't submit any proposal preparations",
+			zap.Int("total", len(preparations)),
+		)
+	}
 }
 
 // getProposal fetches proposals from beacon nodes and
@@ -373,27 +383,28 @@ func (gc *GoClient) getProposal(
 	if len(gc.clients) == 1 {
 		logger := gc.log.With(fields.Address(gc.clients[0].Address()))
 
+		reqStart := time.Now()
 		p, err := gc.clients[0].Proposal(ctx, &api.ProposalOpts{
 			Slot:                   slot,
 			RandaoReveal:           sig,
 			Graffiti:               graffiti,
 			SkipRandaoVerification: false,
 		})
+		recordRequestDuration(ctx, "Proposal", gc.clients[0].Address(), http.MethodGet, time.Since(reqStart), err)
 		if err != nil {
 			return nil, err
 		}
 
-		b, err := hasFeeRecipient(p.Data)
+		ok, err := hasFeeRecipient(p.Data)
 		if err != nil {
 			// If we cannot check fee recipient, either the block is malformed
 			// or hasFeeRecipient doesn't count all cases.
 			// So we just log it, return the block we received,
 			// and let the caller decide what to do with it.
-			logger.Warn("failed to check fee recipient", zap.Error(err))
+			logger.Error("failed to check fee recipient", zap.Error(err))
 			return p.Data, nil
 		}
-
-		if b {
+		if ok {
 			return p.Data, nil
 		}
 
@@ -401,23 +412,26 @@ func (gc *GoClient) getProposal(
 		if feeRecipients == nil {
 			// The cache shouldn't be empty because proposal preparations are submitted on the node start,
 			// but it's better to check it to avoid nil pointer dereference.
-			logger.Warn("received a proposal without fee recipients but the fee recipients data hasn't been built yet")
+			logger.Error("received a proposal without fee recipients but the fee recipients data hasn't been built yet")
 			return p.Data, nil
 		}
 
-		// Although proposal preparations are submitted on client restart,
-		// the client may return no fee recipient because we submit them
-		// in batches and don't interrupt the process on error.
+		// Although proposal preparations are submitted on beacon node restart,
+		// the beacon node may return no fee recipient because we submit
+		// proposal preparations in batches and don't interrupt the process on error.
+		//
 		// So, given the load on the node on restart, it's possible
 		// that registrations haven't been submitted, although it's unlikely.
-		// Therefore, we can afford to try to submit them again
-		// and request another block using a strict deadline.
+		//
+		// Therefore, we may have to try to submit them again
+		// and request another block using a strict deadline that will, hopefully,
+		// have a fee recipient set.
 		logger.Warn("received a proposal without fee recipients, trying to submit a preparation and get a new one")
 
 		deadline := gc.beaconConfig.GetSlotStartTime(gc.beaconConfig.EstimatedCurrentSlot()).
 			Add(gc.beaconConfig.SlotDuration / 4) // TODO: find the best value
 
-		preparationsCtx, cancel := context.WithDeadline(ctx, deadline)
+		requestCtx, cancel := context.WithDeadline(ctx, deadline)
 		defer cancel()
 
 		proposalCh := make(chan *api.VersionedProposal, 1)
@@ -427,13 +441,13 @@ func (gc *GoClient) getProposal(
 
 			validatorIndex, err := getValidatorIndex(p.Data)
 			if err != nil {
-				logger.Warn("failed to get validator index", zap.Error(err))
+				logger.Error("failed to extract validator index from proposal", zap.Error(err))
 				return
 			}
 
 			address, ok := (*feeRecipients)[validatorIndex]
 			if !ok {
-				logger.Warn("fee recipient address for validator not found",
+				logger.Error("fee recipient address for validator not found",
 					fields.ValidatorIndex(validatorIndex))
 				return
 			}
@@ -442,30 +456,36 @@ func (gc *GoClient) getProposal(
 				validatorIndex: address,
 			}
 
-			if err := gc.SubmitProposalPreparation(preparationsCtx, proposalPreparation); err != nil {
+			preparationReqStart := time.Now()
+			// Although SubmitProposalPreparation is designed for a multi client,
+			// we can reuse it for a single client to avoid code duplication.
+			err = gc.SubmitProposalPreparation(requestCtx, proposalPreparation)
+			recordRequestDuration(requestCtx, "SubmitProposalPreparation", gc.clients[0].Address(), http.MethodGet, time.Since(preparationReqStart), err)
+			if err != nil {
 				logger.Warn("failed to submit proposal preparation", zap.Error(err))
 				return
 			}
 
-			newProposal, err := gc.clients[0].Proposal(preparationsCtx, &api.ProposalOpts{
+			proposalReqStart := time.Now()
+			newProposal, err := gc.clients[0].Proposal(requestCtx, &api.ProposalOpts{
 				Slot:                   slot,
 				RandaoReveal:           sig,
 				Graffiti:               graffiti,
 				SkipRandaoVerification: false,
 			})
+			recordRequestDuration(requestCtx, "Proposal", gc.clients[0].Address(), http.MethodGet, time.Since(proposalReqStart), err)
 			if err != nil {
 				logger.Warn("failed to get proposal after preparation submission", zap.Error(err))
 				return
 			}
 
-			b, err := hasFeeRecipient(newProposal.Data)
+			ok, err = hasFeeRecipient(newProposal.Data)
 			if err != nil {
-				logger.Warn("received a proposal after preparation submission but failed to check fee recipient",
+				logger.Error("received a proposal after preparation submission but failed to check fee recipient",
 					zap.Error(err))
 				return
 			}
-
-			if !b {
+			if !ok {
 				logger.Warn("received a proposal after preparation submission but it still doesn't have a fee recipient, hence using the first block")
 			}
 
@@ -473,7 +493,7 @@ func (gc *GoClient) getProposal(
 		}()
 
 		select {
-		case <-preparationsCtx.Done():
+		case <-requestCtx.Done():
 			logger.Warn("preparation submission and requesting new proposal timed out, using the first received proposal")
 			return p.Data, nil
 		case proposal, ok := <-proposalCh:
@@ -511,31 +531,32 @@ func (gc *GoClient) getProposal(
 		go func() {
 			defer wg.Done()
 
+			reqStart := time.Now()
 			proposalResp, err := client.Proposal(requestCtx, &api.ProposalOpts{
 				Slot:                   slot,
 				RandaoReveal:           sig,
 				Graffiti:               graffiti,
 				SkipRandaoVerification: false,
 			})
-
+			recordRequestDuration(requestCtx, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
 			if err != nil {
 				gc.log.Warn("failed to get proposal", fields.Address(client.Address()), zap.Error(err))
 				return
 			}
 
-			b, err := hasFeeRecipient(proposalResp.Data)
+			ok, err := hasFeeRecipient(proposalResp.Data)
 			if err != nil {
 				// If we cannot check fee recipient, either the block is malformed
 				// or hasFeeRecipient doesn't count all cases.
 				// So we just log it, consider the block without fee recipient,
 				// and let the caller decide what to do with it.
-				gc.log.Warn("failed to check fee recipient", fields.Address(client.Address()), zap.Error(err))
+				gc.log.Error("failed to check fee recipient", fields.Address(client.Address()), zap.Error(err))
+			}
+			if ok {
+				proposalsWithFeeRecipient <- proposalResp.Data
 			}
 
 			proposals <- proposalResp.Data
-			if b {
-				proposalsWithFeeRecipient <- proposalResp.Data
-			}
 		}()
 	}
 

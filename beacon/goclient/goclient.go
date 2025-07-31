@@ -172,6 +172,7 @@ type GoClient struct {
 	// since it doesn't change over time
 	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
 
+	// feeRecipientsCache is used to re-submit proposal preparations on Beacon node restart.
 	feeRecipientsCache atomic.Pointer[map[phase0.ValidatorIndex]bellatrix.ExecutionAddress]
 }
 
