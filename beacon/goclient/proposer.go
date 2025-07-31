@@ -371,8 +371,6 @@ func (gc *GoClient) getProposal(
 	copy(graffiti[:], graffitiBytes[:])
 
 	if len(gc.clients) == 1 {
-		start := time.Now()
-
 		logger := gc.log.With(fields.Address(gc.clients[0].Address()))
 
 		p, err := gc.clients[0].Proposal(ctx, &api.ProposalOpts{
@@ -416,7 +414,10 @@ func (gc *GoClient) getProposal(
 		// and request another block using a strict deadline.
 		logger.Warn("received a proposal without fee recipients, trying to submit a preparation and get a new one")
 
-		preparationsCtx, cancel := context.WithDeadline(ctx, start.Add(gc.beaconConfig.SlotDuration/6))
+		deadline := gc.beaconConfig.GetSlotStartTime(gc.beaconConfig.EstimatedCurrentSlot()).
+			Add(gc.beaconConfig.SlotDuration / 4) // TODO: find the best value
+
+		preparationsCtx, cancel := context.WithDeadline(ctx, deadline)
 		defer cancel()
 
 		proposalCh := make(chan *api.VersionedProposal, 1)
