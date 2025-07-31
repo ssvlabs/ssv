@@ -63,6 +63,7 @@ type Service interface {
 	RegisterSubnets(subnets ...uint64) (updated bool, err error)
 	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
 	Bootstrap(handler HandleNewPeer) error
+	Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error)
 	PublishENR()
 }
 
