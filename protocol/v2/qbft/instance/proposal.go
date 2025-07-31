@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -137,8 +138,15 @@ func (i *Instance) isProposalJustification(
 	round specqbft.Round,
 	fullData []byte,
 ) error {
-	if err := i.config.GetValueCheckF()(fullData); err != nil {
-		return errors.Wrap(err, "proposal fullData invalid")
+	valueChecker := i.config.GetValueChecker()
+	if voteChecker, ok := valueChecker.(ssv.VoteChecker); ok && i.spData != nil {
+		if err := voteChecker.CheckValueWithSP(fullData, i.spData); err != nil {
+			return errors.Wrap(err, "proposal fullData invalid")
+		}
+	} else {
+		if err := valueChecker.CheckValue(fullData); err != nil {
+			return errors.Wrap(err, "proposal fullData invalid")
+		}
 	}
 
 	if round == specqbft.FirstRound {
