@@ -21,6 +21,6 @@ var HoodiStageSSV = &SSVConfig{
 	Forks: SSVForks{
 		Alan:            0,
 		GasLimit36:      0,
-		NetworkTopology: 29293,
+		NetworkTopology: 30700,
 	},
 }
