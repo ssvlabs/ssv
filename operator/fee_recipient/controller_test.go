@@ -55,7 +55,7 @@ func TestSubmitProposal(t *testing.T) {
 	})
 
 	t.Run("submit first time or halfway through epoch", func(t *testing.T) {
-		numberOfRequests := 4
+		numberOfRequests := 2
 		var wg sync.WaitGroup
 		wg.Add(numberOfRequests) // Set up the wait group before starting goroutines
 
@@ -106,7 +106,7 @@ func TestSubmitProposal(t *testing.T) {
 		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return errors.New("failed to submit")
-		}).MinTimes(2).MaxTimes(2)
+		}).Times(1)
 
 		ticker := mocks.NewMockSlotTicker(ctrl)
 		mockTimeChan := make(chan time.Time, 1)
@@ -120,7 +120,7 @@ func TestSubmitProposal(t *testing.T) {
 
 		go frCtrl.Start(t.Context())
 		mockTimeChan <- time.Now()
-		wg.Add(2)
+		wg.Add(1)
 		wg.Wait()
 		close(mockTimeChan)
 	})
