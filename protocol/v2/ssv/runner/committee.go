@@ -613,7 +613,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			// Reconstruct signature
 			share := cr.BaseRunner.Share[validator]
 			pubKey := share.ValidatorPubKey
-			vlogger := logger.With(zap.Uint64("validator_index", uint64(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
+			vLogger := logger.With(zap.Uint64("validator_index", uint64(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
 
 			sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root,
 				pubKey[:], validator)
@@ -626,7 +626,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				}
 				const eventMsg = "got post-consensus quorum but it has invalid signatures"
 				span.AddEvent(eventMsg)
-				vlogger.Error(eventMsg,
+				vLogger.Error(eventMsg,
 					fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 					zap.Error(err),
 				)
@@ -639,7 +639,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 			const eventMsg = "🧩 reconstructed partial signatures committee"
 			span.AddEvent(eventMsg)
-			vlogger.Debug(eventMsg, zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
+			vLogger.Debug(eventMsg, zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
 			validatorObjs, exists := beaconObjects[validator]
 			if !exists {
@@ -682,30 +682,34 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	cr.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, cr.measurements.PostConsensusTime(), spectypes.RoleCommittee)
 
+	cr.measurements.EndDutyFlow()
+
 	logger = logger.With(fields.PostConsensusTime(cr.measurements.PostConsensusTime()))
 
-	// Submit multiple attestations
+	// Submit multiple attestations.
 	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
 	for _, att := range attestationsToSubmit {
 		if att != nil && att.ValidatorIndex != nil {
 			span.AddEvent("adding attestation to submit to beacon", trace.WithAttributes(
 				observability.ValidatorIndexAttribute(*att.ValidatorIndex),
 			))
-
 			attestations = append(attestations, att)
 		}
 	}
-
-	cr.measurements.EndDutyFlow()
-
 	if len(attestations) > 0 {
+		validators := make([]phase0.ValidatorIndex, 0, len(attestations))
+		for _, att := range attestations {
+			validators = append(validators, *att.ValidatorIndex)
+		}
+		aLogger := logger.With(zap.Any("validators", validators))
+
 		submissionStart := time.Now()
 		span.AddEvent("submitting attestations")
 		if err := cr.beacon.SubmitAttestations(ctx, attestations); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
 
 			const errMsg = "could not submit attestations"
-			logger.Error(errMsg, zap.Error(err))
+			aLogger.Error(errMsg, zap.Error(err))
 			return observability.Errorf(span, "%s: %w", errMsg, err)
 		}
 
@@ -732,7 +736,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			observability.ValidatorCountAttribute(attestationsCount),
 		))
 
-		logger.Info(eventMsg,
+		aLogger.Info(eventMsg,
 			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
@@ -749,19 +753,24 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		}
 	}
 
-	// Submit multiple sync committee
+	// Submit multiple sync committee.
 	syncCommitteeMessages := make([]*altair.SyncCommitteeMessage, 0, len(syncCommitteeMessagesToSubmit))
 	for _, syncMsg := range syncCommitteeMessagesToSubmit {
 		syncCommitteeMessages = append(syncCommitteeMessages, syncMsg)
 	}
-
 	if len(syncCommitteeMessages) > 0 {
+		validators := make([]phase0.ValidatorIndex, 0, len(syncCommitteeMessages))
+		for _, sc := range syncCommitteeMessages {
+			validators = append(validators, sc.ValidatorIndex)
+		}
+		scLogger := logger.With(zap.Any("validators", validators))
+
 		submissionStart := time.Now()
 		if err := cr.beacon.SubmitSyncMessages(ctx, syncCommitteeMessages); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
 
 			const errMsg = "could not submit sync committee messages"
-			logger.Error(errMsg, zap.Error(err))
+			scLogger.Error(errMsg, zap.Error(err))
 			return observability.Errorf(span, "%s: %w", errMsg, err)
 		}
 
@@ -785,7 +794,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
 			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
 		))
-		logger.Info(eventMsg,
+		scLogger.Info(eventMsg,
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
