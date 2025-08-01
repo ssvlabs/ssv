@@ -14,8 +14,8 @@ import (
 
 // This migration populates the mapping between validator pubkey -> index
 // It reads all the shares to collect relevant data
-var migration_7_populate_validator_index_mapping = Migration{
-	Name: "migration_7_populate_validator_index_mapping",
+var migration_8_populate_validator_index_mapping = Migration{
+	Name: "migration_8_populate_validator_index_mapping",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) (err error) {
 		var validatorsMapped int
 
