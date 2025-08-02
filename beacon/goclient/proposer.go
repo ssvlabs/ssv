@@ -425,8 +425,8 @@ func (gc *GoClient) getSingleClientProposal(
 	// Therefore, we may have to try to submit them again
 	// and request another block using a strict deadline that will, hopefully,
 	// have a fee recipient set. The deadline aims to have enough time
-	// to complete a QBFT consensus within round 1.
-	feeRecipientDeadline := gc.firstRoundQBFTLatestTime(slot)
+	// to complete a QBFT consensus within the best time range.
+	feeRecipientDeadline := gc.latestProposalTime(slot)
 	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, feeRecipientDeadline)
 	defer feeRecipientCancel()
 
@@ -597,9 +597,9 @@ func (gc *GoClient) selectBestProposal(
 	proposals chan *api.VersionedProposal,
 ) (*api.VersionedProposal, error) {
 	// Try to get a proposal with a fee recipient set before feeRecipientDeadline
-	// while we are in round 1 with a sufficient buffer for a QBFT consensus.
+	// while we are within the best time range.
 	// Afterward, any proposal will be enough for us.
-	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.firstRoundQBFTLatestTime(slot))
+	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot))
 	defer feeRecipientCancel()
 
 	var selectProposalCh chan *api.VersionedProposal
@@ -642,7 +642,7 @@ func (gc *GoClient) selectBestProposal(
 			// Didn't get a proposal with fee recipient quickly,
 			// enable receiving from proposals and enter the select again.
 			selectProposalCh = proposals
-			gc.log.Debug("didn't receive proposal with fee recipient within safe duration for the first round, accepting any proposal")
+			gc.log.Debug("didn't receive proposal with fee recipient within the safe duration for the best round, accepting any proposal")
 		case <-ctx.Done():
 			// Ran out of time. Check if we got any proposal.
 			select {
@@ -666,11 +666,16 @@ func (gc *GoClient) selectBestProposal(
 	}
 }
 
-// firstRoundQBFTLatestTime returns the latest time when QBFT should start
-// to have a high chance to finish within the first round for given slot.
-func (gc *GoClient) firstRoundQBFTLatestTime(slot phase0.Slot) time.Time {
+// latestProposalTime returns the latest time when QBFT should start
+// to have a high chance to finish within the best time range for given slot.
+func (gc *GoClient) latestProposalTime(slot phase0.Slot) time.Time {
+	// We aim to try to get the best proposal in the first round.
+	// The second round might also work, giving more time to get
+	// a proposal we are looking for, but it would increase the probability
+	// of being late with the proposal submission.
+	const maxRound = 1
 	const avgQBFTTime = 350 * time.Millisecond
-	return gc.beaconConfig.GetSlotStartTime(slot).Add(qbft.QuickTimeout - avgQBFTTime*2)
+	return gc.beaconConfig.GetSlotStartTime(slot).Add(maxRound*qbft.QuickTimeout - avgQBFTTime*2)
 }
 
 func hasFeeRecipient(block any) (bool, error) {
