@@ -25,8 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
-const avgQBFTTime = 350 * time.Millisecond
-
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
 	start := time.Now()
@@ -417,14 +415,6 @@ func (gc *GoClient) getSingleClientProposal(
 		return p.Data, nil
 	}
 
-	feeRecipients := gc.feeRecipientsCache.Load()
-	if feeRecipients == nil {
-		// The cache shouldn't be empty because proposal preparations are submitted on the node start,
-		// but it's better to check it to avoid nil pointer dereference.
-		logger.Error("received a proposal without fee recipients but the fee recipients data hasn't been built yet")
-		return p.Data, nil
-	}
-
 	// Although proposal preparations are submitted on beacon node restart,
 	// the beacon node may return no fee recipient because we submit
 	// proposal preparations in batches and don't interrupt the process on error.
@@ -436,81 +426,89 @@ func (gc *GoClient) getSingleClientProposal(
 	// and request another block using a strict deadline that will, hopefully,
 	// have a fee recipient set. The deadline aims to have enough time
 	// to complete a QBFT consensus within round 1.
-	logger.Warn("received a proposal without fee recipients, trying to submit a preparation and get a new one")
-
-	feeRecipientDeadline := gc.beaconConfig.GetSlotStartTime(slot).Add(qbft.QuickTimeout - avgQBFTTime*2)
+	feeRecipientDeadline := gc.firstRoundQBFTLatestTime(slot)
 	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, feeRecipientDeadline)
 	defer feeRecipientCancel()
 
-	proposalCh := make(chan *api.VersionedProposal, 1)
+	logger.Warn("received a proposal without fee recipients, trying to submit a preparation and get a new one",
+		zap.Duration("time_left", time.Until(feeRecipientDeadline)))
 
-	go func() {
-		defer close(proposalCh)
-
-		validatorIndex, err := getValidatorIndex(p.Data)
-		if err != nil {
-			logger.Error("failed to extract validator index from proposal", zap.Error(err))
-			return
-		}
-
-		address, ok := (*feeRecipients)[validatorIndex]
-		if !ok {
-			logger.Error("fee recipient address for validator not found",
-				fields.ValidatorIndex(validatorIndex))
-			return
-		}
-
-		proposalPreparation := map[phase0.ValidatorIndex]bellatrix.ExecutionAddress{
-			validatorIndex: address,
-		}
-
-		// Although SubmitProposalPreparation is designed for a multi client,
-		// we can reuse it for a single client to avoid code duplication.
-		if err := gc.SubmitProposalPreparation(feeRecipientCtx, proposalPreparation); err != nil {
-			logger.Warn("failed to submit proposal preparation", zap.Error(err))
-			return
-		}
-
-		proposalReqStart := time.Now()
-		newProposal, err := gc.clients[0].Proposal(feeRecipientCtx, &api.ProposalOpts{
-			Slot:                   slot,
-			RandaoReveal:           sig,
-			Graffiti:               graffiti,
-			SkipRandaoVerification: false,
-		})
-		recordRequestDuration(feeRecipientCtx, "Proposal", gc.clients[0].Address(), http.MethodGet, time.Since(proposalReqStart), err)
-		if err != nil {
-			logger.Warn("failed to get proposal after preparation submission", zap.Error(err))
-			return
-		}
-
-		ok, err = hasFeeRecipient(newProposal.Data)
-		if err != nil {
-			logger.Error("received a proposal after preparation submission but failed to check fee recipient",
-				zap.Error(err))
-			return
-		}
-		if !ok {
-			logger.Warn("received a proposal after preparation submission but it still doesn't have a fee recipient, hence using the first block")
-		}
-
-		proposalCh <- newProposal.Data
-	}()
-
-	select {
-	case <-feeRecipientCtx.Done():
-		logger.Warn("preparation submission and requesting new proposal timed out, using the first received proposal")
+	validatorIndex, err := getValidatorIndex(p.Data)
+	if err != nil {
+		logger.Error("failed to extract validator index from proposal", zap.Error(err))
 		return p.Data, nil
-	case proposal, ok := <-proposalCh:
-		if !ok {
-			// The error should have already been logged.
-			logger.Warn("failed to submit preparation submission and request a new proposal")
-			return p.Data, nil
-		}
-
-		logger.Info("received new proposal with fee recipient", fields.Address(mustGetFeeRecipient(proposal).String()))
-		return proposal, nil
 	}
+
+	logger = logger.With(fields.ValidatorIndex(validatorIndex))
+
+	newProposalStart := time.Now()
+	feeRecipientProposal, err := gc.submitPreparationsAndGetProposal(feeRecipientCtx, validatorIndex, slot, sig, graffiti)
+	if err != nil {
+		logger.Error("failed to submit a preparation and get a new proposal",
+			fields.Took(time.Since(newProposalStart)),
+			zap.Error(err))
+		return p.Data, nil
+	}
+
+	logger.Info("received a new proposal with fee recipient",
+		fields.Took(time.Since(newProposalStart)),
+		fields.Address(mustGetFeeRecipient(feeRecipientProposal).String()))
+
+	return feeRecipientProposal, nil
+}
+
+// submitPreparationsAndGetProposal submits a proposal preparation from cache for given validator index
+// and requests a proposal from CL afterward. This logic is relevant only for a single client.
+func (gc *GoClient) submitPreparationsAndGetProposal(
+	ctx context.Context,
+	validatorIndex phase0.ValidatorIndex,
+	slot phase0.Slot,
+	sig phase0.BLSSignature,
+	graffiti [32]byte,
+) (*api.VersionedProposal, error) {
+	feeRecipients := gc.feeRecipientsCache.Load()
+	if feeRecipients == nil {
+		// The cache shouldn't be empty because proposal preparations are submitted on the node start,
+		// but it's better to check it to avoid nil pointer dereference.
+		return nil, fmt.Errorf("received a proposal without fee recipients but the fee recipients data hasn't been built yet")
+	}
+
+	address, ok := (*feeRecipients)[validatorIndex]
+	if !ok {
+		return nil, fmt.Errorf("fee recipient address for validator not found")
+	}
+
+	proposalPreparation := map[phase0.ValidatorIndex]bellatrix.ExecutionAddress{
+		validatorIndex: address,
+	}
+
+	// Although SubmitProposalPreparation is designed for a multi client,
+	// we can reuse it for a single client to avoid code duplication.
+	if err := gc.SubmitProposalPreparation(ctx, proposalPreparation); err != nil {
+		return nil, fmt.Errorf("submit proposal preparation: %w", err)
+	}
+
+	proposalReqStart := time.Now()
+	newProposal, err := gc.clients[0].Proposal(ctx, &api.ProposalOpts{
+		Slot:                   slot,
+		RandaoReveal:           sig,
+		Graffiti:               graffiti,
+		SkipRandaoVerification: false,
+	})
+	recordRequestDuration(ctx, "Proposal", gc.clients[0].Address(), http.MethodGet, time.Since(proposalReqStart), err)
+	if err != nil {
+		return nil, fmt.Errorf("get proposal: %w", err)
+	}
+
+	ok, err = hasFeeRecipient(newProposal.Data)
+	if err != nil {
+		return nil, fmt.Errorf("extract proposal fee recipient: %w", err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("received a proposal after preparation submission but it still doesn't have a fee recipient")
+	}
+
+	return newProposal.Data, nil
 }
 
 func (gc *GoClient) getMultiClientProposal(
@@ -519,6 +517,21 @@ func (gc *GoClient) getMultiClientProposal(
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
 ) (*api.VersionedProposal, error) {
+	// Cancel the goroutines when we got a result to avoid waiting for the parent context.
+	requestCtx, requestCancel := context.WithCancel(ctx)
+	defer requestCancel()
+
+	proposalsWithFeeRecipient, proposals := gc.getProposalStreams(requestCtx, slot, sig, graffiti)
+
+	return gc.selectBestProposal(ctx, slot, proposalsWithFeeRecipient, proposals)
+}
+
+func (gc *GoClient) getProposalStreams(
+	ctx context.Context,
+	slot phase0.Slot,
+	sig phase0.BLSSignature,
+	graffiti [32]byte,
+) (chan *api.VersionedProposal, chan *api.VersionedProposal) {
 	// Although we re-submit proposal preparation on client restart,
 	// the spec doesn't guarantee it will be used:
 	//
@@ -528,15 +541,11 @@ func (gc *GoClient) getMultiClientProposal(
 	// > so on receipt of a proposed block the validator should confirm
 	// > that it finds the fee recipient within the block acceptable before signing it.
 	//
-	// So we nevertheless try to find a proposal with a fee recipient.
+	// So we nevertheless prioritize finding a proposal with a fee recipient.
 	proposalsWithFeeRecipient := make(chan *api.VersionedProposal, len(gc.clients))
 	proposals := make(chan *api.VersionedProposal, len(gc.clients))
 
 	var wg sync.WaitGroup
-
-	// Cancel the goroutines when we got a result to avoid waiting for the parent context.
-	requestCtx, requestCancel := context.WithCancel(ctx)
-	defer requestCancel()
 
 	for _, client := range gc.clients {
 		wg.Add(1)
@@ -544,13 +553,13 @@ func (gc *GoClient) getMultiClientProposal(
 			defer wg.Done()
 
 			reqStart := time.Now()
-			proposalResp, err := client.Proposal(requestCtx, &api.ProposalOpts{
+			proposalResp, err := client.Proposal(ctx, &api.ProposalOpts{
 				Slot:                   slot,
 				RandaoReveal:           sig,
 				Graffiti:               graffiti,
 				SkipRandaoVerification: false,
 			})
-			recordRequestDuration(requestCtx, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
+			recordRequestDuration(ctx, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
 			if err != nil {
 				gc.log.Warn("failed to get proposal", fields.Address(client.Address()), zap.Error(err))
 				return
@@ -578,11 +587,19 @@ func (gc *GoClient) getMultiClientProposal(
 		close(proposalsWithFeeRecipient)
 	}()
 
+	return proposalsWithFeeRecipient, proposals
+}
+
+func (gc *GoClient) selectBestProposal(
+	ctx context.Context,
+	slot phase0.Slot,
+	proposalsWithFeeRecipient chan *api.VersionedProposal,
+	proposals chan *api.VersionedProposal,
+) (*api.VersionedProposal, error) {
 	// Try to get a proposal with a fee recipient set before feeRecipientDeadline
 	// while we are in round 1 with a sufficient buffer for a QBFT consensus.
 	// Afterward, any proposal will be enough for us.
-	feeRecipientDeadline := gc.beaconConfig.GetSlotStartTime(slot).Add(qbft.QuickTimeout - avgQBFTTime*2)
-	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, feeRecipientDeadline)
+	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.firstRoundQBFTLatestTime(slot))
 	defer feeRecipientCancel()
 
 	var selectProposalCh chan *api.VersionedProposal
@@ -608,6 +625,7 @@ func (gc *GoClient) getMultiClientProposal(
 
 			}
 			// Got a proposal with fee recipient. It is good enough, we can use it.
+			gc.log.Debug("received a proposal with fee recipient")
 			return p, nil
 		case p, ok := <-selectProposalCh:
 			// Didn't get a proposal with fee recipient until feeRecipientCtx expired,
@@ -624,6 +642,7 @@ func (gc *GoClient) getMultiClientProposal(
 			// Didn't get a proposal with fee recipient quickly,
 			// enable receiving from proposals and enter the select again.
 			selectProposalCh = proposals
+			gc.log.Debug("didn't receive proposal with fee recipient within safe duration for the first round, accepting any proposal")
 		case <-ctx.Done():
 			// Ran out of time. Check if we got any proposal.
 			select {
@@ -645,6 +664,13 @@ func (gc *GoClient) getMultiClientProposal(
 			}
 		}
 	}
+}
+
+// firstRoundQBFTLatestTime returns the latest time when QBFT should start
+// to have a high chance to finish within the first round for given slot.
+func (gc *GoClient) firstRoundQBFTLatestTime(slot phase0.Slot) time.Time {
+	const avgQBFTTime = 350 * time.Millisecond
+	return gc.beaconConfig.GetSlotStartTime(slot).Add(qbft.QuickTimeout - avgQBFTTime*2)
 }
 
 func hasFeeRecipient(block any) (bool, error) {
