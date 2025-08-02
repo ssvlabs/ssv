@@ -19,10 +19,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 )
+
+const avgQBFTTime = 350 * time.Millisecond
 
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
@@ -431,14 +434,13 @@ func (gc *GoClient) getSingleClientProposal(
 	//
 	// Therefore, we may have to try to submit them again
 	// and request another block using a strict deadline that will, hopefully,
-	// have a fee recipient set.
+	// have a fee recipient set. The deadline aims to have enough time
+	// to complete a QBFT consensus within round 1.
 	logger.Warn("received a proposal without fee recipients, trying to submit a preparation and get a new one")
 
-	deadline := gc.beaconConfig.GetSlotStartTime(gc.beaconConfig.EstimatedCurrentSlot()).
-		Add(gc.beaconConfig.SlotDuration / 4) // TODO: find the best value
-
-	requestCtx, cancel := context.WithDeadline(ctx, deadline)
-	defer cancel()
+	feeRecipientDeadline := gc.beaconConfig.GetSlotStartTime(slot).Add(qbft.QuickTimeout - avgQBFTTime*2)
+	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, feeRecipientDeadline)
+	defer feeRecipientCancel()
 
 	proposalCh := make(chan *api.VersionedProposal, 1)
 
@@ -462,24 +464,21 @@ func (gc *GoClient) getSingleClientProposal(
 			validatorIndex: address,
 		}
 
-		preparationReqStart := time.Now()
 		// Although SubmitProposalPreparation is designed for a multi client,
 		// we can reuse it for a single client to avoid code duplication.
-		err = gc.SubmitProposalPreparation(requestCtx, proposalPreparation)
-		recordRequestDuration(requestCtx, "SubmitProposalPreparation", gc.clients[0].Address(), http.MethodGet, time.Since(preparationReqStart), err)
-		if err != nil {
+		if err := gc.SubmitProposalPreparation(feeRecipientCtx, proposalPreparation); err != nil {
 			logger.Warn("failed to submit proposal preparation", zap.Error(err))
 			return
 		}
 
 		proposalReqStart := time.Now()
-		newProposal, err := gc.clients[0].Proposal(requestCtx, &api.ProposalOpts{
+		newProposal, err := gc.clients[0].Proposal(feeRecipientCtx, &api.ProposalOpts{
 			Slot:                   slot,
 			RandaoReveal:           sig,
 			Graffiti:               graffiti,
 			SkipRandaoVerification: false,
 		})
-		recordRequestDuration(requestCtx, "Proposal", gc.clients[0].Address(), http.MethodGet, time.Since(proposalReqStart), err)
+		recordRequestDuration(feeRecipientCtx, "Proposal", gc.clients[0].Address(), http.MethodGet, time.Since(proposalReqStart), err)
 		if err != nil {
 			logger.Warn("failed to get proposal after preparation submission", zap.Error(err))
 			return
@@ -499,7 +498,7 @@ func (gc *GoClient) getSingleClientProposal(
 	}()
 
 	select {
-	case <-requestCtx.Done():
+	case <-feeRecipientCtx.Done():
 		logger.Warn("preparation submission and requesting new proposal timed out, using the first received proposal")
 		return p.Data, nil
 	case proposal, ok := <-proposalCh:
@@ -535,6 +534,7 @@ func (gc *GoClient) getMultiClientProposal(
 
 	var wg sync.WaitGroup
 
+	// Cancel the goroutines when we got a result to avoid waiting for the parent context.
 	requestCtx, requestCancel := context.WithCancel(ctx)
 	defer requestCancel()
 
@@ -578,41 +578,71 @@ func (gc *GoClient) getMultiClientProposal(
 		close(proposalsWithFeeRecipient)
 	}()
 
-	select {
-	case p, ok := <-proposalsWithFeeRecipient:
-		if !ok {
-			// All request goroutines have finished, but we didn't get any proposal with fee recipient.
+	// Try to get a proposal with a fee recipient set before feeRecipientDeadline
+	// while we are in round 1 with a sufficient buffer for a QBFT consensus.
+	// Afterward, any proposal will be enough for us.
+	feeRecipientDeadline := gc.beaconConfig.GetSlotStartTime(slot).Add(qbft.QuickTimeout - avgQBFTTime*2)
+	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, feeRecipientDeadline)
+	defer feeRecipientCancel()
 
-			// proposalsWithFeeRecipient is closed after proposals, so this should never block.
-			if p, ok = <-proposals; ok {
-				// If we have one without fee recipient, it's better that nothing, so we use it.
-				gc.log.Warn("no proposals with fee recipient found")
-				return p, nil
-			}
+	var selectProposalCh chan *api.VersionedProposal
 
-			// We don't have any proposals, so we got some error.
-			// The errors have been logged, so we don't need to return them.
-			return nil, fmt.Errorf("all requests failed")
-		}
-		// Got a proposal with fee recipient. It is good enough, we can use it.
-		return p, nil
-	case <-ctx.Done():
-		// Ran out of time. Check if we got any proposal.
+	// Wrapped with a for loop to enter the select again on feeRecipientCtx expiration.
+	for {
 		select {
-		case p, ok := <-proposals:
-			if ok {
+		case p, ok := <-proposalsWithFeeRecipient:
+			if !ok {
+				// All request goroutines have finished, but we didn't get any proposal with fee recipient.
+
+				// proposalsWithFeeRecipient is closed after proposals, so this should never block.
+				p, ok = <-proposals
+				if !ok {
+					// We don't have any proposals, so we got some error.
+					// The errors have been logged, so we don't need to return them.
+					return nil, fmt.Errorf("all requests failed")
+				}
+
 				// If we have one without fee recipient, it's better that nothing, so we use it.
 				gc.log.Warn("no proposals with fee recipient found")
 				return p, nil
+
 			}
-			// Ran out of time and then all requests immediately finished.
-			// This should probably never happen, but it's better to make sure we won't return a nil proposal.
-			return nil, ctx.Err()
-		default:
-			// We still don't have any proposals, but requests haven't finished yet.
-			// However, we don't have more time, so we have to return an error.
-			// Probably, there are some connection issues or the node is overloaded.
-			return nil, ctx.Err()
+			// Got a proposal with fee recipient. It is good enough, we can use it.
+			return p, nil
+		case p, ok := <-selectProposalCh:
+			// Didn't get a proposal with fee recipient until feeRecipientCtx expired,
+			// so we are ready to accept any proposal.
+			if !ok {
+				// We don't have any proposals, so we got some error.
+				// The errors have been logged, so we don't need to return them.
+				return nil, fmt.Errorf("all requests failed")
+			}
+
+			gc.log.Warn("no proposals with fee recipient found")
+			return p, nil
+		case <-feeRecipientCtx.Done():
+			// Didn't get a proposal with fee recipient quickly,
+			// enable receiving from proposals and enter the select again.
+			selectProposalCh = proposals
+		case <-ctx.Done():
+			// Ran out of time. Check if we got any proposal.
+			select {
+			case p, ok := <-proposals:
+				if !ok {
+					// Ran out of time and then all requests immediately finished.
+					// This should probably never happen, but it's better to make sure we won't return a nil proposal.
+					return nil, ctx.Err()
+				}
+
+				// If we have one without fee recipient, it's better that nothing, so we use it.
+				gc.log.Warn("no proposals with fee recipient found")
+				return p, nil
+			default:
+				// We still don't have any proposals, but requests haven't finished yet.
+				// However, we don't have more time, so we have to return an error.
+				// Probably, there are some connection issues or the node is overloaded.
+				return nil, ctx.Err()
+			}
 		}
 	}
 }
