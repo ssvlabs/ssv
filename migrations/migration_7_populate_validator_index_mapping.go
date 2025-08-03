@@ -38,7 +38,7 @@ var migration_7_populate_validator_index_mapping = Migration{
 
 		if err = opt.Db.GetAll(storage.SharesDBPrefix(opstorage.OperatorStoragePrefix), func(i int, obj basedb.Obj) error {
 			shareSSZ := &storage.Share{}
-			if err := shareSSZ.Decode(obj.Value); err != nil {
+			if err := shareSSZ.Decode(obj.Value()); err != nil {
 				return fmt.Errorf("decode ssz share: %w", err)
 			}
 
@@ -55,9 +55,9 @@ var migration_7_populate_validator_index_mapping = Migration{
 
 		logger.Info("tracer migration", zap.Int("shares with 0 index", shares0), zap.Int("validator index mappings", len(mappings)))
 
-		err = opt.Db.SetMany(storage.PubkeyToIndexMappingDBKey(opstorage.OperatorStoragePrefix), len(mappings), func(i int) (basedb.Obj, error) {
+		err = opt.Db.SetMany(storage.PubkeyToIndexMappingDBKey(opstorage.OperatorStoragePrefix), len(mappings), func(i int) (key, value []byte, err error) {
 			m := mappings[i]
-			return basedb.Obj{Key: m.pubkey, Value: uint64ToBytes(m.index)}, nil
+			return m.pubkey, uint64ToBytes(m.index), nil
 		})
 		if err != nil {
 			return fmt.Errorf("set validator pubkey and index: %w", err)

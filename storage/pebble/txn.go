@@ -33,14 +33,14 @@ func (txn *txn) Set(prefix []byte, key []byte, value []byte) error {
 	return txn.Batch.Set(append(prefix, key...), value, nil)
 }
 
-func (txn *txn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+func (txn *txn) SetMany(prefix []byte, n int, next func(int) (key, value []byte, err error)) error {
 	for i := range n {
-		item, err := next(i)
+		key, value, err := next(i)
 		if err != nil {
 			return err
 		}
-		key := append(prefix, item.Key...)
-		err = txn.Batch.Set(key, item.Value, nil)
+		keys := append(prefix, key...)
+		err = txn.Batch.Set(keys, value, nil)
 		if err != nil {
 			return err
 		}
