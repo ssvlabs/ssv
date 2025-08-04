@@ -123,7 +123,7 @@ func (s *SSVShare) Slashed() bool {
 // Note: the validator may be eligible only for sync committee, but not to attest and propose. See IsAttesting.
 // Requirements: not liquidated and attesting or exited in the current or previous sync committee period.
 func (s *SSVShare) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
-	return s.IsAttesting(epoch) || s.isSyncCommitteeEligible(beaconCfg, epoch)
+	return s.isSyncCommitteeEligible(beaconCfg, epoch)
 }
 
 // IsAttesting returns true if the validator can participate in *all* SSV duties at the given epoch.
