@@ -19,16 +19,16 @@ const (
 type validatorStatus string
 
 const (
-	statusParticipatingAttesting validatorStatus = "participating_attesting"
-	statusParticipating          validatorStatus = "participating"
-	statusNotFound               validatorStatus = "not_found"
-	statusActive                 validatorStatus = "active"
-	statusSlashed                validatorStatus = "slashed"
-	statusExiting                validatorStatus = "exiting"
-	statusNotActivated           validatorStatus = "not_activated"
-	statusPending                validatorStatus = "pending"
-	statusNoIndex                validatorStatus = "no_index"
-	statusUnknown                validatorStatus = "unknown"
+	statusAttesting     validatorStatus = "attesting"
+	statusParticipating validatorStatus = "participating"
+	statusNotFound      validatorStatus = "not_found"
+	statusActive        validatorStatus = "active"
+	statusSlashed       validatorStatus = "slashed"
+	statusExiting       validatorStatus = "exiting"
+	statusNotActivated  validatorStatus = "not_activated"
+	statusPending       validatorStatus = "pending"
+	statusNoIndex       validatorStatus = "no_index"
+	statusUnknown       validatorStatus = "unknown"
 )
 
 var (
