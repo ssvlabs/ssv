@@ -270,15 +270,12 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.DBOptions.Ctx = cmd.Context()
 		var db basedb.Database
-		switch cfg.DBOptions.Engine {
-		case "pebble":
+		if cfg.ExporterOptions.Enabled {
 			logger.Info("using pebble db")
 			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
-		case "badger":
+		} else {
 			logger.Info("using badger db")
 			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
-		default:
-			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
 		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -436,11 +433,13 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
+		var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
+			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -510,7 +509,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
-					dstore, networkConfig.BeaconConfig)
+					dstore, networkConfig.BeaconConfig, decidedStreamPublisherFn)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
