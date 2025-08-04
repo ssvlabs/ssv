@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/prometheus/common/model"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
@@ -12,9 +11,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	metric_noop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	trace_noop "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
 )
@@ -112,33 +109,4 @@ func Initialize(ctx context.Context, appName, appVersion string, l *zap.Logger, 
 	logger.Info("observability stack initialized")
 
 	return shutdown, nil
-}
-
-func buildResources(appName, appVersion string) (*resource.Resource, error) {
-	hostName, err := os.Hostname()
-	if err != nil {
-		const defaultHostname = "unknown"
-		logger.Warn("fetching hostname returned an error. Setting hostname to default",
-			zap.Error(err),
-			zap.String("default_hostname", defaultHostname))
-		hostName = defaultHostname
-	}
-
-	const errMsg = "failed to merge OTeL Resources"
-	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceName(appName),
-		semconv.ServiceVersion(appVersion),
-		semconv.HostName(hostName),
-	))
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", errMsg, err)
-	}
-
-	resources, err = resource.Merge(resources, resource.Environment())
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", errMsg, err)
-	}
-
-	return resources, nil
 }

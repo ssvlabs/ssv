@@ -8,10 +8,14 @@ import (
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
 )
 
-var logger *zap.Logger
+var (
+	logger                *zap.Logger
+	defaultTracerProvider = noop.NewTracerProvider()
+)
 
 const traceIDByteLen = 16
 
