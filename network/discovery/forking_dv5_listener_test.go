@@ -97,21 +97,21 @@ func TestForkListener_PingPreFork(t *testing.T) {
 	t.Run("Post-Fork succeeds", func(t *testing.T) {
 		postForkListener.SetNodesForPingError([]*enode.Node{})
 		preForkListener.SetNodesForPingError([]*enode.Node{pingPeer})
-		err := forkListener.Ping(pingPeer)
+		_, err := forkListener.Ping(pingPeer)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Post-Fork fails and Pre-Fork succeeds", func(t *testing.T) {
 		postForkListener.SetNodesForPingError([]*enode.Node{pingPeer})
 		preForkListener.SetNodesForPingError([]*enode.Node{})
-		err := forkListener.Ping(pingPeer)
+		_, err := forkListener.Ping(pingPeer)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Post-Fork and Pre-Fork fails", func(t *testing.T) {
 		postForkListener.SetNodesForPingError([]*enode.Node{pingPeer})
 		preForkListener.SetNodesForPingError([]*enode.Node{pingPeer})
-		err := forkListener.Ping(pingPeer)
+		_, err := forkListener.Ping(pingPeer)
 		assert.ErrorContains(t, err, "failed ping")
 	})
 }
