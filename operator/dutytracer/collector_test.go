@@ -367,6 +367,78 @@ func TestValidatorDuty(t *testing.T) {
 	}
 }
 
+func TestValidatorDuties(t *testing.T) {
+	logger := zap.NewNop()
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	const (
+		slot         = phase0.Slot(1)
+		role, bnRole = spectypes.RoleAggregator, spectypes.BNRoleAggregator
+		vIndex       = phase0.ValidatorIndex(55)
+	)
+
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), role)
+
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+
+	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+
+	var wantBeaconRoot phase0.Root
+	bnVal := [32]byte{1, 2, 3}
+	copy(wantBeaconRoot[:], bnVal[:])
+
+	var validatorPK spectypes.ValidatorPK
+	copy(validatorPK[:], identifier.GetDutyExecutorID()[:])
+
+	fakeSig := [96]byte{}
+
+	partialSigType := spectypes.VoluntaryExitPartialSig
+	var partSigMessages = spectypes.PartialSignatureMessages{
+		Type: partialSigType,
+		Slot: 1,
+		Messages: []*spectypes.PartialSignatureMessage{
+			{
+				ValidatorIndex:   vIndex,
+				Signer:           99,
+				PartialSignature: fakeSig[:],
+				SigningRoot:      [32]byte{1, 2, 3},
+			},
+		},
+	}
+
+	partSigMessagesData, err := partSigMessages.Encode()
+	require.NoError(t, err)
+
+	{ // TC 1 - PartialSig - Aggregator - pre-consensus
+		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
+		err := collector.Collect(t.Context(), partSigMsg, dummyVerify)
+		require.NoError(t, err)
+
+		duties, err := collector.GetAllValidatorDuties(bnRole, slot)
+		require.NoError(t, err)
+		require.NotNil(t, duties)
+		require.Len(t, duties, 1)
+
+		duty := duties[0]
+
+		assert.Equal(t, slot, duty.Slot)
+		assert.Equal(t, bnRole, duty.Role)
+		assert.Equal(t, vIndex, duty.Validator)
+		assert.Len(t, duty.Pre, 1)
+
+		pre := duty.Pre[0]
+		assert.Equal(t, partialSigType, pre.Type)
+		assert.Equal(t, wantBeaconRoot, pre.BeaconRoot)
+		assert.Equal(t, uint64(99), pre.Signer)
+		assert.NotNil(t, pre.ReceivedTime)
+	}
+}
+
 func TestCommitteeDuty(t *testing.T) {
 	logger := zap.NewNop()
 	ctrl := gomock.NewController(t)

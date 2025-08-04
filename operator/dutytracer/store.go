@@ -56,6 +56,61 @@ func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 	return committeeID, index, nil
 }
 
+func (c *Collector) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
+	duties := []*ValidatorDutyTrace{}
+
+	// lookup in cache
+	c.validatorTraces.Range(func(pubkey spectypes.ValidatorPK, validatorSlots *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+		traces, found := validatorSlots.Get(slot)
+		if found {
+			traces.Lock()
+			defer traces.Unlock()
+
+			// find the trace for the role
+			for _, trace := range traces.roles {
+				if trace.Role == role {
+					duties = append(duties, &ValidatorDutyTrace{
+						ValidatorDutyTrace: *deepCopyValidatorDutyTrace(trace),
+						pubkey:             pubkey,
+					})
+				}
+			}
+		}
+		return true // keep iterating
+	})
+
+	// go to disk for the older ones
+	storeDuties, err := c.getAllValidatorDutiesFromDisk(role, slot)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(duties, storeDuties...), nil
+}
+
+func (c *Collector) getAllValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
+	storeDuties, err := c.store.GetValidatorDuties(role, slot)
+	if err != nil {
+		return nil, fmt.Errorf("get validator duties from disk: %w", err)
+	}
+
+	duties := []*ValidatorDutyTrace{}
+
+	for _, duty := range storeDuties {
+		share, found := c.validators.ValidatorByIndex(duty.Validator)
+		if !found {
+			c.logger.Error("validator not found by index", fields.ValidatorIndex(duty.Validator))
+			return nil, fmt.Errorf("error retrieving validator by index: %v", duty.Validator)
+		}
+
+		duties = append(duties, &ValidatorDutyTrace{
+			ValidatorDutyTrace: *deepCopyValidatorDutyTrace(duty),
+			pubkey:             share.ValidatorPubKey,
+		})
+	}
+	return duties, nil
+}
+
 func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
 	validatorSlots, found := c.validatorTraces.Get(pubkey)
