@@ -1433,8 +1433,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	if operator == nil {
-		logger.Fatal("empty test operator was passed")
+	if operator == nil || operator.privateKey == nil {
+		logger.Fatal("empty test operator (or empty private key) was passed")
 	}
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
