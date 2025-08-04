@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -545,13 +544,8 @@ func (gc *GoClient) getProposalStreams(
 	proposalsWithFeeRecipient := make(chan *api.VersionedProposal, len(gc.clients))
 	proposals := make(chan *api.VersionedProposal, len(gc.clients))
 
-	var wg sync.WaitGroup
-
 	for _, client := range gc.clients {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
-
 			reqStart := time.Now()
 			proposalResp, err := client.Proposal(ctx, &api.ProposalOpts{
 				Slot:                   slot,
@@ -581,12 +575,6 @@ func (gc *GoClient) getProposalStreams(
 		}()
 	}
 
-	go func() {
-		wg.Wait()
-		close(proposals)
-		close(proposalsWithFeeRecipient)
-	}()
-
 	return proposalsWithFeeRecipient, proposals
 }
 
@@ -596,83 +584,53 @@ func (gc *GoClient) selectBestProposal(
 	proposalsWithFeeRecipient chan *api.VersionedProposal,
 	proposals chan *api.VersionedProposal,
 ) (*api.VersionedProposal, error) {
-	// Try to get a proposal with a fee recipient set before feeRecipientDeadline
-	// while we are within the best time range.
-	// Afterward, any proposal will be enough for us.
-	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot))
-	defer feeRecipientCancel()
-
-	var selectProposalCh chan *api.VersionedProposal
-
-	// Wrapped with a for loop to enter the select again on feeRecipientCtx expiration.
-	for {
-		select {
-		case p, ok := <-proposalsWithFeeRecipient:
-			if !ok {
-				// All request goroutines have finished, but we didn't get any proposal with fee recipient.
-
-				// proposalsWithFeeRecipient is closed after proposals, so this should never block.
-				p, ok = <-proposals
-				if !ok {
-					// We don't have any proposals, so we got some error.
-					// The errors have been logged, so we don't need to return them.
-					return nil, fmt.Errorf("all requests failed")
-				}
-
-				// If we have one without fee recipient, it's better that nothing, so we use it.
-				gc.log.Warn("no proposals with fee recipient found")
-				return p, nil
-
-			}
-			// Got a proposal with fee recipient. It is good enough, we can use it.
-			gc.log.Debug("received a proposal with fee recipient")
-			return p, nil
-		case p, ok := <-selectProposalCh:
-			// Didn't get a proposal with fee recipient until feeRecipientCtx expired,
-			// so we are ready to accept any proposal.
-			if !ok {
-				// We don't have any proposals, so we got some error.
-				// The errors have been logged, so we don't need to return them.
-				return nil, fmt.Errorf("all requests failed")
-			}
-
-			gc.log.Warn("no proposals with fee recipient found")
-			return p, nil
-		case <-feeRecipientCtx.Done():
-			// Didn't get a proposal with fee recipient quickly,
-			// enable receiving from proposals and enter the select again.
-			selectProposalCh = proposals
-			gc.log.Debug("didn't receive proposal with fee recipient within the safe duration for the best round, accepting any proposal")
-		case <-ctx.Done():
-			// Ran out of time. Check if we got any proposal.
-			select {
-			case p, ok := <-proposals:
-				if !ok {
-					// Ran out of time and then all requests immediately finished.
-					// This should probably never happen, but it's better to make sure we won't return a nil proposal.
-					return nil, ctx.Err()
-				}
-
-				// If we have one without fee recipient, it's better that nothing, so we use it.
-				gc.log.Warn("no proposals with fee recipient found")
-				return p, nil
-			default:
-				// We still don't have any proposals, but requests haven't finished yet.
-				// However, we don't have more time, so we have to return an error.
-				// Probably, there are some connection issues or the node is overloaded.
-				return nil, ctx.Err()
-			}
+	// See if we can get a proposal with fee recipient set before "soft deadline".
+	softCtx, softCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot))
+	defer softCancel()
+	var proposalWithNoFeeRecipient *api.VersionedProposal
+	select {
+	case p := <-proposalsWithFeeRecipient:
+		// Got a proposal with fee recipient. It is good enough, we can use it.
+		gc.log.Debug("received a proposal with fee recipient to use for round 1")
+		return p, nil
+	case p := <-proposals:
+		// Got a proposal with no fee recipient. We'd prefer a proposal with fee recipient though,
+		// so we'll stash this one for now in case we need it later.
+		if proposalWithNoFeeRecipient == nil {
+			proposalWithNoFeeRecipient = p
 		}
+	case <-softCtx.Done():
+		if proposalWithNoFeeRecipient != nil {
+			gc.log.Debug("got no proposal with fee recipient to use for round 1, will use a proposal without fee recipient")
+			return proposalWithNoFeeRecipient, nil
+		}
+		gc.log.Debug("got no proposal to use for round 1, will wait some more and likely join QBFT at round 2")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	// Fine, "soft deadline" has passed, and we still have no proposal with fee recipient. Any proposal
+	// will be good enough for us then. Maybe we already have a proposal without fee recipient, let's see.
+	if proposalWithNoFeeRecipient != nil {
+		return proposalWithNoFeeRecipient, nil
+	}
+	select {
+	case p := <-proposalsWithFeeRecipient:
+		gc.log.Debug("received a proposal with fee recipient to use for round 2")
+		return p, nil
+	case p := <-proposals:
+		gc.log.Debug("received a proposal without fee recipient to use for round 2")
+		return p, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
-// latestProposalTime returns the latest time when QBFT should start
-// to have a high chance to finish within the best time range for given slot.
+// latestProposalTime returns the latest time when QBFT can start to have
+// a high chance to successfully finish in round 1 for the given slot.
+// We could target round 2 instead and get a laxer deadline, but that would
+// put proposer-runner QBFT at higher risk of not succeeding at all.
 func (gc *GoClient) latestProposalTime(slot phase0.Slot) time.Time {
-	// We aim to try to get the best proposal in the first round.
-	// The second round might also work, giving more time to get
-	// a proposal we are looking for, but it would increase the probability
-	// of being late with the proposal submission.
 	const maxRound = 1
 	const avgQBFTTime = 350 * time.Millisecond
 	return gc.beaconConfig.GetSlotStartTime(slot).Add(maxRound*qbft.QuickTimeout - avgQBFTTime*2)
