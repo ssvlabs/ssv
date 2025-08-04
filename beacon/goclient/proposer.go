@@ -425,8 +425,13 @@ func (gc *GoClient) getSingleClientProposal(
 	// Therefore, we may have to try to submit them again
 	// and request another block using a strict deadline that will, hopefully,
 	// have a fee recipient set. The deadline aims to have enough time
-	// to complete a QBFT consensus within the best time range.
-	feeRecipientDeadline := gc.latestProposalTime(slot)
+	// to complete a QBFT consensus within the first two rounds.
+	//
+	// Trying to do it within the first round might also work.
+	// But in the case with the single client (unlike the multi client),
+	// we have to submit proposal preparations and request a new proposal.
+	// So, it requires more time, and the first round becomes very risky.
+	feeRecipientDeadline := gc.latestProposalTime(slot, 2)
 	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, feeRecipientDeadline)
 	defer feeRecipientCancel()
 
@@ -478,13 +483,17 @@ func (gc *GoClient) submitPreparationsAndGetProposal(
 		return nil, fmt.Errorf("fee recipient address for validator not found")
 	}
 
-	proposalPreparation := map[phase0.ValidatorIndex]bellatrix.ExecutionAddress{
-		validatorIndex: address,
+	proposalPreparation := []*eth2apiv1.ProposalPreparation{
+		{
+			ValidatorIndex: validatorIndex,
+			FeeRecipient:   address,
+		},
 	}
 
-	// Although SubmitProposalPreparation is designed for a multi client,
-	// we can reuse it for a single client to avoid code duplication.
-	if err := gc.SubmitProposalPreparation(ctx, proposalPreparation); err != nil {
+	preparationsReqStart := time.Now()
+	err := gc.clients[0].SubmitProposalPreparations(ctx, proposalPreparation)
+	recordRequestDuration(ctx, "SubmitProposalPreparations", gc.clients[0].Address(), http.MethodGet, time.Since(preparationsReqStart), err)
+	if err != nil {
 		return nil, fmt.Errorf("submit proposal preparation: %w", err)
 	}
 
@@ -597,9 +606,12 @@ func (gc *GoClient) selectBestProposal(
 	proposals chan *api.VersionedProposal,
 ) (*api.VersionedProposal, error) {
 	// Try to get a proposal with a fee recipient set before feeRecipientDeadline
-	// while we are within the best time range.
+	// while we are within the first slot.
 	// Afterward, any proposal will be enough for us.
-	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot))
+	// The second round might also work, giving more time to get
+	// a proposal we are looking for, but it would increase the probability
+	// of being late with the proposal submission.
+	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot, 1))
 	defer feeRecipientCancel()
 
 	var selectProposalCh chan *api.VersionedProposal
@@ -668,14 +680,9 @@ func (gc *GoClient) selectBestProposal(
 
 // latestProposalTime returns the latest time when QBFT should start
 // to have a high chance to finish within the best time range for given slot.
-func (gc *GoClient) latestProposalTime(slot phase0.Slot) time.Time {
-	// We aim to try to get the best proposal in the first round.
-	// The second round might also work, giving more time to get
-	// a proposal we are looking for, but it would increase the probability
-	// of being late with the proposal submission.
-	const maxRound = 1
-	const avgQBFTTime = 350 * time.Millisecond
-	return gc.beaconConfig.GetSlotStartTime(slot).Add(maxRound*qbft.QuickTimeout - avgQBFTTime*2)
+func (gc *GoClient) latestProposalTime(slot phase0.Slot, maxRound qbft.Round) time.Time {
+	const avgQBFTDuration = 350 * time.Millisecond
+	return gc.beaconConfig.GetSlotStartTime(slot).Add(time.Duration(maxRound)*qbft.QuickTimeout - avgQBFTDuration*2)
 }
 
 func hasFeeRecipient(block any) (bool, error) {
