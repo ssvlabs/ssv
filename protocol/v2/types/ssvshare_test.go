@@ -304,7 +304,7 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsSyncCommitteeEligible(networkconfig.TestNetwork, tc.Epoch)
+			result := tc.Share.isSyncCommitteeEligible(networkconfig.TestNetwork, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}
