@@ -309,6 +309,16 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 			Epoch:    currentEpoch,
 			Expected: false,
 		},
+		{
+			Name: "Exited Share Within Same Period and Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch:  epochSamePeriod,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
 	}
 
 	for _, tc := range tt {
