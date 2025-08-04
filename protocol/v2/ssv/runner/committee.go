@@ -661,6 +661,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	listener:
 		for {
 			select {
+			case <-ctx.Done():
+				return ctx.Err()
 			case err := <-errCh:
 				executionErr = err
 			case signatureResult, ok := <-signatureCh:
