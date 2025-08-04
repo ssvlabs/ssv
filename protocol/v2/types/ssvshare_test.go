@@ -124,6 +124,15 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 			Expected: true,
 		},
 		{
+			Name: "Is Attesting and Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateActiveOngoing,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
 			Name: "Pending Queued with Future Activation Epoch",
 			Share: &SSVShare{
 				Status:          eth2apiv1.ValidatorStatePendingQueued,
