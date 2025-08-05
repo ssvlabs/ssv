@@ -575,7 +575,8 @@ func (gc *GoClient) selectBestProposal(
 }
 
 // latestProposalTime returns the latest time when QBFT should start
-// to have a high chance to finish within the best time range for given slot.
+// to have a high chance to finish within the best time range for given slot
+// and round.
 func (gc *GoClient) latestProposalTime(slot phase0.Slot, maxRound qbft.Round) time.Time {
 	const avgQBFTDuration = 350 * time.Millisecond
 	// #nosec G115 -- round cannot exceed int64
