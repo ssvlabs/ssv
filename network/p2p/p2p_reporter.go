@@ -3,11 +3,11 @@ package p2pv1
 import (
 	"math"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
-	ssvpeers "github.com/ssvlabs/ssv/network/peers"
+	s "github.com/ssvlabs/ssv/network/peers/scores"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
@@ -22,9 +22,10 @@ func (n *p2pNetwork) ReportValidation(msg *spectypes.SSVMessage, res protocolp2p
 		n.logger.Warn("could not encode message", zap.Error(err))
 		return
 	}
+	score := s.NewScoreIndex()
 	peers := n.msgResolver.GetPeers(data)
 	for _, pi := range peers {
-		err := n.idx.Score(pi, &ssvpeers.NodeScore{Name: "validation", Value: msgValidationScore(res)})
+		err := score.Score(pi, &s.NodeScore{Name: "validation", Value: msgValidationScore(res)})
 		if err != nil {
 			n.logger.Warn("could not score peer", fields.PeerID(pi), zap.Error(err))
 			continue

@@ -12,7 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/peers"
+	s "github.com/ssvlabs/ssv/network/peers/scores"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
@@ -34,12 +34,12 @@ type topicScoreSnapshot struct {
 // adding the peers' scores.
 // TODO: finalize once validation is in place
 func scoreInspector(logger *zap.Logger,
-	scoreIdx peers.ScoreIndex,
+	scoreIdx s.ScoreIndex,
 	logFrequency int,
 	peerConnected func(pid peer.ID) bool,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
-	gossipScoreIndex peers.GossipScoreIndex,
+	gossipScoreIndex s.GossipScoreIndex,
 ) pubsub.ExtendedPeerScoreInspectFn {
 	inspections := 0
 

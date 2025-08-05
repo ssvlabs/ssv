@@ -22,12 +22,6 @@ var (
 	ErrNotFound = errors.New("peer not found")
 )
 
-// NodeScore is a wrapping objet for scores
-type NodeScore struct {
-	Name  string
-	Value float64
-}
-
 // ConnectionIndex is an interface for accessing peers connections
 type ConnectionIndex interface {
 	// Connectedness returns the connection state of the given peer
@@ -42,14 +36,6 @@ type ConnectionIndex interface {
 
 	// IsBad returns whether the given peer is bad
 	IsBad(id peer.ID) bool
-}
-
-// ScoreIndex is an interface for managing peers scores
-type ScoreIndex interface {
-	// Score adds score to the given peer
-	Score(id peer.ID, scores ...*NodeScore) error
-	// GetScore returns the desired score for the given peer
-	GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
 
 // NodeInfoIndex is an interface for managing records.NodeInfo of network peers
@@ -111,23 +97,11 @@ type SubnetsIndex interface {
 	GetSubnetsStats() *SubnetsStats
 }
 
-// GossipScoreIndex serves as an interface to get a peer's Gossip score
-type GossipScoreIndex interface {
-	// AddScore adds a score for a peer
-	SetScores(scores map[peer.ID]float64)
-	// GetGossipScore returns the peer score and a boolean flag for whether it has such score or not
-	GetGossipScore(peerID peer.ID) (float64, bool)
-	// HasBadGossipScore returns true if the peer has a bad Gossip score
-	HasBadGossipScore(peerID peer.ID) (bool, float64)
-}
-
 // Index is a facade interface of this package
 type Index interface {
 	ConnectionIndex
 	NodeInfoIndex
 	PeerInfoIndex
-	ScoreIndex
 	SubnetsIndex
 	io.Closer
-	GossipScoreIndex
 }

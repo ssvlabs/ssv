@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
@@ -30,6 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections"
+	s "github.com/ssvlabs/ssv/network/peers/scores"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
@@ -81,9 +83,12 @@ type p2pNetwork struct {
 
 	host         host.Host
 	streamCtrl   streams.StreamController
+	gsix         s.GossipScoreIndex
+	six          s.ScoreIndex
 	idx          peers.Index
 	isIdxSet     atomic.Bool
 	disc         discovery.Service
+	pubsub       *pubsub.PubSub
 	topicsCtrl   topics.Controller
 	msgRouter    network.MessageRouter
 	msgResolver  topics.MsgPeersResolver
@@ -107,7 +112,7 @@ type p2pNetwork struct {
 	libConnManager connmgrcore.ConnManager
 
 	nodeStorage             operatorstorage.Storage
-	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
+	operatorPKHashToPKCache *hashmap.Map[string, string] // used for metrics
 	operatorSigner          keys.OperatorSigner
 	operatorDataStore       operatordatastore.OperatorDataStore
 
@@ -138,7 +143,7 @@ func New(
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
-		operatorPKHashToPKCache: hashmap.New[string, []byte](),
+		operatorPKHashToPKCache: hashmap.New[string, string](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
 		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
@@ -311,7 +316,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			_ = n.idx.GetSubnetsStats() // collect metrics
 		}()
 
-		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
+		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.gsix)
 
 		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.host.Network().Peers())
 		if disconnectedCnt > 0 {
@@ -592,6 +597,16 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+// Implements the interface GetPubSub method
+func (n *p2pNetwork) GetPubSub() *pubsub.PubSub {
+	return n.pubsub
+}
+
+// Implements the interface GetDiscoveryService method
+func (n *p2pNetwork) GetDiscoveryService() discovery.Service {
+	return n.disc
 }
 
 // peerScore calculates peer score based on how valuable this peer would have been if we didn't

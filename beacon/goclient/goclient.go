@@ -170,6 +170,8 @@ type GoClient struct {
 	// voluntaryExitDomainCached is voluntary exit domain value calculated lazily and re-used
 	// since it doesn't change over time
 	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
+
+	SlotTickerProvider slotticker.Provider
 }
 
 // New init new client and go-client instance
@@ -262,6 +264,7 @@ func New(
 			GenesisTime:  config.GenesisTime,
 		})
 	}
+	client.SlotTickerProvider = slotTickerProvider
 
 	go client.registrationSubmitter(ctx, slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
@@ -273,6 +276,10 @@ func New(
 	}
 
 	return client, nil
+}
+
+func (gc *GoClient) MultiClient() MultiClient {
+	return gc.multiClient
 }
 
 // getBeaconConfig provides thread-safe access to the beacon configuration

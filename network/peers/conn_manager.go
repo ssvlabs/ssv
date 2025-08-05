@@ -10,6 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	s "github.com/ssvlabs/ssv/network/peers/scores"
 )
 
 // ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.
@@ -29,7 +30,7 @@ type connManager struct {
 	logger           *zap.Logger
 	connManager      connmgrcore.ConnManager
 	subnetsIdx       SubnetsIndex
-	gossipScoreIndex GossipScoreIndex
+	gossipScoreIndex s.GossipScoreIndex
 }
 
 // NewConnManager creates a new conn manager.
@@ -38,7 +39,7 @@ func NewConnManager(
 	logger *zap.Logger,
 	connMgr connmgrcore.ConnManager,
 	subnetsIdx SubnetsIndex,
-	gossipScoreIndex GossipScoreIndex,
+	gossipScoreIndex s.GossipScoreIndex,
 ) ConnManager {
 	return &connManager{
 		logger:           logger,

@@ -4,9 +4,11 @@ import (
 	"context"
 	"io"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ssvlabs/ssv/network/commons"
+	discovery "github.com/ssvlabs/ssv/network/discovery"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
@@ -53,6 +55,12 @@ type P2PNetwork interface {
 	PeersByTopic() map[string][]peer.ID
 	// Peers returns all peers we are connected to
 	Peers() []peer.ID
+	// Returns the pubsub object
+	GetPubSub() *pubsub.PubSub
+	// Get discovery service
+	GetDiscoveryService() discovery.Service
+	// BroadcastRaw sends an encoded raw message to the topics
+	BroadcastRaw([]string, []byte) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:

@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/peers/scores"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -26,7 +27,7 @@ type peersIndex struct {
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	scoreIdx ScoreIndex
+	scoreIdx scores.ScoreIndex
 	SubnetsIndex
 	PeerInfoIndex
 
@@ -35,7 +36,7 @@ type peersIndex struct {
 
 	maxPeers MaxPeersProvider
 
-	gossipScoreIndex GossipScoreIndex
+	gossipScoreIndex scores.GossipScoreIndex
 }
 
 // NewPeersIndex creates a new Index
@@ -45,13 +46,13 @@ func NewPeersIndex(
 	self *records.NodeInfo,
 	maxPeers MaxPeersProvider,
 	netKeyProvider NetworkKeyProvider,
-	gossipScoreIndex GossipScoreIndex,
+	gossipScoreIndex scores.GossipScoreIndex,
 ) *peersIndex {
 
 	return &peersIndex{
 		logger:           logger,
 		network:          network,
-		scoreIdx:         newScoreIndex(),
+		scoreIdx:         scores.NewScoreIndex(),
 		SubnetsIndex:     NewSubnetsIndex(),
 		PeerInfoIndex:    NewPeerInfoIndex(),
 		self:             self,
@@ -147,12 +148,12 @@ func (pi *peersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
 }
 
 // Score adds score to the given peer
-func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
+func (pi *peersIndex) Score(id peer.ID, scores ...*scores.NodeScore) error {
 	return pi.scoreIdx.Score(id, scores...)
 }
 
 // GetScore returns the desired score for the given peer
-func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
+func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]scores.NodeScore, error) {
 	switch pi.State(id) {
 	case StateUnknown:
 		return nil, ErrNotFound
