@@ -3,8 +3,9 @@ package eventsyncer
 import (
 	"time"
 
-	"github.com/ssvlabs/ssv/observability/log"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // Option defines EventSyncer configuration option.

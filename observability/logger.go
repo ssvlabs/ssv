@@ -1,10 +1,11 @@
 package observability
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/observability/traces"
-	"go.uber.org/zap"
 )
 
 var logger *zap.Logger

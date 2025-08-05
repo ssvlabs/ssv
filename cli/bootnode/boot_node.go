@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 
 	global_config "github.com/ssvlabs/ssv/cli/config"
-	ssv_log "github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssv_log "github.com/ssvlabs/ssv/observability/log"
 	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
 	"github.com/ssvlabs/ssv/utils/commons"
 )

@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/ssvlabs/ssv/observability/log"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // badgerLogger is a wrapper for badger.Logger
