@@ -37,7 +37,7 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 
 func TestMain(m *testing.M) {
 	ctx := context.TODO()
-	if err := log.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
+	if err := log.SetGlobal("debug", "capital", "console", nil); err != nil {
 		panic(err)
 	}
 

@@ -818,7 +818,7 @@ func setupGlobal() (*zap.Logger, error) {
 		}
 	}
 
-	err := ssv_log.SetGlobalLogger(
+	err := ssv_log.SetGlobal(
 		cfg.LogLevel,
 		cfg.LogLevelFormat,
 		cfg.LogFormat,

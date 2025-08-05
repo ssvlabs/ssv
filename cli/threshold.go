@@ -19,7 +19,7 @@ var createThresholdCmd = &cobra.Command{
 	Use:   "create-threshold",
 	Short: "Turns a private key into a threshold key. For testing usage only",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := ssv_log.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
+		if err := ssv_log.SetGlobal("debug", "capital", "console", nil); err != nil {
 			log.Fatal(err)
 		}
 		logger := zap.L().Named(ssv_log.NameCreateThreshold)

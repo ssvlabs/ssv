@@ -29,7 +29,7 @@ func parseConfigLevelEncoder(levelEncoderName string) zapcore.LevelEncoder {
 	}
 }
 
-func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string, fileOptions *LogFileOptions) (err error) {
+func SetGlobal(levelName string, levelEncoderName string, logFormat string, fileOptions *LogFileOptions) (err error) {
 	defer func() {
 		if err == nil {
 			zap.L().Debug("logger is ready",
@@ -115,7 +115,6 @@ func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
 
 func CapturePanic(logger *zap.Logger) {
 	if r := recover(); r != nil {
-		// defer logger.Sync()
 		defer func() {
 			if err := logger.Sync(); err != nil {
 				log.Println("failed to sync zap.Logger", err)

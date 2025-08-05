@@ -9,7 +9,7 @@ import (
 )
 
 func TestLogger(t *testing.T) *zap.Logger {
-	err := SetGlobalLogger(zapcore.DebugLevel.String(), "capital", "console", nil)
+	err := SetGlobal(zapcore.DebugLevel.String(), "capital", "console", nil)
 	require.NoError(t, err)
 	return zap.L().Named(t.Name())
 }

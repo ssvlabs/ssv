@@ -17,7 +17,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Use:   "generate-operator-keys",
 	Short: "generates ssv operator keys",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := ssv_log.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
+		if err := ssv_log.SetGlobal("debug", "capital", "console", nil); err != nil {
 			log.Fatal(err)
 		}
 
