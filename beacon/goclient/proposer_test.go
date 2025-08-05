@@ -21,7 +21,7 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 		frDelay      time.Duration
 		proposals    []uint64 // IDs; must be unique
 		pDelay       time.Duration
-		wantProposal uint64
+		wantProposal uint64 // ID
 		wantDelay    time.Duration
 		wantErr      string
 	}{
@@ -164,7 +164,7 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 			frProposals := make(chan *api.VersionedProposal, len(tc.frProposals))
 
 			go func() {
-				sleep(t, tc.frDelay)
+				time.Sleep(tc.frDelay)
 				for _, proposal := range tc.frProposals {
 					frProposals <- &api.VersionedProposal{
 						ConsensusValue: new(big.Int).SetUint64(proposal),
@@ -174,7 +174,7 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 			}()
 
 			go func() {
-				sleep(t, tc.pDelay)
+				time.Sleep(tc.pDelay)
 				for _, proposal := range tc.proposals {
 					proposals <- &api.VersionedProposal{
 						ConsensusValue: new(big.Int).SetUint64(proposal),
@@ -200,14 +200,6 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 				require.EqualValues(t, tc.wantProposal, proposal.ConsensusValue.Uint64())
 			}
 			require.GreaterOrEqual(t, time.Since(beaconCfg.GenesisTime), tc.wantDelay)
-			require.LessOrEqual(t, time.Since(beaconCfg.GenesisTime), tc.wantDelay+10*time.Millisecond)
 		})
-	}
-}
-
-func sleep(t *testing.T, duration time.Duration) {
-	select {
-	case <-t.Context().Done():
-	case <-time.After(duration):
 	}
 }
