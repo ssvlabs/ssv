@@ -186,7 +186,6 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), tc.ctxTimeout)
 			defer cancel()
 
-			start := time.Now()
 			proposal, err := gc.selectBestProposal(
 				ctx,
 				beaconCfg.EstimatedCurrentSlot(),
@@ -200,8 +199,8 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, tc.wantProposal, proposal.ConsensusValue.Uint64())
 			}
-			require.GreaterOrEqual(t, time.Since(start), tc.wantDelay)
-			require.LessOrEqual(t, time.Since(start), tc.wantDelay+10*time.Millisecond)
+			require.GreaterOrEqual(t, time.Since(beaconCfg.GenesisTime), tc.wantDelay)
+			require.LessOrEqual(t, time.Since(beaconCfg.GenesisTime), tc.wantDelay+10*time.Millisecond)
 		})
 	}
 }
