@@ -160,8 +160,8 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 				beaconConfig: &beaconCfg,
 			}
 
-			proposals := make(chan *api.VersionedProposal, len(tc.frProposals))
-			frProposals := make(chan *api.VersionedProposal, len(tc.proposals))
+			proposals := make(chan *api.VersionedProposal, len(tc.proposals))
+			frProposals := make(chan *api.VersionedProposal, len(tc.frProposals))
 
 			go func() {
 				sleep(t, tc.frDelay)
