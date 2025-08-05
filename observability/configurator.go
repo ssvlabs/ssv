@@ -6,21 +6,11 @@ import (
 	"fmt"
 
 	"github.com/prometheus/common/model"
-	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/prometheus"
-	metric_noop "go.opentelemetry.io/otel/metric/noop"
-	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/trace"
-	trace_noop "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
-)
 
-var (
-	config Config
-
-	defaultMeterProvider  = metric_noop.NewMeterProvider()
-	defaultTracerProvider = trace_noop.NewTracerProvider()
+	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/observability/traces"
 )
 
 func init() {
@@ -42,7 +32,11 @@ func init() {
 }
 
 func Initialize(ctx context.Context, appName, appVersion string, l *zap.Logger, options ...Option) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
+	var (
+		config        Config
+		shutdownFuncs []func(context.Context) error
+	)
+
 	logger := initLogger(l)
 
 	shutdown = func(ctx context.Context) error {
@@ -63,48 +57,32 @@ func Initialize(ctx context.Context, appName, appVersion string, l *zap.Logger, 
 	logger.Info("building OTel resources")
 	resources, err := buildResources(appName, appVersion)
 	if err != nil {
-		logger.Error("could not build OTel resources", zap.Error(err))
-		return shutdown, err
+		return shutdown, fmt.Errorf("could not build OTel resources: %w", err)
 	}
 
-	if config.metrics.enabled {
-		logger.Info("metrics are enabled, setting up Prometheus exporter")
-		promExporter, err := prometheus.New()
-		if err != nil {
-			logger.Error("could not instantiate Metrics Prometheus exporter", zap.Error(err))
-			return shutdown, fmt.Errorf("failed to instantiate Metric Prometheus exporter: %w", err)
-		}
-		meterProvider := metric.NewMeterProvider(
-			metric.WithResource(resources),
-			metric.WithReader(promExporter),
-		)
-		shutdownFuncs = append(shutdownFuncs, promExporter.Shutdown)
+	logger.
+		With(zap.Bool("metrics_enabled", config.metrics.enabled)).
+		Info("fetching Metrics provider")
 
-		otel.SetMeterProvider(meterProvider)
-	} else {
-		logger.Info("metrics were disabled. Setting noop MeterProvider")
-		otel.SetMeterProvider(defaultMeterProvider)
+	meterProvider, shutdownFnc, err := metrics.InitializeProvider(ctx, resources, config.traces.enabled)
+	if err != nil {
+		return shutdown, fmt.Errorf("failed to instantiate Meter provider: %w", err)
 	}
 
-	if config.traces.enabled {
-		logger.Info("traces are enabled, setting up Auto exporter")
-		autoExporter, err := autoexport.NewSpanExporter(ctx)
-		if err != nil {
-			logger.Error("could not instantiate Tracing Auto exporter", zap.Error(err))
-			return shutdown, fmt.Errorf("failed to instantiate Trace auto exporter: %w", err)
-		}
+	shutdownFuncs = append(shutdownFuncs, shutdownFnc)
+	otel.SetMeterProvider(meterProvider)
 
-		traceProvider := trace.NewTracerProvider(
-			trace.WithResource(resources),
-			trace.WithBatcher(autoExporter),
-		)
+	logger.
+		With(zap.Bool("traces_enabled", config.traces.enabled)).
+		Info("fetching Traces provider")
 
-		otel.SetTracerProvider(traceProvider)
-		shutdownFuncs = append(shutdownFuncs, autoExporter.Shutdown)
-	} else {
-		logger.Info("traces were disabled. Setting noop TracerProvider")
-		otel.SetTracerProvider(defaultTracerProvider)
+	traceProvider, shutdownFnc, err := traces.InitializeProvider(ctx, resources, config.traces.enabled)
+	if err != nil {
+		return shutdown, fmt.Errorf("failed to instantiate Traces provider: %w", err)
 	}
+
+	shutdownFuncs = append(shutdownFuncs, shutdownFnc)
+	otel.SetTracerProvider(traceProvider)
 
 	logger.Info("observability stack initialized")
 
