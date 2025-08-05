@@ -49,7 +49,7 @@ var (
 			metric.WithUnit("{block}"),
 			metric.WithDescription("consensus client syncing distance which is a delta between highest and current blocks")))
 
-	attestationDataClientSelections = observability.NewMetric(
+	attestationDataClientSelections = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "attestation_data.client_selections"),
 			metric.WithUnit("{selection}"),
