@@ -1335,7 +1335,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 
 	listener := &mockDecidedListener{}
 	dutyStore := new(mockDutyTraceStore)
-	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, listener.OnDecided)
+	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided)
 
 	signingRoot := [32]byte{1, 2, 3, 4, 5}
 	fakeSig := [96]byte{}
