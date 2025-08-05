@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -36,7 +37,7 @@ type (
 // NewHandler returns a new metrics handler.
 func NewHandler(logger *zap.Logger, db basedb.Database, enableProf bool, healthChecker healthChecker) *Handler {
 	mh := Handler{
-		logger:        logger,
+		logger:        logger.Named(log.NameMetricsHandler),
 		db:            db,
 		enableProf:    enableProf,
 		healthChecker: healthChecker,

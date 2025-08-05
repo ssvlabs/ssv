@@ -557,7 +557,12 @@ var StartNodeCmd = &cobra.Command{
 		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
+			go func() {
+				metricsHandler := metrics.NewHandler(logger, db, cfg.EnableProfile, operatorNode)
+				if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", cfg.MetricsAPIPort)); err != nil {
+					logger.Panic("failed to serve metrics", zap.Error(err))
+				}
+			}()
 		}
 
 		nodeProber := nodeprobe.NewProber(
@@ -1176,16 +1181,6 @@ func syncContractEvents(
 	}
 
 	return eventSyncer
-}
-
-func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
-	logger = logger.Named(ssv_log.NameMetricsHandler)
-	// init and start HTTP handler
-	metricsHandler := metrics.NewHandler(logger, db, enableProf, opNode)
-	addr := fmt.Sprintf(":%d", port)
-	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
-		logger.Panic("failed to serve metrics", zap.Error(err))
-	}
 }
 
 func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
