@@ -26,13 +26,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
-
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -73,6 +66,12 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/pebble"
@@ -433,11 +432,13 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
+		var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
+			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -507,7 +508,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
-					dstore, networkConfig.Beacon)
+					dstore, networkConfig.Beacon, decidedStreamPublisherFn)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector

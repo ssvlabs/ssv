@@ -106,6 +106,15 @@ func toProposalTrace(rt *model.ProposalTrace) *proposalTrace {
 	if rt == nil {
 		return nil
 	}
+
+	// Filter out zero-valued ProposalTrace objects created by SSZ encoding.
+	// These occur when rounds exist with only roundChanges (or possibly also prepares/commits) but no actual proposal.
+	// Without filtering, they appear as confusing proposals with round=0, leader=0, epoch timestamp.
+	// While 0-valued proposals are technically valid according to our data model, they show up as confusing API responses.
+	if rt.Round == 0 && rt.Signer == 0 && rt.ReceivedTime == 0 {
+		return nil
+	}
+
 	return &proposalTrace{
 		Round:                 rt.Round,
 		BeaconRoot:            rt.BeaconRoot,
