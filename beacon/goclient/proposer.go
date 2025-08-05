@@ -79,89 +79,7 @@ func (gc *GoClient) GetBeaconBlock(
 		return nil, DataVersionNil, fmt.Errorf("proposal response is nil")
 	}
 
-	if beaconBlock.Blinded {
-		switch beaconBlock.Version {
-		case spec.DataVersionCapella:
-			if beaconBlock.CapellaBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block is nil")
-			}
-			if beaconBlock.CapellaBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block body is nil")
-			}
-			if beaconBlock.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block execution payload header is nil")
-			}
-			return beaconBlock.CapellaBlinded, beaconBlock.Version, nil
-		case spec.DataVersionDeneb:
-			if beaconBlock.DenebBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block contents is nil")
-			}
-			if beaconBlock.DenebBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block body is nil")
-			}
-			if beaconBlock.DenebBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
-			}
-			return beaconBlock.DenebBlinded, beaconBlock.Version, nil
-		case spec.DataVersionElectra:
-			if beaconBlock.ElectraBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block is nil")
-			}
-			if beaconBlock.ElectraBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block body is nil")
-			}
-			if beaconBlock.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block execution payload header is nil")
-			}
-			return beaconBlock.ElectraBlinded, beaconBlock.Version, nil
-		default:
-			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
-		}
-	}
-
-	switch beaconBlock.Version {
-	case spec.DataVersionCapella:
-		if beaconBlock.Capella == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block is nil")
-		}
-		if beaconBlock.Capella.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
-		}
-		if beaconBlock.Capella.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
-		}
-		return beaconBlock.Capella, beaconBlock.Version, nil
-	case spec.DataVersionDeneb:
-		if beaconBlock.Deneb == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
-		}
-		if beaconBlock.Deneb.Block == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block is nil")
-		}
-		if beaconBlock.Deneb.Block.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
-		}
-		if beaconBlock.Deneb.Block.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
-		}
-		return beaconBlock.Deneb, beaconBlock.Version, nil
-	case spec.DataVersionElectra:
-		if beaconBlock.Electra == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block contents is nil")
-		}
-		if beaconBlock.Electra.Block == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block is nil")
-		}
-		if beaconBlock.Electra.Block.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block body is nil")
-		}
-		if beaconBlock.Electra.Block.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block execution payload is nil")
-		}
-		return beaconBlock.Electra, beaconBlock.Version, nil
-	default:
-		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
-	}
+	return extractBlock(beaconBlock)
 }
 
 func (gc *GoClient) SubmitBlindedBeaconBlock(
@@ -888,4 +806,90 @@ func getValidatorIndex(block any) (phase0.ValidatorIndex, error) {
 	}
 
 	return 0, fmt.Errorf("unsupported block type %T", block)
+}
+
+func extractBlock(beaconBlock *api.VersionedProposal) (ssz.Marshaler, spec.DataVersion, error) {
+	if beaconBlock.Blinded {
+		switch beaconBlock.Version {
+		case spec.DataVersionCapella:
+			if beaconBlock.CapellaBlinded == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block is nil")
+			}
+			if beaconBlock.CapellaBlinded.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block body is nil")
+			}
+			if beaconBlock.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block execution payload header is nil")
+			}
+			return beaconBlock.CapellaBlinded, beaconBlock.Version, nil
+		case spec.DataVersionDeneb:
+			if beaconBlock.DenebBlinded == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block contents is nil")
+			}
+			if beaconBlock.DenebBlinded.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block body is nil")
+			}
+			if beaconBlock.DenebBlinded.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
+			}
+			return beaconBlock.DenebBlinded, beaconBlock.Version, nil
+		case spec.DataVersionElectra:
+			if beaconBlock.ElectraBlinded == nil {
+				return nil, DataVersionNil, fmt.Errorf("electra blinded block is nil")
+			}
+			if beaconBlock.ElectraBlinded.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("electra blinded block body is nil")
+			}
+			if beaconBlock.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("electra blinded block execution payload header is nil")
+			}
+			return beaconBlock.ElectraBlinded, beaconBlock.Version, nil
+		default:
+			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
+		}
+	}
+
+	switch beaconBlock.Version {
+	case spec.DataVersionCapella:
+		if beaconBlock.Capella == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block is nil")
+		}
+		if beaconBlock.Capella.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
+		}
+		if beaconBlock.Capella.Body.ExecutionPayload == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
+		}
+		return beaconBlock.Capella, beaconBlock.Version, nil
+	case spec.DataVersionDeneb:
+		if beaconBlock.Deneb == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
+		}
+		if beaconBlock.Deneb.Block == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block is nil")
+		}
+		if beaconBlock.Deneb.Block.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
+		}
+		if beaconBlock.Deneb.Block.Body.ExecutionPayload == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
+		}
+		return beaconBlock.Deneb, beaconBlock.Version, nil
+	case spec.DataVersionElectra:
+		if beaconBlock.Electra == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block contents is nil")
+		}
+		if beaconBlock.Electra.Block == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block is nil")
+		}
+		if beaconBlock.Electra.Block.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block body is nil")
+		}
+		if beaconBlock.Electra.Block.Body.ExecutionPayload == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block execution payload is nil")
+		}
+		return beaconBlock.Electra, beaconBlock.Version, nil
+	default:
+		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
+	}
 }
