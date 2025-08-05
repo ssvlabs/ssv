@@ -251,6 +251,8 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 	return respBuf.Bytes(), nil
 }
 
+// MissingKeys returns a list of public keys that are present in localKeys but not in the remote signer.
+// It logs debug information about key counts to help diagnose performance issues with large key sets.
 func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) ([]phase0.BLSPubKey, error) {
 	remoteKeys, err := c.ListValidators(ctx)
 	if err != nil {
@@ -262,14 +264,20 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 		remoteKeysSet[remoteKey] = struct{}{}
 	}
 
-	var missing []phase0.BLSPubKey
+	var missingKeys []phase0.BLSPubKey
 	for _, key := range localKeys {
 		if _, ok := remoteKeysSet[key]; !ok {
-			missing = append(missing, key)
+			missingKeys = append(missingKeys, key)
 		}
 	}
 
-	return missing, nil
+	c.logger.Debug("missing keys check completed",
+		zap.Int("remote_count", len(remoteKeys)),
+		zap.Int("local_count", len(localKeys)),
+		zap.Int("missing_count", len(missingKeys)),
+	)
+
+	return missingKeys, nil
 }
 
 // applyTLSConfig applies the given TLS configuration to the HTTP client.

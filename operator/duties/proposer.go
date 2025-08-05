@@ -190,7 +190,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	var allEligibleIndices []phase0.ValidatorIndex
 	for _, share := range h.validatorProvider.Validators() {
-		if share.IsParticipatingAndAttesting(epoch) {
+		if share.IsAttesting(epoch) {
 			allEligibleIndices = append(allEligibleIndices, share.ValidatorIndex)
 		}
 	}
@@ -204,7 +204,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
 	for _, share := range h.validatorProvider.SelfValidators() {
-		if share.IsParticipatingAndAttesting(epoch) {
+		if share.IsAttesting(epoch) {
 			selfEligibleIndices[share.ValidatorIndex] = struct{}{}
 		}
 	}

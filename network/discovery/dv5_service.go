@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -40,7 +41,7 @@ type Listener interface {
 	Lookup(enode.ID) []*enode.Node
 	RandomNodes() enode.Iterator
 	AllNodes() []*enode.Node
-	Ping(*enode.Node) error
+	Ping(*enode.Node) (*v5wire.Pong, error)
 	LocalNode() *enode.LocalNode
 	Close()
 }
@@ -422,7 +423,7 @@ func (dvs *DiscV5Service) PublishENR() {
 
 	// Publish ENR.
 	dvs.discover(ctx, func(e PeerEvent) {
-		err := dvs.dv5Listener.Ping(e.Node)
+		_, err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
 			errs++
 			if err.Error() == "RPC timeout" {

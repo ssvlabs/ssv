@@ -48,6 +48,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "sync.distance"),
 			metric.WithUnit("{block}"),
 			metric.WithDescription("consensus client syncing distance which is a delta between highest and current blocks")))
+
+	attestationDataClientSelections = observability.NewMetric(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.client_selections"),
+			metric.WithUnit("{selection}"),
+			metric.WithDescription("beacon client selections for attestation data")))
 )
 
 func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, err error) {
@@ -97,4 +103,12 @@ func resetBeaconClientStatusGauge(ctx context.Context, serverAddr string) {
 func beaconClientStatusAttribute(value beaconNodeStatus) attribute.KeyValue {
 	eventNameAttrName := fmt.Sprintf("%s.sync.status", observabilityNamespace)
 	return attribute.String(eventNameAttrName, string(value))
+}
+
+func recordAttestationDataClientSelection(ctx context.Context, clientAddr string) {
+	attr := []attribute.KeyValue{
+		semconv.ServerAddress(clientAddr),
+	}
+
+	attestationDataClientSelections.Add(ctx, 1, metric.WithAttributes(attr...))
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -351,14 +352,14 @@ func (l *MockListener) RandomNodes() enode.Iterator {
 func (l *MockListener) AllNodes() []*enode.Node {
 	return l.nodes
 }
-func (l *MockListener) Ping(node *enode.Node) error {
+func (l *MockListener) Ping(node *enode.Node) (*v5wire.Pong, error) {
 	nodeStr := node.String()
 	for _, storedNode := range l.nodesForPingError {
 		if storedNode.String() == nodeStr {
-			return errors.New("failed ping")
+			return nil, errors.New("failed ping")
 		}
 	}
-	return nil
+	return nil, nil
 }
 func (l *MockListener) LocalNode() *enode.LocalNode {
 	return l.localNode
