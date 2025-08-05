@@ -448,29 +448,18 @@ func (gc *GoClient) getMultiClientProposal(
 	requestCtx, requestCancel := context.WithCancel(ctx)
 	defer requestCancel()
 
-	proposalsWithFeeRecipient, proposals := gc.getProposalStreams(requestCtx, slot, sig, graffiti)
+	proposalCh := gc.getProposalStream(requestCtx, slot, sig, graffiti)
 
-	return gc.selectBestProposal(ctx, slot, proposalsWithFeeRecipient, proposals)
+	return gc.selectBestProposal(ctx, slot, proposalCh)
 }
 
-func (gc *GoClient) getProposalStreams(
+func (gc *GoClient) getProposalStream(
 	ctx context.Context,
 	slot phase0.Slot,
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
-) (chan *api.VersionedProposal, chan *api.VersionedProposal) {
-	// Although we re-submit proposal preparation on client restart,
-	// the spec doesn't guarantee it will be used:
-	//
-	// https://ethereum.github.io/beacon-APIs/#/Validator/prepareBeaconProposer
-	// > Note that there is no guarantee that the beacon node will
-	// > use the supplied fee recipient when creating a block proposal,
-	// > so on receipt of a proposed block the validator should confirm
-	// > that it finds the fee recipient within the block acceptable before signing it.
-	//
-	// So we nevertheless prioritize finding a proposal with a fee recipient.
-	proposalsWithFeeRecipient := make(chan *api.VersionedProposal, len(gc.clients))
-	proposals := make(chan *api.VersionedProposal, len(gc.clients))
+) chan *api.VersionedProposal {
+	proposalCh := make(chan *api.VersionedProposal, len(gc.clients))
 
 	var wg sync.WaitGroup
 
@@ -492,38 +481,34 @@ func (gc *GoClient) getProposalStreams(
 				return
 			}
 
-			ok, err := hasFeeRecipient(proposalResp.Data)
-			if err != nil {
-				// If we cannot check fee recipient, either the block is malformed
-				// or hasFeeRecipient doesn't count all cases.
-				// So we just log it, consider the block without fee recipient,
-				// and let the caller decide what to do with it.
-				gc.log.Error("failed to check fee recipient", fields.Address(client.Address()), zap.Error(err))
-			}
-			if ok {
-				proposalsWithFeeRecipient <- proposalResp.Data
-			}
-
-			proposals <- proposalResp.Data
+			proposalCh <- proposalResp.Data
 		}()
 	}
 
 	go func() {
 		wg.Wait()
-		close(proposals)
-		close(proposalsWithFeeRecipient)
+		close(proposalCh)
 	}()
 
-	return proposalsWithFeeRecipient, proposals
+	return proposalCh
 }
 
 func (gc *GoClient) selectBestProposal(
 	ctx context.Context,
 	slot phase0.Slot,
-	proposalsWithFeeRecipient chan *api.VersionedProposal,
-	proposals chan *api.VersionedProposal,
+	proposalCh chan *api.VersionedProposal,
 ) (*api.VersionedProposal, error) {
-	// Try to get a proposal with a fee recipient set before feeRecipientDeadline
+	// Although we re-submit proposal preparation on client restart,
+	// the spec doesn't guarantee it will be used:
+	//
+	// https://ethereum.github.io/beacon-APIs/#/Validator/prepareBeaconProposer
+	// > Note that there is no guarantee that the beacon node will
+	// > use the supplied fee recipient when creating a block proposal,
+	// > so on receipt of a proposed block the validator should confirm
+	// > that it finds the fee recipient within the block acceptable before signing it.
+	//
+	// So we prioritize finding a proposal with a fee recipient and
+	// try to get a proposal with a fee recipient set before feeRecipientDeadline
 	// while we are within the first slot.
 	// Afterward, any proposal will be enough for us.
 	// The second round might also work, giving more time to get
@@ -532,68 +517,59 @@ func (gc *GoClient) selectBestProposal(
 	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot, 1))
 	defer feeRecipientCancel()
 
-	var selectProposalCh chan *api.VersionedProposal // initially disabled
-	feeRecipientDoneCh := feeRecipientCtx.Done()     // initially enabled
+	var fallbackProposal *api.VersionedProposal
 
 	// Wrapped with a for loop to enter the select again on feeRecipientCtx expiration.
 	for {
 		select {
-		case p, ok := <-proposalsWithFeeRecipient:
+		case p, ok := <-proposalCh:
 			if !ok {
 				// All request goroutines have finished, but we didn't get any proposal with fee recipient.
 
-				// proposalsWithFeeRecipient is closed after proposals, so this should never block.
-				p, ok = <-proposals
-				if !ok {
-					// We don't have any proposals, so we got some error.
+				if fallbackProposal == nil {
+					// We don't have any proposals at all, so we got some error.
 					// The errors have been logged, so we don't need to return them.
 					return nil, fmt.Errorf("all requests failed")
 				}
 
-				// If we have one without fee recipient, it's better that nothing, so we use it.
+				// If we have a proposal without a fee recipient, it's better that nothing, so we use it.
 				gc.log.Warn("no proposals with fee recipient found")
-				return p, nil
-
+				return fallbackProposal, nil
 			}
+
+			hasFR, err := hasFeeRecipient(p)
+			if err != nil {
+				// If we cannot check fee recipient, either the block is malformed
+				// or hasFeeRecipient doesn't count all cases.
+				// So we just log it and consider the block as being without a fee recipient.
+				gc.log.Error("failed to check fee recipient", zap.Error(err))
+			}
+			if err != nil || !hasFR {
+				if feeRecipientCtx.Err() != nil {
+					gc.log.Debug("didn't receive proposal with fee recipient within the safe duration for the best round, accepting any proposal")
+					return p, nil
+				}
+
+				fallbackProposal = p
+				continue
+			}
+
 			// Got a proposal with fee recipient. It is good enough, we can use it.
 			gc.log.Debug("received a proposal with fee recipient")
 			return p, nil
-		case p, ok := <-selectProposalCh:
-			// Didn't get a proposal with fee recipient until feeRecipientCtx expired,
-			// so we are ready to accept any proposal.
-			if !ok {
-				// We don't have any proposals, so we got some error.
-				// The errors have been logged, so we don't need to return them.
-				return nil, fmt.Errorf("all requests failed")
-			}
 
-			gc.log.Warn("no proposals with fee recipient found")
-			return p, nil
-		case <-feeRecipientDoneCh:
-			// Didn't get a proposal with fee recipient quickly,
-			// enable receiving from proposals, disable this branch and enter the select again.
-			selectProposalCh = proposals
-			feeRecipientDoneCh = nil
-			gc.log.Debug("didn't receive proposal with fee recipient within the safe duration for the best round, accepting any proposal")
 		case <-ctx.Done():
 			// Ran out of time. Check if we got any proposal.
-			select {
-			case p, ok := <-proposals:
-				if !ok {
-					// Ran out of time and then all requests immediately finished.
-					// This should probably never happen, but it's better to make sure we won't return a nil proposal.
-					return nil, ctx.Err()
-				}
-
-				// If we have one without fee recipient, it's better that nothing, so we use it.
-				gc.log.Warn("no proposals with fee recipient found")
-				return p, nil
-			default:
+			if fallbackProposal == nil {
 				// We still don't have any proposals, but requests haven't finished yet.
 				// However, we don't have more time, so we have to return an error.
 				// Probably, there are some connection issues or the node is overloaded.
 				return nil, ctx.Err()
 			}
+
+			// If we have one without fee recipient, it's better that nothing, so we use it.
+			gc.log.Warn("no proposals with fee recipient found")
+			return fallbackProposal, nil
 		}
 	}
 }
@@ -602,6 +578,7 @@ func (gc *GoClient) selectBestProposal(
 // to have a high chance to finish within the best time range for given slot.
 func (gc *GoClient) latestProposalTime(slot phase0.Slot, maxRound qbft.Round) time.Time {
 	const avgQBFTDuration = 350 * time.Millisecond
+	// #nosec G115 -- round cannot exceed int64
 	return gc.beaconConfig.GetSlotStartTime(slot).Add(time.Duration(maxRound)*qbft.QuickTimeout - avgQBFTDuration*2)
 }
 
