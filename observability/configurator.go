@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/observability/traces"
 )
@@ -31,17 +32,16 @@ func init() {
 	model.NameValidationScheme = model.LegacyValidation // nolint: staticcheck
 }
 
-func Initialize(ctx context.Context, appName, appVersion string, l *zap.Logger, options ...Option) (shutdown func(context.Context) error, err error) {
+func Initialize(ctx context.Context, appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
 	var (
+		localLogger   = zap.NewNop()
 		config        Config
 		shutdownFuncs []func(context.Context) error
 	)
 
-	logger := initLogger(l)
-
 	shutdown = func(ctx context.Context) error {
 		var joinedErr error
-		logger.Info("shutting down observability stack")
+		localLogger.Info("shutting down observability stack")
 		for _, f := range shutdownFuncs {
 			if err := f(ctx); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
@@ -54,37 +54,57 @@ func Initialize(ctx context.Context, appName, appVersion string, l *zap.Logger, 
 		option(&config)
 	}
 
-	logger.Info("building OTel resources")
-	resources, err := buildResources(appName, appVersion)
-	if err != nil {
-		return shutdown, fmt.Errorf("could not build OTel resources: %w", err)
+	if config.logger.enabled {
+		err = log.SetGlobal(
+			config.logger.level,
+			config.logger.levelFormat,
+			config.logger.format,
+			&log.LogFileOptions{
+				FilePath:   config.logger.filePath,
+				MaxSize:    config.logger.fileSize,
+				MaxBackups: config.logger.fileBackups,
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("could not setup global logger: %w", err)
+		}
+
+		localLogger = initLogger(zap.L())
+
+		localLogger.Info("global logger initialized")
 	}
 
-	logger.
+	localLogger.Info("building OTel resources")
+	resources, err := buildResources(appName, appVersion)
+	if err != nil {
+		return nil, fmt.Errorf("could not build OTel resources: %w", err)
+	}
+
+	localLogger.
 		With(zap.Bool("metrics_enabled", config.metrics.enabled)).
 		Info("fetching Metrics provider")
 
 	meterProvider, shutdownFnc, err := metrics.InitializeProvider(ctx, resources, config.traces.enabled)
 	if err != nil {
-		return shutdown, fmt.Errorf("failed to instantiate Meter provider: %w", err)
+		return nil, fmt.Errorf("failed to instantiate Meter provider: %w", err)
 	}
 
 	shutdownFuncs = append(shutdownFuncs, shutdownFnc)
 	otel.SetMeterProvider(meterProvider)
 
-	logger.
+	localLogger.
 		With(zap.Bool("traces_enabled", config.traces.enabled)).
 		Info("fetching Traces provider")
 
 	traceProvider, shutdownFnc, err := traces.InitializeProvider(ctx, resources, config.traces.enabled)
 	if err != nil {
-		return shutdown, fmt.Errorf("failed to instantiate Traces provider: %w", err)
+		return nil, fmt.Errorf("failed to instantiate Traces provider: %w", err)
 	}
 
 	shutdownFuncs = append(shutdownFuncs, shutdownFnc)
 	otel.SetTracerProvider(traceProvider)
 
-	logger.Info("observability stack initialized")
+	localLogger.Info("observability stack initialized")
 
 	return shutdown, nil
 }

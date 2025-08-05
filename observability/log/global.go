@@ -94,6 +94,7 @@ func SetGlobal(levelName string, levelEncoderName string, logFormat string, file
 	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
 
 	zap.ReplaceGlobals(zap.New(zapcore.NewTee(usedcore, fileCore)))
+
 	return nil
 }
 

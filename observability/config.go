@@ -10,7 +10,9 @@ type (
 	}
 
 	loggerConfig struct {
-		enabled bool
+		enabled                              bool
+		level, levelFormat, format, filePath string
+		fileSize, fileBackups                int
 	}
 
 	Config struct {

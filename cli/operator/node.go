@@ -128,17 +128,27 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		logger, err := setupGlobal()
-		if err != nil {
-			log.Fatal("could not create logger ", err)
+		if globalArgs.ConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
+				log.Fatal("could not read config needed for logger initialization: %w", err)
+			}
+		}
+		if globalArgs.ShareConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
+				log.Fatal("could not read share config needed for logger initialization: %w", err)
+			}
 		}
 
-		defer ssv_log.CapturePanic(logger)
-
-		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
-
-		var observabilityOptions []observability.Option
-		observabilityOptions = append(observabilityOptions, observability.WithLogger())
+		observabilityOptions := []observability.Option{
+			observability.WithLogger(
+				cfg.LogLevel,
+				cfg.LogLevelFormat,
+				cfg.LogFormat,
+				cfg.LogFilePath,
+				cfg.LogFileSize,
+				cfg.LogFileBackups,
+			),
+		}
 		if cfg.MetricsAPIPort > 0 {
 			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
 		}
@@ -146,16 +156,19 @@ var StartNodeCmd = &cobra.Command{
 			observabilityOptions = append(observabilityOptions, observability.WithTraces())
 		}
 
-		logger.Info("initializing observability")
 		observabilityShutdown, err := observability.Initialize(
 			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			logger,
 			observabilityOptions...)
 		if err != nil {
-			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+			log.Fatal("could not initialize observability configuration", zap.Error(err))
 		}
+
+		logger := zap.L()
+		defer ssv_log.CapturePanic(logger)
+
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		defer func() {
 			if err = observabilityShutdown(cmd.Context()); err != nil {
@@ -804,35 +817,6 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
-}
-
-func setupGlobal() (*zap.Logger, error) {
-	if globalArgs.ConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read config: %w", err)
-		}
-	}
-	if globalArgs.ShareConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %w", err)
-		}
-	}
-
-	err := ssv_log.SetGlobal(
-		cfg.LogLevel,
-		cfg.LogLevelFormat,
-		cfg.LogFormat,
-		&ssv_log.LogFileOptions{
-			FilePath:   cfg.LogFilePath,
-			MaxSize:    cfg.LogFileSize,
-			MaxBackups: cfg.LogFileBackups,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
-	}
-
-	return zap.L(), nil
 }
 
 func setupBadgerDB(
