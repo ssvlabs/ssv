@@ -532,7 +532,8 @@ func (gc *GoClient) selectBestProposal(
 	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot, 1))
 	defer feeRecipientCancel()
 
-	var selectProposalCh chan *api.VersionedProposal
+	var selectProposalCh chan *api.VersionedProposal // initially disabled
+	feeRecipientDoneCh := feeRecipientCtx.Done()     // initially enabled
 
 	// Wrapped with a for loop to enter the select again on feeRecipientCtx expiration.
 	for {
@@ -568,10 +569,11 @@ func (gc *GoClient) selectBestProposal(
 
 			gc.log.Warn("no proposals with fee recipient found")
 			return p, nil
-		case <-feeRecipientCtx.Done():
+		case <-feeRecipientDoneCh:
 			// Didn't get a proposal with fee recipient quickly,
-			// enable receiving from proposals and enter the select again.
+			// enable receiving from proposals, disable this branch and enter the select again.
 			selectProposalCh = proposals
+			feeRecipientDoneCh = nil
 			gc.log.Debug("didn't receive proposal with fee recipient within the safe duration for the best round, accepting any proposal")
 		case <-ctx.Done():
 			// Ran out of time. Check if we got any proposal.
