@@ -117,9 +117,8 @@ func (env *TestEnvironment) startPostgreSQL() error {
 		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
 	if err = db.Ping(); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			// Best effort cleanup, don't mask the original ping error
-		}
+		// Best effort cleanup, don't mask the original ping error
+		_ = db.Close()
 		return fmt.Errorf("failed to ping postgres: %w", err)
 	}
 	env.postgresDB = db

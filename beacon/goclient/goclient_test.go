@@ -156,8 +156,8 @@ func runHealthyTest(
 
 	mockResponses := mocks.ServerResponses()
 	replaceSyncing := atomic.Bool{}
-	var servers []*httptest.Server
-	var urls []string
+	servers := make([]*httptest.Server, 0, len(syncResponseList))
+	urls := make([]string, 0, len(syncResponseList))
 
 	for _, syncResp := range syncResponseList {
 		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {

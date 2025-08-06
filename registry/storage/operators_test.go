@@ -187,7 +187,6 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 	})
-
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {

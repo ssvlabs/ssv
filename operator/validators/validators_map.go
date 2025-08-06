@@ -125,7 +125,7 @@ func (vm *ValidatorsMap) GetAllCommittees() []*validator.Committee {
 	vm.committeesMx.RLock()
 	defer vm.committeesMx.RUnlock()
 
-	var committees []*validator.Committee
+	committees := make([]*validator.Committee, 0, len(vm.committees))
 	for _, val := range vm.committees {
 		committees = append(committees, val)
 	}

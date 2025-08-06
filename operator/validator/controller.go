@@ -421,8 +421,7 @@ func (c *controller) handleNonCommitteeMessages(
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		// Process proposal messages for committee consensus only to get the roots
 		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
 			return nil
@@ -434,7 +433,9 @@ func (c *controller) handleNonCommitteeMessages(
 		}
 
 		return ncv.SaveRoots(ctx, msg)
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return err
@@ -448,7 +449,7 @@ func (c *controller) handleNonCommitteeMessages(
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators(ctx context.Context) {
-	// TODO: Pass context whereever the execution flow may be blocked.
+	// TODO: Pass context wherever the execution flow may be blocked.
 
 	// Load non-liquidated shares.
 	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
@@ -491,8 +492,8 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var errs []error
 	var fetchMetadata [][]byte
-	var validators []*validator.Validator
-	var committees []*validator.Committee
+	validators := make([]*validator.Validator, 0, len(shares))
+	committees := make([]*validator.Committee, 0, len(shares))
 	for _, validatorShare := range shares {
 		var initialized bool
 		v, vc, err := c.onShareInit(validatorShare)
@@ -581,7 +582,7 @@ func (c *controller) startEligibleValidators(ctx context.Context, pubKeys []spec
 	for _, share := range shares {
 		select {
 		case <-ctx.Done():
-			c.logger.Warn("context cancelled, stopping validator start loop")
+			c.logger.Warn("context canceled, stopping validator start loop")
 			return startedValidators
 		default:
 		}
@@ -681,7 +682,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		return
 	}
 
-	var committee []spectypes.OperatorID
+	committee := make([]spectypes.OperatorID, 0, len(cm.CommitteeMember.Committee))
 	for _, operator := range cm.CommitteeMember.Committee {
 		committee = append(committee, operator.OperatorID)
 	}
@@ -875,7 +876,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 
 		c.printShare(share, "setup committee done")
-
 	} else {
 		vc.AddShare(&share.Share)
 		c.printShare(share, "added share to committee")
@@ -953,7 +953,7 @@ func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare) error {
 	data, found, err := c.recipientsStorage.GetRecipientData(nil, share.OwnerAddress)
 	if err != nil {
-		return errors.Wrap(err, "could not get recipient data")
+		return fmt.Errorf("could not get recipient data: %w", err)
 	}
 
 	if found {
@@ -1000,7 +1000,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	started, err := c.validatorStart(v)
 	if err != nil {
 		validatorErrorsCounter.Add(c.ctx, 1)
-		return false, errors.Wrap(err, "could not start validator")
+		return false, fmt.Errorf("could not start validator: %w", err)
 	}
 
 	return started, nil
@@ -1111,11 +1111,10 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 				recordValidatorStatus(ctx, count, status)
 			}
 		case <-ctx.Done():
-			c.logger.Info("stopped reporting validator statuses. Context cancelled")
+			c.logger.Info("stopped reporting validator statuses. Context canceled")
 			return
 		}
 	}
-
 }
 
 func SetupCommitteeRunners(
@@ -1180,7 +1179,6 @@ func SetupRunners(
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
 		spectypes.RoleProposer,
 		spectypes.RoleAggregator,
 		spectypes.RoleSyncCommitteeContribution,
@@ -1231,9 +1229,11 @@ func SetupRunners(
 			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, share.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, validatorRegistrationSubmitter, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+		default:
+			return nil, fmt.Errorf("unexpected duty runner type: %s", role)
 		}
 		if err != nil {
-			return nil, errors.Wrap(err, "could not create duty runner")
+			return nil, fmt.Errorf("could not create duty runner: %w", err)
 		}
 	}
 	return runners, nil

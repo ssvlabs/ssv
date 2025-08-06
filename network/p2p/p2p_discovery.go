@@ -80,7 +80,7 @@ func (n *p2pNetwork) startDiscovery() error {
 					zap.String("topic", topic), zap.Int("subnet", int(subnet)))
 				continue
 			}
-			currentSubnetPeers[subnet] = uint16(len(peers)) // nolint: gosec
+			currentSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
 		}
 
 		n.logger.Debug("selecting discovered peers",

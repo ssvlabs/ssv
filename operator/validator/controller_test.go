@@ -1153,7 +1153,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			if tc.mockSharesStorageExpect != nil {
 				tc.mockSharesStorageExpect(mockSharesStorage)
 			} else {
-				var shares []*types.SSVShare
+				shares := make([]*types.SSVShare, 0, len(tc.metadataAfter))
 				for _, metadata := range tc.metadataAfter {
 					share := &types.SSVShare{}
 					share.SharePubKey = make([]byte, 48)

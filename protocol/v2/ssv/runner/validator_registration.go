@@ -363,7 +363,7 @@ type VRSubmitter struct {
 	beacon         beacon.BeaconNode
 	validatorStore validatorStore
 
-	// registrationMu synchronises access to registrations
+	// registrationMu synchronizes access to registrations
 	registrationMu sync.Mutex
 	// registrations is a set of validator-registrations (their latest versions) to be sent to
 	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of

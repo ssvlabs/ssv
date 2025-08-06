@@ -266,7 +266,7 @@ func (gc *GoClient) getBeaconConfig() *networkconfig.BeaconConfig {
 }
 
 func (gc *GoClient) initMultiClient(ctx context.Context) error {
-	var services []eth2client.Service
+	services := make([]eth2client.Service, 0, len(gc.clients))
 	for _, client := range gc.clients {
 		services = append(services, client)
 	}
