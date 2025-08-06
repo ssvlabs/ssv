@@ -567,7 +567,6 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 	c.Runners = tmpSsvCommittee.Runners
 
 	for slot := range c.Runners {
-
 		var shareInstance *spectypes.Share
 		for _, share := range c.Runners[slot].BaseRunner.Share {
 			shareInstance = share

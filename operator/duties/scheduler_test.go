@@ -420,5 +420,4 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Channel is jammed")
 	}
-
 }
