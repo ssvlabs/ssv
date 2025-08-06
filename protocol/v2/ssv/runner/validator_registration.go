@@ -419,7 +419,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 			// 1. find and add validators attesting in the 10th epoch from now
 			shares := s.validatorStore.SelfValidators()
 			for _, share := range shares {
-				if !share.IsParticipatingAndAttesting(currentEpoch + 10) {
+				if !share.IsAttesting(currentEpoch + 10) {
 					continue
 				}
 				pk := phase0.BLSPubKey{}

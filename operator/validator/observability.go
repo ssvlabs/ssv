@@ -19,6 +19,7 @@ const (
 type validatorStatus string
 
 const (
+	statusAttesting     validatorStatus = "attesting"
 	statusParticipating validatorStatus = "participating"
 	statusNotFound      validatorStatus = "not_found"
 	statusActive        validatorStatus = "active"

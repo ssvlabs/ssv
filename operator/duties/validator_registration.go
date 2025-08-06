@@ -69,7 +69,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			shares := h.validatorProvider.SelfValidators()
 			for _, share := range shares {
-				if !share.IsParticipatingAndAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
+				if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
 					// Only attesting validators are eligible for registration duties.
 					continue
 				}
