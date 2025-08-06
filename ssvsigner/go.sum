@@ -409,8 +409,8 @@ github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0b
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/ssvlabs/eth2-key-manager v1.5.5 h1:AzwNowGvcmVpRCVHq10FVnpkVIUpoDo5YbJWNMnYA8Q=
 github.com/ssvlabs/eth2-key-manager v1.5.5/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
-github.com/ssvlabs/ssv v1.2.1-0.20250711215649-704a9b93a256 h1:6DXew2mtNvvFP6rjC43sVobApCqAtkcjAr/rY7ROcgY=
-github.com/ssvlabs/ssv v1.2.1-0.20250711215649-704a9b93a256/go.mod h1:dX0NlpskcrYG4XHaU7iHtK9PPRdSkHL7YxDJ9Id560g=
+github.com/ssvlabs/ssv v1.2.1-0.20250806153219-2dc63a642d9d h1:h9DsioibSz62wQiI183iapwfMGDr4JPqyosg76DNGvs=
+github.com/ssvlabs/ssv v1.2.1-0.20250806153219-2dc63a642d9d/go.mod h1:5axXraTW30/mYaRcpYCxnlp9W699lsNLd5WN0VebMyg=
 github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo8=
 github.com/ssvlabs/ssv-spec v1.1.3/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
@@ -494,8 +494,6 @@ go.opentelemetry.io/proto/otlp v1.7.0 h1:jX1VolD6nHuFzOYso2E73H85i92Mv8JQYk0K9vz
 go.opentelemetry.io/proto/otlp v1.7.0/go.mod h1:fSKjH6YJ7HDlwzltzyMj036AJ3ejJLCgCSHGj4efDDo=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
-go.uber.org/mock v0.5.0 h1:KAMbZvZPyBPWgD14IrIQ38QCyjwpvVVV6K/bHl1IwQU=
-go.uber.org/mock v0.5.0/go.mod h1:ge71pBPLYDk7QIi1LupWxdAykm7KIEFchiOqd6z7qMM=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
 go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
 go.uber.org/zap v1.27.0 h1:aJMhYGrd5QSmlpLMr2MftRKl7t8J8PTZPA732ud/XR8=

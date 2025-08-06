@@ -30,7 +30,7 @@ require (
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/sourcegraph/conc v0.3.0
 	github.com/ssvlabs/eth2-key-manager v1.5.5
-	github.com/ssvlabs/ssv v1.2.1-0.20250711215649-704a9b93a256
+	github.com/ssvlabs/ssv v1.2.1-0.20250806153219-2dc63a642d9d
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.37.0
@@ -38,7 +38,6 @@ require (
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.opentelemetry.io/otel v1.36.0
 	go.opentelemetry.io/otel/metric v1.36.0
-	go.uber.org/mock v0.5.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.39.0
 )
