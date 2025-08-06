@@ -6,7 +6,7 @@ file (or `PROPOSER_DELAY` environment variable):
 ProposerDelay: 300ms
 ```
 
-As per our own estimates the max reasonable value of `ProposerDelay` for Ethereum mainnet is around ~1.65s, 
+As per our own estimates the max reasonable value of `ProposerDelay` for Ethereum mainnet is around ~1.2s, 
 although we recommend starting with something like 300ms gradually increasing it up - the higher 
 `ProposerDelay` value is the higher the chance of missing Ethereum block proposal will be.
 
@@ -82,7 +82,7 @@ thus an alternative approach would be:
 ### approach 2
 
 To introduce an additional configurable delay `ProposerDelay` SSV Operator can set so 
-that it will work nicely even with Relays that "reply as fast as possible", the equation from above
+that it will work nicely even with Relays that "reply as fast as possible", the equation from above 
 becomes:
 ```
 RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
@@ -96,16 +96,17 @@ const miscellaneousTime = 150 * time.Millisecond
 const blockSubmissionTime = 1000 * time.Millisecond
 const proposerDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
 ```
-but on top of that another consideration Operator needs to take into account is - other SSV nodes in 
-his cluster might not even have ProposerDelay configured (it's 0s by default), meaning they will start QBFT 
-sooner and timeout round 1 sooner. To prevent that round timeout we'll need to cap proposerDelay accordingly 
-so it does not exceed that `QBFTConstrainingTime` - this would give us a rough estimate of ~1.65s:
+but on top of that, another consideration Operator needs to take into account is QBFT round timeout, specifically 
+round 1 timeout. For proposer duty round 1 times out at ~2s after slot start time (so that proposer duty can execute 2
+QBFT rounds, if necessary, and still complete before that desirable 4s after slot start deadline). To avoid round 1 timing out
+we'd want the following equation to hold:
 ```go
-const qbftConstrainingTime = roundtimer.QuickTimeout - qbftTime
+RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + MiscellaneousTime < 2s
 ```
+and with the values listed above this gives us `ProposerDelay` value of ~1.2s.
 
-Therefore, we consider ~1.65s to be the maximum reasonable value for `ProposerDelay`, going beyond that value will very 
-likely result in missed block proposal.
+Therefore, we consider ~1.2s to be the maximum reasonable value for `ProposerDelay`, going beyond that value might 
+result in missed block proposal.
 
 **To enforce proposer safety limits, the SSV node will automatically prevent startup if ProposerDelay exceeds 1s 
 unless the Operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.**

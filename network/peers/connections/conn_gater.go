@@ -13,7 +13,7 @@ import (
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 

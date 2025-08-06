@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -143,74 +143,73 @@ func (i *Instance) isProposalJustification(
 
 	if round == specqbft.FirstRound {
 		return nil
-	} else {
-		// check all round changes are valid for height and round
-		// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
-		// prepared
-		for _, rc := range roundChangeMsgs {
-			if err := i.validRoundChangeForDataVerifySignature(rc, round, fullData); err != nil {
-				return errors.Wrap(err, "change round msg not valid")
-			}
-		}
+	}
 
-		// check there is a quorum
-		if !specqbft.HasQuorum(i.State.CommitteeMember, roundChangeMsgs) {
-			return errors.New("change round has no quorum")
-		}
-
-		// previouslyPreparedF returns true if any on the round change messages have a prepared round and fullData
-		previouslyPrepared, err := func(rcMsgs []*specqbft.ProcessingMessage) (bool, error) {
-			for _, rc := range rcMsgs {
-				if rc.QBFTMessage.RoundChangePrepared() {
-					return true, nil
-				}
-			}
-			return false, nil
-		}(roundChangeMsgs)
-		if err != nil {
-			return errors.Wrap(err, "could not calculate if previously prepared")
-		}
-
-		if !previouslyPrepared {
-			return nil
-		} else {
-
-			// check prepare quorum
-			if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgs) {
-				return errors.New("prepares has no quorum")
-			}
-
-			// get a round change data for which there is a justification for the highest previously prepared round
-			rcMsg, err := highestPrepared(roundChangeMsgs)
-			if err != nil {
-				return errors.Wrap(err, "could not get highest prepared")
-			}
-			if rcMsg == nil {
-				return errors.New("no highest prepared")
-			}
-
-			// proposed fullData must equal highest prepared fullData
-			r, err := specqbft.HashDataRoot(fullData)
-			if err != nil {
-				return errors.Wrap(err, "could not hash input data")
-			}
-			if !bytes.Equal(r[:], rcMsg.QBFTMessage.Root[:]) {
-				return errors.New("proposed data doesn't match highest prepared")
-			}
-
-			// validate each prepare message against the highest previously prepared fullData and round
-			for _, pm := range prepareMsgs {
-				if err := i.validSignedPrepareForHeightRoundAndRootVerifySignature(
-					pm,
-					rcMsg.QBFTMessage.DataRound,
-					rcMsg.QBFTMessage.Root,
-				); err != nil {
-					return errors.New("signed prepare not valid")
-				}
-			}
-			return nil
+	// check all round changes are valid for height and round
+	// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
+	// prepared
+	for _, rc := range roundChangeMsgs {
+		if err := i.validRoundChangeForDataVerifySignature(rc, round, fullData); err != nil {
+			return errors.Wrap(err, "change round msg not valid")
 		}
 	}
+
+	// check there is a quorum
+	if !specqbft.HasQuorum(i.State.CommitteeMember, roundChangeMsgs) {
+		return errors.New("change round has no quorum")
+	}
+
+	// previouslyPreparedF returns true if any on the round change messages have a prepared round and fullData
+	previouslyPrepared, err := func(rcMsgs []*specqbft.ProcessingMessage) (bool, error) {
+		for _, rc := range rcMsgs {
+			if rc.QBFTMessage.RoundChangePrepared() {
+				return true, nil
+			}
+		}
+		return false, nil
+	}(roundChangeMsgs)
+	if err != nil {
+		return errors.Wrap(err, "could not calculate if previously prepared")
+	}
+
+	if !previouslyPrepared {
+		return nil
+	}
+
+	// check prepare quorum
+	if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgs) {
+		return errors.New("prepares has no quorum")
+	}
+
+	// get a round change data for which there is a justification for the highest previously prepared round
+	rcMsg, err := highestPrepared(roundChangeMsgs)
+	if err != nil {
+		return errors.Wrap(err, "could not get highest prepared")
+	}
+	if rcMsg == nil {
+		return errors.New("no highest prepared")
+	}
+
+	// proposed fullData must equal highest prepared fullData
+	r, err := specqbft.HashDataRoot(fullData)
+	if err != nil {
+		return errors.Wrap(err, "could not hash input data")
+	}
+	if !bytes.Equal(r[:], rcMsg.QBFTMessage.Root[:]) {
+		return errors.New("proposed data doesn't match highest prepared")
+	}
+
+	// validate each prepare message against the highest previously prepared fullData and round
+	for _, pm := range prepareMsgs {
+		if err := i.validSignedPrepareForHeightRoundAndRootVerifySignature(
+			pm,
+			rcMsg.QBFTMessage.DataRound,
+			rcMsg.QBFTMessage.Root,
+		); err != nil {
+			return errors.New("signed prepare not valid")
+		}
+	}
+	return nil
 }
 
 func (i *Instance) proposer(round specqbft.Round) spectypes.OperatorID {

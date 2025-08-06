@@ -25,6 +25,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/contract"
@@ -41,8 +44,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
@@ -155,7 +156,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
-
 		}
 		sim.Commit()
 
@@ -562,7 +562,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check that nonces are not intertwined between different owner accounts!
 			require.Equal(t, registrystorage.Nonce(1), nonce)
 		})
-
 	})
 
 	t.Run("test ValidatorExited event handling", func(t *testing.T) {
@@ -1232,7 +1231,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
-
 		// Should return MalformedEventError and no changes to the state
 		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
 			// Call the contract method
@@ -1435,8 +1433,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	if operator == nil {
-		logger.Fatal("empty test operator was passed")
+	if operator == nil || operator.privateKey == nil {
+		logger.Fatal("empty test operator (or empty private key) was passed")
 	}
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)

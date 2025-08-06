@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
@@ -45,7 +45,7 @@ type wsServer struct {
 func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
 	ws := wsServer{
 		ctx:         ctx,
-		logger:      logger.Named(logging.NameWSServer),
+		logger:      logger.Named(log.NameWSServer),
 		handler:     handler,
 		router:      mux,
 		broadcaster: newBroadcaster(logger),

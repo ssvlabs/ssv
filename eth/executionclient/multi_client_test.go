@@ -19,6 +19,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 func TestNewMulti(t *testing.T) {
@@ -83,7 +85,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, mc)
-	require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
+	require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
 	require.EqualValues(t, customFollowDistance, mc.followDistance)
 	require.EqualValues(t, customTimeout, mc.connectionTimeout)
 	require.EqualValues(t, customReconnectionInterval, mc.reconnectionInitialInterval)
@@ -1143,7 +1145,6 @@ func TestMultiClient_Filterer_Integration(t *testing.T) {
 	logs, err := filterer.ParseValidatorAdded(log)
 	require.NoError(t, err)
 	require.NotNil(t, logs)
-
 }
 
 func TestMultiClient_ChainID(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	validatorsStateGauge = observability.NewMetric(
+	validatorsStateGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "validators.state"),
 			metric.WithUnit("{validator}"),

@@ -12,7 +12,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 type event interface {
@@ -57,7 +57,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		return nil
 	}
 
-	var strTopics []string
+	strTopics := make([]string, 0, len(gc.supportedTopics))
 	for _, topic := range gc.supportedTopics {
 		strTopics = append(strTopics, string(topic))
 	}

@@ -22,8 +22,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/logging/fields/stringer"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/observability/log/fields/stringer"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/utils/format"
@@ -377,7 +377,7 @@ func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, beaconRole spectypes.Bea
 }
 
 func FormatCommittee(operators []spectypes.OperatorID) string {
-	var opids []string
+	opids := make([]string, 0, len(operators))
 	for _, op := range operators {
 		opids = append(opids, fmt.Sprint(op))
 	}
