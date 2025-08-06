@@ -287,6 +287,16 @@ func (gc *GoClient) submitProposalPreparationBatches(
 // if it has a fee recipient. Otherwise, it tries to submit
 // a proposal preparation for this validator and request
 // a new block with a fee recipient using a strict deadline.
+//
+// The reason for this logic is that
+// although we re-submit proposal preparation on client restart,
+// the spec doesn't guarantee it will be used:
+//
+// https://ethereum.github.io/beacon-APIs/#/Validator/prepareBeaconProposer
+// > Note that there is no guarantee that the beacon node will
+// > use the supplied fee recipient when creating a block proposal,
+// > so on receipt of a proposed block the validator should confirm
+// > that it finds the fee recipient within the block acceptable before signing it.
 func (gc *GoClient) getProposal(
 	ctx context.Context,
 	slot phase0.Slot,
@@ -496,22 +506,6 @@ func (gc *GoClient) selectBestProposal(
 	slot phase0.Slot,
 	proposalCh chan *api.VersionedProposal,
 ) (*api.VersionedProposal, error) {
-	// Although we re-submit proposal preparation on client restart,
-	// the spec doesn't guarantee it will be used:
-	//
-	// https://ethereum.github.io/beacon-APIs/#/Validator/prepareBeaconProposer
-	// > Note that there is no guarantee that the beacon node will
-	// > use the supplied fee recipient when creating a block proposal,
-	// > so on receipt of a proposed block the validator should confirm
-	// > that it finds the fee recipient within the block acceptable before signing it.
-	//
-	// So we prioritize finding a proposal with a fee recipient and
-	// try to get a proposal with a fee recipient set before feeRecipientDeadline
-	// while we are within the first slot.
-	// Afterward, any proposal will be enough for us.
-	// The second round might also work, giving more time to get
-	// a proposal we are looking for, but it would increase the probability
-	// of being late with the proposal submission.
 	feeRecipientCtx, feeRecipientCancel := context.WithDeadline(ctx, gc.latestProposalTime(slot, 1))
 	defer feeRecipientCancel()
 
