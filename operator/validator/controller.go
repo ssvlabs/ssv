@@ -1052,8 +1052,12 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			validatorsPerStatus := make(map[validatorStatus]uint32)
 
 			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
-				if share.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
+				currentEpoch := c.networkConfig.EstimatedCurrentEpoch()
+				if share.IsParticipating(c.networkConfig, currentEpoch) {
 					validatorsPerStatus[statusParticipating]++
+				}
+				if share.IsAttesting(currentEpoch) {
+					validatorsPerStatus[statusAttesting]++
 				}
 				if !share.HasBeaconMetadata() {
 					validatorsPerStatus[statusNotFound]++

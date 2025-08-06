@@ -13,7 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func TestMigration7PopulateValidatorIndexMapping(t *testing.T) {
+func TestMigration8PopulateValidatorIndexMapping(t *testing.T) {
 	ctx := t.Context()
 	logger := zap.NewNop()
 	sharesPrefix := storage.SharesDBPrefix(opstorage.OperatorStoragePrefix)
@@ -24,10 +24,10 @@ func TestMigration7PopulateValidatorIndexMapping(t *testing.T) {
 		options, err := setupOptions(ctx, t)
 		require.NoError(t, err)
 
-		err = migration_7_populate_validator_index_mapping.Run(ctx,
+		err = migration_8_populate_validator_index_mapping.Run(ctx,
 			logger,
 			options,
-			[]byte(migration_7_populate_validator_index_mapping.Name),
+			[]byte(migration_8_populate_validator_index_mapping.Name),
 			func(rw basedb.ReadWriter) error { return nil },
 		)
 		assert.NoError(t, err)
@@ -47,10 +47,10 @@ func TestMigration7PopulateValidatorIndexMapping(t *testing.T) {
 		seededShares := seedDatabase7(t, 5, options.Db, storageSetSharesKey)
 
 		called := false
-		err = migration_7_populate_validator_index_mapping.Run(ctx,
+		err = migration_8_populate_validator_index_mapping.Run(ctx,
 			logger,
 			options,
-			[]byte(migration_7_populate_validator_index_mapping.Name),
+			[]byte(migration_8_populate_validator_index_mapping.Name),
 			func(rw basedb.ReadWriter) error {
 				called = true
 				return nil
@@ -66,20 +66,20 @@ func TestMigration7PopulateValidatorIndexMapping(t *testing.T) {
 		require.NoError(t, err)
 		seededShares := seedDatabase7(t, 7, options.Db, storageSetSharesKey)
 
-		err = migration_7_populate_validator_index_mapping.Run(ctx,
+		err = migration_8_populate_validator_index_mapping.Run(ctx,
 			logger,
 			options,
-			[]byte(migration_7_populate_validator_index_mapping.Name),
+			[]byte(migration_8_populate_validator_index_mapping.Name),
 			func(rw basedb.ReadWriter) error { return fmt.Errorf("fail complete") },
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "fail complete")
 
 		// Should be able to re-run and succeed
-		err = migration_7_populate_validator_index_mapping.Run(ctx,
+		err = migration_8_populate_validator_index_mapping.Run(ctx,
 			logger,
 			options,
-			[]byte(migration_7_populate_validator_index_mapping.Name),
+			[]byte(migration_8_populate_validator_index_mapping.Name),
 			func(rw basedb.ReadWriter) error { return nil },
 		)
 		assert.NoError(t, err)
@@ -93,10 +93,10 @@ func TestMigration7PopulateValidatorIndexMapping(t *testing.T) {
 		err = options.Db.Set(sharesPrefix, []byte("corrupt"), []byte{0x01, 0x02, 0x03})
 		require.NoError(t, err)
 
-		err = migration_7_populate_validator_index_mapping.Run(ctx,
+		err = migration_8_populate_validator_index_mapping.Run(ctx,
 			logger,
 			options,
-			[]byte(migration_7_populate_validator_index_mapping.Name),
+			[]byte(migration_8_populate_validator_index_mapping.Name),
 			func(rw basedb.ReadWriter) error { return nil },
 		)
 		assert.Error(t, err)
