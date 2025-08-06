@@ -15,8 +15,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
@@ -25,7 +25,7 @@ import (
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	nm := NetworkMessage{
 		Msg: Message{
@@ -44,7 +44,7 @@ func TestHandleUnknownQuery(t *testing.T) {
 }
 
 func TestHandleErrorQuery(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	tests := []struct {
 		expectedErr string
@@ -83,7 +83,7 @@ func TestHandleErrorQuery(t *testing.T) {
 }
 
 func TestHandleDecidedQuery(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()

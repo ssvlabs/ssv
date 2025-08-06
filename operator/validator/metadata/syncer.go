@@ -12,10 +12,10 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -75,7 +75,7 @@ func NewSyncer(
 	opts ...Option,
 ) *Syncer {
 	u := &Syncer{
-		logger:            logger.Named(logging.NameShareMetadataSyncer),
+		logger:            logger.Named(log.NameShareMetadataSyncer),
 		netCfg:            netCfg,
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,

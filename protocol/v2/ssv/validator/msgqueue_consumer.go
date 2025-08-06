@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -178,17 +178,16 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
-
 		baseFields = []zap.Field{
 			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
 			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
 			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
 			zap.Uint64("signer", psm.Messages[0].Signer), // TODO: only one signer?

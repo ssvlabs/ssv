@@ -19,8 +19,8 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -87,7 +87,7 @@ func NewSignerStorage(db basedb.Database, beaconConfig networkconfig.Beacon, log
 	return &storage{
 		db:           db,
 		beaconConfig: beaconConfig,
-		logger:       logger.Named(logging.NameSignerStorage).Named(prefix + "storage"),
+		logger:       logger.Named(log.NameSignerStorage).Named(prefix + "storage"),
 		lock:         sync.RWMutex{},
 	}
 }

@@ -318,7 +318,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 			}
 
 			if !updated {
-				newCommittees = append(newCommittees, committee)
+				newCommittees = append(newCommittees, committee) //nolint: makezero
 			}
 			data.committees = newCommittees
 			c.byOperatorID[operator.Signer] = data
@@ -483,7 +483,7 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 }
 
 func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShare) (*Committee, error) {
-	var shares []*types.SSVShare
+	shares := make([]*types.SSVShare, 0, len(committee.Validators))
 	removed := false
 
 	for i, share := range committee.Validators {

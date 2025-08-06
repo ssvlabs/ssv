@@ -10,8 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -203,7 +203,7 @@ func (b *DB) Close() error {
 
 // report the db size and metrics
 func (b *DB) report() {
-	logger := b.logger.Named(logging.NameBadgerDBReporting)
+	logger := b.logger.Named(log.NameBadgerDBReporting)
 	lsm, vlog := b.db.Size()
 	blockCache := b.db.BlockCacheMetrics()
 	indexCache := b.db.IndexCacheMetrics()
