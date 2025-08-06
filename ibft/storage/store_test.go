@@ -19,12 +19,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -381,7 +382,7 @@ func TestUpsertSlot(t *testing.T) {
 
 // helper to create a new ibftStorage with an in-memory DB
 func newTestStorage(t *testing.T) *participantStorage {
-	db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{})
+	db, err := kv.NewInMemory(log.TestLogger(t), basedb.Options{})
 	require.NoError(t, err)
 
 	store := &participantStorage{
