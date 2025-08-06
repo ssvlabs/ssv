@@ -16,8 +16,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -35,7 +35,7 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
-	metrics *metrics
+	metrics *metricsRecorder
 }
 
 func NewInstance(

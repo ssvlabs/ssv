@@ -11,7 +11,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 func TestStreamCtrl(t *testing.T) {
@@ -19,7 +19,7 @@ func TestStreamCtrl(t *testing.T) {
 
 	prot := protocol.ID("/test/protocol")
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ctrl0 := NewStreamController(t.Context(), hosts[0], time.Second, time.Second)
 	ctrl1 := NewStreamController(t.Context(), hosts[1], time.Second, time.Second)
 

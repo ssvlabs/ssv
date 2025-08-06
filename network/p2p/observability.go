@@ -11,10 +11,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -25,25 +26,25 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	peersConnectedGauge = observability.NewMetric(
+	peersConnectedGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "peers.connected"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers")))
 
-	connectionsGauge = observability.NewMetric(
+	connectionsGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "connections.active"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("number of active connections")))
 
-	peersPerTopicGauge = observability.NewMetric(
+	peersPerTopicGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "peers.per_topic"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers per topic")))
 
-	peerIdentityGauge = observability.NewMetric(
+	peerIdentityGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "peers.per_version"),
 			metric.WithUnit("{peer}"),

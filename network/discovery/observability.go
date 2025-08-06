@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -27,25 +28,25 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	peerDiscoveryIterationsCounter = observability.NewMetric(
+	peerDiscoveryIterationsCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "iterations"),
 			metric.WithUnit("{iteration}"),
 			metric.WithDescription("total number of iterations through discovered nodes")))
 
-	peerDiscoveriesCounter = observability.NewMetric(
+	peerDiscoveriesCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "peers"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers discovered")))
 
-	peerRejectionsCounter = observability.NewMetric(
+	peerRejectionsCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "peers.skipped"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers skipped during discovery")))
 
-	peerAcceptedCounter = observability.NewMetric(
+	peerAcceptedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "peers.accepted"),
 			metric.WithUnit("{peer}"),

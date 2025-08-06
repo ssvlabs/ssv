@@ -19,8 +19,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
@@ -44,7 +44,7 @@ func testKeyManagerWithMockNetwork(t *testing.T, operatorPrivateKey keys.Operato
 func testKeyManagerImpl(t *testing.T, network networkconfig.Network, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
 	threshold.Init()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	sk.SetByCSPRNG()
 
 	index := 0
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
@@ -101,7 +101,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-	}(db, logging.TestLogger(t))
+	}(db, log.TestLogger(t))
 
 	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 	require.NoError(t, signerStorage.SaveWallet(hdwallet))
