@@ -56,7 +56,7 @@ func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 	return committeeID, index, nil
 }
 
-func (c *Collector) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
+func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
 	duties := []*ValidatorDutyTrace{}
 
 	// lookup in cache
@@ -80,7 +80,7 @@ func (c *Collector) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0
 	})
 
 	// go to disk for the older ones
-	storeDuties, err := c.getAllValidatorDutiesFromDisk(role, slot)
+	storeDuties, err := c.getValidatorDutiesFromDisk(role, slot)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (c *Collector) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0
 	return append(duties, storeDuties...), nil
 }
 
-func (c *Collector) getAllValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
+func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
 	storeDuties, err := c.store.GetValidatorDuties(role, slot)
 	if err != nil {
 		return nil, fmt.Errorf("get validator duties from disk: %w", err)
@@ -115,7 +115,7 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 	// lookup in cache
 	validatorSlots, found := c.validatorTraces.Get(pubkey)
 	if !found {
-		return c.getValidatorDutiesFromDisk(role, slot, pubkey)
+		return c.getValidatorDutyFromDisk(role, slot, pubkey)
 	}
 
 	traces, found := validatorSlots.Get(slot)
@@ -135,10 +135,10 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 	}
 
 	// go to disk for the older ones
-	return c.getValidatorDutiesFromDisk(role, slot, pubkey)
+	return c.getValidatorDutyFromDisk(role, slot, pubkey)
 }
 
-func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
+func (c *Collector) getValidatorDutyFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	vIndex, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
 		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)

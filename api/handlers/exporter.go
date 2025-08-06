@@ -41,7 +41,7 @@ func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantS
 
 type dutyTraceStore interface {
 	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
-	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
@@ -360,7 +360,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
 			if isCommitteeDuty(role) {
-				return api.BadRequestError(errors.New("either pubkeys or indices is required for role " + role.String()))
+				return api.BadRequestError(fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for specific a validators subset or use the /committee endpoint to query all the corresponding duties", role.String()))
 			}
 		}
 	}
@@ -397,10 +397,14 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 			role := spectypes.BeaconRole(r)
 
 			if len(pubkeys) == 0 {
-				duties, err := e.traceStore.GetAllValidatorDuties(role, slot)
+				duties, err := e.traceStore.GetValidatorDuties(role, slot)
 				if err != nil {
-					e.logger.Debug("error getting validator duties", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
-					continue
+					if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
+						e.logger.Debug("error getting validator duties", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+						// we might not have a duty for this role, so we skip it
+						continue
+					}
+					return api.Error(fmt.Errorf("error getting validator duties: %w", err))
 				}
 				results = append(results, duties...)
 				continue

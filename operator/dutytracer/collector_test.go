@@ -419,7 +419,7 @@ func TestValidatorDuties(t *testing.T) {
 		err := collector.Collect(t.Context(), partSigMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duties, err := collector.GetAllValidatorDuties(bnRole, slot)
+		duties, err := collector.GetValidatorDuties(bnRole, slot)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)

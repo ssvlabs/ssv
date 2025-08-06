@@ -152,7 +152,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 			return nil, false, errInFlight
 		}
 
-		trace, err := c.getValidatorDutiesFromDisk(role, slot, vPubKey)
+		trace, err := c.getValidatorDutyFromDisk(role, slot, vPubKey)
 		if errors.Is(err, store.ErrNotFound) {
 			roleDutyTrace := &model.ValidatorDutyTrace{
 				Slot: slot,
