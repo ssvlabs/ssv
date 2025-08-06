@@ -10,7 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -138,7 +138,6 @@ func baseCommitValidationIgnoreSignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "signed commit invalid")
 	}
@@ -162,7 +161,6 @@ func BaseCommitValidationVerifySignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := baseCommitValidationIgnoreSignature(msg, height, operators); err != nil {
 		return err
 	}

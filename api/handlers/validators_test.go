@@ -207,7 +207,6 @@ func TestByPubKeys(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -244,7 +243,6 @@ func TestByOperators(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -297,7 +295,6 @@ func TestByOwners(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -340,7 +337,6 @@ func TestByIndices(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -434,7 +430,6 @@ func TestRequestClustersBind(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 

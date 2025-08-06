@@ -22,8 +22,9 @@ import (
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
@@ -130,7 +131,7 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 
-	// registrationMu synchronises access to registrations
+	// registrationMu synchronizes access to registrations
 	registrationMu sync.Mutex
 	// registrations is a set of validator-registrations (their latest versions) to be sent to
 	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
@@ -194,7 +195,7 @@ func New(
 	}
 
 	client := &GoClient{
-		log:                                logger.Named("consensus_client"),
+		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
 		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
@@ -283,7 +284,7 @@ func (gc *GoClient) getBeaconConfig() *networkconfig.Beacon {
 }
 
 func (gc *GoClient) initMultiClient(ctx context.Context) error {
-	var services []eth2client.Service
+	services := make([]eth2client.Service, 0, len(gc.clients))
 	for _, client := range gc.clients {
 		services = append(services, client)
 	}

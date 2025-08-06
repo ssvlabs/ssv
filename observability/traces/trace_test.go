@@ -1,4 +1,4 @@
-package observability
+package traces
 
 import (
 	"crypto/sha256"
@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 func TestShouldBuildDeterministicTraceIDWhenRandomInputProvided(t *testing.T) {
 	traceIDInput := gofakeit.LetterN(gofakeit.UintN(128))
 
-	traceContext := TraceContext(t.Context(), traceIDInput)
+	traceContext := Context(t.Context(), traceIDInput)
 
 	expectedSha := sha256.Sum256([]byte(traceIDInput))
 	expectedTraceIDHex := hex.EncodeToString(expectedSha[:traceIDByteLen])
@@ -32,8 +32,8 @@ func TestShouldBuildDeterministicTraceIDWhenRandomInputProvided(t *testing.T) {
 func TestShouldBuildEqualTraceIDsWhenTwoIdenticalInputsProvided(t *testing.T) {
 	traceIDInput := gofakeit.LetterN(gofakeit.UintN(128))
 
-	traceContextOne := TraceContext(t.Context(), traceIDInput)
-	traceContextTwo := TraceContext(t.Context(), traceIDInput)
+	traceContextOne := Context(t.Context(), traceIDInput)
+	traceContextTwo := Context(t.Context(), traceIDInput)
 
 	require.Equal(t,
 		trace.SpanContextFromContext(traceContextOne).TraceID().String(),

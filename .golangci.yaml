@@ -14,13 +14,33 @@ output:
 linters:
   enable:
     - errorlint
+    - errcheck
     - goconst
     - gosec
     - unconvert
+    - depguard
+    - exhaustive
+    - govet
+    - makezero
+    - misspell
+    - nakedret
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - whitespace
   settings:
-    cyclop:
-      max-complexity: 10
-      package-average: 0
+    errorlint:
+      errorf: true
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - fmt:.*
+        - io/ioutil:^Read.*
+    goconst:
+      min-len: 3
+      min-occurrences: 3
     depguard:
       rules:
         main:
@@ -28,78 +48,8 @@ linters:
           deny:
             - pkg: github.com/sirupsen/logrus
               desc: logging is allowed only by go.uber.org/zap
-    dogsled:
-      max-blank-identifiers: 2
-    dupl:
-      threshold: 100
-    errcheck:
-      check-type-assertions: false
-      check-blank: false
-      exclude-functions:
-        - fmt:.*
-        - io/ioutil:^Read.*
-    errorlint:
-      errorf: true
     exhaustive:
-      default-signifies-exhaustive: false
-    exhaustruct:
-      exclude:
-        - .*.Test
-        - .*.Test2
-        - .*.Embedded
-        - .*.External
-    forbidigo:
-      forbid:
-        - pattern: fmt.Errorf
-        - pattern: fmt.Print.*
-        - pattern: ginkgo\\.F.*
-      exclude-godoc-examples: false
-    funlen:
-      lines: 60
-      statements: 40
-    gocognit:
-      min-complexity: 10
-    goconst:
-      min-len: 3
-      min-occurrences: 3
-    gocritic:
-      enabled-checks:
-        - rangeValCopy
-      disabled-checks:
-        - regexpMust
-      enabled-tags:
-        - performance
-      disabled-tags:
-        - experimental
-      settings:
-        captLocal:
-          paramsOnly: true
-        elseif:
-          skipBalanced: true
-        hugeParam:
-          sizeThreshold: 80
-        nestingReduce:
-          bodyWidth: 5
-        rangeExprCopy:
-          sizeThreshold: 512
-          skipTestFuncs: true
-        rangeValCopy:
-          sizeThreshold: 32
-          skipTestFuncs: true
-        ruleguard:
-          rules: ""
-        truncateCmp:
-          skipArchDependent: true
-        underef:
-          skipRecvDeref: true
-    godot:
-      scope: declarations
-      capital: false
-    godox:
-      keywords:
-        - NOTE
-        - OPTIMIZE
-        - HACK
+      default-signifies-exhaustive: true
     govet:
       enable:
         - atomicalign
@@ -113,31 +63,14 @@ linters:
             - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
             - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
             - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
-    lll:
-      line-length: 120
-      tab-width: 1
     makezero:
       always: false
     misspell:
       locale: US
       ignore-rules:
         - someword
-    mnd:
-      checks:
-        - argument
-        - case
-        - condition
-        - operation
-        - return
-        - assign
     nakedret:
       max-func-lines: 30
-    nestif:
-      min-complexity: 4
-    nolintlint:
-      require-explanation: true
-      require-specific: true
-      allow-unused: false
     prealloc:
       simple: true
       range-loops: true
@@ -152,36 +85,9 @@ linters:
     rowserrcheck:
       packages:
         - github.com/jmoiron/sqlx
-    testpackage:
-      skip-regexp: (export|internal)_test\.go
-    thelper:
-      test:
-        first: true
-        name: true
-        begin: true
-      benchmark:
-        first: true
-        name: true
-        begin: true
-      tb:
-        first: true
-        name: true
-        begin: true
-    unparam:
-      check-exported: false
     whitespace:
       multi-if: false
       multi-func: false
-    wsl:
-      strict-append: true
-      allow-assign-and-call: true
-      allow-assign-and-anything: false
-      allow-multiline-assign: true
-      force-case-trailing-whitespace: 0
-      allow-trailing-comment: false
-      allow-separated-leading-comment: false
-      allow-cuddle-declarations: false
-      force-err-cuddling: false
   exclusions:
     generated: lax
     rules:
@@ -197,8 +103,6 @@ linters:
       - linters:
           - staticcheck
         text: 'SA9003:'
-      - linters:
-          - lll
         source: '^//go:generate '
       - path: (.+)\.go$
         text: declaration of "(err|ctx|logger)" shadows declaration at

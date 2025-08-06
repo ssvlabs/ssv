@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // Option defines an ExecutionClient configuration option.
@@ -15,14 +17,14 @@ type OptionMulti func(client *MultiClient)
 // WithLogger enables logging.
 func WithLogger(logger *zap.Logger) Option {
 	return func(s *ExecutionClient) {
-		s.logger = logger.Named("execution_client")
+		s.logger = logger.Named(log.NameExecutionClient)
 	}
 }
 
 // WithLoggerMulti enables logging.
 func WithLoggerMulti(logger *zap.Logger) OptionMulti {
 	return func(s *MultiClient) {
-		s.logger = logger.Named("execution_client_multi")
+		s.logger = logger.Named(log.NameExecutionClientMulti)
 	}
 }
 

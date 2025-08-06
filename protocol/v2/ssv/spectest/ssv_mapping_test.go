@@ -24,8 +24,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
@@ -41,7 +41,7 @@ func TestSSVMapping(t *testing.T) {
 	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	untypedTests := map[string]interface{}{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -367,7 +367,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	require.NoError(t, json.Unmarshal(byts, &base))
 	base.NetworkConfig = networkconfig.TestNetwork
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	ret := baseRunnerForRole(logger, base.RunnerRoleType, base, ks)
 
@@ -567,7 +567,6 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 	c.Runners = tmpSsvCommittee.Runners
 
 	for slot := range c.Runners {
-
 		var shareInstance *spectypes.Share
 		for _, share := range c.Runners[slot].BaseRunner.Share {
 			shareInstance = share

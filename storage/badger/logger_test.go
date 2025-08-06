@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // setupLoggerTest creates a badgerLogger with an observer for testing.
@@ -33,7 +33,7 @@ func Test_newLogger(t *testing.T) {
 
 		require.NotNil(t, bl)
 		require.IsType(t, &badgerLogger{}, bl)
-		assert.Contains(t, bl.(*badgerLogger).logger.Name(), logging.NameBadgerDBLog)
+		assert.Contains(t, bl.(*badgerLogger).logger.Name(), log.NameBadgerDBLog)
 	})
 
 	t.Run("with nop logger", func(t *testing.T) {

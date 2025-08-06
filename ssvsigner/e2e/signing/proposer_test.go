@@ -145,7 +145,8 @@ func (s *BlockSlashingTestSuite) TestBlockValidProgression() {
 	}
 
 	s.T().Logf("✍️ Phase 2: Signing blocks sequentially")
-	var allSigs []spectypes.Signature
+
+	allSigs := make([]spectypes.Signature, 0, len(blocks))
 
 	for _, block := range blocks {
 		sig := s.RequireValidSigning(

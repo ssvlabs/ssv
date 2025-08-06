@@ -142,11 +142,15 @@ func NodeWithCustomSubnets(t *testing.T, subnets commons.Subnets) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, subnets)
 }
 
-func CustomNode(t *testing.T,
-	setDomainType bool, domainType spectypes.DomainType,
-	setNextDomainType bool, nextDomainType spectypes.DomainType,
-	setSubnets bool, subnets commons.Subnets) *enode.Node {
-
+func CustomNode(
+	t *testing.T,
+	setDomainType bool,
+	domainType spectypes.DomainType,
+	setNextDomainType bool,
+	nextDomainType spectypes.DomainType,
+	setSubnets bool,
+	subnets commons.Subnets,
+) *enode.Node {
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)

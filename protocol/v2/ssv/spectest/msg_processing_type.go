@@ -22,8 +22,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -57,7 +57,7 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
 }

@@ -71,7 +71,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
-
 			share1 := cloneSSVShare(t, shares.active)
 			share2 := cloneSSVShare(t, share1)
 			share2.ValidatorIndex = share1.ValidatorIndex + 1
@@ -1037,7 +1036,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a message with an operator that does not exist but has been removed
 	t.Run("operator exists but removed", func(t *testing.T) {
-
 		// Configure mock to return false for operator 999, simulating a removed operator
 		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{999}).Return(false, nil)
 

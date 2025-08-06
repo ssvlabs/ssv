@@ -19,11 +19,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -124,7 +124,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	}
 
 	s := &Scheduler{
-		logger:              logger.Named(logging.NameDutyScheduler),
+		logger:              logger.Named(log.NameDutyScheduler),
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
 		beaconConfig:        opts.BeaconConfig,

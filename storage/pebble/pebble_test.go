@@ -99,7 +99,6 @@ func TestPebbleDB_GetMany(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
-
 }
 
 func TestPebbleDB_GetAll(t *testing.T) {

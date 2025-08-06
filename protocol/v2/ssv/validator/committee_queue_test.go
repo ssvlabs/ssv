@@ -81,7 +81,6 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
 	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
 	committeeRunner *runner.CommitteeRunner) {
-
 	t.Helper()
 
 	errCh := make(chan error, 1)
@@ -167,7 +166,6 @@ func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.
 // 4. Verify that a new queue was created for the message's slot
 // 5. Confirm the queue has the correct properties (non-nil and proper slot)
 func TestHandleMessageCreatesQueue(t *testing.T) {
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -1138,7 +1136,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	assert.Equal(t, message.SSVEventMsgType, received[0].MsgType)
 	assert.Equal(t, eventMsgBody, received[0].Body.(*types.EventMsg))
 
-	var actual []specqbft.MessageType
+	actual := make([]specqbft.MessageType, 0, len(received[1:]))
 	for _, m := range received[1:] {
 		actual = append(actual, m.Body.(*specqbft.Message).MsgType)
 	}

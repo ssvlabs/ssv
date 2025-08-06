@@ -146,8 +146,9 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 
-	var observedLogsFlow []string
-	for _, entry := range observedLogs.All() {
+	logs := observedLogs.All()
+	observedLogsFlow := make([]string, 0, len(logs))
+	for _, entry := range logs {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{

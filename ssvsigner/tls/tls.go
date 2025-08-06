@@ -325,7 +325,7 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 
 	// If ServerName didn't match, check all certificate identities
 	// This handles cases where ServerName is empty or doesn't match our fingerprint keys
-	var identities []string
+	var identities []string //nolint: prealloc
 
 	// Check Common Name
 	if cert.Subject.CommonName != "" {

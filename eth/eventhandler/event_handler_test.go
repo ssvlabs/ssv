@@ -161,7 +161,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
-
 		}
 		sim.Commit()
 
@@ -568,7 +567,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check that nonces are not intertwined between different owner accounts!
 			require.Equal(t, registrystorage.Nonce(1), nonce)
 		})
-
 	})
 
 	t.Run("test ValidatorExited event handling", func(t *testing.T) {
@@ -1238,7 +1236,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
-
 		// Should return MalformedEventError and no changes to the state
 		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
 			// Call the contract method
@@ -1444,8 +1441,8 @@ func setupEventHandler(
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	if operator == nil {
-		logger.Fatal("empty test operator was passed")
+	if operator == nil || operator.privateKey == nil {
+		logger.Fatal("empty test operator (or empty private key) was passed")
 	}
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)

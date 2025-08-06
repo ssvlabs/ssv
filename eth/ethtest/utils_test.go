@@ -128,7 +128,6 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 
 		pubKeys = append(pubKeys, validatorData.operatorsShares[i].pub.Serialize()...)
 		encryptedShares = append(encryptedShares, cipherText...)
-
 	}
 
 	toSign := fmt.Sprintf("%s:%d", owner.String(), nonce)
@@ -241,8 +240,8 @@ func setupOperatorStorage(
 	operator *testOperator,
 	ownerAddress *ethcommon.Address,
 ) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	if operator == nil {
-		logger.Fatal("empty test operator was passed")
+	if operator == nil || operator.privateKey == nil {
+		logger.Fatal("empty test operator (or empty private key) was passed")
 	}
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
