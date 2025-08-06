@@ -278,7 +278,7 @@ func (gc *GoClient) submitProposalPreparationBatches(
 
 // getProposal fetches proposals from beacon nodes and
 // returns the first received one with a fee recipient set,
-// or, if none, it returns the first received proposal.
+// or, if none, it returns the last received proposal.
 //
 // If it receives no proposal until context is canceled,
 // it returns an error.
@@ -373,9 +373,7 @@ func (gc *GoClient) getSingleClientProposal(
 		return p.Data, nil
 	}
 
-	logger.Info("received a new proposal with fee recipient",
-		fields.Took(time.Since(newProposalStart)),
-		fields.Address(mustGetFeeRecipient(feeRecipientProposal).String()))
+	logger.Info("received a new proposal with fee recipient", fields.Took(time.Since(newProposalStart)))
 
 	return feeRecipientProposal, nil
 }
@@ -529,7 +527,7 @@ func (gc *GoClient) selectBestProposal(
 				if fallbackProposal == nil {
 					// We don't have any proposals at all, so we got some error.
 					// The errors have been logged, so we don't need to return them.
-					return nil, fmt.Errorf("all requests failed")
+					return nil, fmt.Errorf("none of proposal-fetch requests succeeded")
 				}
 
 				// If we have a proposal without a fee recipient, it's better that nothing, so we use it.
@@ -546,7 +544,7 @@ func (gc *GoClient) selectBestProposal(
 			}
 			if err != nil || !hasFR {
 				if feeRecipientCtx.Err() != nil {
-					gc.log.Debug("didn't receive proposal with fee recipient within the safe duration for the best round, accepting any proposal")
+					gc.log.Debug("didn't receive proposal with fee recipient in time for round 1, will use the proposal without fee recipient we got instead")
 					return p, nil
 				}
 
@@ -568,7 +566,7 @@ func (gc *GoClient) selectBestProposal(
 			}
 
 			// If we have one without fee recipient, it's better that nothing, so we use it.
-			gc.log.Warn("no proposals with fee recipient found")
+			gc.log.Warn("all proposal-fetch requests finished but no proposals with fee recipient found, using proposal without fee recipient")
 			return fallbackProposal, nil
 		}
 	}
@@ -592,14 +590,6 @@ func hasFeeRecipient(block any) (bool, error) {
 	}
 
 	return address != zeroAddress, nil
-}
-
-func mustGetFeeRecipient(block any) bellatrix.ExecutionAddress {
-	b, err := getFeeRecipient(block)
-	if err != nil {
-		panic(err)
-	}
-	return b
 }
 
 func getFeeRecipient(block any) (bellatrix.ExecutionAddress, error) {
