@@ -14,8 +14,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 type testProposal struct {
@@ -203,7 +203,7 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 			beaconCfg.GenesisTime = time.Now()
 
 			gc := &GoClient{
-				log:          logging.TestLogger(t),
+				log:          log.TestLogger(t),
 				beaconConfig: &beaconCfg,
 			}
 
