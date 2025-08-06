@@ -481,7 +481,7 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 }
 
 func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShare) (*Committee, error) {
-	shares := make([]*types.SSVShare, 0, len(committee.Validators))
+	shares := make([]*types.SSVShare, 0, len(committee.Shares))
 	removed := false
 
 	for i, share := range committee.Shares {

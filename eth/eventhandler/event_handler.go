@@ -19,9 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
