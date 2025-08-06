@@ -161,11 +161,11 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 	}
 	conn, err := net.ListenUDP(networkVersion, udpAddr)
 	if err != nil {
-		n.logger.Fatal(err.Error())
+		n.logger.Fatal("Failed to create UDP server", zap.Error(err))
 	}
 	localNode, err := n.createLocalNode(privateKey, ip, port)
 	if err != nil {
-		n.logger.Fatal(err.Error())
+		n.logger.Fatal("Failed to create local node", zap.Error(err))
 	}
 
 	listener, err := discover.ListenV5(conn, localNode, discover.Config{
@@ -173,7 +173,7 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 		V5ProtocolID: &n.ssvConfig.DiscoveryProtocolID,
 	})
 	if err != nil {
-		n.logger.Fatal(err.Error())
+		n.logger.Fatal("Filed to create UDPv5 listener", zap.Error(err))
 	}
 
 	return listener
