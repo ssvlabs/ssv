@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// logger is defined as global var here to keep package API as simple as possible (instead of returning error we log them with this logger in some places)
 var logger *zap.Logger
 
 const traceIDByteLen = 16

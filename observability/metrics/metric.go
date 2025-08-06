@@ -9,6 +9,7 @@ import (
 )
 
 var (
+	// logger is defined as global var here to keep package API as simple as possible (instead of returning error we log them with this logger in some places)
 	logger                  *zap.Logger
 	SecondsHistogramBuckets = []float64{0, 0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}
 )
