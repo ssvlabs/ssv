@@ -12,9 +12,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/observability/log"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -37,7 +37,7 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 
 func TestMain(m *testing.M) {
 	ctx := context.TODO()
-	if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
+	if err := log.SetGlobal("debug", "capital", "console", nil); err != nil {
 		panic(err)
 	}
 

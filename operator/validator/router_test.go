@@ -10,8 +10,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -19,7 +19,7 @@ func TestRouter(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	router := newMessageRouter(logger)
 

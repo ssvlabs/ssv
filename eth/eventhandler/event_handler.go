@@ -24,9 +24,9 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -123,7 +123,7 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		}
 		lastProcessedBlock = blockLogs.BlockNumber
 
-		observability.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
+		metrics.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
 
 		if !executeTasks || len(tasks) == 0 {
 			continue

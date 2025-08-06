@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 
 	global_config "github.com/ssvlabs/ssv/cli/config"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
 	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
@@ -35,11 +35,11 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		err := logging.SetGlobalLogger(
+		err := ssvlog.SetGlobal(
 			cfg.LogLevel,
 			cfg.LogLevelFormat,
 			cfg.LogFormat,
-			&logging.LogFileOptions{
+			&ssvlog.LogFileOptions{
 				FilePath:   cfg.LogFilePath,
 				MaxSize:    cfg.LogFileSize,
 				MaxBackups: cfg.LogFileBackups,

@@ -22,8 +22,9 @@ import (
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
@@ -194,7 +195,7 @@ func New(
 	}
 
 	client := &GoClient{
-		log:                                logger.Named("consensus_client"),
+		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
 		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},

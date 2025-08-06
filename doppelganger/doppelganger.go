@@ -11,10 +11,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -82,7 +82,7 @@ func NewHandler(opts *Options) *handler {
 		beaconNode:         opts.BeaconNode,
 		validatorProvider:  opts.ValidatorProvider,
 		slotTickerProvider: opts.SlotTickerProvider,
-		logger:             opts.Logger.Named(logging.NameDoppelganger),
+		logger:             opts.Logger.Named(log.NameDoppelganger),
 		validatorsState:    make(map[phase0.ValidatorIndex]*doppelgangerState),
 	}
 }
@@ -330,8 +330,8 @@ func (h *handler) recordValidatorStates(ctx context.Context) {
 		return
 	}()
 
-	observability.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
-	observability.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
+	metrics.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
+	metrics.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
 }
 
 func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {

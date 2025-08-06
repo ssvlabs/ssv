@@ -6,24 +6,23 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -60,7 +59,7 @@ type Validator struct {
 // NewValidator creates a new instance of Validator.
 func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
 	v := &Validator{
-		logger:           logger.Named(logging.NameValidator).With(fields.PubKey(options.SSVShare.ValidatorPubKey[:])),
+		logger:           logger.Named(log.NameValidator).With(fields.PubKey(options.SSVShare.ValidatorPubKey[:])),
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
 		cancel:           cancel,
@@ -110,12 +109,12 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 	vDuty, ok := duty.(*spectypes.ValidatorDuty)
 	if !ok {
-		return observability.Errorf(span, "expected ValidatorDuty, got %T", duty)
+		return traces.Errorf(span, "expected ValidatorDuty, got %T", duty)
 	}
 
 	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(vDuty.Type)]
 	if dutyRunner == nil {
-		return observability.Errorf(span, "no duty runner for role %s", vDuty.Type.String())
+		return traces.Errorf(span, "no duty runner for role %s", vDuty.Type.String())
 	}
 
 	// Log with duty ID.
@@ -133,7 +132,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	span.AddEvent(eventMsg)
 
 	if err := dutyRunner.StartNewDuty(ctx, logger, vDuty, v.Operator.GetQuorum()); err != nil {
-		return observability.Errorf(span, "could not start duty: %w", err)
+		return traces.Errorf(span, "could not start duty: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -159,12 +158,12 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	if msgType != message.SSVEventMsgType {
 		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return observability.Errorf(span, "invalid SignedSSVMessage: %w", err)
+			return traces.Errorf(span, "invalid SignedSSVMessage: %w", err)
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return observability.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
+			return traces.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
 		}
 	}
 
@@ -173,22 +172,22 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	// Get runner
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
-		return observability.Errorf(span, "could not get duty runner for msg ID %v", messageID)
+		return traces.Errorf(span, "could not get duty runner for msg ID %v", messageID)
 	}
 
 	// Validate message for runner
 	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return observability.Errorf(span, "message invalid for msg ID %v: %w", messageID, err)
+		return traces.Errorf(span, "message invalid for msg ID %v: %w", messageID, err)
 	}
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
-			return observability.Errorf(span, "could not decode consensus message from network message")
+			return traces.Errorf(span, "could not decode consensus message from network message")
 		}
 
 		if err := qbftMsg.Validate(); err != nil {
-			return observability.Errorf(span, "invalid QBFT Message: %w", err)
+			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 
 		if dutyID, ok := v.dutyIDs.Get(messageID.GetRoleType()); ok {
@@ -201,14 +200,14 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			With(fields.Slot(phase0.Slot(qbftMsg.Height)))
 
 		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
-			return observability.Error(span, err)
+			return traces.Error(span, err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
-			return observability.Errorf(span, "could not decode post consensus message from network message")
+			return traces.Errorf(span, "could not decode post consensus message from network message")
 		}
 
 		if dutyID, ok := v.dutyIDs.Get(messageID.GetRoleType()); ok {
@@ -219,35 +218,35 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		logger = logger.With(fields.Slot(signedMsg.Slot))
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return observability.Errorf(span, "PartialSignatureMessage has more than 1 signer")
+			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
 		}
 
 		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return observability.Errorf(span, "invalid PartialSignatureMessages: %w", err)
+			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
 		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
 			span.AddEvent("processing post-consensus message")
 			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
-				return observability.Error(span, err)
+				return traces.Error(span, err)
 			}
 			span.SetStatus(codes.Ok, "")
 			return nil
 		}
 		span.AddEvent("processing pre-consensus message")
 		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
-			return observability.Error(span, err)
+			return traces.Error(span, err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case message.SSVEventMsgType:
 		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
-			return observability.Errorf(span, "could not handle event message: %w", err)
+			return traces.Errorf(span, "could not handle event message: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	default:
-		return observability.Errorf(span, "unknown message type %d", msgType)
+		return traces.Errorf(span, "unknown message type %d", msgType)
 	}
 }
 
@@ -274,7 +273,7 @@ func (v *Validator) withDutyID(logger *zap.Logger, role spectypes.RunnerRole) *z
 
 func (v *Validator) fetchTraceContext(ctx context.Context, msgID spectypes.MessageID) (traceCtx context.Context, dutyID string) {
 	if dutyID, ok := v.dutyIDs.Get(msgID.GetRoleType()); ok {
-		return observability.TraceContext(ctx, dutyID), dutyID
+		return traces.Context(ctx, dutyID), dutyID
 	}
 	return ctx, ""
 }

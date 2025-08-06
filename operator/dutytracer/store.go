@@ -11,7 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	model "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )

@@ -11,8 +11,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -47,7 +48,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	executeDutyData, err := msg.GetExecuteDutyData()
 	if err != nil {
-		return observability.Errorf(span, "failed to get execute duty data: %w", err)
+		return traces.Errorf(span, "failed to get execute duty data: %w", err)
 	}
 
 	span.SetAttributes(
@@ -59,12 +60,12 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	// force the validator to be started (subscribed to validator's topic and synced)
 	span.AddEvent("start validator")
 	if _, err := v.Start(); err != nil {
-		return observability.Errorf(span, "could not start validator: %w", err)
+		return traces.Errorf(span, "could not start validator: %w", err)
 	}
 
 	span.AddEvent("start duty")
 	if err := v.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {
-		return observability.Errorf(span, "could not start duty: %w", err)
+		return traces.Errorf(span, "could not start duty: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -108,7 +109,7 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 	executeDutyData, err := msg.GetExecuteCommitteeDutyData()
 	if err != nil {
-		return observability.Errorf(span, "failed to get execute committee duty data: %w", err)
+		return traces.Errorf(span, "failed to get execute committee duty data: %w", err)
 	}
 
 	span.SetAttributes(
@@ -118,12 +119,12 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	)
 	span.AddEvent("start duty")
 	if err := c.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {
-		return observability.Errorf(span, "could not start committee duty: %w", err)
+		return traces.Errorf(span, "could not start committee duty: %w", err)
 	}
 
 	span.AddEvent("start consume queue")
 	if err := c.StartConsumeQueue(ctx, logger, executeDutyData.Duty); err != nil {
-		return observability.Errorf(span, "could not start committee consume queue: %w", err)
+		return traces.Errorf(span, "could not start committee consume queue: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
