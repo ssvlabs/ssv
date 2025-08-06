@@ -116,7 +116,7 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 			proposals:      []testProposal{},
 			wantProposalID: 0,
 			wantDelay:      0,
-			wantErr:        "all requests failed",
+			wantErr:        "none of proposal-fetch requests succeeded",
 		},
 		{
 			name:           "late errors",
@@ -125,7 +125,7 @@ func TestGoClient_selectBestProposal(t *testing.T) {
 			proposals:      []testProposal{},
 			wantProposalID: 0,
 			wantDelay:      1400 * time.Millisecond,
-			wantErr:        "all requests failed",
+			wantErr:        "none of proposal-fetch requests succeeded",
 		},
 		{
 			name:       "parent ctx timeout, no proposals at all",
