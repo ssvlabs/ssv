@@ -14,7 +14,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
 

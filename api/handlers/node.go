@@ -81,7 +81,7 @@ type healthCheckJSON struct {
 func (hc healthCheckJSON) String() string {
 	b, err := json.MarshalIndent(hc, "", "  ")
 	if err != nil {
-		return fmt.Sprintf("error marshalling healthCheckJSON: %s", err.Error())
+		return fmt.Sprintf("error marshaling healthCheckJSON: %s", err.Error())
 	}
 	return string(b)
 }

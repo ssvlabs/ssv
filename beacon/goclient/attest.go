@@ -16,7 +16,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 type (
@@ -95,7 +95,6 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 	}
 
 	return result, spec.DataVersionPhase0, nil
-
 }
 
 func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
@@ -238,6 +237,8 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 		zap.Float64("score", bestScore)).
 		Debug("successfully fetched attestation data")
 
+	recordAttestationDataClientSelection(ctx, bestClientAddr)
+
 	return bestAttestationData, nil
 }
 
@@ -277,6 +278,8 @@ func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot)
 		zap.String("client_addr", gc.multiClient.Address()),
 		fields.BlockRoot(resp.Data.BeaconBlockRoot),
 	).Debug("successfully fetched attestation data")
+
+	recordAttestationDataClientSelection(ctx, gc.multiClient.Address())
 
 	return resp.Data, nil
 }

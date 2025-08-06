@@ -33,7 +33,7 @@ var migrationOrder = []string{
 
 // loadMigrations reads migration files from the filesystem
 func (env *TestEnvironment) loadMigrations() ([]MigrationFile, error) {
-	var migrations []MigrationFile
+	migrations := make([]MigrationFile, 0, len(migrationOrder))
 
 	for _, filename := range migrationOrder {
 		migrationPath := filepath.Join(env.migrationsPath, filename)
