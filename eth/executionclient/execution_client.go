@@ -457,7 +457,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 	//
 	// Thus, we decided not to rely on log streaming and use SubscribeNewHead + FilterLogs.
 	//
-	// It also allowed us to implement more 'atomic' behaviour easier:
+	// It also allowed us to implement more 'atomic' behavior easier:
 	// We can revert the tx if there was an error in processing all the events of a block.
 	// So we can restart from this block once everything is good.
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)

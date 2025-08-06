@@ -64,7 +64,6 @@ func scoreInspector(logger *zap.Logger,
 
 		// Log score for each peer
 		for pid, peerScores := range scores {
-
 			// Store topic snapshot for topics with invalid messages
 			filtered := []*topicScoreSnapshot{}
 			for topic, snapshot := range peerScores.Topics {
@@ -94,7 +93,6 @@ func scoreInspector(logger *zap.Logger,
 
 			// Get counters for each topic
 			for topic, snapshot := range peerScores.Topics {
-
 				topicScoreParams := getScoreParamsForTopic(topic)
 
 				// Cap p1 as done in GossipSub
@@ -129,7 +127,7 @@ func scoreInspector(logger *zap.Logger,
 			p6 := peerScores.IPColocationFactor
 			w6 := peerScoreParams.IPColocationFactorWeight
 
-			// P7 - Behaviour penalty
+			// P7 - Behavior penalty
 			p7 := peerScores.BehaviourPenalty
 			w7 := peerScoreParams.BehaviourPenaltyWeight
 
@@ -152,8 +150,8 @@ func scoreInspector(logger *zap.Logger,
 				zap.Float64("w4_invalid_message_deliveries", w4),
 				zap.Float64("p6_ip_colocation_factor", p6),
 				zap.Float64("w6_ip_colocation_factor", w6),
-				zap.Float64("p7_behaviour_penalty", p7),
-				zap.Float64("w7_behaviour_penalty", w7),
+				zap.Float64("p7_behavior_penalty", p7),
+				zap.Float64("w7_behavior_penalty", w7),
 				zap.String("invalid_messages", invalidMessagesStats),
 			}
 			if peerConnected(pid) {
@@ -180,7 +178,6 @@ func scoreInspector(logger *zap.Logger,
 // topicScoreParams factory for creating scoring params for topics
 func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider CommitteesProvider) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
-
 		// Get validator stats
 		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
 		if err != nil {
@@ -219,7 +216,6 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 
 // Returns a new committee list with only the committees that belong to the given topic
 func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
-
 	topicCommittees := make([]*storage.Committee, 0)
 
 	for _, committee := range committees {
