@@ -110,7 +110,7 @@ func mapShare(share *migration_6_OldStorageShare) *storage.Share {
 		},
 		OwnerAddress:    share.OwnerAddress,
 		Liquidated:      share.Liquidated,
-		Status:          v1.ValidatorState(share.Status), // nolint: gosec //G115: integer overflow conversion uint64 -> int
+		Status:          v1.ValidatorState(share.Status), //nolint: gosec //G115: integer overflow conversion uint64 -> int
 		ActivationEpoch: phase0.Epoch(share.ActivationEpoch),
 	}
 

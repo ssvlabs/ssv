@@ -227,7 +227,6 @@ func TestExporterDecideds(t *testing.T) {
 				require.Len(t, resp.Data, 2)
 
 				for _, item := range resp.Data {
-
 					assert.Equal(t, "ATTESTER", item.Role)
 					assert.Equal(t, "b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1", item.PublicKey)
 				}

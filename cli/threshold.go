@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/cli/flags"
-	"github.com/ssvlabs/ssv/logging"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
@@ -19,10 +19,10 @@ var createThresholdCmd = &cobra.Command{
 	Use:   "create-threshold",
 	Short: "Turns a private key into a threshold key. For testing usage only",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
+		if err := ssvlog.SetGlobal("debug", "capital", "console", nil); err != nil {
 			log.Fatal(err)
 		}
-		logger := zap.L().Named(logging.NameCreateThreshold)
+		logger := zap.L().Named(ssvlog.NameCreateThreshold)
 
 		privKey, err := flags.GetPrivKeyFlagValue(cmd)
 		if err != nil {

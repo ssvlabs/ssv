@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
-	db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{
+	db, err := kv.NewInMemory(log.TestLogger(t), basedb.Options{
 		Reporting: true,
 		Ctx:       ctx,
 	})
@@ -31,7 +31,7 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 
 func Test_RunNotMigratingTwice(t *testing.T) {
 	ctx := t.Context()
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -59,7 +59,7 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 
 func Test_Rollback(t *testing.T) {
 	ctx := t.Context()
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -86,7 +86,7 @@ func Test_Rollback(t *testing.T) {
 
 func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 	ctx := t.Context()
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 

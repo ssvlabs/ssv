@@ -217,7 +217,7 @@ func (gc *GoClient) SubmitProposalPreparation(
 	ctx context.Context,
 	feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress,
 ) error {
-	var preparations []*eth2apiv1.ProposalPreparation
+	preparations := make([]*eth2apiv1.ProposalPreparation, 0, len(feeRecipients))
 	for index, recipient := range feeRecipients {
 		preparations = append(preparations, &eth2apiv1.ProposalPreparation{
 			ValidatorIndex: index,
