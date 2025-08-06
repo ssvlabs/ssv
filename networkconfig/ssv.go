@@ -36,6 +36,7 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 type SSV interface {
 	GetDomainType() spectypes.DomainType
 	GetGasLimit36Epoch() phase0.Epoch
+	MaxOperators() int
 }
 
 type SSVConfig struct {
@@ -44,6 +45,12 @@ type SSVConfig struct {
 	RegistryContractAddr ethcommon.Address
 	Bootnodes            []string
 	DiscoveryProtocolID  [6]byte
+	// MaxF defines max amount of failed operators with which SSV node will continue working.
+	// The max amount of operators is inherited from this value using the 3F+1 formula.
+	// We currently support only MaxF=4, it should be changed only for experimental testing.
+	// IMPORTANT: While it's possible to change it, the codebase is not adapted to the change yet,
+	// so it doesn't work out of the box. The support will be added gradually.
+	MaxF uint8
 	// TotalEthereumValidators value needs to be maintained — consider getting it from external API
 	// with default or per-network value(s) as fallback
 	TotalEthereumValidators int
@@ -67,6 +74,7 @@ type marshaledConfig struct {
 	RegistryContractAddr    ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
 	Bootnodes               []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	MaxF                    uint8             `json:"MaxF,omitempty" yaml:"MaxF,omitempty"`
 	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 	GasLimit36Epoch         phase0.Epoch      `json:"GasLimit36Epoch,omitempty" yaml:"GasLimit36Epoch,omitempty"`
 }
@@ -79,6 +87,7 @@ func (s *SSVConfig) marshal() *marshaledConfig {
 		RegistryContractAddr:    s.RegistryContractAddr,
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
+		MaxF:                    s.MaxF,
 		TotalEthereumValidators: s.TotalEthereumValidators,
 		GasLimit36Epoch:         s.GasLimit36Epoch,
 	}
@@ -108,6 +117,7 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 		RegistryContractAddr:    aux.RegistryContractAddr,
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
+		MaxF:                    aux.MaxF,
 		TotalEthereumValidators: aux.TotalEthereumValidators,
 		GasLimit36Epoch:         aux.GasLimit36Epoch,
 	}
@@ -135,6 +145,24 @@ func (s *SSVConfig) UnmarshalJSON(data []byte) error {
 
 func (s *SSVConfig) GetDomainType() spectypes.DomainType {
 	return s.DomainType
+}
+
+func (s *SSVConfig) MaxOperators() int {
+	const defaultMaxF = 4
+
+	maxF := s.MaxF
+	if maxF == 0 {
+		maxF = defaultMaxF
+	}
+
+	return int(s.calcOperatorCount(maxF))
+}
+
+func (s *SSVConfig) calcOperatorCount(f uint8) uint8 {
+	// We heavily rely on this formula in the codebase, however, this function is made flexible intentionally
+	// to allow experiments on local testnet as there might exist better formulas theoretically
+	// (e.g. https://www.anza.xyz/blog/alpenglow-a-new-consensus-for-solana)
+	return 3*f + 1
 }
 
 func (s *SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
