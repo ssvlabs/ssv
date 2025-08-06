@@ -6,7 +6,7 @@ import (
 
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel/sdk/resource"
-	sdk_trace "go.opentelemetry.io/otel/sdk/trace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
@@ -21,9 +21,9 @@ func InitializeProvider(ctx context.Context, resources *resource.Resource, isEna
 		return nil, nil, fmt.Errorf("failed to instantiate Trace Auto exporter: %w", err)
 	}
 
-	provider := sdk_trace.NewTracerProvider(
-		sdk_trace.WithResource(resources),
-		sdk_trace.WithBatcher(autoExporter),
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(resources),
+		sdktrace.WithBatcher(autoExporter),
 	)
 
 	return provider, autoExporter.Shutdown, nil

@@ -4,7 +4,7 @@ import (
 	"crypto/ecdsa"
 	"net"
 
-	eth_logger "github.com/ethereum/go-ethereum/log"
+	ethlogger "github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -117,7 +117,7 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger, funcOpts ...func(config
 		zapLogger := logger.Named(log.NameDiscoveryV5Logger)
 		//TODO: this is a workaround for using slog without upgrade go to 1.21
 		zapHandler := compatible_logger.Option{Logger: zapLogger}.NewZapHandler()
-		newLogger := eth_logger.New(zapHandler)
+		newLogger := ethlogger.New(zapHandler)
 		dv5Cfg.Log = newLogger
 	}
 
