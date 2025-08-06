@@ -150,12 +150,9 @@ func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	logger.Debug("received request")
 
 	start := time.Now()
-
 	resp, err := s.remoteSigner.ListKeys(ctx)
-
 	recordRemoteSignerOperation(ctx, opRemoteSignerListKeys, err, time.Since(start))
 	logger = logger.With(fields.Took(time.Since(start)))
-
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -224,12 +221,9 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-
 	resp, err := s.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
-
 	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
 	logger = logger.With(fields.Took(time.Since(start)))
-
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -321,12 +315,9 @@ func (s *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	logger = logger.With(zap.Int("req_count", len(req.Pubkeys)))
 
 	start := time.Now()
-
 	resp, err := s.remoteSigner.DeleteKeystore(ctx, req)
-
 	recordRemoteSignerOperation(ctx, opRemoteSignerDeleteKeystore, err, time.Since(start))
 	logger = logger.With(fields.Took(time.Since(start)))
-
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -375,12 +366,9 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	logger = logger.With(zap.String("type", string(req.Type)))
 
 	start := time.Now()
-
 	resp, err := s.remoteSigner.Sign(ctx, blsPubKey, req)
-
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
 	logger = logger.With(fields.Took(time.Since(start)))
-
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
