@@ -126,7 +126,7 @@ func TestFullGC_ErrorWhenClosed(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to collect garbage")
 }
 
-// TestFullGC_ContextCancellation verifies that FullGC exits promptly when the context is cancelled.
+// TestFullGC_ContextCancellation verifies that FullGC exits promptly when the context is canceled.
 func TestFullGC_ContextCancellation(t *testing.T) {
 	t.Parallel()
 
@@ -248,7 +248,7 @@ func TestPeriodicGC(t *testing.T) {
 	}
 }
 
-// TestPeriodicGC_Cancellation verifies that the periodic GC goroutine exits promptly when the context is cancelled.
+// TestPeriodicGC_Cancellation verifies that the periodic GC goroutine exits promptly when the context is canceled.
 func TestPeriodicGC_Cancellation(t *testing.T) {
 	t.Parallel()
 

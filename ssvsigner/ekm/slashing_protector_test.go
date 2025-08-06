@@ -18,6 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 func TestSlashing(t *testing.T) {
@@ -406,14 +408,14 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
+	const validatorCount = 3
 	type testValidator struct {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
 	}
 
-	var testValidators []testValidator
-
-	for range 3 {
+	testValidators := make([]testValidator, 0, validatorCount)
+	for range validatorCount {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 		pk := sk.GetPublicKey()
@@ -510,14 +512,15 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
+	const validatorCount = 3
 	type testValidator struct {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
 	}
 
-	var testValidators []testValidator
+	testValidators := make([]testValidator, 0, validatorCount)
 
-	for range 3 {
+	for range validatorCount {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 		pk := sk.GetPublicKey()

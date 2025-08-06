@@ -187,8 +187,7 @@ func (c *Committee) ConsumeQueue(
 
 func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
 			zap.Uint64("msg_height", uint64(sm.Height)),
@@ -196,7 +195,8 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
 			zap.Uint64("signer", psm.Messages[0].Signer),

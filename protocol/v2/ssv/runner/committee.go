@@ -926,7 +926,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, error error,
+	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, err error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)

@@ -34,7 +34,7 @@ func ExecWithTimeout(ctx context.Context, fn Func, timeout time.Duration) (bool,
 	select {
 	case result := <-c:
 		return true, result.res, result.err
-	case <-ctx.Done(): // cancelled by context
+	case <-ctx.Done(): // canceled by context
 		go func() {
 			stopper.stop()
 		}()

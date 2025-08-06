@@ -77,7 +77,6 @@ func New(
 	beaconNetwork *networkconfig.BeaconConfig,
 	decidedListenerFunc func(msg DecidedInfo),
 ) *Collector {
-
 	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration
 
 	collector := &Collector{
@@ -535,8 +534,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		tracerInFlightMessageHist.Record(ctx, time.Since(start).Seconds())
 	}()
 
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		subMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return nil
@@ -604,7 +602,6 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					var data = new(spectypes.ValidatorConsensusData)
 					if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
 						func() {
-
 							trace.Lock()
 							defer trace.Unlock()
 
@@ -639,7 +636,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			return nil
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		logger := c.logger.With(zap.String("msg_id", msg.MsgID.String()))
 		logger.Debug("processing partial signature message")
 
@@ -951,7 +950,7 @@ func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, si
 	}
 
 	// Convert map to sorted slice
-	var result []spectypes.OperatorID
+	result := make([]spectypes.OperatorID, 0, len(signers))
 	for signer := range signers {
 		result = append(result, signer)
 	}
@@ -967,7 +966,7 @@ func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, si
 
 // signersToKey creates a string key from sorted signers for deduplication
 func (c *Collector) signersToKey(signers []spectypes.OperatorID) string {
-	var parts []string
+	parts := make([]string, 0, len(signers))
 	for _, signer := range signers {
 		parts = append(parts, fmt.Sprintf("%d", signer))
 	}

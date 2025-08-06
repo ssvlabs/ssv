@@ -114,8 +114,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		}
 
 		if err = opt.Db.DropPrefix(append(opstorage.OperatorStoragePrefix, sharesPrefixGOB...)); err != nil {
-			err = fmt.Errorf("DropPrefix (GOB shares): %w", err)
-			return
+			return fmt.Errorf("DropPrefix (GOB shares): %w", err)
 		}
 
 		return nil

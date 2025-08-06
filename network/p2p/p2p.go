@@ -356,7 +356,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			if in < n.inboundLimit() {
 				return // skip trim iteration
 			}
-			if rand.Intn(5) > 0 { // nolint: gosec
+			if rand.Intn(5) > 0 { //nolint: gosec
 				return // skip trim iteration
 			}
 			trimInboundOnly = true
@@ -571,7 +571,6 @@ func (n *p2pNetwork) UpdateScoreParams() {
 
 	// Run immediately and then once every epoch
 	for ; true; <-timer.C {
-
 		// Update score parameters
 		err := n.topicsCtrl.UpdateScoreParams()
 		if err != nil {

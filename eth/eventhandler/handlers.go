@@ -11,12 +11,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -168,7 +169,6 @@ func (eh *EventHandler) handleValidatorAdded(
 		logger.Warn("malformed event: event shares length is not correct",
 			zap.Int("expected", sharesExpectedLength),
 			zap.Int("got", len(event.Shares)))
-
 		return nil, &MalformedEventError{Err: ErrIncorrectSharesLength}
 	}
 
@@ -184,7 +184,6 @@ func (eh *EventHandler) handleValidatorAdded(
 			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
 			zap.Uint16("expected_nonce", uint16(nonce)),
 			zap.Error(err))
-
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
@@ -195,10 +194,8 @@ func (eh *EventHandler) handleValidatorAdded(
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
-
 				return nil, err
 			}
-
 			return nil, err
 		}
 
@@ -222,7 +219,7 @@ func (eh *EventHandler) handleValidatorAdded(
 	}
 
 	logger.Debug("processed event")
-	return
+	return ownShare, nil
 }
 
 // handleShareCreation is called when a validator was added/updated during registry sync

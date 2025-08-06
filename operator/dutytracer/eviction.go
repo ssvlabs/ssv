@@ -93,8 +93,8 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	if err := c.store.SaveValidatorDuties(duties); err != nil {
-		c.logger.Error("save validator duties to disk", zap.Error(err))
-		return
+		c.logger.Error("couldn't save validator duties to disk", zap.Error(err))
+		return 0
 	}
 
 	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
@@ -102,7 +102,5 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 		return true
 	})
 
-	totalSaved = len(duties)
-
-	return
+	return len(duties)
 }
