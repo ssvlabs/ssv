@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/cli/flags"
-	ssv_log "github.com/ssvlabs/ssv/observability/log"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
 )
 
 // exportKeysCmd is the command to export private/public keys based on given mnemonic
@@ -19,11 +19,11 @@ var exportKeysCmd = &cobra.Command{
 	Use:   "export-keys",
 	Short: "exports private/public keys based on given mnemonic. For testing usage only",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := ssv_log.SetGlobal("dpanic", "capital", "console", nil); err != nil {
+		if err := ssvlog.SetGlobal("dpanic", "capital", "console", nil); err != nil {
 			log.Fatal(err)
 		}
 
-		logger := zap.L().Named(ssv_log.NameExportKeys)
+		logger := zap.L().Named(ssvlog.NameExportKeys)
 
 		mnemonicKey, err := flags.GetMnemonicFlagValue(cmd)
 		if err != nil {

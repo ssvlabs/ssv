@@ -51,7 +51,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/observability"
-	ssv_log "github.com/ssvlabs/ssv/observability/log"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/operator"
@@ -166,7 +166,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		logger := zap.L()
-		defer ssv_log.CapturePanic(logger)
+		defer ssvlog.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 

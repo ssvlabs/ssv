@@ -10,7 +10,7 @@ import (
 
 	global_config "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/networkconfig"
-	ssv_log "github.com/ssvlabs/ssv/observability/log"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
 	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
@@ -35,11 +35,11 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		err := ssv_log.SetGlobal(
+		err := ssvlog.SetGlobal(
 			cfg.LogLevel,
 			cfg.LogLevelFormat,
 			cfg.LogFormat,
-			&ssv_log.LogFileOptions{
+			&ssvlog.LogFileOptions{
 				FilePath:   cfg.LogFilePath,
 				MaxSize:    cfg.LogFileSize,
 				MaxBackups: cfg.LogFileBackups,

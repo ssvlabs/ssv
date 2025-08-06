@@ -19,7 +19,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/networkconfig"
-	ssv_log "github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils"
 )
@@ -55,7 +55,7 @@ type bootNode struct {
 // New is the constructor of ssvNode
 func New(logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts Options) (Node, error) {
 	return &bootNode{
-		logger:      logger.Named(ssv_log.NameBootNode),
+		logger:      logger.Named(log.NameBootNode),
 		privateKey:  opts.PrivateKey,
 		discv5port:  opts.UDPPort,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
