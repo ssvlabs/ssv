@@ -16,8 +16,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -37,7 +37,7 @@ type Instance struct {
 	// spData is used for spectypes.BeaconVote, it contains source and target epochs from the duty encoded in StartValue
 	spData *ssvtypes.SlashingProtectionData
 
-	metrics *metrics
+	metrics *metricsRecorder
 }
 
 func NewInstance(
@@ -115,23 +115,23 @@ func (i *Instance) Start(
 				span.SetStatus(codes.Error, err.Error())
 				return
 				// TODO align spec to add else to avoid broadcast errored proposal
-			} else {
-				r, err := specqbft.HashDataRoot(i.StartValue) // @TODO (better than decoding?)
-				if err != nil {
-					logger.Warn("❗ failed to hash input data", zap.Error(err))
-					span.SetStatus(codes.Error, err.Error())
-					return
-				}
+			}
 
-				logger = logger.With(fields.Root(r))
-				const eventMsg = "📢 leader broadcasting proposal message"
-				logger.Debug(eventMsg)
-				span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
+			r, err := specqbft.HashDataRoot(i.StartValue) // TODO (better than decoding?)
+			if err != nil {
+				logger.Warn("❗ failed to hash input data", zap.Error(err))
+				span.SetStatus(codes.Error, err.Error())
+				return
+			}
 
-				if err := i.Broadcast(proposal); err != nil {
-					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
-					span.RecordError(err)
-				}
+			logger = logger.With(fields.Root(r))
+			const eventMsg = "📢 leader broadcasting proposal message"
+			logger.Debug(eventMsg)
+			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
+
+			if err := i.Broadcast(proposal); err != nil {
+				logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
+				span.RecordError(err)
 			}
 		}
 
@@ -166,7 +166,6 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 	}
 
 	res := i.processMsgF.Run(func() interface{} {
-
 		switch msg.QBFTMessage.MsgType {
 		case specqbft.ProposalMsgType:
 			return i.uponProposal(ctx, logger, msg)

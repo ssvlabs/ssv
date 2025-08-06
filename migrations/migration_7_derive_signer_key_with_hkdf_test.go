@@ -15,14 +15,14 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
+func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	t.Run("successfully migrates accounts with new key derivation", func(t *testing.T) {
@@ -47,8 +47,8 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 			OperatorPrivKey: operatorPrivKey,
 		}
 
-		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
+		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error { return nil })
 		assert.NoError(t, err)
 
@@ -81,8 +81,8 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 		}
 
 		completedExecuted := false
-		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
+		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error {
 				completedExecuted = true
 				return nil
@@ -113,8 +113,8 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 		}
 
 		completedExecuted := false
-		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
+		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error {
 				completedExecuted = true
 				return nil
@@ -146,8 +146,8 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 			OperatorPrivKey: operatorPrivKey,
 		}
 
-		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
+		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error {
 				return fmt.Errorf("completion error")
 			})
@@ -160,7 +160,7 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 func setupTest(t *testing.T) (basedb.Database, *zap.Logger) {
 	t.Helper()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 

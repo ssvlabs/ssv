@@ -175,7 +175,7 @@ func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMessa
 		signerCount = int(state.Quorum) + 1
 	}
 
-	var signers []spectypes.OperatorID
+	signers := make([]spectypes.OperatorID, 0, signerCount)
 	for i := 0; i < signerCount; i++ {
 		signers = append(signers, spectypes.OperatorID(i))
 	}

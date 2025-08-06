@@ -43,7 +43,7 @@ func TestFairMixIterator_Next_False(t *testing.T) {
 	iterator.AddSource(preFork)
 	iterator.AddSource(postFork)
 
-	var expectedNodes []*enode.Node
+	expectedNodes := make([]*enode.Node, 0, len(preforkNodes)+len(postForkNodes))
 	for _, node := range preforkNodes {
 		if node == nil {
 			break

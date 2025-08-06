@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -19,14 +20,14 @@ var (
 	tracer = otel.Tracer(observabilityName)
 	meter  = otel.Meter(observabilityName)
 
-	slotDelayHistogram = observability.NewMetric(
+	slotDelayHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "scheduler.slot_ticker_delay.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("delay of the slot ticker in seconds"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	dutiesExecutedCounter = observability.NewMetric(
+	dutiesExecutedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "scheduler.executions"),
 			metric.WithUnit("{duty}"),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -63,12 +64,12 @@ func (l *forkingDV5Listener) AllNodes() []*enode.Node {
 
 // Sends a ping in the post-fork service.
 // Before the fork, it also tries to ping with the pre-fork service in case of error.
-func (l *forkingDV5Listener) Ping(node *enode.Node) error {
-	err := l.postForkListener.Ping(node)
+func (l *forkingDV5Listener) Ping(node *enode.Node) (*v5wire.Pong, error) {
+	pong, err := l.postForkListener.Ping(node)
 	if err != nil {
 		return l.preForkListener.Ping(node)
 	}
-	return nil
+	return pong, nil
 }
 
 // Returns the LocalNode using the post-fork listener.

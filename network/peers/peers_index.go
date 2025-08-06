@@ -47,7 +47,6 @@ func NewPeersIndex(
 	netKeyProvider NetworkKeyProvider,
 	gossipScoreIndex GossipScoreIndex,
 ) *peersIndex {
-
 	return &peersIndex{
 		logger:           logger,
 		network:          network,

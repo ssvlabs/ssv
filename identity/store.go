@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
 )
@@ -38,7 +38,7 @@ type identityStore struct {
 // NewIdentityStore creates a new identity store
 func NewIdentityStore(logger *zap.Logger, db basedb.Database) Store {
 	es := identityStore{
-		logger: logger.Named(logging.NameP2PStorage),
+		logger: logger.Named(log.NameP2PStorage),
 		db:     db,
 	}
 	return &es

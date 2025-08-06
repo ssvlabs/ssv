@@ -17,6 +17,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -72,15 +73,15 @@ func (c *Controller) StartNewInstance(
 	defer span.End()
 
 	if err := c.GetConfig().GetValueChecker().CheckValue(value); err != nil {
-		return observability.Errorf(span, "value invalid: %w", err)
+		return traces.Errorf(span, "value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		return observability.Errorf(span, "attempting to start an instance with a past height")
+		return traces.Errorf(span, "attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return observability.Errorf(span, "instance already running")
+		return traces.Errorf(span, "instance already running")
 	}
 
 	c.Height = height
