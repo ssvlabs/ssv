@@ -60,13 +60,19 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
+func (c *Controller) StartNewInstance(
+	ctx context.Context,
+	logger *zap.Logger,
+	height specqbft.Height,
+	value []byte,
+	spData *ssvtypes.SlashingProtectionData,
+) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
-	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
+	if err := c.GetConfig().GetValueChecker().CheckValue(value); err != nil {
 		return traces.Errorf(span, "value invalid: %w", err)
 	}
 
@@ -83,7 +89,7 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 	newInstance := c.addAndStoreNewInstance()
 
 	span.AddEvent("start new instance")
-	newInstance.Start(ctx, logger, value, height)
+	newInstance.Start(ctx, logger, value, height, spData)
 	c.forceStopAllInstanceExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")

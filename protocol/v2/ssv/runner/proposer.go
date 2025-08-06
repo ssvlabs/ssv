@@ -32,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -43,7 +44,7 @@ type ProposerRunner struct {
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
-	valCheck            specqbft.ProposedValueCheckF
+	valCheck            ssv.ValueChecker
 	measurements        measurementsStore
 	graffiti            []byte
 
@@ -63,7 +64,7 @@ func NewProposerRunner(
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	doppelgangerHandler DoppelgangerProvider,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
 	proposerDelay time.Duration,
@@ -203,7 +204,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	r.measurements.StartConsensus()
 
-	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, nil); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
@@ -594,7 +595,7 @@ func (r *ProposerRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (r *ProposerRunner) GetValChecker() ssv.ValueChecker {
 	return r.valCheck
 }
 
