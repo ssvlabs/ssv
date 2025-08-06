@@ -16,5 +16,9 @@ var HoleskyE2ESSV = &SSVConfig{
 	RegistrySyncOffset:      big.NewInt(405579),
 	Bootnodes:               []string{},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
-	GasLimit36Epoch:         0,
+	Forks: SSVForks{
+		Alan:            0,
+		GasLimit36:      0,
+		NetworkTopology: 0,
+	},
 }

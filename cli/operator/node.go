@@ -421,7 +421,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			networkConfig.Forks[spec.DataVersionElectra].Epoch,
+			networkConfig.BeaconConfig.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 
@@ -505,6 +505,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metadataSyncer := metadata.NewSyncer(
 			logger,
+			networkConfig,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
 			consensusClient,
@@ -622,10 +623,16 @@ var StartNodeCmd = &cobra.Command{
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
-				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-				if !mySubnets.IsSet(subnet) {
+				if subnet := v.CommitteeSubnet(); !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
+				}
+
+				if !networkConfig.NetworkTopologyFork() {
+					if alanSubnet := v.CommitteeSubnetAlan(); !mySubnets.IsSet(alanSubnet) {
+						mySubnets.Set(alanSubnet)
+						myActiveSubnets++
+					}
 				}
 			}
 			idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
