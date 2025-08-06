@@ -18,8 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 func TestSlashing(t *testing.T) {
