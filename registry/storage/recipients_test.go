@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func TestStorage_DropRecipients(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newRecipientStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
@@ -58,7 +58,7 @@ func TestStorage_DropRecipients(t *testing.T) {
 }
 
 func TestStorage_GetRecipientsPrefix(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newRecipientStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
@@ -67,7 +67,7 @@ func TestStorage_GetRecipientsPrefix(t *testing.T) {
 }
 
 func TestStorage_SaveAndGetRecipientData(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newRecipientStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()

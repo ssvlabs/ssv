@@ -11,8 +11,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -30,7 +31,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 		return
 	}
 	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
@@ -186,8 +187,7 @@ func (c *Committee) ConsumeQueue(
 
 func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
 			zap.Uint64("msg_height", uint64(sm.Height)),
@@ -195,7 +195,8 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
 			zap.Uint64("signer", psm.Messages[0].Signer),

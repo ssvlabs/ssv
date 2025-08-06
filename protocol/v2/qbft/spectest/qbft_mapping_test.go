@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -95,7 +95,7 @@ func TestQBFTMapping(t *testing.T) {
 			// a little trick we do to instantiate all the internal instance params
 
 			preByts, _ := typedTest.Pre.Encode()
-			logger := logging.TestLogger(t)
+			logger := log.TestLogger(t)
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(

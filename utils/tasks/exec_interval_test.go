@@ -12,7 +12,7 @@ func TestExecWithInterval(t *testing.T) {
 	var list []string
 	var mut sync.Mutex
 
-	addToList := func(lastTick time.Duration) (bool, bool) {
+	addToList := func(_ time.Duration) (bool, bool) {
 		mut.Lock()
 		defer mut.Unlock()
 

@@ -26,6 +26,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -42,18 +49,18 @@ import (
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/migrations"
-	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/network"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/observability"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -66,12 +73,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/pebble"
@@ -128,16 +129,27 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		logger, err := setupGlobal()
-		if err != nil {
-			log.Fatal("could not create logger ", err)
+		if globalArgs.ConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
+				log.Fatal("could not read config needed for logger initialization: %w", err)
+			}
+		}
+		if globalArgs.ShareConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
+				log.Fatal("could not read share config needed for logger initialization: %w", err)
+			}
 		}
 
-		defer logging.CapturePanic(logger)
-
-		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
-
-		var observabilityOptions []observability.Option
+		observabilityOptions := []observability.Option{
+			observability.WithLogger(
+				cfg.LogLevel,
+				cfg.LogLevelFormat,
+				cfg.LogFormat,
+				cfg.LogFilePath,
+				cfg.LogFileSize,
+				cfg.LogFileBackups,
+			),
+		}
 		if cfg.MetricsAPIPort > 0 {
 			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
 		}
@@ -145,16 +157,19 @@ var StartNodeCmd = &cobra.Command{
 			observabilityOptions = append(observabilityOptions, observability.WithTraces())
 		}
 
-		logger.Info("initializing observability")
 		observabilityShutdown, err := observability.Initialize(
 			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			logger,
 			observabilityOptions...)
 		if err != nil {
-			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+			log.Fatal("could not initialize observability configuration", zap.Error(err))
 		}
+
+		logger := zap.L()
+		defer ssvlog.CapturePanic(logger)
+
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		defer func() {
 			if err = observabilityShutdown(cmd.Context()); err != nil {
@@ -433,11 +448,13 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
+		var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
+			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -507,7 +524,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
-					dstore, networkConfig.BeaconConfig)
+					dstore, networkConfig.BeaconConfig, decidedStreamPublisherFn)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
@@ -541,7 +558,12 @@ var StartNodeCmd = &cobra.Command{
 		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
+			go func() {
+				metricsHandler := metrics.NewHandler(logger, db, cfg.EnableProfile, operatorNode)
+				if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", cfg.MetricsAPIPort)); err != nil {
+					logger.Panic("failed to serve metrics", zap.Error(err))
+				}
+			}()
 		}
 
 		nodeProber := nodeprobe.NewProber(
@@ -679,7 +701,7 @@ func ensureNoMissingKeys(
 		return
 	}
 
-	var localKeys []phase0.BLSPubKey
+	localKeys := make([]phase0.BLSPubKey, 0, len(shares))
 	for _, share := range shares {
 		localKeys = append(localKeys, phase0.BLSPubKey(share.SharePubKey))
 	}
@@ -801,35 +823,6 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
-}
-
-func setupGlobal() (*zap.Logger, error) {
-	if globalArgs.ConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read config: %w", err)
-		}
-	}
-	if globalArgs.ShareConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %w", err)
-		}
-	}
-
-	err := logging.SetGlobalLogger(
-		cfg.LogLevel,
-		cfg.LogLevelFormat,
-		cfg.LogFormat,
-		&logging.LogFileOptions{
-			FilePath:   cfg.LogFilePath,
-			MaxSize:    cfg.LogFileSize,
-			MaxBackups: cfg.LogFileBackups,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
-	}
-
-	return zap.L(), nil
 }
 
 func setupBadgerDB(
@@ -1189,16 +1182,6 @@ func syncContractEvents(
 	}
 
 	return eventSyncer
-}
-
-func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
-	logger = logger.Named(logging.NameMetricsHandler)
-	// init and start HTTP handler
-	metricsHandler := metrics.NewHandler(logger, db, enableProf, opNode)
-	addr := fmt.Sprintf(":%d", port)
-	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
-		logger.Panic("failed to serve metrics", zap.Error(err))
-	}
 }
 
 func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
