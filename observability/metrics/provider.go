@@ -13,7 +13,8 @@ import (
 
 func InitializeProvider(ctx context.Context, resources *resource.Resource, isEnabled bool) (metric.MeterProvider, func(context.Context) error, error) {
 	if !isEnabled {
-		return noop.NewMeterProvider(), nil, nil
+		noopShutdown := func(ctx context.Context) error { return nil }
+		return noop.NewMeterProvider(), noopShutdown, nil
 	}
 
 	promExporter, err := prometheus.New()

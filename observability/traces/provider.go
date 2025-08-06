@@ -13,7 +13,8 @@ import (
 
 func InitializeProvider(ctx context.Context, resources *resource.Resource, isEnabled bool) (trace.TracerProvider, func(context.Context) error, error) {
 	if !isEnabled {
-		return noop.NewTracerProvider(), nil, nil
+		noopShutdown := func(ctx context.Context) error { return nil }
+		return noop.NewTracerProvider(), noopShutdown, nil
 	}
 
 	autoExporter, err := autoexport.NewSpanExporter(ctx)
