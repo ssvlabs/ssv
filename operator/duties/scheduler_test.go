@@ -249,7 +249,7 @@ func waitForDutiesFetch(
 	executeDutiesCall chan []*spectypes.ValidatorDuty,
 	timeout time.Duration,
 ) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	select {
 	case <-fetchDutiesCall:
@@ -284,7 +284,7 @@ func waitForDutiesExecution(
 	timeout time.Duration,
 	expectedDuties []*spectypes.ValidatorDuty,
 ) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	select {
 	case <-fetchDutiesCall:
