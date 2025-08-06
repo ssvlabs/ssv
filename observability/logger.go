@@ -8,14 +8,8 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 )
 
-var logger *zap.Logger
-
 func initLogger(l *zap.Logger) *zap.Logger {
-	if l == nil {
-		l = zap.NewNop()
-	}
-
-	logger = l.Named(log.NameObservability)
+	logger := l.Named(log.NameObservability)
 	metrics.InitLogger(logger)
 	traces.InitLogger(logger)
 

@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func buildResources(appName, appVersion string) (*resource.Resource, error) {
+func buildResources(appName, appVersion string, logger *zap.Logger) (*resource.Resource, error) {
 	const defaultHostname = "unknown"
 
 	hostName, err := os.Hostname()

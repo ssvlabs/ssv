@@ -16,9 +16,6 @@ var logger *zap.Logger
 const traceIDByteLen = 16
 
 func InitLogger(l *zap.Logger) {
-	if l == nil {
-		l = zap.NewNop()
-	}
 	logger = l
 }
 

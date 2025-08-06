@@ -75,7 +75,7 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 	}
 
 	localLogger.Info("building OTel resources")
-	resources, err := buildResources(appName, appVersion)
+	resources, err := buildResources(appName, appVersion, localLogger)
 	if err != nil {
 		return nil, fmt.Errorf("could not build OTel resources: %w", err)
 	}
