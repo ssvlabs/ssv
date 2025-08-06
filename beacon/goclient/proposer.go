@@ -22,7 +22,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
