@@ -280,8 +280,8 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleAggregator)
 
 	r.measurements.EndPostConsensus()
