@@ -280,6 +280,9 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+
+	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleAggregator)
 
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregator)
@@ -332,12 +335,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(
-		ctx,
-		1,
-		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleAggregator,
-	)
+	recordSuccessfulSubmission(ctx, 1, epoch, spectypes.BNRoleAggregator)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

@@ -27,7 +27,9 @@ type submissionsMetric struct {
 
 var (
 	submissions = make(map[types.BeaconRole]submissionsMetric)
-	metricLock  sync.Mutex
+	quorums     = make(map[types.BeaconRole]submissionsMetric)
+
+	submissionsLock, quorumsLock sync.Mutex
 )
 
 var (
@@ -68,6 +70,12 @@ var (
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("number of duty submissions")))
 
+	quorumsGauge = metrics.New(
+		meter.Int64Gauge(
+			observability.InstrumentName(observabilityNamespace, "quorums"),
+			metric.WithUnit("{quorum}"),
+			metric.WithDescription("number of successful quorums")))
+
 	failedSubmissionCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "submissions.failed"),
@@ -76,16 +84,14 @@ var (
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
-	metricLock.Lock()
-	defer metricLock.Unlock()
+	submissionsLock.Lock()
+	defer submissionsLock.Unlock()
 
 	var rolesToReset []types.BeaconRole
 	for r, submission := range submissions {
 		if submission.epoch != 0 && submission.epoch < epoch {
-			submissionsGauge.Record(ctx,
-				int64(submission.count),
-				metric.WithAttributes(
-					observability.BeaconRoleAttribute(r)))
+			submissionsGauge.Record(ctx, int64(submission.count), metric.WithAttributes(observability.BeaconRoleAttribute(r)))
+
 			rolesToReset = append(rolesToReset, r)
 		}
 	}
@@ -100,6 +106,32 @@ func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.
 	submission.epoch = epoch
 	submission.count += count
 	submissions[role] = submission
+}
+
+func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
+	quorumsLock.Lock()
+	defer quorumsLock.Unlock()
+
+	var rolesToReset []types.BeaconRole
+	for r, quorum := range quorums {
+		if quorum.epoch != 0 && quorum.epoch < epoch {
+			quorumsGauge.Record(ctx, int64(quorum.count), metric.WithAttributes(observability.BeaconRoleAttribute(r)))
+
+			rolesToReset = append(rolesToReset, r)
+		}
+	}
+
+	for _, r := range rolesToReset {
+		quorums[r] = submissionsMetric{
+			epoch: epoch,
+		}
+	}
+
+	quorum := quorums[role]
+	quorum.epoch = epoch
+	quorum.count += count
+	quorums[role] = quorum
+
 }
 
 func recordFailedSubmission(ctx context.Context, role types.BeaconRole) {
