@@ -18,8 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig *networkconfig.NetworkConfig) {
-
+func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig *networkconfig.Network) {
 	require.Len(t, dvs.bootnodes, len(netConfig.Bootnodes))
 
 	for _, bootnode := range netConfig.Bootnodes {
@@ -121,7 +120,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig *networkconfig.NetworkConfig) {
+func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig *networkconfig.Network) {
 	// Check domain entry
 	domainEntry := records.DomainTypeEntry{
 		Key:        records.KeyDomainType,
@@ -145,7 +144,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
@@ -159,7 +158,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.ssvConfig = networkconfig.TestNetwork.SSVConfig
+	dvs.ssvConfig = networkconfig.TestNetwork.SSV
 	// Test PublishENR method
 	dvs.PublishENR()
 
@@ -171,7 +170,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
@@ -366,7 +365,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			defer cancel()
 
 			// create options with unique ports for parallel testing
-			opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+			opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 			opts.DiscV5Opts.Port = uint16(13000 + i*10)
 			opts.DiscV5Opts.TCPPort = uint16(14000 + i*10)
 			opts.HostAddress = tc.hostAddress

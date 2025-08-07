@@ -11,10 +11,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -55,7 +55,7 @@ type BeaconNode interface {
 
 // Options contains the configuration options for the Doppelgänger protection.
 type Options struct {
-	BeaconConfig       *networkconfig.BeaconConfig
+	BeaconConfig       *networkconfig.Beacon
 	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
@@ -68,7 +68,7 @@ type handler struct {
 	mu              sync.RWMutex
 	validatorsState map[phase0.ValidatorIndex]*doppelgangerState
 
-	beaconConfig       *networkconfig.BeaconConfig
+	beaconConfig       *networkconfig.Beacon
 	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
@@ -82,7 +82,7 @@ func NewHandler(opts *Options) *handler {
 		beaconNode:         opts.BeaconNode,
 		validatorProvider:  opts.ValidatorProvider,
 		slotTickerProvider: opts.SlotTickerProvider,
-		logger:             opts.Logger.Named(logging.NameDoppelganger),
+		logger:             opts.Logger.Named(log.NameDoppelganger),
 		validatorsState:    make(map[phase0.ValidatorIndex]*doppelgangerState),
 	}
 }
@@ -233,7 +233,7 @@ func (h *handler) Start(ctx context.Context) error {
 
 func (h *handler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
 	// Set a deadline until the start of the next slot, with a 100ms safety margin
-	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	h.mu.RLock()
@@ -330,8 +330,8 @@ func (h *handler) recordValidatorStates(ctx context.Context) {
 		return
 	}()
 
-	observability.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
-	observability.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
+	metrics.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
+	metrics.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
 }
 
 func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {

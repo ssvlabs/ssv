@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -123,7 +123,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingDuties
-	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.GetSlotsPerEpoch()))
+	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.SlotsPerEpoch))
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {

@@ -17,8 +17,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/slotticker/mocks"
@@ -30,7 +30,7 @@ import (
 )
 
 func TestSubmitProposal(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -43,7 +43,7 @@ func TestSubmitProposal(t *testing.T) {
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
 
-	beaconConfig := networkconfig.TestNetwork.BeaconConfig
+	beaconConfig := networkconfig.TestNetwork.Beacon
 	populateStorage(t, shareStorage, operatorData)
 
 	frCtrl := NewController(logger, &ControllerOptions{
@@ -127,11 +127,11 @@ func TestSubmitProposal(t *testing.T) {
 }
 
 func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

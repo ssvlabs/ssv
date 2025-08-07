@@ -179,7 +179,7 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 func (gc *GoClient) waitToSlotTwoThirds(ctx context.Context, slot phase0.Slot) error {
 	config := gc.getBeaconConfig()
 	oneInterval := config.IntervalDuration()
-	finalTime := config.GetSlotStartTime(slot).Add(2 * oneInterval)
+	finalTime := config.SlotStartTime(slot).Add(2 * oneInterval)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return nil

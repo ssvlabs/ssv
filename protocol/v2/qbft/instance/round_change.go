@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -70,7 +70,7 @@ func (i *Instance) uponRoundChange(
 			return errors.Wrap(err, "failed to create proposal")
 		}
 
-		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happenes in createproposal
+		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happens in createproposal
 
 		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonJustified)
 

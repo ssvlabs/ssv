@@ -54,7 +54,7 @@ type peerIDWithMessageID struct {
 
 type messageValidator struct {
 	logger          *zap.Logger
-	netCfg          networkconfig.Network
+	netCfg          *networkconfig.Network
 	pectraForkEpoch phase0.Epoch
 	state           *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
 	validatorStore  validatorStore
@@ -64,11 +64,11 @@ type messageValidator struct {
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
-	// same ID apply any state modifications (during message validation - which is not
-	// stateless) in isolated synchronised manner with respect to each other.
+	// the same ID apply any state modifications (during message validation - which is not
+	// stateless) in an isolated synchronized manner with respect to each other.
 	validationLockCache *ttlcache.Cache[peerIDWithMessageID, *sync.Mutex]
 	// validationLocksInflight helps us prevent generating 2 different validation locks
-	// for messages that must lock on the same lock (messages with same ID) when undergoing
+	// for messages that must lock on the same lock (messages with the same ID) when undergoing
 	// validation (that validation is not stateless - it often requires messageValidator to
 	// update some state).
 	validationLocksInflight singleflight.Group[peerIDWithMessageID, *sync.Mutex]
@@ -80,7 +80,7 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 // It starts a goroutine that cleans up the state.
 func New(
-	netCfg networkconfig.Network,
+	netCfg *networkconfig.Network,
 	validatorStore validatorStore,
 	operators operators,
 	dutyStore *dutystore.Store,
@@ -99,7 +99,7 @@ func New(
 		pectraForkEpoch:     pectraForkEpoch,
 	}
 
-	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.GetSlotDuration() // #nosec G115 -- amount of slots cannot exceed int64
+	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
 	mv.state = ttlcache.New(
 		ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
 	)
@@ -305,7 +305,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeInfo{}, e
 	}
 
-	var operators []spectypes.OperatorID
+	operators := make([]spectypes.OperatorID, 0, len(share.Committee))
 	for _, c := range share.Committee {
 		operators = append(operators, c.Signer)
 	}
@@ -330,5 +330,5 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 // maxStoredSlots stores max amount of slots message validation stores.
 // It's exported to allow usage outside of message validation
 func (mv *messageValidator) maxStoredSlots() uint64 {
-	return mv.netCfg.GetSlotsPerEpoch() + LateSlotAllowance
+	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
 }

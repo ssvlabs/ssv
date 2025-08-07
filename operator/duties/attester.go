@@ -13,8 +13,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -86,7 +87,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.processExecution(ctx, currentEpoch, slot)
 			h.processFetching(ctx, currentEpoch, slot)
 
-			slotsPerEpoch := h.beaconConfig.GetSlotsPerEpoch()
+			slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
@@ -140,7 +141,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.GetSlotDuration()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration/2)
 	defer cancel()
 
 	slot := h.beaconConfig.EstimatedCurrentSlot()
@@ -158,7 +159,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		))
 	defer span.End()
 
-	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	if h.fetchCurrentEpoch {
@@ -251,7 +252,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		return observability.Errorf(span, "failed to fetch attester duties: %w", err)
+		return traces.Errorf(span, "failed to fetch attester duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -343,8 +344,8 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = h.beaconConfig.GetSlotsPerEpoch()
-	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
+	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
@@ -380,6 +381,6 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 }
 
 func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
-	slotsPerEpoch := h.beaconConfig.GetSlotsPerEpoch()
+	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 	return uint64(slot)%slotsPerEpoch > slotsPerEpoch/2-2
 }

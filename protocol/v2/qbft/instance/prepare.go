@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -138,7 +138,6 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootVerifySignature(
 	round specqbft.Round,
 	root [32]byte,
 ) error {
-
 	if err := i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, round, root); err != nil {
 		return err
 	}

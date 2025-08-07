@@ -75,7 +75,7 @@ type Config struct {
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
 	// NetworkConfig defines a network configuration.
-	NetworkConfig *networkconfig.NetworkConfig
+	NetworkConfig *networkconfig.Network
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
 
@@ -181,7 +181,6 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 
 // TransformBootnodes converts bootnodes string and convert it to slice
 func (c *Config) TransformBootnodes() []string {
-
 	if c.Bootnodes == "" {
 		return c.NetworkConfig.Bootnodes
 	}

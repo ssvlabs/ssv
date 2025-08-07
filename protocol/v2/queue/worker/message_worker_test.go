@@ -8,13 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestWorker(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	worker := NewWorker(logger, &Config{
 		Ctx:          t.Context(),
 		WorkersCount: 1,
@@ -32,7 +32,7 @@ func TestWorker(t *testing.T) {
 }
 
 func TestManyWorkers(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{
@@ -56,7 +56,7 @@ func TestManyWorkers(t *testing.T) {
 }
 
 func TestBuffer(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{

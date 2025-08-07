@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -206,8 +206,8 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = h.beaconConfig.GetSlotsPerEpoch()
-	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
+	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {

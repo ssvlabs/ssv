@@ -11,7 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	model "github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -56,11 +56,66 @@ func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 	return committeeID, index, nil
 }
 
+func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
+	duties := []*ValidatorDutyTrace{}
+
+	// lookup in cache
+	c.validatorTraces.Range(func(pubkey spectypes.ValidatorPK, validatorSlots *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+		traces, found := validatorSlots.Get(slot)
+		if found {
+			traces.Lock()
+			defer traces.Unlock()
+
+			// find the trace for the role
+			for _, trace := range traces.roles {
+				if trace.Role == role {
+					duties = append(duties, &ValidatorDutyTrace{
+						ValidatorDutyTrace: *deepCopyValidatorDutyTrace(trace),
+						pubkey:             pubkey,
+					})
+				}
+			}
+		}
+		return true // keep iterating
+	})
+
+	// go to disk for the older ones
+	storeDuties, err := c.getValidatorDutiesFromDisk(role, slot)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(duties, storeDuties...), nil
+}
+
+func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
+	storeDuties, err := c.store.GetValidatorDuties(role, slot)
+	if err != nil {
+		return nil, fmt.Errorf("get validator duties from disk: %w", err)
+	}
+
+	duties := []*ValidatorDutyTrace{}
+
+	for _, duty := range storeDuties {
+		share, found := c.validators.ValidatorByIndex(duty.Validator)
+		if !found {
+			c.logger.Error("validator not found by index", fields.ValidatorIndex(duty.Validator))
+			return nil, fmt.Errorf("error retrieving validator by index: %v", duty.Validator)
+		}
+
+		duties = append(duties, &ValidatorDutyTrace{
+			ValidatorDutyTrace: *deepCopyValidatorDutyTrace(duty),
+			pubkey:             share.ValidatorPubKey,
+		})
+	}
+	return duties, nil
+}
+
 func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
 	validatorSlots, found := c.validatorTraces.Get(pubkey)
 	if !found {
-		return c.getValidatorDutiesFromDisk(role, slot, pubkey)
+		return c.getValidatorDutyFromDisk(role, slot, pubkey)
 	}
 
 	traces, found := validatorSlots.Get(slot)
@@ -80,10 +135,10 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 	}
 
 	// go to disk for the older ones
-	return c.getValidatorDutiesFromDisk(role, slot, pubkey)
+	return c.getValidatorDutyFromDisk(role, slot, pubkey)
 }
 
-func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
+func (c *Collector) getValidatorDutyFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	vIndex, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
 		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
@@ -176,12 +231,12 @@ func hasSignersForRoles(duty *model.CommitteeDutyTrace, roles ...spectypes.Beaco
 		return true
 	}
 	for _, role := range roles {
-		switch role {
-		case spectypes.BNRoleAttester:
+		if role == spectypes.BNRoleAttester {
 			if len(duty.Attester) == 0 {
 				return false
 			}
-		case spectypes.BNRoleSyncCommittee:
+		}
+		if role == spectypes.BNRoleSyncCommittee {
 			if len(duty.SyncCommittee) == 0 {
 				return false
 			}
@@ -221,7 +276,7 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes
 	}
 
 	for _, duty := range duties {
-		var signers []spectypes.OperatorID
+		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.SyncCommittee)+len(duty.Attester))
 		for _, d := range duty.Decideds {
 			signers = append(signers, d.Signers...)
 		}
@@ -283,7 +338,7 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.Vali
 		return nil, fmt.Errorf("get committee duty: %w", err)
 	}
 
-	var signers []spectypes.OperatorID
+	signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.SyncCommittee)+len(duty.Attester))
 
 	for _, d := range duty.Decideds {
 		signers = append(signers, d.Signers...)
@@ -316,7 +371,7 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 			return nil, fmt.Errorf("get validator duty for decideds: %w", err)
 		}
 
-		var signers []spectypes.OperatorID
+		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
 
 		for _, d := range duty.Decideds {
 			signers = append(signers, d.Signers...)
@@ -346,7 +401,7 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 	}
 
 	for _, duty := range duties {
-		var signers []spectypes.OperatorID
+		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
 
 		for _, d := range duty.Decideds {
 			signers = append(signers, d.Signers...)
@@ -414,11 +469,11 @@ func deepCopyCommitteeDutyTrace(trace *model.CommitteeDutyTrace) *model.Committe
 }
 
 func deepCopyDecideds(decideds []*model.DecidedTrace) []*model.DecidedTrace {
-	copy := make([]*model.DecidedTrace, len(decideds))
+	cp := make([]*model.DecidedTrace, len(decideds))
 	for i, d := range decideds {
-		copy[i] = deepCopyDecided(d)
+		cp[i] = deepCopyDecided(d)
 	}
-	return copy
+	return cp
 }
 
 func deepCopyDecided(trace *model.DecidedTrace) *model.DecidedTrace {
@@ -431,11 +486,11 @@ func deepCopyDecided(trace *model.DecidedTrace) *model.DecidedTrace {
 }
 
 func deepCopyRounds(rounds []*model.RoundTrace) []*model.RoundTrace {
-	copy := make([]*model.RoundTrace, len(rounds))
+	cp := make([]*model.RoundTrace, len(rounds))
 	for i, r := range rounds {
-		copy[i] = deepCopyRound(r)
+		cp[i] = deepCopyRound(r)
 	}
-	return copy
+	return cp
 }
 
 func deepCopyRound(round *model.RoundTrace) *model.RoundTrace {
@@ -466,19 +521,19 @@ func deepCopyProposalTrace(trace *model.ProposalTrace) *model.ProposalTrace {
 }
 
 func deepCopyCommits(commits []*model.QBFTTrace) []*model.QBFTTrace {
-	copy := make([]*model.QBFTTrace, len(commits))
+	cp := make([]*model.QBFTTrace, len(commits))
 	for i, c := range commits {
-		copy[i] = deepCopyQBFTTrace(c)
+		cp[i] = deepCopyQBFTTrace(c)
 	}
-	return copy
+	return cp
 }
 
 func deepCopyRoundChanges(roundChanges []*model.RoundChangeTrace) []*model.RoundChangeTrace {
-	copy := make([]*model.RoundChangeTrace, len(roundChanges))
+	cp := make([]*model.RoundChangeTrace, len(roundChanges))
 	for i, r := range roundChanges {
-		copy[i] = deepCopyRoundChange(r)
+		cp[i] = deepCopyRoundChange(r)
 	}
-	return copy
+	return cp
 }
 
 func deepCopyRoundChange(trace *model.RoundChangeTrace) *model.RoundChangeTrace {
@@ -495,11 +550,11 @@ func deepCopyRoundChange(trace *model.RoundChangeTrace) *model.RoundChangeTrace 
 }
 
 func deepCopyPrepares(prepares []*model.QBFTTrace) []*model.QBFTTrace {
-	copy := make([]*model.QBFTTrace, len(prepares))
+	cp := make([]*model.QBFTTrace, len(prepares))
 	for i, p := range prepares {
-		copy[i] = deepCopyQBFTTrace(p)
+		cp[i] = deepCopyQBFTTrace(p)
 	}
-	return copy
+	return cp
 }
 
 func deepCopyQBFTTrace(trace *model.QBFTTrace) *model.QBFTTrace {
@@ -512,11 +567,11 @@ func deepCopyQBFTTrace(trace *model.QBFTTrace) *model.QBFTTrace {
 }
 
 func deepCopySigners(committee []*model.SignerData) []*model.SignerData {
-	copy := make([]*model.SignerData, len(committee))
+	cp := make([]*model.SignerData, len(committee))
 	for i, c := range committee {
-		copy[i] = deepCopySignerData(c)
+		cp[i] = deepCopySignerData(c)
 	}
-	return copy
+	return cp
 }
 
 func deepCopySignerData(data *model.SignerData) *model.SignerData {
@@ -528,9 +583,9 @@ func deepCopySignerData(data *model.SignerData) *model.SignerData {
 }
 
 func deepCopyOperatorIDs(ids []spectypes.OperatorID) []spectypes.OperatorID {
-	copy := make([]spectypes.OperatorID, 0, len(ids))
-	copy = append(copy, ids...)
-	return copy
+	cp := make([]spectypes.OperatorID, len(ids))
+	copy(cp, ids)
+	return cp
 }
 
 func deepCopyValidatorDutyTrace(trace *model.ValidatorDutyTrace) *model.ValidatorDutyTrace {
@@ -549,17 +604,17 @@ func deepCopyValidatorDutyTrace(trace *model.ValidatorDutyTrace) *model.Validato
 }
 
 func deepCopyProposalData(data []byte) []byte {
-	copy := make([]byte, len(data))
-	copy = append(copy, data...)
-	return copy
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	return cp
 }
 
 func deepCopyPartialSigs(partialSigs []*model.PartialSigTrace) []*model.PartialSigTrace {
-	copy := make([]*model.PartialSigTrace, len(partialSigs))
+	cp := make([]*model.PartialSigTrace, len(partialSigs))
 	for i, p := range partialSigs {
-		copy[i] = deepCopyPartialSig(p)
+		cp[i] = deepCopyPartialSig(p)
 	}
-	return copy
+	return cp
 }
 
 func deepCopyPartialSig(trace *model.PartialSigTrace) *model.PartialSigTrace {

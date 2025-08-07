@@ -113,7 +113,7 @@ func (gc *GoClient) ComputeSigningRoot(object interface{}, domain phase0.Domain)
 	}, domain[:])
 }
 
-// signingData Computes the signing data by utilising the provided root function and then
+// signingData Computes the signing data by using the provided root function and then
 // returning the signing data of the container object.
 func (gc *GoClient) signingData(rootFunc func() ([32]byte, error), domain []byte) ([32]byte, error) {
 	objRoot, err := rootFunc()

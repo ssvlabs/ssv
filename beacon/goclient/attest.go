@@ -16,7 +16,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 type (
@@ -95,7 +95,6 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 	}
 
 	return result, spec.DataVersionPhase0, nil
-
 }
 
 func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {

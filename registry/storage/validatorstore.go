@@ -57,7 +57,7 @@ type Committee struct {
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
-func (c *Committee) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
+func (c *Committee) IsParticipating(beaconCfg *networkconfig.Beacon, epoch phase0.Epoch) bool {
 	for _, validator := range c.Validators {
 		if validator.IsParticipating(beaconCfg, epoch) {
 			return true
@@ -81,7 +81,7 @@ type validatorStore struct {
 	byCommitteeID     map[spectypes.CommitteeID]*Committee
 	byOperatorID      map[spectypes.OperatorID]*sharesAndCommittees
 
-	beaconCfg networkconfig.Beacon
+	beaconCfg *networkconfig.Beacon
 
 	mu sync.RWMutex
 }
@@ -90,7 +90,7 @@ func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
 	pubkeyIndexMapping map[spectypes.ValidatorPK]phase0.ValidatorIndex,
-	beaconCfg networkconfig.Beacon,
+	beaconCfg *networkconfig.Beacon,
 ) *validatorStore {
 	return &validatorStore{
 		shares:            shares,
@@ -316,7 +316,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 			}
 
 			if !updated {
-				newCommittees = append(newCommittees, committee)
+				newCommittees = append(newCommittees, committee) //nolint: makezero
 			}
 			data.committees = newCommittees
 			c.byOperatorID[operator.Signer] = data
@@ -481,7 +481,7 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 }
 
 func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShare) (*Committee, error) {
-	var shares []*types.SSVShare
+	shares := make([]*types.SSVShare, 0, len(committee.Validators))
 	removed := false
 
 	for i, share := range committee.Validators {

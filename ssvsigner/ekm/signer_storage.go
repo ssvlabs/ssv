@@ -19,8 +19,8 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -77,17 +77,17 @@ type SlashingStoreTxn interface {
 // (walletPrefix, highestAttPrefix, etc.).
 type storage struct {
 	db            basedb.Database
-	beaconConfig  networkconfig.Beacon
+	beaconConfig  *networkconfig.Beacon
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, beaconConfig networkconfig.Beacon, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, beaconConfig *networkconfig.Beacon, logger *zap.Logger) Storage {
 	return &storage{
 		db:           db,
 		beaconConfig: beaconConfig,
-		logger:       logger.Named(logging.NameSignerStorage).Named(prefix + "storage"),
+		logger:       logger.Named(log.NameSignerStorage).Named(prefix + "storage"),
 		lock:         sync.RWMutex{},
 	}
 }
@@ -106,7 +106,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(s.beaconConfig.GetNetworkName() + obj)
+	return []byte(s.beaconConfig.Name + obj)
 }
 
 // Name returns storage name.
@@ -116,7 +116,7 @@ func (s *storage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *storage) Network() core.Network {
-	return core.Network(s.beaconConfig.GetNetworkName())
+	return core.Network(s.beaconConfig.Name)
 }
 
 // SaveWallet stores the given wallet.

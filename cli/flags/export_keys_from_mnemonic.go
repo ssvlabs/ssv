@@ -36,7 +36,7 @@ func GetKeyIndexFlagValue(c *cobra.Command) (uint64, error) {
 
 // AddNetworkFlag adds the network key flag to the command
 func AddNetworkFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, networkFlag, networkconfig.MainnetName, "network", false)
+	cliflag.AddPersistentStringFlag(c, networkFlag, networkconfig.MainnetSSV.Name, "network", false)
 }
 
 // GetNetworkFlag gets the network key flag from the command

@@ -10,22 +10,22 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 )
 
-type metrics struct {
+type metricsRecorder struct {
 	stageStart time.Time
 	role       string
 }
 
-func newMetrics(role string) *metrics {
-	return &metrics{
+func newMetrics(role string) *metricsRecorder {
+	return &metricsRecorder{
 		role: role,
 	}
 }
 
-func (m *metrics) StartStage() {
+func (m *metricsRecorder) StartStage() {
 	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStage(ctx context.Context, round qbft.Round, s stage) {
+func (m *metricsRecorder) EndStage(ctx context.Context, round qbft.Round, s stage) {
 	validatorStageDurationHistogram.Record(
 		ctx,
 		time.Since(m.stageStart).Seconds(),
@@ -37,7 +37,7 @@ func (m *metrics) EndStage(ctx context.Context, round qbft.Round, s stage) {
 }
 
 // RecordRoundChange records a round change event with the specified reason.
-func (m *metrics) RecordRoundChange(ctx context.Context, round qbft.Round, reason roundChangeReason) {
+func (m *metricsRecorder) RecordRoundChange(ctx context.Context, round qbft.Round, reason roundChangeReason) {
 	roundsChangedCounter.Add(
 		ctx,
 		1,

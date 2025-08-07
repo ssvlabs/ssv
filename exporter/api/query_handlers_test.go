@@ -14,18 +14,19 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	nm := NetworkMessage{
 		Msg: Message{
@@ -44,7 +45,7 @@ func TestHandleUnknownQuery(t *testing.T) {
 }
 
 func TestHandleErrorQuery(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	tests := []struct {
 		expectedErr string
@@ -83,7 +84,7 @@ func TestHandleErrorQuery(t *testing.T) {
 }
 
 func TestHandleDecidedQuery(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()
@@ -106,7 +107,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	for _, role := range roles {
 		pk := sks[1].GetPublicKey()
-		ssvConfig := networkconfig.TestNetwork.SSVConfig
+		ssvConfig := networkconfig.TestNetwork.SSV
 		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 			return oids, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
@@ -208,7 +209,7 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, fu
 }
 
 func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.ParticipantStores) {
-	sExporter, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	sExporter, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
 		panic(err)
 	}

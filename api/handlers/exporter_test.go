@@ -227,7 +227,6 @@ func TestExporterDecideds(t *testing.T) {
 				require.Len(t, resp.Data, 2)
 
 				for _, item := range resp.Data {
-
 					assert.Equal(t, "ATTESTER", item.Role)
 					assert.Equal(t, "b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1", item.PublicKey)
 				}
@@ -495,6 +494,7 @@ type mockTraceStore struct {
 	validatorDecideds           map[string][]qbftstorage.ParticipantsRangeEntry
 	committeeDecideds           map[string][]qbftstorage.ParticipantsRangeEntry
 	GetValidatorDutyFunc        func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
+	GetValidatorDutiesFunc      func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDutyFunc        func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error)
 	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error)
 	GetCommitteeIDFunc          func(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
@@ -514,6 +514,13 @@ func newMockTraceStore() *mockTraceStore {
 func (m *mockTraceStore) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
 	if m.GetValidatorDutyFunc != nil {
 		return m.GetValidatorDutyFunc(role, slot, pubkey)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error) {
+	if m.GetValidatorDutiesFunc != nil {
+		return m.GetValidatorDutiesFunc(role, slot)
 	}
 	return nil, nil
 }
@@ -1502,11 +1509,62 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 		},
 		{
+			name: "valid request - no pubkeys or indices",
+			request: map[string]any{
+				"from":  100,
+				"to":    100,
+				"roles": []string{"PROPOSER"},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				validatorStore.ValidatorByIndexFunc = func(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
+					share := &ssvtypes.SSVShare{}
+					copy(share.ValidatorPubKey[:], pkBytes)
+					return share, true
+				}
+
+				store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error) {
+					results := []*dutytracer.ValidatorDutyTrace{
+						{
+							ValidatorDutyTrace: exportertypes.ValidatorDutyTrace{
+								Slot:      150,
+								Role:      role,
+								Validator: 1,
+							},
+						},
+						{
+							ValidatorDutyTrace: exportertypes.ValidatorDutyTrace{
+								Slot:      150,
+								Role:      role,
+								Validator: 2,
+							},
+						},
+					}
+					return results, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*validatorTrace `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 2)
+				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
+				assert.Equal(t, "PROPOSER", resp.Data[0].Role)
+				assert.Equal(t, phase0.ValidatorIndex(1), resp.Data[0].Validator)
+				assert.Equal(t, phase0.ValidatorIndex(2), resp.Data[1].Validator)
+			},
+		},
+		{
 			name: "invalid request - no pubkeys or indices",
 			request: map[string]any{
 				"from":  100,
 				"to":    200,
-				"roles": []string{"PROPOSER"},
+				"roles": []string{"ATTESTER"},
 			},
 			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
 			expectedStatus: http.StatusBadRequest,
@@ -1516,7 +1574,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 					Message string `json:"error"`
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, "either pubkeys or indices is required", resp.Message)
+				assert.Equal(t, "role ATTESTER is a committee duty, please provide either pubkeys or indices to filter the duty for specific a validators subset or use the /committee endpoint to query all the corresponding duties", resp.Message)
 			},
 		},
 		{

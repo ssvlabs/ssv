@@ -16,13 +16,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // VoluntaryExitRunner runner for validator voluntary exit duty
@@ -39,14 +39,13 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 ) (Runner, error) {
-
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
 	}
@@ -93,7 +92,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return observability.Errorf(span, "failed processing voluntary exit message: %w", err)
+		return traces.Errorf(span, "failed processing voluntary exit message: %w", err)
 	}
 
 	// quorum returns true only once (first time quorum achieved)
@@ -110,7 +109,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return observability.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
+		return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
@@ -123,7 +122,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 
 	span.AddEvent("submitting voluntary exit")
 	if err := r.beacon.SubmitVoluntaryExit(ctx, signedVoluntaryExit); err != nil {
-		return observability.Errorf(span, "could not submit voluntary exit: %w", err)
+		return traces.Errorf(span, "could not submit voluntary exit: %w", err)
 	}
 
 	const eventMsg = "✅ successfully submitted voluntary exit"
@@ -175,7 +174,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	voluntaryExit, err := r.calculateVoluntaryExit()
 	if err != nil {
-		return observability.Errorf(span, "could not calculate voluntary exit: %w", err)
+		return traces.Errorf(span, "could not calculate voluntary exit: %w", err)
 	}
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
@@ -189,7 +188,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		spectypes.DomainVoluntaryExit,
 	)
 	if err != nil {
-		return observability.Errorf(span, "could not sign VoluntaryExit object: %w", err)
+		return traces.Errorf(span, "could not sign VoluntaryExit object: %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
@@ -198,10 +197,10 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return observability.Errorf(span, "could not encode PartialSignatureMessages: %w", err)
+		return traces.Errorf(span, "could not encode PartialSignatureMessages: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -213,7 +212,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return observability.Errorf(span, "could not sign SSVMessage: %w", err)
+		return traces.Errorf(span, "could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -224,7 +223,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return observability.Errorf(span, "can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
+		return traces.Errorf(span, "can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
 	}
 
 	// stores value for later using in ProcessPreConsensus

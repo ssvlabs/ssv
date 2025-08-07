@@ -10,14 +10,15 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
-	return c.logger.Named("TaskExecutor").
+	return c.logger.Named(log.NameControllerTaskExecutor).
 		With(zap.String("task", taskName)).
 		With(fields...)
 }
@@ -108,7 +109,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		select {
 		case c.validatorExitCh <- exitDesc:
 			logger.Debug("added voluntary exit task to pipeline")
-		case <-time.After(2 * c.networkConfig.GetSlotDuration()):
+		case <-time.After(2 * c.networkConfig.SlotDuration):
 			logger.Error("failed to schedule ExitValidator duty!")
 		}
 	}()

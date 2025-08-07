@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -24,6 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
@@ -41,11 +45,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
@@ -69,10 +70,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 	operatorsCount += uint64(len(ops))
 
-	currentSlot := &utils.SlotValue{}
-	mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
+	beaconConfigVarEpoch := *networkconfig.TestNetwork.Beacon
+	beaconConfigVarEpoch.GenesisTime = time.Now().Add(-32 * beaconConfigVarEpoch.SlotDuration)
 
-	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
+	netCfgVarEpoch := &networkconfig.Network{
+		Beacon: &beaconConfigVarEpoch,
+		SSV:    networkconfig.TestNetwork.SSV,
+	}
+
+	eh, _, err := setupEventHandler(t, ctx, logger, netCfgVarEpoch, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +149,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 
 	blockNum := uint64(0x1)
-	currentSlot.SetSlot(100)
+	netCfgVarEpoch.GenesisTime = time.Now().Add(-100 * netCfgVarEpoch.SlotDuration)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		for _, op := range ops {
@@ -155,7 +161,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
-
 		}
 		sim.Commit()
 
@@ -562,7 +567,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check that nonces are not intertwined between different owner accounts!
 			require.Equal(t, registrystorage.Nonce(1), nonce)
 		})
-
 	})
 
 	t.Run("test ValidatorExited event handling", func(t *testing.T) {
@@ -852,13 +856,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 
-		require.Equal(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
 
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, currentSlot.GetSlot())
+		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -889,7 +893,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		currentSlot.SetSlot(1000)
+		netCfgVarEpoch.GenesisTime = time.Now().Add(-1000 * netCfgVarEpoch.SlotDuration)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
@@ -901,13 +905,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
 
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, currentSlot.GetSlot())
+		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
 		blockNum++
 	})
@@ -980,7 +984,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, exists)
 		require.NotNil(t, share)
 		require.True(t, share.Liquidated)
-		currentSlot.SetSlot(100)
+		netCfgVarEpoch.GenesisTime = time.Now().Add(-100 * netCfgVarEpoch.SlotDuration)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
@@ -992,13 +996,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Greater(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Greater(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Greater(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
 
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Greater(t, highestProposal, currentSlot.GetSlot())
+		require.Greater(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
 		blockNum++
 
@@ -1232,7 +1236,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
-
 		// Should return MalformedEventError and no changes to the state
 		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
 			// Call the contract method
@@ -1349,7 +1352,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network networkconfig.Network, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandler(
+	t *testing.T,
+	ctx context.Context,
+	logger *zap.Logger,
+	network *networkconfig.Network,
+	operator *testOperator,
+	useMockCtrl bool,
+) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -1360,11 +1370,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	if network == nil {
-		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, &utils.SlotValue{})
-	}
-
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, network, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, network.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1435,11 +1441,11 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	if operator == nil {
-		logger.Fatal("empty test operator was passed")
+	if operator == nil || operator.privateKey == nil {
+		logger.Fatal("empty test operator (or empty private key) was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

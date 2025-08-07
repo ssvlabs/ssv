@@ -16,6 +16,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
@@ -52,7 +53,7 @@ func TestExecuteTask(t *testing.T) {
 	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, nil, ops[0], true)
+	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], true)
 	require.NoError(t, err)
 
 	valPk := "b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"
@@ -110,7 +111,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,8 +146,9 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 
-	var observedLogsFlow []string
-	for _, entry := range observedLogs.All() {
+	logs := observedLogs.All()
+	observedLogsFlow := make([]string, 0, len(logs))
+	for _, entry := range logs {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{
