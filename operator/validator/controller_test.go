@@ -15,22 +15,16 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/herumi/bls-eth-go-binary/bls"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -46,7 +40,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -103,143 +98,17 @@ func TestNewController(t *testing.T) {
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
-	passedEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
-	operators := buildOperators(t)
-
-	operatorDataStore := operatordatastore.New(buildOperatorData(0, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
-
-	secretKey := &bls.SecretKey{}
-	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
-
-	operatorStore, done := newOperatorStorageForTest(zap.NewNop())
-	defer done()
-
-	sharesWithMetadata := []*types.SSVShare{
-		{
-			Share: spectypes.Share{
-				Committee:       operators,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+	logger := log.TestLogger(t)
+	controllerOptions := MockControllerOptions{
+		validatorCommonOpts: &validator.CommonOptions{
+			ExporterOptions: exporter.Options{
+				Enabled: true,
 			},
-			Status:                    eth2apiv1.ValidatorStateActiveOngoing,
-			ActivationEpoch:           passedEpoch,
-			ExitEpoch:                 exitEpoch,
-			Liquidated:                false,
-			BeaconMetadataLastUpdated: time.Now(),
-		},
-		{
-			Share: spectypes.Share{
-				Committee:       operators,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
-			},
-			Status:                    eth2apiv1.ValidatorStateActiveOngoing,
-			ActivationEpoch:           passedEpoch,
-			ExitEpoch:                 exitEpoch,
-			Liquidated:                false,
-			BeaconMetadataLastUpdated: time.Now(),
 		},
 	}
-	_ = sharesWithMetadata
-
-	sharesWithoutMetadata := []*types.SSVShare{
-		{
-			Share: spectypes.Share{
-				Committee:       operators,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
-			},
-			Liquidated: false,
-		},
-		{
-			Share: spectypes.Share{
-				Committee:       operators,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
-			},
-			Liquidated: false,
-		},
-	}
-	_ = sharesWithoutMetadata
-
-	testCases := []struct {
-		name                       string
-		shareStorageListResponse   []*types.SSVShare
-		syncHighestDecidedResponse error
-		getValidatorDataResponse   error
-	}{
-		{"no shares of non-committee", nil, nil, nil},
-		{"set up non-committee validators", sharesWithMetadata, nil, nil},
-		{"set up non-committee validators without metadata", sharesWithoutMetadata, nil, nil},
-		{"fail to sync highest decided", sharesWithMetadata, errors.New("failed to sync highest decided"), nil},
-		{"fail to update validators metadata", sharesWithMetadata, nil, errors.New("could not update all validators")},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			operatorPrivateKey, err := keys.GeneratePrivateKey()
-			require.NoError(t, err)
-
-			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
-
-			defer ctrl.Finish()
-			mockValidatorsMap := validators.New(t.Context())
-
-			subnets := commons.Subnets{}
-			for _, share := range sharesWithMetadata {
-				subnets.Set(commons.CommitteeSubnet(share.CommitteeID()))
-			}
-
-			network.EXPECT().ActiveSubnets().Return(subnets).AnyTimes()
-			network.EXPECT().FixedSubnets().Return(commons.Subnets{}).AnyTimes()
-
-			if tc.shareStorageListResponse == nil {
-				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
-			} else {
-				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
-					for _, share := range tc.shareStorageListResponse {
-						if hex.EncodeToString(share.Share.ValidatorPubKey[:]) == hex.EncodeToString(pubKey) {
-							return share, true
-						}
-					}
-					return nil, false
-				}).AnyTimes()
-				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).AnyTimes()
-				sharesStorage.EXPECT().Range(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, fn func(*types.SSVShare) bool) {
-					for _, share := range tc.shareStorageListResponse {
-						if !fn(share) {
-							break
-						}
-					}
-				}).AnyTimes()
-				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
-			}
-
-			mockValidatorStore := registrystoragemocks.NewMockValidatorStore(ctrl)
-			mockValidatorStore.EXPECT().OperatorValidators(gomock.Any()).Return(sharesWithMetadata).AnyTimes()
-
-			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
-				return true, nil
-			}
-			controllerOptions := MockControllerOptions{
-				beacon:            bc,
-				network:           network,
-				operatorDataStore: operatorDataStore,
-				operatorStorage:   operatorStore,
-				sharesStorage:     sharesStorage,
-				recipientsStorage: recipientStorage,
-				validatorsMap:     mockValidatorsMap,
-				validatorStore:    mockValidatorStore,
-				validatorCommonOpts: &validator.CommonOptions{
-					ExporterOptions: exporter.Options{
-						Enabled: true,
-					},
-				},
-			}
-			ctr := setupController(t, logger, controllerOptions)
-			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators(t.Context())
-		})
-	}
+	ctr := setupController(t, logger, controllerOptions)
+	err := ctr.StartValidators(t.Context())
+	require.NoError(t, err)
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {

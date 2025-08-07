@@ -104,7 +104,7 @@ type ControllerOptions struct {
 // Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
-	StartValidators(ctx context.Context)
+	StartValidators(ctx context.Context) error
 	HandleMetadataUpdates(ctx context.Context)
 	FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
@@ -438,49 +438,66 @@ func (c *controller) handleNonCommitteeMessages(
 	return nil
 }
 
-// StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators(ctx context.Context) {
+// StartValidators loads all persisted shares and sets up the corresponding validators
+func (c *controller) StartValidators(ctx context.Context) error {
 	// TODO: Pass context wherever the execution flow may be blocked.
 
-	// Load non-liquidated shares.
-	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
-	if len(shares) == 0 {
-		close(c.committeeValidatorSetup)
-		c.logger.Info("could not find validators")
-		return
-	}
-
-	var ownShares []*ssvtypes.SSVShare
-	for _, share := range shares {
-		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
-			ownShares = append(ownShares, share)
-		}
-	}
-
 	if c.validatorCommonOpts.ExporterOptions.Enabled {
-		// There are no committee validators to setup.
+		// There are no committee validators to set up.
 		close(c.committeeValidatorSetup)
-	} else {
-		// Setup committee validators.
-		inited, committees := c.setupValidators(ownShares)
-		if len(inited) == 0 {
-			// If no validators were started and therefore we're not subscribed to any subnets,
-			// then subscribe to a random subnet to participate in the network.
-			if err := c.network.SubscribeRandoms(1); err != nil {
-				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
-			}
-		}
-		close(c.committeeValidatorSetup)
-
-		// Start validators.
-		c.startValidators(inited, committees)
+		return nil
 	}
+
+	init := func() ([]*validator.Validator, []*validator.Committee, error) {
+		defer close(c.committeeValidatorSetup)
+
+		// Load non-liquidated shares that belong to our own Operator.
+		ownShares := c.sharesStorage.List(
+			nil,
+			registrystorage.ByNotLiquidated(),
+			registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
+		)
+		if len(ownShares) == 0 {
+			c.logger.Info("no validators to start: no own non-liquidated validator shares found in DB")
+			return nil, nil, nil
+		}
+
+		// Setup committee validators.
+		validators, committees := c.setupValidators(ownShares)
+		if len(validators) == 0 {
+			return nil, nil, fmt.Errorf("none of %d validators were successfully initialized", len(ownShares))
+		}
+
+		return validators, committees, nil
+	}
+
+	// Initialize validators.
+	validators, committees, err := init()
+	if err != nil {
+		return fmt.Errorf("init validators: %w", err)
+	}
+	if len(validators) == 0 {
+		// If no validators were initialized - we're not subscribed to any subnets,
+		// we have to subscribe to 1 random subnet to participate in the network.
+		if err := c.network.SubscribeRandoms(1); err != nil {
+			return fmt.Errorf("subscribe to random subnets: %w", err)
+		}
+		c.logger.Info("no validators to start, successfully subscribed to random subnet")
+		return nil
+	}
+
+	// Start validators.
+	started := c.startValidators(validators, committees)
+	if started == 0 {
+		return fmt.Errorf("none of %d validators were successfully started", len(validators))
+	}
+	return nil
 }
 
-// setupValidators setup and starts validators from the given shares.
-// shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
+// setupValidators initializes validators for the provided shares.
+// Share w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterward.
 func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.Validator, []*validator.Committee) {
-	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
+	c.logger.Info("initializing validators ...", zap.Int("shares count", len(shares)))
 	var errs []error
 	var fetchMetadata [][]byte
 	validators := make([]*validator.Validator, 0, len(shares))
@@ -489,7 +506,7 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.
 		var initialized bool
 		v, vc, err := c.onShareInit(validatorShare)
 		if err != nil {
-			c.logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey[:]), zap.Error(err))
+			c.logger.Warn("could not initialize validator", fields.PubKey(validatorShare.ValidatorPubKey[:]), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if v != nil {
@@ -504,9 +521,15 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.
 			committees = append(committees, vc)
 		}
 	}
-	c.logger.Info("init validators done", zap.Int("validators_size", c.validatorsMap.SizeValidators()), zap.Int("committee_size", c.validatorsMap.SizeCommittees()),
-		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
-		zap.Int("shares", len(shares)), zap.Int("initialized", len(validators)))
+	c.logger.Info(
+		"validator initialization is done",
+		zap.Int("validators_size", c.validatorsMap.SizeValidators()),
+		zap.Int("committee_size", c.validatorsMap.SizeCommittees()),
+		zap.Int("failures", len(errs)),
+		zap.Int("missing_metadata", len(fetchMetadata)),
+		zap.Int("shares", len(shares)),
+		zap.Int("initialized", len(validators)),
+	)
 	return validators, committees
 }
 
@@ -527,7 +550,7 @@ func (c *controller) startValidators(validators []*validator.Validator, committe
 
 	started += len(committees)
 
-	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.SizeValidators()),
+	c.logger.Info("start validators done", zap.Int("map size", c.validatorsMap.SizeValidators()),
 		zap.Int("failures", len(errs)),
 		zap.Int("shares", len(validators)), zap.Int("started", started))
 	return started
@@ -922,7 +945,7 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 
 	started, err := c.startValidator(v)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("start validator: %w", err)
 	}
 
 	return started, nil
@@ -973,7 +996,7 @@ func (c *controller) validatorStart(validator *validator.Validator) (bool, error
 func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	c.reportValidatorStatus(v.Share)
 	if v.Share.ValidatorIndex == 0 {
-		return false, errors.New("could not start validator: index not found")
+		return false, errors.New("validator index not found")
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
