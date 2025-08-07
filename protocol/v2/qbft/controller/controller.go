@@ -17,6 +17,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -66,15 +67,15 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return observability.Errorf(span, "value invalid: %w", err)
+		return traces.Errorf(span, "value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		return observability.Errorf(span, "attempting to start an instance with a past height")
+		return traces.Errorf(span, "attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return observability.Errorf(span, "instance already running")
+		return traces.Errorf(span, "instance already running")
 	}
 
 	c.Height = height
@@ -115,12 +116,12 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	isDecided, err := IsDecidedMsg(c.CommitteeMember, msg)
+	isDecided, err := c.IsDecidedMsg(msg)
 	if err != nil {
 		return nil, err
 	}
 	if isDecided {
-		return c.UponDecided(logger, msg)
+		return c.UponDecided(msg)
 	}
 
 	isFuture, err := c.isFutureMessage(msg)

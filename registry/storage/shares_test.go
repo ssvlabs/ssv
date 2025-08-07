@@ -27,8 +27,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -82,7 +82,7 @@ func TestMaxPossibleShareSize(t *testing.T) {
 }
 
 func TestSharesStorage(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
 	defer storage.Close()
@@ -131,7 +131,7 @@ func TestSharesStorage(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateValidatorMetadata_updatesMetadata", func(t *testing.T) {
+	t.Run("UpdateValidatorMetadata_updatesMetadata_whenMetadataChanged", func(t *testing.T) {
 		for _, share := range persistedActiveValidatorShares {
 			updatedIndex := phase0.ValidatorIndex(rand.Uint64())
 			updatedActivationEpoch, updatedExitEpoch := phase0.Epoch(5), phase0.Epoch(6)
@@ -154,6 +154,21 @@ func TestSharesStorage(t *testing.T) {
 			require.Equal(t, updatedActivationEpoch, fetchedShare.ActivationEpoch)
 			require.Equal(t, updatedExitEpoch, fetchedShare.ExitEpoch)
 			require.Equal(t, updatedStatus, fetchedShare.Status)
+			require.WithinDuration(t, time.Now(), fetchedShare.BeaconMetadataLastUpdated, time.Second)
+		}
+	})
+
+	t.Run("UpdateValidatorMetadata_updatesMetadata_whenMetadataUnchanged", func(t *testing.T) {
+		for _, share := range persistedActiveValidatorShares {
+			updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+				map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{share.ValidatorPubKey: share.BeaconMetadata()})
+			require.NoError(t, err)
+			require.Nil(t, updatedShares)
+
+			fetchedShare, exists := storage.Shares.Get(nil, share.ValidatorPubKey[:])
+			require.True(t, exists)
+			require.NotNil(t, fetchedShare)
+			require.WithinDuration(t, time.Now(), fetchedShare.BeaconMetadataLastUpdated, time.Second)
 		}
 	})
 
@@ -214,7 +229,7 @@ func TestSharesStorage(t *testing.T) {
 }
 
 func TestValidatorPubkeysToIndicesMapping(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
 	defer storage.Close()
@@ -260,7 +275,7 @@ func TestValidatorPubkeysToIndicesMapping(t *testing.T) {
 }
 
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	// Test share deletion with and without reopening the database.
 	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
@@ -451,7 +466,7 @@ func TestShareStorage_MultipleCommittees(t *testing.T) {
 }
 
 func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
 	defer storage.Close()
@@ -529,7 +544,7 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 func testWithStorageReopen(t *testing.T, f func(t *testing.T, storage *testStorage, reopen func(t *testing.T))) {
 	for _, withReopen := range []bool{false, true} {
 		t.Run(fmt.Sprintf("withReopen=%t", withReopen), func(t *testing.T) {
-			logger := logging.TestLogger(t)
+			logger := log.TestLogger(t)
 			storage, err := newTestStorage(logger)
 			require.NoError(t, err)
 			defer storage.Close()
@@ -581,7 +596,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 	sk2 := bls.SecretKey{}
 	sk2.SetByCSPRNG()
 
-	var ibftCommittee []*storageOperator
+	ibftCommittee := make([]*storageOperator, 0, len(splitKeys))
 	for operatorID, sk := range splitKeys {
 		ibftCommittee = append(ibftCommittee, &storageOperator{
 			OperatorID: operatorID,
@@ -615,7 +630,7 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey, state v1.Validator
 	sk2 := bls.SecretKey{}
 	sk2.SetByCSPRNG()
 
-	var ibftCommittee []*spectypes.ShareMember
+	ibftCommittee := make([]*spectypes.ShareMember, 0, len(splitKeys))
 	for operatorID, sk := range splitKeys {
 		ibftCommittee = append(ibftCommittee, &spectypes.ShareMember{
 			Signer:      operatorID,

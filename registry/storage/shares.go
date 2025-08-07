@@ -9,6 +9,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -210,7 +211,7 @@ func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.
 		return slices.Collect(maps.Values(s.shares))
 	}
 
-	var shares []*types.SSVShare
+	var shares []*types.SSVShare //nolint:prealloc
 Shares:
 	for _, share := range s.shares {
 		for _, filter := range filters {
@@ -352,7 +353,7 @@ func FromSSVShare(share *types.SSVShare) *Share {
 		Graffiti:            share.Graffiti,
 		OwnerAddress:        share.OwnerAddress,
 		Liquidated:          share.Liquidated,
-		Status:              uint64(share.Status), // nolint: gosec
+		Status:              uint64(share.Status), //nolint: gosec
 		ActivationEpoch:     uint64(share.ActivationEpoch),
 		ExitEpoch:           uint64(share.ExitEpoch),
 	}
@@ -384,7 +385,7 @@ func ToSSVShare(stShare *Share) (*types.SSVShare, error) {
 			FeeRecipientAddress: stShare.FeeRecipientAddress,
 			Graffiti:            stShare.Graffiti,
 		},
-		Status:          eth2apiv1.ValidatorState(stShare.Status), // nolint: gosec
+		Status:          eth2apiv1.ValidatorState(stShare.Status), //nolint: gosec
 		ActivationEpoch: phase0.Epoch(stShare.ActivationEpoch),
 		ExitEpoch:       phase0.Epoch(stShare.ExitEpoch),
 		OwnerAddress:    stShare.OwnerAddress,
@@ -456,6 +457,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 			}
 
 			if metadata.Equals(share.BeaconMetadata()) {
+				share.BeaconMetadataLastUpdated = time.Now()
 				continue
 			}
 

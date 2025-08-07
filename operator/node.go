@@ -3,9 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"go.uber.org/zap"
 
@@ -13,10 +10,10 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/fee_recipient"
@@ -69,7 +66,7 @@ type Node struct {
 // New is the constructor of Node
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	node := &Node{
-		logger:           logger.Named(logging.NameOperator),
+		logger:           logger.Named(log.NameOperator),
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
@@ -124,12 +121,10 @@ func (n *Node) Start() error {
 		}
 	}()
 
-	if !n.exporterOptions.Enabled {
-		// Start the duty scheduler, and a background goroutine to crash the node
-		// in case there were any errors.
-		if err := n.dutyScheduler.Start(ctx); err != nil {
-			return fmt.Errorf("failed to run duty scheduler: %w", err)
-		}
+	// Start the duty scheduler, and a background goroutine to crash the node
+	// in case there were any errors.
+	if err := n.dutyScheduler.Start(ctx); err != nil {
+		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
 
 	n.validatorsCtrl.StartNetworkHandlers()
@@ -162,16 +157,8 @@ func (n *Node) Start() error {
 		}
 	}()
 
-	if n.exporterOptions.Enabled {
-		n.logger.Info("exporter is enabled, duty scheduler will not run")
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
-		n.logger.Info("received shutdown signal")
-	} else {
-		if err := n.dutyScheduler.Wait(); err != nil {
-			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
-		}
+	if err := n.dutyScheduler.Wait(); err != nil {
+		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
 	}
 
 	if err := n.net.Close(); err != nil {

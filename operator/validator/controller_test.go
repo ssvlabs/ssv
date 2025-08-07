@@ -15,22 +15,18 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
@@ -44,6 +40,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -100,7 +98,7 @@ func TestNewController(t *testing.T) {
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	controllerOptions := MockControllerOptions{
 		validatorCommonOpts: &validator.CommonOptions{
 			ExporterOptions: exporter.Options{
@@ -114,7 +112,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	mockValidatorsMap := validators.New(t.Context())
 	controllerOptions := MockControllerOptions{
 		validatorsMap:       mockValidatorsMap,
@@ -194,7 +192,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 func TestSetupValidators(t *testing.T) {
 	// Setup logger and mock controller
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	// Init global variables
 	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
@@ -440,7 +438,7 @@ func TestSetupValidators(t *testing.T) {
 
 func TestGetValidator(t *testing.T) {
 	// Setup logger and mock controller
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	// Initialize a test validator with the decoded owner address
 	testValidator := &validator.Validator{
@@ -466,7 +464,7 @@ func TestGetValidator(t *testing.T) {
 
 func TestGetValidatorStats(t *testing.T) {
 	// Common setup
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	bc := beacon.NewMockBeaconNode(ctrl)
 	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
@@ -622,7 +620,7 @@ func TestGetValidatorStats(t *testing.T) {
 
 func TestUpdateFeeRecipient(t *testing.T) {
 	// Setup logger for testing
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	fakeOwnerAddressBytes := decodeHex(t, "61Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode fake owner address")
@@ -817,7 +815,7 @@ func createKey() ([]byte, error) {
 }
 
 func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivateKey) (*gomock.Controller, *zap.Logger, *mocks.MockSharesStorage, *mocks.MockP2PNetwork, ekm.KeyManager, *mocks.MockRecipients, *beacon.MockBeaconNode) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	bc := beacon.NewMockBeaconNode(ctrl)
 	network := mocks.NewMockP2PNetwork(ctrl)
@@ -992,7 +990,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			if tc.mockSharesStorageExpect != nil {
 				tc.mockSharesStorageExpect(mockSharesStorage)
 			} else {
-				var shares []*types.SSVShare
+				shares := make([]*types.SSVShare, 0, len(tc.metadataAfter))
 				for _, metadata := range tc.metadataAfter {
 					share := &types.SSVShare{}
 					share.SharePubKey = make([]byte, 48)
@@ -1057,7 +1055,7 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish) // Ensures gomock is properly cleaned up after the test
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ctx := t.Context()
 
 	operators := buildOperators(t)

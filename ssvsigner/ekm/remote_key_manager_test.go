@@ -1743,7 +1743,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainProposer)
 		s.ErrorContains(err, "obj type is unknown")
-
 	})
 }
 

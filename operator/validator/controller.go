@@ -25,13 +25,14 @@ import (
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
@@ -229,7 +230,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
 	ctrl := controller{
-		logger:            logger.Named(logging.NameController),
+		logger:            logger.Named(log.NameController),
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
 		operatorsStorage:  options.RegistryStorage,
@@ -411,8 +412,7 @@ func (c *controller) handleNonCommitteeMessages(
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		// Process proposal messages for committee consensus only to get the roots
 		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
 			return nil
@@ -424,7 +424,9 @@ func (c *controller) handleNonCommitteeMessages(
 		}
 
 		return ncv.SaveRoots(ctx, msg)
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return err
@@ -438,7 +440,7 @@ func (c *controller) handleNonCommitteeMessages(
 
 // StartValidators loads all persisted shares and sets up the corresponding validators
 func (c *controller) StartValidators(ctx context.Context) error {
-	// TODO: Pass context whereever the execution flow may be blocked.
+	// TODO: Pass context wherever the execution flow may be blocked.
 
 	if c.validatorCommonOpts.ExporterOptions.Enabled {
 		// There are no committee validators to set up.
@@ -498,8 +500,8 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.
 	c.logger.Info("initializing validators ...", zap.Int("shares count", len(shares)))
 	var errs []error
 	var fetchMetadata [][]byte
-	var validators []*validator.Validator
-	var committees []*validator.Committee
+	validators := make([]*validator.Validator, 0, len(shares))
+	committees := make([]*validator.Committee, 0, len(shares))
 	for _, validatorShare := range shares {
 		var initialized bool
 		v, vc, err := c.onShareInit(validatorShare)
@@ -594,7 +596,7 @@ func (c *controller) startEligibleValidators(ctx context.Context, pubKeys []spec
 	for _, share := range shares {
 		select {
 		case <-ctx.Done():
-			c.logger.Warn("context cancelled, stopping validator start loop")
+			c.logger.Warn("context canceled, stopping validator start loop")
 			return startedValidators
 		default:
 		}
@@ -638,7 +640,7 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	dutyID := fields.FormatDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
@@ -694,13 +696,13 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		return
 	}
 
-	var committee []spectypes.OperatorID
+	committee := make([]spectypes.OperatorID, 0, len(cm.CommitteeMember.Committee))
 	for _, operator := range cm.CommitteeMember.Committee {
 		committee = append(committee, operator.OperatorID)
 	}
 
 	dutyID := fields.FormatCommitteeDutyID(committee, c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(duty.Slot),
@@ -888,7 +890,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
 
 		c.printShare(share, "setup committee done")
-
 	} else {
 		vc.AddShare(&share.Share)
 		c.printShare(share, "added share to committee")
@@ -966,7 +967,7 @@ func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
 	data, found, err := getRecipientData(nil, share.OwnerAddress)
 	if err != nil {
-		return errors.Wrap(err, "could not get recipient data")
+		return fmt.Errorf("could not get recipient data: %w", err)
 	}
 
 	var feeRecipient bellatrix.ExecutionAddress
@@ -1000,7 +1001,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	started, err := c.validatorStart(v)
 	if err != nil {
 		validatorErrorsCounter.Add(c.ctx, 1)
-		return false, err
+		return false, fmt.Errorf("could not start validator: %w", err)
 	}
 
 	return started, nil
@@ -1077,8 +1078,12 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			validatorsPerStatus := make(map[validatorStatus]uint32)
 
 			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
-				if share.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
+				currentEpoch := c.networkConfig.EstimatedCurrentEpoch()
+				if share.IsParticipating(c.networkConfig, currentEpoch) {
 					validatorsPerStatus[statusParticipating]++
+				}
+				if share.IsAttesting(currentEpoch) {
+					validatorsPerStatus[statusAttesting]++
 				}
 				if !share.HasBeaconMetadata() {
 					validatorsPerStatus[statusNotFound]++
@@ -1107,11 +1112,10 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 				recordValidatorStatus(ctx, count, status)
 			}
 		case <-ctx.Done():
-			c.logger.Info("stopped reporting validator statuses. Context cancelled")
+			c.logger.Info("stopped reporting validator statuses. Context canceled")
 			return
 		}
 	}
-
 }
 
 func SetupCommitteeRunners(
@@ -1174,7 +1178,6 @@ func SetupRunners(
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
 		spectypes.RoleProposer,
 		spectypes.RoleAggregator,
 		spectypes.RoleSyncCommitteeContribution,
@@ -1225,9 +1228,11 @@ func SetupRunners(
 			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+		default:
+			return nil, fmt.Errorf("unexpected duty runner type: %s", role)
 		}
 		if err != nil {
-			return nil, errors.Wrap(err, "could not create duty runner")
+			return nil, fmt.Errorf("could not create duty runner: %w", err)
 		}
 	}
 	return runners, nil

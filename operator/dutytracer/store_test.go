@@ -11,9 +11,12 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+
 	model "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -29,7 +32,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	dutyStore := store.New(db)
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -136,7 +139,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -300,6 +303,62 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.Equal(t, []spectypes.OperatorID{1, 2, 3}, signers)
 }
 
+func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
+	validatorPK7 := spectypes.ValidatorPK{7}
+	committeeID1 := spectypes.CommitteeID{1}
+	slot4 := phase0.Slot(4)
+	index1 := phase0.ValidatorIndex(1)
+
+	// Setup db, shares & collector
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+	dutyStore := store.New(db)
+	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
+	require.NoError(t, err)
+	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	shares.Save(db, &types.SSVShare{
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+		Share: spectypes.Share{
+			ValidatorIndex:  index1,
+			ValidatorPubKey: validatorPK7,
+		},
+	})
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+
+	// Create a new trace
+	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
+	require.NoError(t, err)
+	dutyTrace.Decideds = append(dutyTrace.Decideds, &model.DecidedTrace{
+		Signers: []spectypes.OperatorID{1},
+	})
+	require.NotNil(t, dutyTrace)
+	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
+		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index1}},
+	}, committeeID1)
+
+	// Fetch trace from memory cache and check
+	{
+		dd, err := collector.GetAllCommitteeDecideds(slot4)
+		require.NoError(t, err)
+		require.NotNil(t, dd)
+		require.Len(t, dd, 1)
+		require.Equal(t, validatorPK7, dd[0].PubKey)
+	}
+
+	// Evict to disk
+	collector.dumpCommitteeToDBPeriodically(slot4)
+	collector.dumpLinkToDBPeriodically(slot4)
+
+	// Fetch trace from disk and check
+	{
+		dd, err := collector.GetAllCommitteeDecideds(slot4)
+		require.NoError(t, err)
+		require.NotNil(t, dd)
+		require.Len(t, dd, 1)
+		require.Equal(t, validatorPK7, dd[0].PubKey)
+	}
+}
+
 func TestValidatorDutyStore(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
@@ -327,7 +386,7 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
 
 	slot4 := phase0.Slot(4)
 
@@ -444,4 +503,12 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	_, err = collector.GetAllValidatorDecideds(spectypes.BNRoleProposer, slot4)
 	require.NoError(t, err)
+}
+
+// --- helpers -------------------------------------------
+
+func encodeLittleEndian(i phase0.ValidatorIndex) []byte {
+	value := make([]byte, 8)
+	binary.LittleEndian.PutUint64(value, uint64(i))
+	return value
 }

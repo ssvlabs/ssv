@@ -12,14 +12,14 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func TestStorage_SaveAndGetOperatorData(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
@@ -118,7 +118,7 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 }
 
 func TestStorage_ListOperators(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
@@ -148,7 +148,7 @@ func TestStorage_ListOperators(t *testing.T) {
 }
 
 func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
@@ -187,7 +187,6 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 	})
-
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {

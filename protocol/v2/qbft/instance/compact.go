@@ -55,13 +55,13 @@ func compact(state *specqbft.State, decidedMessage *spectypes.SignedSSVMessage, 
 	// state.CommitContainer = compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
 }
 
-type compactContainerFunc func(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) *specqbft.MsgContainer
+type compactContainerFunc func(container *specqbft.MsgContainer, currentRound specqbft.Round, reset bool) *specqbft.MsgContainer
 
-func compactContainerEdit(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) *specqbft.MsgContainer {
+func compactContainerEdit(container *specqbft.MsgContainer, currentRound specqbft.Round, reset bool) *specqbft.MsgContainer {
 	switch {
 	case container == nil || len(container.Msgs) == 0:
 		// Empty already.
-	case clear:
+	case reset:
 		// Discard all messages.
 		container.Msgs = map[specqbft.Round][]*specqbft.ProcessingMessage{}
 	default:
@@ -75,12 +75,12 @@ func compactContainerEdit(container *specqbft.MsgContainer, currentRound specqbf
 	return container
 }
 
-func compactContainerCopy(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) *specqbft.MsgContainer {
+func compactContainerCopy(container *specqbft.MsgContainer, currentRound specqbft.Round, reset bool) *specqbft.MsgContainer {
 	switch {
 	case container == nil || len(container.Msgs) == 0:
 		// Empty already.
 		return container
-	case clear:
+	case reset:
 		// Discard all messages.
 		return &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{},

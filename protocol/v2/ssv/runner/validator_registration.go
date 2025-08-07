@@ -12,20 +12,25 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+)
+
+const (
+	DefaultGasLimit    = uint64(36_000_000)
+	DefaultGasLimitOld = uint64(30_000_000)
 )
 
 type ValidatorRegistrationRunner struct {
@@ -89,7 +94,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return observability.Errorf(span, "failed processing validator registration message: %w", err)
+		return traces.Errorf(span, "failed processing validator registration message: %w", err)
 	}
 
 	// TODO: (Alan) revert
@@ -112,19 +117,19 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return observability.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
+		return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
 	share := r.GetShare()
 	if share == nil {
-		return observability.Errorf(span, "no share to get validator public key: %w", err)
+		return traces.Errorf(span, "no share to get validator public key: %w", err)
 	}
 
 	registration, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
-		return observability.Errorf(span, "could not calculate validator registration: %w", err)
+		return traces.Errorf(span, "could not calculate validator registration: %w", err)
 	}
 
 	signedRegistration := &api.VersionedSignedValidatorRegistration{
@@ -137,7 +142,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	span.AddEvent("submitting validator registration")
 	if err := r.beacon.SubmitValidatorRegistration(signedRegistration); err != nil {
-		return observability.Errorf(span, "could not submit validator registration: %w", err)
+		return traces.Errorf(span, "could not submit validator registration: %w", err)
 	}
 
 	const eventMsg = "validator registration submitted successfully"
@@ -186,7 +191,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	vr, err := r.calculateValidatorRegistration(duty.DutySlot())
 	if err != nil {
-		return observability.Errorf(span, "could not calculate validator registration: %w", err)
+		return traces.Errorf(span, "could not calculate validator registration: %w", err)
 	}
 
 	// sign partial randao
@@ -200,7 +205,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		spectypes.DomainApplicationBuilder,
 	)
 	if err != nil {
-		return observability.Errorf(span, "could not sign validator registration: %w", err)
+		return traces.Errorf(span, "could not sign validator registration: %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
@@ -212,7 +217,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return observability.Errorf(span, "could not encode validator registration partial sig message: %w", err)
+		return traces.Errorf(span, "could not encode validator registration partial sig message: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -224,7 +229,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return observability.Errorf(span, "could not sign SSVMessage: %w", err)
+		return traces.Errorf(span, "could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -240,7 +245,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	)
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return observability.Errorf(span, "can't broadcast partial randao sig: %w", err)
+		return traces.Errorf(span, "can't broadcast partial randao sig: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -258,9 +263,20 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
 
+	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
+	// on the current epoch as compared to when this transition is supposed to happen.
+	gasLimit := r.gasLimit
+	if gasLimit == 0 {
+		defaultGasLimit := DefaultGasLimit
+		if r.BaseRunner.NetworkConfig.EstimatedCurrentEpoch() < r.BaseRunner.NetworkConfig.GetGasLimit36Epoch() {
+			defaultGasLimit = DefaultGasLimitOld
+		}
+		gasLimit = defaultGasLimit
+	}
+
 	return &v1.ValidatorRegistration{
 		FeeRecipient: share.FeeRecipientAddress,
-		GasLimit:     r.gasLimit,
+		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.NetworkConfig.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
