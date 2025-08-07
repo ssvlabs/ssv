@@ -188,10 +188,9 @@ var StartNodeCmd = &cobra.Command{
 				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
 		}
 
-		networkConfig := &networkconfig.NetworkConfig{
-			Name:         cfg.SSVOptions.NetworkName,
-			SSVConfig:    ssvNetworkConfig,
-			BeaconConfig: consensusClient.BeaconConfig(),
+		networkConfig := &networkconfig.Network{
+			SSV:    ssvNetworkConfig,
+			Beacon: consensusClient.BeaconConfig(),
 		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
@@ -287,10 +286,10 @@ var StartNodeCmd = &cobra.Command{
 		var db basedb.Database
 		if cfg.ExporterOptions.Enabled {
 			logger.Info("using pebble db")
-			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+			db, err = setupPebbleDB(logger, networkConfig.Beacon, operatorPrivKey)
 		} else {
 			logger.Info("using badger db")
-			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+			db, err = setupBadgerDB(logger, networkConfig.Beacon, operatorPrivKey)
 		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -301,7 +300,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
+		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig.Beacon, logger, db)
 		if err != nil {
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
@@ -321,7 +320,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents, usingSSVSigner); err != nil {
+		if err := validateConfig(nodeStorage, networkConfig.StorageName(), usingLocalEvents, usingSSVSigner); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
@@ -379,7 +378,7 @@ var StartNodeCmd = &cobra.Command{
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
 				logger,
-				networkConfig,
+				networkConfig.Beacon,
 				ssvSignerClient,
 				db,
 				operatorDataStore.GetOperatorID,
@@ -392,7 +391,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.OperatorSigner = remoteKeyManager
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
 		} else {
-			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig, operatorPrivKey)
+			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig.Beacon, operatorPrivKey)
 			if err != nil {
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
@@ -421,7 +420,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			networkConfig.Forks[spec.DataVersionElectra].Epoch,
+			networkConfig.Beacon.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 
@@ -524,7 +523,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
-					dstore, networkConfig.BeaconConfig, decidedStreamPublisherFn)
+					dstore, networkConfig.Beacon, decidedStreamPublisherFn)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
@@ -538,7 +537,7 @@ var StartNodeCmd = &cobra.Command{
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
-				BeaconConfig:       networkConfig.BeaconConfig,
+				BeaconConfig:       networkConfig.Beacon,
 				BeaconNode:         consensusClient,
 				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
 				SlotTickerProvider: slotTickerProvider,
@@ -827,7 +826,7 @@ func init() {
 
 func setupBadgerDB(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
@@ -844,7 +843,7 @@ func setupBadgerDB(
 
 func setupPebbleDB(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
@@ -863,7 +862,7 @@ func setupPebbleDB(
 
 func applyMigrations(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 	db basedb.Database,
 	dbPath string,
@@ -995,14 +994,14 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSVConfig, error) {
-	var ssvConfig *networkconfig.SSVConfig
+func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
+	var ssvConfig *networkconfig.SSV
 
 	if cfg.SSVOptions.CustomNetwork != nil {
 		ssvConfig = cfg.SSVOptions.CustomNetwork
 		logger.Info("using custom network config")
 	} else if cfg.SSVOptions.NetworkName != "" {
-		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
+		snc, err := networkconfig.SSVConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
 			return ssvConfig, err
 		}
@@ -1068,7 +1067,7 @@ func syncContractEvents(
 	logger *zap.Logger,
 	executionClient executionclient.Provider,
 	validatorCtrl validator.Controller,
-	networkConfig *networkconfig.NetworkConfig,
+	networkConfig *networkconfig.Network,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,

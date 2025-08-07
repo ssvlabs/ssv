@@ -90,7 +90,7 @@ type ControllerOptions struct {
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	DoppelgangerHandler        doppelganger.Provider
-	NetworkConfig              networkconfig.Network
+	NetworkConfig              *networkconfig.Network
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
 	ProposerDelay              time.Duration
@@ -152,7 +152,7 @@ type controller struct {
 
 	logger *zap.Logger
 
-	networkConfig     networkconfig.Network
+	networkConfig     *networkconfig.Network
 	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage Recipients
@@ -303,7 +303,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
+		if s.IsParticipating(c.networkConfig.Beacon, c.networkConfig.EstimatedCurrentEpoch()) {
 			active++
 		}
 		total++
@@ -372,7 +372,7 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 	if item == nil || item.Value() == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
 			Logger:            c.logger,
-			BeaconConfig:      c.networkConfig,
+			BeaconConfig:      c.networkConfig.Beacon,
 			ValidatorStore:    c.validatorStore,
 			Network:           c.validatorCommonOpts.Network,
 			Storage:           c.validatorCommonOpts.Storage,
@@ -388,7 +388,7 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions)
 
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
-		ttl := time.Duration(ttlSlots) * c.networkConfig.GetSlotDuration()
+		ttl := time.Duration(ttlSlots) * c.networkConfig.SlotDuration
 
 		c.committeesObservers.Set(ssvMsg.GetID(), ncv, ttl)
 	} else {
@@ -637,7 +637,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 	copy(pk, duty.PubKey[:])
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.GetDomainType())
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.DomainType)
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
@@ -690,7 +690,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.GetDomainType())
+	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
 	if err != nil {
 		logger.Error("could not create duty execute msg", zap.Error(err))
 		span.SetStatus(codes.Error, err.Error())
@@ -857,7 +857,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 			ctx,
 			cancel,
 			logger,
-			c.networkConfig,
+			c.networkConfig.Beacon,
 			operator,
 			committeeRunnerFunc,
 			nil,
@@ -1033,7 +1033,7 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 }
 
 func (c *controller) reportIndicesChange(ctx context.Context) bool {
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.GetSlotDuration())
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.SlotDuration)
 	defer cancel()
 
 	select {
@@ -1056,7 +1056,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 
 			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
 				currentEpoch := c.networkConfig.EstimatedCurrentEpoch()
-				if share.IsParticipating(c.networkConfig, currentEpoch) {
+				if share.IsParticipating(c.networkConfig.Beacon, currentEpoch) {
 					validatorsPerStatus[statusParticipating]++
 				}
 				if share.IsAttesting(currentEpoch) {
@@ -1102,18 +1102,18 @@ func SetupCommitteeRunners(
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.GetDomainType(),
+			Domain:       options.NetworkConfig.DomainType,
 			ValueCheckF:  valueCheckF,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.GetDomainType(), options.Operator.CommitteeID[:], role)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
@@ -1165,19 +1165,19 @@ func SetupRunners(
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.GetDomainType(),
+			Domain:       options.NetworkConfig.DomainType,
 			ValueCheckF:  nil, // is set per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.GetDomainType(), share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
@@ -1190,15 +1190,15 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay)
 		case spectypes.RoleAggregator:
-			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig, share.ValidatorPubKey, share.ValidatorIndex)
+			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
 			runners[role], err = runner.NewAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
 		case spectypes.RoleSyncCommitteeContribution:
-			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig, share.ValidatorPubKey, share.ValidatorIndex)
+			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:

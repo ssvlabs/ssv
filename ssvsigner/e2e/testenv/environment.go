@@ -11,16 +11,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/testcontainers/testcontainers-go"
-	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // TestEnvironment manages the complete E2E test infrastructure
@@ -38,10 +36,7 @@ type TestEnvironment struct {
 	remoteKeyManager *ekm.RemoteKeyManager
 	localDB          basedb.Database
 	remoteDB         basedb.Database
-
-	// Mock beacon for controlled testing
-	mockController *gomock.Controller
-	mockBeacon     *networkconfig.MockBeacon
+	beaconConfig     *networkconfig.Beacon
 
 	// Network
 	networkName string
@@ -72,7 +67,7 @@ type TestEnvironment struct {
 }
 
 // NewTestEnvironment creates a new test environment
-func NewTestEnvironment(ctx context.Context, t gomock.TestReporter) (*TestEnvironment, error) {
+func NewTestEnvironment(ctx context.Context) (*TestEnvironment, error) {
 	env := &TestEnvironment{
 		ctx:            ctx,
 		migrationsPath: "../testdata/migrations",
@@ -100,9 +95,7 @@ func NewTestEnvironment(ctx context.Context, t gomock.TestReporter) (*TestEnviro
 		return nil, fmt.Errorf("failed to setup TLS certificates: %w", err)
 	}
 
-	if err := env.setupMockBeacon(t); err != nil {
-		return nil, fmt.Errorf("failed to setup mock beacon: %w", err)
-	}
+	env.beaconConfig = common.MainnetBeaconConfig
 
 	return env, nil
 }
@@ -168,10 +161,6 @@ func (env *TestEnvironment) Stop() error {
 	// Clean up TLS certificates directory
 	if err := os.RemoveAll(env.certDir); err != nil {
 		errors = append(errors, fmt.Errorf("failed to cleanup TLS certificates directory: %w", err))
-	}
-
-	if env.mockController != nil {
-		env.mockController.Finish()
 	}
 
 	if len(errors) > 0 {
@@ -244,9 +233,17 @@ func (env *TestEnvironment) GetRemoteKeyManager() *ekm.RemoteKeyManager {
 	return env.remoteKeyManager
 }
 
-// GetMockBeacon returns the mock beacon for test control
-func (env *TestEnvironment) GetMockBeacon() *networkconfig.MockBeacon {
-	return env.mockBeacon
+// GetBeaconConfig returns the beacon config for test control
+func (env *TestEnvironment) GetBeaconConfig() *networkconfig.Beacon {
+	return env.beaconConfig
+}
+
+// SetTestCurrentEpoch sets up the beacon config to return a specific current epoch for testing
+// It calculates the current slot as the middle of the epoch (first slot + SlotsPerEpoch/2)
+func (env *TestEnvironment) SetTestCurrentEpoch(testCurrentEpoch phase0.Epoch) {
+	slotOffset := uint64(testCurrentEpoch)*env.beaconConfig.SlotsPerEpoch + env.beaconConfig.SlotsPerEpoch/2
+	durationOffset := time.Duration(slotOffset) * env.beaconConfig.SlotDuration // #nosec G115 -- slot offset never exceeds int64
+	env.beaconConfig.GenesisTime = time.Now().Add(-durationOffset)
 }
 
 // GetOperatorKey returns the operator key for validator encryption

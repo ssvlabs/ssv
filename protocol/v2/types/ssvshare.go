@@ -122,7 +122,7 @@ func (s *SSVShare) Slashed() bool {
 // IsParticipating returns true if the validator can participate in *any* SSV duty at the given epoch.
 // Note: the validator may be eligible only for sync committee, but not to attest and propose. See IsAttesting.
 // Requirements: not liquidated and attesting or exited in the current or previous sync committee period.
-func (s *SSVShare) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
+func (s *SSVShare) IsParticipating(beaconCfg *networkconfig.Beacon, epoch phase0.Epoch) bool {
 	return s.isSyncCommitteeEligible(beaconCfg, epoch)
 }
 
@@ -139,11 +139,10 @@ func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 	return s.Status == eth2apiv1.ValidatorStatePendingQueued && s.ActivationEpoch <= epoch
 }
 
-func (s *SSVShare) isSyncCommitteeEligible(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
+func (s *SSVShare) isSyncCommitteeEligible(beaconCfg *networkconfig.Beacon, epoch phase0.Epoch) bool {
 	if s.Liquidated {
 		return false
 	}
-
 	if s.IsAttesting(epoch) {
 		return true
 	}

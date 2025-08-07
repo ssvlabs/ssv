@@ -174,14 +174,12 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	defer cancel()
 
 	slot := phase0.Slot(123)
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
-	mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot)
 
 	committee := &Committee{
 		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]queueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig:    mockBeaconConfig,
+		beaconConfig:    networkconfig.TestNetwork.Beacon,
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
@@ -232,7 +230,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 		ctx:          ctx,
 		Queues:       make(map[phase0.Slot]queueContainer),
 		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig: networkconfig.NewMockBeacon(ctrl),
+		beaconConfig: networkconfig.TestNetwork.Beacon,
 	}
 
 	slot := phase0.Slot(123)
@@ -312,14 +310,11 @@ func TestStartConsumeQueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
-	mockBeaconConfig.EXPECT().EstimatedTimeAtSlot(gomock.Any())
-
 	committee := &Committee{
 		ctx:          ctx,
 		Queues:       make(map[phase0.Slot]queueContainer),
 		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig: mockBeaconConfig,
+		beaconConfig: networkconfig.TestNetwork.Beacon,
 	}
 
 	slot := phase0.Slot(123)
@@ -1175,15 +1170,12 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	slot := phase0.Slot(123)
 
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
-	mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).Times(3)
-
 	queueCapacity := 2
 	committee := &Committee{
 		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]queueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
-		beaconConfig:    mockBeaconConfig,
+		beaconConfig:    networkconfig.TestNetwork.Beacon,
 	}
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
@@ -1555,7 +1547,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	defer ctrl.Finish()
 
 	mainLogger, _ := zap.NewDevelopment()
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
 
 	t.Run("drop when inbox strictly full", func(t *testing.T) {
 		logger := mainLogger.Named("DropWhenInboxStrictlyFull")
@@ -1563,14 +1554,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		defer cancel()
 
 		slot := phase0.Slot(123)
-		mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).AnyTimes()
 
 		committee := &Committee{
 			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			beaconConfig:    mockBeaconConfig,
+			beaconConfig:    networkconfig.TestNetwork.Beacon,
 		}
 
 		currentRound := specqbft.Round(1)
@@ -1639,14 +1629,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		defer cancel()
 
 		slot := phase0.Slot(789)
-		mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).AnyTimes()
 
 		committee := &Committee{
 			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			beaconConfig:    mockBeaconConfig,
+			beaconConfig:    networkconfig.TestNetwork.Beacon,
 		}
 
 		currentRound := specqbft.Round(1)
