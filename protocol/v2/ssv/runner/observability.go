@@ -9,15 +9,20 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
+type attributeConsensusPhase string
+
 const (
 	observabilityName      = "github.com/ssvlabs/ssv/protocol/v2/ssv"
 	observabilityNamespace = "ssv.validator"
+
+	attributeConsensusPhasePreConsensus attributeConsensusPhase = "pre_consensus"
 )
 
 type submissionsMetric struct {
@@ -84,11 +89,15 @@ var (
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
-	epochRecordGaugeMetric(ctx, &submissionsLock, submissions, submissionsGauge, count, epoch, role)
+	epochRecordGaugeMetric(ctx, &submissionsLock, submissions, submissionsGauge, count, epoch, role, observability.BeaconRoleAttribute(role))
 }
 
-func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
-	epochRecordGaugeMetric(ctx, &quorumsLock, quorums, quorumsGauge, count, epoch, role)
+func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole, phase attributeConsensusPhase) {
+	attributes := []attribute.KeyValue{
+		observability.BeaconRoleAttribute(role),
+		attribute.String("ssv.validator.duty.phase", string(phase)),
+	}
+	epochRecordGaugeMetric(ctx, &quorumsLock, quorums, quorumsGauge, count, epoch, role, attributes...)
 }
 
 func epochRecordGaugeMetric(
@@ -99,6 +108,7 @@ func epochRecordGaugeMetric(
 	count uint32,
 	epoch phase0.Epoch,
 	role types.BeaconRole,
+	attributes ...attribute.KeyValue,
 ) {
 	lock.Lock()
 	defer lock.Unlock()
@@ -106,7 +116,7 @@ func epochRecordGaugeMetric(
 	var rolesToReset []types.BeaconRole
 	for r, entry := range metricsMap {
 		if entry.epoch != 0 && entry.epoch < epoch {
-			gauge.Record(ctx, int64(entry.count), metric.WithAttributes(observability.BeaconRoleAttribute(r)))
+			gauge.Record(ctx, int64(entry.count), metric.WithAttributes(attributes...))
 
 			rolesToReset = append(rolesToReset, r)
 		}

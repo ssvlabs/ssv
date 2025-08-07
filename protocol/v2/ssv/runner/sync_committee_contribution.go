@@ -102,7 +102,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		return nil
 	}
 
-	recordSuccessfulQuorum(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()), spectypes.BNRoleSyncCommitteeContribution)
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleSyncCommitteeContribution, attributeConsensusPhasePreConsensus)
 
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleSyncCommitteeContribution)
