@@ -25,16 +25,51 @@ const (
 	attributeConsensusPhasePreConsensus attributeConsensusPhase = "pre_consensus"
 )
 
-type submissionsMetric struct {
-	count uint32
-	epoch phase0.Epoch
+type (
+	EpochMetricRecorder struct {
+		mu    sync.Mutex
+		data  map[types.BeaconRole]epochCounter
+		gauge metric.Int64Gauge
+	}
+
+	epochCounter struct {
+		count uint32
+		epoch phase0.Epoch
+	}
+)
+
+func (r *EpochMetricRecorder) Record(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole, attributes ...attribute.KeyValue) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var rolesToReset []types.BeaconRole
+
+	for rKey, entry := range r.data {
+		if entry.epoch != 0 && entry.epoch < epoch {
+			r.gauge.Record(ctx, int64(entry.count), metric.WithAttributes(attributes...))
+			rolesToReset = append(rolesToReset, rKey)
+		}
+	}
+
+	for _, rKey := range rolesToReset {
+		r.data[rKey] = epochCounter{epoch: epoch}
+	}
+
+	entry := r.data[role]
+	entry.epoch = epoch
+	entry.count += count
+	r.data[role] = entry
 }
 
 var (
-	submissions = make(map[types.BeaconRole]submissionsMetric)
-	quorums     = make(map[types.BeaconRole]submissionsMetric)
-
-	submissionsLock, quorumsLock sync.Mutex
+	submissions = EpochMetricRecorder{
+		data:  make(map[types.BeaconRole]epochCounter),
+		gauge: submissionsGauge,
+	}
+	quorums = EpochMetricRecorder{
+		data:  make(map[types.BeaconRole]epochCounter),
+		gauge: quorumsGauge,
+	}
 )
 
 var (
@@ -89,7 +124,7 @@ var (
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
-	epochRecordGaugeMetric(ctx, &submissionsLock, submissions, submissionsGauge, count, epoch, role, observability.BeaconRoleAttribute(role))
+	submissions.Record(ctx, count, epoch, role, observability.BeaconRoleAttribute(role))
 }
 
 func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole, phase attributeConsensusPhase) {
@@ -97,41 +132,7 @@ func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoc
 		observability.BeaconRoleAttribute(role),
 		attribute.String("ssv.validator.duty.phase", string(phase)),
 	}
-	epochRecordGaugeMetric(ctx, &quorumsLock, quorums, quorumsGauge, count, epoch, role, attributes...)
-}
-
-func epochRecordGaugeMetric(
-	ctx context.Context,
-	lock *sync.Mutex,
-	metricsMap map[types.BeaconRole]submissionsMetric,
-	gauge metric.Int64Gauge,
-	count uint32,
-	epoch phase0.Epoch,
-	role types.BeaconRole,
-	attributes ...attribute.KeyValue,
-) {
-	lock.Lock()
-	defer lock.Unlock()
-
-	var rolesToReset []types.BeaconRole
-	for r, entry := range metricsMap {
-		if entry.epoch != 0 && entry.epoch < epoch {
-			gauge.Record(ctx, int64(entry.count), metric.WithAttributes(attributes...))
-
-			rolesToReset = append(rolesToReset, r)
-		}
-	}
-
-	for _, r := range rolesToReset {
-		metricsMap[r] = submissionsMetric{
-			epoch: epoch,
-		}
-	}
-
-	entry := metricsMap[role]
-	entry.epoch = epoch
-	entry.count += count
-	metricsMap[role] = entry
+	quorums.Record(ctx, count, epoch, role, attributes...)
 }
 
 func recordFailedSubmission(ctx context.Context, role types.BeaconRole) {
