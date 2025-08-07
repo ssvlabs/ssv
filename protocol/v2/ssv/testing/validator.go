@@ -31,6 +31,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 	return validator.NewValidator(
 		ctx,
 		cancel,
+		logger,
 		commonOpts.NewOptions(
 			&types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex),
