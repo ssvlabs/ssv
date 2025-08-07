@@ -42,11 +42,12 @@ type (
 )
 
 // Record updates and reports the gauge metric for a given BeaconRole and epoch.
-// If the current epoch is greater than the one recorded for any role in the data map,
-// their values are flushed (recorded) with the corresponding beacon role as an attribute.
-// The method does not require the caller to explicitly include the role attribute in the `attributes`,
-// as it will be automatically added per-role during metric reporting.
-// It is safe for concurrent use.
+// When the epoch advances, all roles from the internal data map that had recorded duties
+// in the previous epoch will have their metrics flushed (recorded), not just the role passed in.
+// This is necessary because not all duties are executed every epoch, so to ensure accurate
+// metric reporting, all completed roles from the previous epoch must be recorded once the new epoch begins.
+// The method automatically appends the relevant beacon role attribute to each metric entry
+// and does not require the caller to explicitly include it in the `attributes` slice.
 func (r *EpochMetricRecorder) Record(ctx context.Context, count uint32, epoch phase0.Epoch, beaconRole types.BeaconRole, attributes ...attribute.KeyValue) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
