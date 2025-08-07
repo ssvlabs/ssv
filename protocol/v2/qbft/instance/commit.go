@@ -10,20 +10,19 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
 // Assumes commit message is valid!
-func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *spectypes.SignedSSVMessage, error) {
+func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (bool, []byte, *spectypes.SignedSSVMessage, error) {
 	logger.Debug("📬 got commit message",
 		fields.Round(i.State.Round),
 		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
 		fields.Root(msg.QBFTMessage.Root))
 
-	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(msg)
+	addMsg, err := i.State.CommitContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
 	}
@@ -32,7 +31,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 	}
 
 	// calculate commit quorum and act upon it
-	quorum, commitMsgs, err := commitQuorumForRoundRoot(i.State, commitMsgContainer, msg.QBFTMessage.Root, msg.QBFTMessage.Round)
+	quorum, commitMsgs, err := i.commitQuorumForRoundRoot(msg.QBFTMessage.Root, msg.QBFTMessage.Round)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not calculate commit quorum")
 	}
@@ -59,9 +58,9 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 }
 
 // returns true if there is a quorum for the current round for this provided value
-func commitQuorumForRoundRoot(state *specqbft.State, commitMsgContainer *specqbft.MsgContainer, root [32]byte, round specqbft.Round) (bool, []*specqbft.ProcessingMessage, error) {
-	signers, msgs := commitMsgContainer.LongestUniqueSignersForRoundAndRoot(round, root)
-	return state.CommitteeMember.HasQuorum(len(signers)), msgs, nil
+func (i *Instance) commitQuorumForRoundRoot(root [32]byte, round specqbft.Round) (bool, []*specqbft.ProcessingMessage, error) {
+	signers, msgs := i.State.CommitContainer.LongestUniqueSignersForRoundAndRoot(round, root)
+	return i.State.CommitteeMember.HasQuorum(len(signers)), msgs, nil
 }
 
 func aggregateCommitMsgs(msgs []*specqbft.ProcessingMessage, fullData []byte) (*spectypes.SignedSSVMessage, error) {
@@ -122,16 +121,16 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *specqbft.State, signer ssvtypes.OperatorSigner, root [32]byte) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreateCommit(root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
-		Height:     state.Height,
-		Round:      state.Round,
-		Identifier: state.ID,
+		Height:     i.State.Height,
+		Round:      i.State.Round,
+		Identifier: i.State.ID,
 
 		Root: root,
 	}
-	return ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	return ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
 }
 
 func baseCommitValidationIgnoreSignature(
@@ -139,7 +138,6 @@ func baseCommitValidationIgnoreSignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "signed commit invalid")
 	}
@@ -159,12 +157,10 @@ func baseCommitValidationIgnoreSignature(
 }
 
 func BaseCommitValidationVerifySignature(
-	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := baseCommitValidationIgnoreSignature(msg, height, operators); err != nil {
 		return err
 	}
@@ -177,14 +173,8 @@ func BaseCommitValidationVerifySignature(
 	return nil
 }
 
-func validateCommit(
-	msg *specqbft.ProcessingMessage,
-	height specqbft.Height,
-	round specqbft.Round,
-	proposedMsg *specqbft.ProcessingMessage,
-	operators []*spectypes.Operator,
-) error {
-	if err := baseCommitValidationIgnoreSignature(msg, height, operators); err != nil {
+func (i *Instance) validateCommit(msg *specqbft.ProcessingMessage) error {
+	if err := baseCommitValidationIgnoreSignature(msg, i.State.Height, i.State.CommitteeMember.Committee); err != nil {
 		return err
 	}
 
@@ -192,11 +182,11 @@ func validateCommit(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if msg.QBFTMessage.Round != round {
+	if msg.QBFTMessage.Round != i.State.Round {
 		return errors.New("wrong msg round")
 	}
 
-	if !bytes.Equal(proposedMsg.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {
+	if !bytes.Equal(i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {
 		return errors.New("proposed data mismatch")
 	}
 

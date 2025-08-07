@@ -10,7 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -65,25 +65,32 @@ func (e Error) Is(target error) bool {
 	return e.text == t.text
 }
 
+// Ignored errors.
 var (
-	ErrWrongDomain                             = Error{text: "wrong domain"}
-	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
-	ErrUnknownValidator                        = Error{text: "unknown validator"}
-	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}
-	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
-	ErrEarlySlotMessage                        = Error{text: "message was sent before slot starts"}
-	ErrLateSlotMessage                         = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
-	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
-	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
-	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers"}
-	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big"}
-	ErrIncorrectTopic                          = Error{text: "incorrect topic"}
-	ErrNonExistentCommitteeID                  = Error{text: "committee ID doesn't exist"}
-	ErrRoundTooHigh                            = Error{text: "round is too high for this role"}
-	ErrValidatorIndexMismatch                  = Error{text: "partial signature validator index not found"}
-	ErrTooManyDutiesPerEpoch                   = Error{text: "too many duties per epoch"}
-	ErrNoDuty                                  = Error{text: "no duty for this epoch"}
-	ErrEstimatedRoundNotInAllowedSpread        = Error{text: "message round is too far from estimated"}
+	ErrWrongDomain                      = Error{text: "wrong domain"}
+	ErrNoShareMetadata                  = Error{text: "share has no metadata"}
+	ErrUnknownValidator                 = Error{text: "unknown validator"}
+	ErrValidatorLiquidated              = Error{text: "validator is liquidated"}
+	ErrValidatorNotAttesting            = Error{text: "validator is not attesting"}
+	ErrEarlySlotMessage                 = Error{text: "message was sent before slot starts"}
+	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
+	ErrSlotAlreadyAdvanced              = Error{text: "signer has already advanced to a later slot"}
+	ErrRoundAlreadyAdvanced             = Error{text: "signer has already advanced to a later round"}
+	ErrDecidedWithSameSigners           = Error{text: "decided with same number of signers"}
+	ErrPubSubDataTooBig                 = Error{text: "pub-sub message data too big"}
+	ErrIncorrectTopic                   = Error{text: "incorrect topic"}
+	ErrNonExistentCommitteeID           = Error{text: "committee ID doesn't exist"}
+	ErrRoundTooHigh                     = Error{text: "round is too high for this role"}
+	ErrValidatorIndexMismatch           = Error{text: "partial signature validator index not found"}
+	ErrTooManyDutiesPerEpoch            = Error{text: "too many duties per epoch"}
+	ErrNoDuty                           = Error{text: "no duty for this epoch"}
+	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
+	ErrUnknownOperator                  = Error{text: "operator is unknown"}
+	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
+)
+
+// Rejected errors.
+var (
 	ErrEmptyData                               = Error{text: "empty data", reject: true}
 	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
@@ -129,8 +136,6 @@ var (
 	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
 	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
-	ErrUnknownOperator                         = Error{text: "operator is unknown"}
-	ErrOperatorValidation                      = Error{text: "failed to validate operator data"}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -41,7 +42,7 @@ var (
 )
 
 // Options for the discovery service
-func testingDiscoveryOptions(t *testing.T, ssvConfig networkconfig.SSVConfig) *Options {
+func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSVConfig) *Options {
 	// Generate key
 	privKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -75,7 +76,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig networkconfig.SSVConfig) *O
 }
 
 // Testing discovery with a given NetworkConfig
-func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig networkconfig.SSVConfig) *DiscV5Service {
+func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSVConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, ssvConfig)
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
@@ -146,11 +147,15 @@ func NodeWithCustomSubnets(t *testing.T, subnets commons.Subnets) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, subnets)
 }
 
-func CustomNode(t *testing.T,
-	setDomainType bool, domainType spectypes.DomainType,
-	setNextDomainType bool, nextDomainType spectypes.DomainType,
-	setSubnets bool, subnets commons.Subnets) *enode.Node {
-
+func CustomNode(
+	t *testing.T,
+	setDomainType bool,
+	domainType spectypes.DomainType,
+	setNextDomainType bool,
+	nextDomainType spectypes.DomainType,
+	setSubnets bool,
+	subnets commons.Subnets,
+) *enode.Node {
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -351,14 +356,14 @@ func (l *MockListener) RandomNodes() enode.Iterator {
 func (l *MockListener) AllNodes() []*enode.Node {
 	return l.nodes
 }
-func (l *MockListener) Ping(node *enode.Node) error {
+func (l *MockListener) Ping(node *enode.Node) (*v5wire.Pong, error) {
 	nodeStr := node.String()
 	for _, storedNode := range l.nodesForPingError {
 		if storedNode.String() == nodeStr {
-			return errors.New("failed ping")
+			return nil, errors.New("failed ping")
 		}
 	}
-	return nil
+	return nil, nil
 }
 func (l *MockListener) LocalNode() *enode.LocalNode {
 	return l.localNode

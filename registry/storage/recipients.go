@@ -117,7 +117,7 @@ func (s *recipientsStorage) GetRecipientDataMany(r basedb.Reader, owners []commo
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	var keys [][]byte
+	keys := make([][]byte, 0, len(owners))
 	for _, owner := range owners {
 		keys = append(keys, buildRecipientKey(owner))
 	}

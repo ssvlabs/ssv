@@ -6,19 +6,13 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
-func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
-	if err := ValidateDecided(
-		c.config,
-		msg,
-		c.CommitteeMember,
-	); err != nil {
+func (c *Controller) UponDecided(msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
+	if err := c.ValidateDecided(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid decided msg")
 	}
 
@@ -67,12 +61,8 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.ProcessingMes
 	return nil, nil
 }
 
-func ValidateDecided(
-	config qbft.IConfig,
-	msg *specqbft.ProcessingMessage,
-	committeeMember *spectypes.CommitteeMember,
-) error {
-	isDecided, err := IsDecidedMsg(committeeMember, msg)
+func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
+	isDecided, err := c.IsDecidedMsg(msg)
 	if err != nil {
 		return err
 	}
@@ -80,7 +70,7 @@ func ValidateDecided(
 		return errors.New("not a decided msg")
 	}
 
-	if err := instance.BaseCommitValidationVerifySignature(config, msg, msg.QBFTMessage.Height, committeeMember.Committee); err != nil {
+	if err := instance.BaseCommitValidationVerifySignature(msg, msg.QBFTMessage.Height, c.CommitteeMember.Committee); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
@@ -96,6 +86,6 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(committeeMember *spectypes.CommitteeMember, msg *specqbft.ProcessingMessage) (bool, error) {
-	return committeeMember.HasQuorum(len(msg.SignedMessage.OperatorIDs)) && msg.QBFTMessage.MsgType == specqbft.CommitMsgType, nil
+func (c *Controller) IsDecidedMsg(msg *specqbft.ProcessingMessage) (bool, error) {
+	return c.CommitteeMember.HasQuorum(len(msg.SignedMessage.OperatorIDs)) && msg.QBFTMessage.MsgType == specqbft.CommitMsgType, nil
 }

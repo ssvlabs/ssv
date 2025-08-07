@@ -17,8 +17,8 @@ type Network interface {
 
 type NetworkConfig struct {
 	Name string
-	BeaconConfig
-	SSVConfig
+	*BeaconConfig
+	*SSVConfig
 }
 
 func (n NetworkConfig) String() string {

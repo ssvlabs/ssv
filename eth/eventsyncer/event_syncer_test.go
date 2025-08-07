@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -53,11 +54,6 @@ func TestEventSyncer(t *testing.T) {
 	const testTimeout = 5 * time.Second
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
-
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
-	done := make(chan struct{})
-	defer close(done)
 
 	// Create sim instance with a delay between block execution
 	sim := simTestBackend(testAddr)
@@ -166,7 +162,7 @@ func setupEventHandler(
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
 		ValidatorsMap:     validators.New(ctx),
-	})
+	}, exporter.Options{})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)

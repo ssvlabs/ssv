@@ -20,23 +20,29 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
+// TODO: The routes are currently custom and adhere DESIGN.md.
+//
+//	However, web3signer and eth remote signer APIs use different ones (prefixed with /api/v1/):
+//	- https://consensys.github.io/web3signer/web3signer-eth2.html
+//	- https://github.com/ethereum/remote-signing-api
+//	We need to decide if we need to match them.
 const (
-	// TODO: The routes are currently custom and adhere DESIGN.md.
-	//  However, web3signer and eth remote signer APIs use different ones (prefixed with /api/v1/):
-	//  - https://consensys.github.io/web3signer/web3signer-eth2.html
-	//  - https://github.com/ethereum/remote-signing-api
-	//  We need to decide if we need to match them.
-	pathValidators       = "/v1/validators"        // TODO: /api/v1/eth2/publicKeys ?
-	pathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
-	pathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
-	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
+	PathValidators       = "/v1/validators"        // TODO: /api/v1/eth2/publicKeys ?
+	PathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
+	PathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
+	PathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
+)
+
+const (
+	// Processing one share takes ~0.5-0.8s, so 10 shares seem a reasonable limit.
+	addShareLimit = 10
 )
 
 type Server struct {
@@ -66,13 +72,13 @@ func NewServer(
 		opt(server)
 	}
 
-	r.GET(pathValidators, server.handleListValidators)
-	r.POST(pathValidators, server.handleAddValidator)
-	r.DELETE(pathValidators, server.handleRemoveValidator)
-	r.POST(pathValidatorsSign+"{identifier}", server.handleSignValidator)
+	r.GET(PathValidators, server.handleListValidators)
+	r.POST(PathValidators, server.handleAddValidator)
+	r.DELETE(PathValidators, server.handleRemoveValidator)
+	r.POST(PathValidatorsSign+"{identifier}", server.handleSignValidator)
 
-	r.GET(pathOperatorIdentity, server.handleOperatorIdentity)
-	r.POST(pathOperatorSign, server.handleSignOperator)
+	r.GET(PathOperatorIdentity, server.handleOperatorIdentity)
+	r.POST(PathOperatorSign, server.handleSignOperator)
 
 	return server
 }
@@ -96,6 +102,12 @@ func (s *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return func(ctx *fasthttp.RequestCtx) {
 		start := time.Now()
 		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("request panicked", zap.Any("panic", r))
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				ctx.SetBodyString("Internal server error")
+			}
+
 			route := string(ctx.Path())
 			matchedRoute := ctx.UserValue(router.MatchedRoutePathParam)
 			if matchedRouteStr, ok := matchedRoute.(string); ok {
@@ -140,7 +152,7 @@ func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.ListKeys(ctx)
 	recordRemoteSignerOperation(ctx, opRemoteSignerListKeys, err, time.Since(start))
-
+	logger = logger.With(fields.Took(time.Since(start)))
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -162,6 +174,13 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	logger = logger.With(zap.Int("req_count", len(req.ShareKeys)))
+
+	if len(req.ShareKeys) > addShareLimit {
+		logger.Warn("requested too many shares to be added")
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest,
+			fmt.Errorf("requested too many shares to be added: %d", len(req.ShareKeys)))
+		return
+	}
 
 	var importKeystoreReq web3signer.ImportKeystoreRequest
 	for i, share := range req.ShareKeys {
@@ -204,6 +223,7 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
 	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
+	logger = logger.With(fields.Took(time.Since(start)))
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -228,6 +248,8 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	s.writeJSON(ctx, logger, resp)
 }
 
+// keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
+// to prevent exposing information related to private key.
 func (s *Server) keystoreJSONFromEncryptedShare(
 	encryptedPrivKey hexutil.Bytes,
 	sharePubKey phase0.BLSPubKey,
@@ -235,17 +257,17 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 ) (string, error) {
 	sharePrivKeyHex, err := s.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
-		return "", fmt.Errorf("decrypt share: %w", err)
+		return "", fmt.Errorf("failed to decrypt share")
 	}
 
 	sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 	if err != nil {
-		return "", fmt.Errorf("decode share private key from hex %s: %w", string(sharePrivKeyHex), err)
+		return "", fmt.Errorf("failed to decode share private key from hex for pubkey %s", sharePubKey.String())
 	}
 
 	sharePrivBLS := &bls.SecretKey{}
 	if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-		return "", fmt.Errorf("deserialize share private key: %w", err)
+		return "", fmt.Errorf("failed to deserialize share private key")
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
@@ -254,7 +276,7 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
-		return "", fmt.Errorf("generate share keystore: %w", err)
+		return "", fmt.Errorf("failed to generate share keystore")
 	}
 
 	keystoreJSON, err := json.Marshal(shareKeystore)
@@ -295,6 +317,7 @@ func (s *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.DeleteKeystore(ctx, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerDeleteKeystore, err, time.Since(start))
+	logger = logger.With(fields.Took(time.Since(start)))
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -345,8 +368,8 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.Sign(ctx, blsPubKey, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
+	logger = logger.With(fields.Took(time.Since(start)))
 	if err != nil {
-		logger = logger.With(zap.String("req", string(ctx.PostBody())))
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}

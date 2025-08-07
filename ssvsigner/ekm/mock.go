@@ -122,6 +122,14 @@ func (m *MockDatabase) Update(fn func(basedb.Txn) error) error {
 	return nil
 }
 
+func (m *MockDatabase) FullGC(arg0 context.Context) error {
+	return nil
+}
+
+func (m *MockDatabase) QuickGC(arg0 context.Context) error {
+	return nil
+}
+
 type MockTxn struct {
 	mock.Mock
 }
@@ -247,17 +255,17 @@ func (m *MockSlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, s
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
-	args := m.Called(pubKey)
+func (m *MockSlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestAttestation(pubKey phase0.BLSPubKey) error {
-	args := m.Called(pubKey)
+func (m *MockSlashingProtector) RemoveHighestAttestationTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestProposal(pubKey phase0.BLSPubKey) error {
-	args := m.Called(pubKey)
+func (m *MockSlashingProtector) RemoveHighestProposalTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }

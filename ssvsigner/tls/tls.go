@@ -106,12 +106,16 @@ func (c *Config) LoadServerTLSConfig() (*tls.Config, error) {
 		return nil, err
 	}
 
-	// For Case 3: Load client fingerprints if provided
+	// For Case 3: Load client fingerprints
 	var trustedFingerprints map[string]string
 	if c.ServerKnownClientsFile != "" {
 		trustedFingerprints, err = loadFingerprintsFile(c.ServerKnownClientsFile)
 		if err != nil {
 			return nil, fmt.Errorf("load known clients: %w", err)
+		}
+
+		if len(trustedFingerprints) == 0 {
+			return nil, fmt.Errorf("no client fingerprints found; mutual TLS required")
 		}
 	}
 
@@ -189,7 +193,7 @@ func (c *Config) loadServerCertificate() (tls.Certificate, error) {
 }
 
 // loadServerFingerprints loads the trusted server fingerprints from a PEM certificate file.
-// It extracts the certificate's fingerprint and identity (common name or DNS name).
+// It extracts the certificate's fingerprint and maps it to all certificate identities (common name, DNS names, and IP addresses).
 func (c *Config) loadServerFingerprints() (map[string]string, error) {
 	serverCert, err := loadPEMCertificate(c.ClientServerCertFile)
 	if err != nil {
@@ -199,17 +203,29 @@ func (c *Config) loadServerFingerprints() (map[string]string, error) {
 	fingerprint := sha256.Sum256(serverCert.Raw)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
-	// Try to get a host identifier from the certificate
-	hostID := serverCert.Subject.CommonName
-	if hostID == "" && len(serverCert.DNSNames) > 0 {
-		hostID = serverCert.DNSNames[0]
+	// Create fingerprint entries for all possible hostnames
+	trustedFingerprints := make(map[string]string)
+
+	// Add common name if present
+	if serverCert.Subject.CommonName != "" {
+		trustedFingerprints[serverCert.Subject.CommonName] = fingerprintHex
 	}
 
-	if hostID == "" {
-		return nil, fmt.Errorf("server certificate must have a Common Name or DNS name")
+	// Add all DNS names
+	for _, dnsName := range serverCert.DNSNames {
+		trustedFingerprints[dnsName] = fingerprintHex
 	}
 
-	return map[string]string{hostID: fingerprintHex}, nil
+	// Add all IP addresses
+	for _, ip := range serverCert.IPAddresses {
+		trustedFingerprints[ip.String()] = fingerprintHex
+	}
+
+	if len(trustedFingerprints) == 0 {
+		return nil, fmt.Errorf("server certificate must have a Common Name, DNS name, or IP address")
+	}
+
+	return trustedFingerprints, nil
 }
 
 // createClientTLSConfig creates a client TLS configuration with certificates and fingerprint verification.
@@ -231,7 +247,15 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 
 	// Set up certificate verification if fingerprints provided
 	if len(trustedFingerprints) > 0 {
-		tlsConfig.InsecureSkipVerify = true // We're doing manual verification
+		// InsecureSkipVerify is deliberately enabled to bypass Go's default certificate validation,
+		// including CA-based trust chains and hostname checks.
+		//
+		// This is required because we perform strict manual verification via VerifyConnection
+		// using pinned SHA-256 fingerprints of the expected server certificate.
+		//
+		// This does NOT disable security — instead, it replaces the traditional PKI trust model
+		// with explicit certificate pinning, which is simpler and stronger in this context.
+		tlsConfig.InsecureSkipVerify = true
 		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
 			return verifyServerCertificate(state, trustedFingerprints)
 		}
@@ -246,7 +270,7 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 //
 // Parameters:
 // - certificate: server certificate to present to clients (required)
-// - trustedFingerprints: map of client common names to expected certificate fingerprints (optional)
+// - trustedFingerprints: map of client common names to expected certificate fingerprints (required unless insecure HTTP is enabled)
 func createServerTLSConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
 	if certificate.Certificate == nil {
 		return nil, fmt.Errorf("server certificate is required")
@@ -284,27 +308,64 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	fingerprint := sha256.Sum256(cert.Raw)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
-	// Get the hostname from multiple possible sources
+	// Try to match the ServerName (from TLS handshake) against our trusted fingerprints
 	host := state.ServerName
-	if host == "" && len(cert.DNSNames) > 0 {
-		host = cert.DNSNames[0]
-	} else if host == "" {
-		host = cert.Subject.CommonName
-	}
-
-	// Check fingerprint against our trusted list
-	if expectedFingerprint, ok := trustedFingerprints[host]; ok {
-		expectedFingerprint = normalizeFingerprint(expectedFingerprint)
-		if expectedFingerprint == fingerprintHex {
-			return nil
+	if host != "" {
+		if expectedFingerprint, ok := trustedFingerprints[host]; ok {
+			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
+			if expectedFingerprint == fingerprintHex {
+				return nil
+			}
+			return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
+				host,
+				formatFingerprint(expectedFingerprint),
+				formatFingerprint(fingerprintHex))
 		}
-		return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
-			host,
-			formatFingerprint(expectedFingerprint),
-			formatFingerprint(fingerprintHex))
 	}
 
-	return fmt.Errorf("server certificate fingerprint not trusted: %s", formatFingerprint(fingerprintHex))
+	// If ServerName didn't match, check all certificate identities
+	// This handles cases where ServerName is empty or doesn't match our fingerprint keys
+	var identities []string //nolint: prealloc
+
+	// Check Common Name
+	if cert.Subject.CommonName != "" {
+		identities = append(identities, cert.Subject.CommonName)
+		if expectedFingerprint, ok := trustedFingerprints[cert.Subject.CommonName]; ok {
+			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
+			if expectedFingerprint == fingerprintHex {
+				return nil
+			}
+		}
+	}
+
+	// Check all DNS names
+	for _, dnsName := range cert.DNSNames {
+		identities = append(identities, dnsName)
+		if expectedFingerprint, ok := trustedFingerprints[dnsName]; ok {
+			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
+			if expectedFingerprint == fingerprintHex {
+				return nil
+			}
+		}
+	}
+
+	// Check all IP addresses
+	for _, ip := range cert.IPAddresses {
+		ipStr := ip.String()
+		identities = append(identities, ipStr)
+		if expectedFingerprint, ok := trustedFingerprints[ipStr]; ok {
+			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
+			if expectedFingerprint == fingerprintHex {
+				return nil
+			}
+		}
+	}
+
+	// No match found
+	if len(identities) > 0 {
+		return fmt.Errorf("server certificate fingerprint not trusted for any identity %v: %s", identities, formatFingerprint(fingerprintHex))
+	}
+	return fmt.Errorf("server certificate has no identities and fingerprint not trusted: %s", formatFingerprint(fingerprintHex))
 }
 
 // verifyClientCertificate verifies a client certificate using fingerprints.

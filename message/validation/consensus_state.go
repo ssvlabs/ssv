@@ -22,7 +22,7 @@ type OperatorState struct {
 	signers         []*SignerState // the slice index is slot % storedSlotCount
 	maxSlot         phase0.Slot
 	maxEpoch        phase0.Epoch
-	lastEpochDuties uint64
+	currEpochDuties uint64
 	prevEpochDuties uint64
 }
 
@@ -48,10 +48,12 @@ func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, st
 	}
 	if epoch > os.maxEpoch {
 		os.maxEpoch = epoch
-		os.prevEpochDuties = os.lastEpochDuties
-		os.lastEpochDuties = 1
+		os.prevEpochDuties = os.currEpochDuties
+		os.currEpochDuties = 1
+	} else if epoch == os.maxEpoch {
+		os.currEpochDuties++
 	} else {
-		os.lastEpochDuties++
+		os.prevEpochDuties++
 	}
 }
 
@@ -61,7 +63,7 @@ func (os *OperatorState) MaxSlot() phase0.Slot {
 
 func (os *OperatorState) DutyCount(epoch phase0.Epoch) uint64 {
 	if epoch == os.maxEpoch {
-		return os.lastEpochDuties
+		return os.currEpochDuties
 	}
 	if epoch == os.maxEpoch-1 {
 		return os.prevEpochDuties

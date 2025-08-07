@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 var _ Provider = &MultiClient{}
@@ -269,12 +269,18 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				}
 
 				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
-				if err != nil && !isInterruptedError(err) {
-					// NOTE: There are unit tests that trigger Fatal and override its behavior.
-					// Therefore, the code must call `return` afterward.
-					mc.logger.Fatal("failed to stream registry events", zap.Error(err))
+				if err == nil {
+					return
 				}
-				return
+
+				if isInterruptedError(err) {
+					mc.logger.Debug("stream logs stopped", zap.Error(err))
+					return
+				}
+
+				// NOTE: There are unit tests that trigger Fatal and override its behavior.
+				// Therefore, the code must call `return` afterward.
+				mc.logger.Fatal("failed to stream logs", zap.Error(err))
 			}
 		}
 	}()
@@ -327,19 +333,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 	return fmt.Errorf("no healthy clients: %w", err)
-}
-
-// BlockByNumber retrieves a block by its number.
-func (mc *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	f := func(client SingleClientProvider) (any, error) {
-		return client.BlockByNumber(ctx, blockNumber)
-	}
-	res, err := mc.call(contextWithMethod(ctx, "BlockByNumber"), f, len(mc.clients))
-	if err != nil {
-		return nil, err
-	}
-
-	return res.(*ethtypes.Block), nil
 }
 
 // HeaderByNumber retrieves a block header by its number.

@@ -11,15 +11,15 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
+//go:generate go tool -modfile=../tool.mod mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
 
 // initialRemainingDetectionEpochs represents the starting number of epochs
 // a validator must pass without liveness detection before being considered safe to sign.
@@ -55,7 +55,7 @@ type BeaconNode interface {
 
 // Options contains the configuration options for the Doppelgänger protection.
 type Options struct {
-	BeaconConfig       networkconfig.BeaconConfig
+	BeaconConfig       *networkconfig.BeaconConfig
 	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
@@ -68,7 +68,7 @@ type handler struct {
 	mu              sync.RWMutex
 	validatorsState map[phase0.ValidatorIndex]*doppelgangerState
 
-	beaconConfig       networkconfig.BeaconConfig
+	beaconConfig       *networkconfig.BeaconConfig
 	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
@@ -82,7 +82,7 @@ func NewHandler(opts *Options) *handler {
 		beaconNode:         opts.BeaconNode,
 		validatorProvider:  opts.ValidatorProvider,
 		slotTickerProvider: opts.SlotTickerProvider,
-		logger:             opts.Logger.Named(logging.NameDoppelganger),
+		logger:             opts.Logger.Named(log.NameDoppelganger),
 		validatorsState:    make(map[phase0.ValidatorIndex]*doppelgangerState),
 	}
 }
@@ -161,7 +161,7 @@ func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	defer h.mu.Unlock()
 
 	if h.validatorsState[validatorIndex] == nil {
-		h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(validatorIndex))
+		h.logger.Warn("Validator not found in Doppelganger state. This is expected in the first block after failed sync", fields.ValidatorIndex(validatorIndex))
 		return
 	}
 
@@ -330,8 +330,8 @@ func (h *handler) recordValidatorStates(ctx context.Context) {
 		return
 	}()
 
-	observability.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
-	observability.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
+	metrics.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
+	metrics.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
 }
 
 func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {

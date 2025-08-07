@@ -7,18 +7,19 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
@@ -40,7 +41,7 @@ type Listener interface {
 	Lookup(enode.ID) []*enode.Node
 	RandomNodes() enode.Iterator
 	AllNodes() []*enode.Node
-	Ping(*enode.Node) error
+	Ping(*enode.Node) (*v5wire.Pong, error)
 	LocalNode() *enode.LocalNode
 	Close()
 }
@@ -72,7 +73,7 @@ type DiscV5Service struct {
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
 
-	ssvConfig networkconfig.SSVConfig
+	ssvConfig *networkconfig.SSVConfig
 	subnets   commons.Subnets
 
 	publishLock chan struct{}
@@ -81,7 +82,7 @@ type DiscV5Service struct {
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		logger:              logger.Named(logging.NameDiscoveryService),
+		logger:              logger.Named(log.NameDiscoveryService),
 		ctx:                 ctx,
 		cancel:              cancel,
 		conns:               opts.ConnIndex,
@@ -422,7 +423,7 @@ func (dvs *DiscV5Service) PublishENR() {
 
 	// Publish ENR.
 	dvs.discover(ctx, func(e PeerEvent) {
-		err := dvs.dv5Listener.Ping(e.Node)
+		_, err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
 			errs++
 			if err.Error() == "RPC timeout" {

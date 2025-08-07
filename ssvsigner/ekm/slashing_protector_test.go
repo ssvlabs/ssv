@@ -13,8 +13,8 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -34,7 +34,7 @@ func TestSlashing(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
 	currentEpoch := networkconfig.TestNetwork.EstimatedEpochAtSlot(currentSlot)
@@ -111,7 +111,7 @@ func TestSlashing(t *testing.T) {
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 	})
 	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
-		require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			beaconBlock,
@@ -138,9 +138,9 @@ func TestSlashing_Attestation(t *testing.T) {
 		secretKeys[i].SetByCSPRNG()
 
 		// Equivalent to AddShare but with a custom slot for minimal slashing protection.
-		err := km.(*LocalKeyManager).BumpSlashingProtection(phase0.BLSPubKey(secretKeys[i].GetPublicKey().Serialize()))
+		err := km.(*LocalKeyManager).BumpSlashingProtection(nil, phase0.BLSPubKey(secretKeys[i].GetPublicKey().Serialize()))
 		require.NoError(t, err)
-		err = km.(*LocalKeyManager).saveShare(secretKeys[i])
+		err = km.(*LocalKeyManager).saveAccount(secretKeys[i])
 		require.NoError(t, err)
 	}
 
@@ -179,7 +179,7 @@ func TestSlashing_Attestation(t *testing.T) {
 			require.NotZero(t, sig, "expected non-zero signature")
 			require.NotZero(t, root, "expected non-zero root")
 
-			highAtt, found, err := km.RetrieveHighestAttestation(phase0.BLSPubKey(sk.GetPublicKey().Serialize()))
+			highAtt, found, err := km.(*LocalKeyManager).slashingProtector.RetrieveHighestAttestation(phase0.BLSPubKey(sk.GetPublicKey().Serialize()))
 			require.NoError(t, err)
 			require.True(t, found)
 			require.Equal(t, attestation.Source.Epoch, highAtt.Source.Epoch)
@@ -406,14 +406,14 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
+	const validatorCount = 3
 	type testValidator struct {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
 	}
 
-	var testValidators []testValidator
-
-	for range 3 {
+	testValidators := make([]testValidator, 0, validatorCount)
+	for range validatorCount {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 		pk := sk.GetPublicKey()
@@ -427,7 +427,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
 	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
@@ -510,14 +510,15 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
+	const validatorCount = 3
 	type testValidator struct {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
 	}
 
-	var testValidators []testValidator
+	testValidators := make([]testValidator, 0, validatorCount)
 
-	for range 3 {
+	for range validatorCount {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 		pk := sk.GetPublicKey()
@@ -531,7 +532,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
 	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
@@ -617,7 +618,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	// Add the share to the key manager
 	encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(sharePrivKey.SerializeToHexStr()))
 	require.NoError(t, err)
-	require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, sharePubKey))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, sharePubKey))
 
 	// --- First Block Proposal ---
 	slotToSign := networkconfig.TestNetwork.EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
@@ -694,7 +695,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 }
 
 func TestSlashableBlockDoubleProposal(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 	defer db.Close()
@@ -711,7 +712,7 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Failed to bump slashing protection")
 
 	// --- First Block Proposal ---
@@ -750,7 +751,7 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 }
 
 func TestSlashableAttestationDoubleVote(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 	defer db.Close()
@@ -767,7 +768,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Failed to bump slashing protection")
 
 	// --- First Attestation ---
@@ -826,7 +827,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 }
 
 func TestSlashableAttestationSurroundingVote(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 	defer db.Close()
@@ -843,7 +844,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Failed to bump slashing protection")
 
 	// --- First Attestation (Inner) ---
@@ -906,7 +907,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	dbPath := t.TempDir() + "/slashing_db.db"
 
 	// --- Phase 1: Initial Setup, Sign, and Close ---
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.New(logger, basedb.Options{Path: dbPath})
 	require.NoError(t, err)
 
@@ -922,7 +923,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "DB Integrity: Failed to bump slashing protection (Phase 1)")
 
 	// Sign a block
@@ -963,7 +964,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 }
 
 func TestSlashingConcurrency(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 	defer db.Close()
@@ -980,7 +981,7 @@ func TestSlashingConcurrency(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Concurrency: Failed to bump slashing protection")
 
 	// Sign a valid block first to establish a baseline
@@ -1025,10 +1026,10 @@ func TestSlashingConcurrency(t *testing.T) {
 				}
 
 			case 2: // Add validation for second key
-				err := protector.BumpSlashingProtection(sharePubKey2)
+				err := protector.BumpSlashingProtectionTxn(nil, sharePubKey2)
 				// This is an idempotent operation so should not error
 				if err != nil {
-					t.Logf("Goroutine %d: BumpSlashingProtection returned error: %v", routineID, err)
+					t.Logf("Goroutine %d: BumpSlashingProtectionTxn returned error: %v", routineID, err)
 				}
 
 			case 3: // Check a new attestation

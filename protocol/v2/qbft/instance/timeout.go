@@ -7,8 +7,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 )
 
 func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {
@@ -16,7 +17,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer span.End()
 
 	if !i.CanProcessMessages() {
-		return observability.Errorf(span, "instance stopped processing timeouts")
+		return traces.Errorf(span, "instance stopped processing timeouts")
 	}
 
 	newRound := i.State.Round + 1
@@ -26,19 +27,19 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	// round to be bumped before the round change message was created & broadcasted.
 	// Remember to track the impact of this change and revert/modify if necessary.
 	defer func() {
-		i.bumpToRound(ctx, newRound)
+		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.signer, newRound, i.StartValue)
+	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
-		return observability.Errorf(span, "could not generate round change msg: %w", err)
+		return traces.Errorf(span, "could not generate round change msg: %w", err)
 	}
 
 	root, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
-		return observability.Errorf(span, "could not calculate root for round change: %w", err)
+		return traces.Errorf(span, "could not calculate root for round change: %w", err)
 	}
 
 	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
@@ -57,8 +58,8 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		fields.Height(i.State.Height),
 		zap.String("reason", "timeout"))
 
-	if err := i.Broadcast(logger, roundChange); err != nil {
-		return observability.Errorf(span, "failed to broadcast round change message: %w", err)
+	if err := i.Broadcast(roundChange); err != nil {
+		return traces.Errorf(span, "failed to broadcast round change message: %w", err)
 	}
 
 	return nil

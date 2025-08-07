@@ -8,6 +8,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -41,7 +42,7 @@ type CommonOptions struct {
 	DoppelgangerHandler runner.DoppelgangerProvider
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
-	Exporter            bool
+	ExporterOptions     exporter.Options
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
@@ -59,7 +60,7 @@ func NewCommonOptions(
 	doppelgangerHandler runner.DoppelgangerProvider,
 	newDecidedHandler qbftctrl.NewDecidedHandler,
 	fullNode bool,
-	exporter bool,
+	exporterOptions exporter.Options,
 	historySyncBatchSize int,
 	gasLimit uint64,
 	messageValidator validation.MessageValidator,
@@ -76,7 +77,7 @@ func NewCommonOptions(
 		DoppelgangerHandler: doppelgangerHandler,
 		NewDecidedHandler:   newDecidedHandler,
 		FullNode:            fullNode,
-		Exporter:            exporter,
+		ExporterOptions:     exporterOptions,
 		QueueSize:           DefaultQueueSize,
 		GasLimit:            gasLimit,
 		MessageValidator:    messageValidator,
@@ -87,10 +88,6 @@ func NewCommonOptions(
 	// If full node, increase the queue size to make enough room for history sync batches to be pushed whole.
 	if fullNode {
 		result.QueueSize = max(result.QueueSize, historySyncBatchSize*2)
-	}
-
-	if result.GasLimit == 0 {
-		result.GasLimit = spectypes.DefaultGasLimit
 	}
 
 	return result

@@ -16,7 +16,7 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
@@ -29,7 +29,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
@@ -66,8 +66,12 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	postRoot, err := preInstance.State.GetRoot()
 	require.NoError(t, err)
 
-	// broadcasting is asynchronic, so need to wait a bit before checking
-	time.Sleep(time.Millisecond * 5)
+	// broadcasting is asynchronous, so need to wait a bit before checking
+	select {
+	case <-t.Context().Done():
+		return
+	case <-time.After(5 * time.Millisecond):
+	}
 
 	// test output message
 	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
@@ -96,7 +100,7 @@ func overrideStateComparisonForMsgProcessingSpecTest(t *testing.T, test *spectes
 	r, err := test.PostState.GetRoot()
 	require.NoError(t, err)
 
-	// backwards compatability test, hard coded post root must be equal to the one loaded from file
+	// backwards compatibility test, hard coded post root must be equal to the one loaded from file
 	if len(test.PostRoot) > 0 {
 		require.EqualValues(t, test.PostRoot, hex.EncodeToString(r[:]))
 	}

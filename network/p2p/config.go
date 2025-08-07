@@ -16,13 +16,14 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	uc "github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -74,7 +75,7 @@ type Config struct {
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
 	// NetworkConfig defines a network configuration.
-	NetworkConfig networkconfig.NetworkConfig
+	NetworkConfig *networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
 
@@ -180,7 +181,6 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 
 // TransformBootnodes converts bootnodes string and convert it to slice
 func (c *Config) TransformBootnodes() []string {
-
 	if c.Bootnodes == "" {
 		return c.NetworkConfig.Bootnodes
 	}

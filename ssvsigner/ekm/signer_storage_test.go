@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils/threshold"
@@ -34,7 +34,7 @@ func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	if err != nil {
 		return nil, func() {}
@@ -355,26 +355,20 @@ func TestStorageUtilityFunctions(t *testing.T) {
 	t.Run("SetEncryptionKey", func(t *testing.T) {
 		t.Parallel()
 
-		logger := logging.TestLogger(t)
+		logger := log.TestLogger(t)
 
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
 		defer db.Close()
 
 		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
-
-		err = signerStorage.SetEncryptionKey("aabbccddee")
-		require.NoError(t, err)
-
-		err = signerStorage.SetEncryptionKey("invalid-hex-key")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "the key must be a valid hexadecimal string")
+		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
 	t.Run("DataEncryption", func(t *testing.T) {
 		t.Parallel()
 
-		logger := logging.TestLogger(t)
+		logger := log.TestLogger(t)
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
 		defer db.Close()
@@ -397,8 +391,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		accountID := account.ID()
 
 		// test with encryption key
-		err = signerStorage.SetEncryptionKey("0123456789abcdef0123456789abcdef")
-		require.NoError(t, err)
+		signerStorage.SetEncryptionKey([]byte("0123456789abcdef0123456789abcdef"))
 
 		// save the account (this will encrypt it)
 		err = signerStorage.SaveAccount(account)
@@ -410,9 +403,21 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NotNil(t, retrievedAccount)
 		require.Equal(t, accountID, retrievedAccount.ID())
 
-		// now test without encryption key
-		err = signerStorage.SetEncryptionKey("")
+		// now test with a key of different length
+		signerStorage.SetEncryptionKey([]byte("0123456789abcdef"))
+
+		// save the account again (this will encrypt it)
+		err = signerStorage.SaveAccount(account)
 		require.NoError(t, err)
+
+		// retrieve the account (this will decrypt it)
+		retrievedAccount, err = signerStorage.OpenAccount(accountID)
+		require.NoError(t, err)
+		require.NotNil(t, retrievedAccount)
+		require.Equal(t, accountID, retrievedAccount.ID())
+
+		// now test without encryption key
+		signerStorage.SetEncryptionKey(nil)
 
 		// save the account again (this won't encrypt it)
 		err = signerStorage.SaveAccount(account)

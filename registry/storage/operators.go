@@ -12,11 +12,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
 
 var (
 	operatorsPrefix = []byte("operators")
@@ -175,7 +175,7 @@ func (s *operatorsStorage) operatorsExist(
 	r basedb.Reader,
 	ids []spectypes.OperatorID,
 ) (bool, error) {
-	var keys [][]byte
+	keys := make([][]byte, 0, len(ids))
 	for _, id := range ids {
 		keys = append(keys, buildOperatorKey(id))
 	}

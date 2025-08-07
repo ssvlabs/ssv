@@ -10,7 +10,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -55,9 +55,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 }
 
 func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) *LoggerFields {
-	descriptor := &LoggerFields{
-		Consensus: &ConsensusFields{},
-	}
+	descriptor := &LoggerFields{}
 
 	if decodedMessage == nil {
 		return descriptor
@@ -75,8 +73,10 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	case *specqbft.Message:
 		if m != nil {
 			descriptor.Slot = phase0.Slot(m.Height)
-			descriptor.Consensus.Round = m.Round
-			descriptor.Consensus.QBFTMessageType = m.MsgType
+			descriptor.Consensus = &ConsensusFields{
+				Round:           m.Round,
+				QBFTMessageType: m.MsgType,
+			}
 		}
 	case *spectypes.PartialSignatureMessages:
 		if m != nil {

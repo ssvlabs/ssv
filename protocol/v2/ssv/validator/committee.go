@@ -15,9 +15,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -107,13 +108,13 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	span.AddEvent("prepare duty and runner")
 	r, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
 	if err != nil {
-		return observability.Error(span, err)
+		return traces.Error(span, err)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
 	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
-		return observability.Errorf(span, "runner failed to start duty: %w", err)
+		return traces.Errorf(span, "runner failed to start duty: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -137,17 +138,17 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	defer span.End()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
-		return nil, nil, observability.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
+		return nil, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		return nil, nil, observability.Error(span, err)
+		return nil, nil, traces.Error(span, err)
 	}
 
 	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
-		return nil, nil, observability.Errorf(span, "could not create CommitteeRunner: %w", err)
+		return nil, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
 
 	// Set timeout function.
@@ -237,16 +238,16 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	if msgType != message.SSVEventMsgType {
 		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return observability.Errorf(span, "invalid SignedSSVMessage: %w", err)
+			return traces.Errorf(span, "invalid SignedSSVMessage: %w", err)
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return observability.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
+			return traces.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
 		}
 
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return observability.Errorf(span, "Message invalid: %w", err)
+			return traces.Errorf(span, "Message invalid: %w", err)
 		}
 	}
 
@@ -254,31 +255,31 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &qbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return observability.Errorf(span, "could not decode consensus Message: %w", err)
+			return traces.Errorf(span, "could not decode consensus Message: %w", err)
 		}
 		if err := qbftMsg.Validate(); err != nil {
-			return observability.Errorf(span, "invalid QBFT Message: %w", err)
+			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 		c.mtx.RLock()
 		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.RUnlock()
 		if !exists {
-			return observability.Errorf(span, "no runner found for message's slot")
+			return traces.Errorf(span, "no runner found for message's slot")
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return observability.Errorf(span, "could not decode PartialSignatureMessages: %w", err)
+			return traces.Errorf(span, "could not decode PartialSignatureMessages: %w", err)
 		}
 
 		// Validate
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return observability.Errorf(span, "PartialSignatureMessage has more than 1 signer")
+			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
 		}
 
 		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return observability.Errorf(span, "invalid PartialSignatureMessages: %w", err)
+			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
@@ -286,22 +287,22 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				return observability.Errorf(span, "no runner found for message's slot")
+				return traces.Errorf(span, "no runner found for message's slot")
 			}
 			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
-				return observability.Error(span, err)
+				return traces.Error(span, err)
 			}
 			span.SetStatus(codes.Ok, "")
 			return nil
 		}
 	case message.SSVEventMsgType:
 		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
-			return observability.Errorf(span, "could not handle event message: %w", err)
+			return traces.Errorf(span, "could not handle event message: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	default:
-		return observability.Errorf(span, "unknown message type: %d", msgType)
+		return traces.Errorf(span, "unknown message type: %d", msgType)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -316,7 +317,7 @@ func (c *Committee) buildTraceContext(ctx context.Context, msg *queue.SSVMessage
 	}
 
 	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
-	return observability.TraceContext(ctx, dutyID), dutyID
+	return traces.Context(ctx, dutyID), dutyID
 }
 
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
