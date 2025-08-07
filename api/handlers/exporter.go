@@ -41,6 +41,7 @@ func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantS
 
 type dutyTraceStore interface {
 	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
@@ -349,8 +350,19 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
+	// these roles map to a committee duty
+	isCommitteeDuty := func(role spectypes.BeaconRole) bool {
+		return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
+	}
+
+	// either PubKeys or Indices are required for committee duty roles
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
-		return api.BadRequestError(errors.New("either pubkeys or indices is required"))
+		for _, r := range request.Roles {
+			role := spectypes.BeaconRole(r)
+			if isCommitteeDuty(role) {
+				return api.BadRequestError(fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for specific a validators subset or use the /committee endpoint to query all the corresponding duties", role.String()))
+			}
+		}
 	}
 
 	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.Indices)+len(request.PubKeys))
@@ -383,8 +395,23 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		slot := phase0.Slot(s)
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
+
+			if len(pubkeys) == 0 {
+				duties, err := e.traceStore.GetValidatorDuties(role, slot)
+				if err != nil {
+					if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
+						e.logger.Debug("error getting validator duties", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+						// we might not have a duty for this role, so we skip it
+						continue
+					}
+					return api.Error(fmt.Errorf("error getting validator duties: %w", err))
+				}
+				results = append(results, duties...)
+				continue
+			}
+
 			for _, pubkey := range pubkeys {
-				if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester {
+				if isCommitteeDuty(role) {
 					committeeID, index, err := e.traceStore.GetCommitteeID(slot, pubkey)
 					if err != nil {
 						e.logger.Debug("error getting committee ID", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
