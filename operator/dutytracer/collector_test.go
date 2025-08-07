@@ -9,14 +9,13 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	model "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
@@ -51,7 +50,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-	collector := New(logger, validators, nil, nil, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(logger, validators, nil, nil, networkconfig.TestNetwork.Beacon, nil)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
@@ -390,7 +389,7 @@ func TestCommitteeDuty(t *testing.T) {
 	validators.EXPECT().Committee(committeeID).Return(committee, true)
 
 	dutyStore := new(mockDutyTraceStore)
-	tracer := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	tracer := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
@@ -699,7 +698,7 @@ func TestCollector_GetCommitteeDuty(t *testing.T) {
 		OperatorIDs: []uint64{1, 2, 3, 4},
 	}
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 	committeeID := spectypes.CommitteeID{1}
 	slot := phase0.Slot(10)
 
@@ -790,7 +789,7 @@ func justification(rcj [][]byte) []byte {
 }
 
 func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
-	collector := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon, nil)
 
 	bnVote := &spectypes.BeaconVote{BlockRoot: [32]byte{1, 2, 3}}
 
@@ -843,12 +842,12 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 
 	var committeeID = spectypes.CommitteeID{1}
 
 	t.Run("slot > last evicted", func(t *testing.T) {
-		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 		slot := phase0.Slot(10)
 		collector.lastEvictedSlot.Store(uint64(5))
 
@@ -888,7 +887,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		evictionSlot := phase0.Slot(5)
 
 		t.Run("committeeID is in flight", func(t *testing.T) {
-			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 			_, _ = collector.inFlightCommittee.GetOrSet(committeeID, struct{}{})
 
@@ -898,7 +897,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		})
 
 		t.Run("committeeID not found on disk", func(t *testing.T) {
-			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
 			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
@@ -910,7 +909,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 		})
 
 		t.Run("committeeID found on disk", func(t *testing.T) {
-			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 			// Setup: Create a collector, save a trace, and then evict it to disk.
 			trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
 			require.NoError(t, err)
@@ -931,7 +930,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 			innerErr := errors.New("error")
 			dutyTraceStore := &mockDutyTraceStore{err: innerErr}
 
-			collector := New(zap.NewNop(), vstore, nil, dutyTraceStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyTraceStore, networkconfig.TestNetwork.Beacon, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
 			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
@@ -948,13 +947,13 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 
 	var vPubKey = spectypes.ValidatorPK{1}
 	var role = spectypes.BNRoleAggregator
 
 	t.Run("slot > last evicted", func(t *testing.T) {
-		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 		slot := phase0.Slot(10)
 		collector.lastEvictedSlot.Store(uint64(5))
 
@@ -996,7 +995,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 		evictionSlot := phase0.Slot(5)
 
 		t.Run("validator is in flight", func(t *testing.T) {
-			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 			_, _ = collector.inFlightValidator.GetOrSet(vPubKey, struct{}{})
 
@@ -1009,7 +1008,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
 			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
@@ -1030,7 +1029,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 			collector.lastEvictedSlot.Store(uint64(evictionSlot))
 
 			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
@@ -1046,7 +1045,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+			collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true).AnyTimes()
 
@@ -1116,7 +1115,7 @@ func TestCollector_saveLateValidatorToCommiteeLinks(t *testing.T) {
 	committeeID := spectypes.CommitteeID{1}
 
 	t.Run("save late validator to committee links", func(t *testing.T) {
-		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 		var called bool
 		dutyStore.saveCommitteeDutyLinkFn = func(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
@@ -1135,7 +1134,7 @@ func TestCollector_saveLateValidatorToCommiteeLinks(t *testing.T) {
 	t.Run("save late validator to committee links error", func(t *testing.T) {
 		core, logs := observer.New(zap.DebugLevel)
 		logger := zap.New(core)
-		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 		var called bool
 		dutyStore.saveCommitteeDutyLinkFn = func(phase0.Slot, phase0.ValidatorIndex, spectypes.CommitteeID) error {
@@ -1165,7 +1164,7 @@ func TestCollector_lateMessage(t *testing.T) {
 	t.Run("late message in flight", func(t *testing.T) {
 		core, logs := observer.New(zap.DebugLevel)
 		logger := zap.New(core)
-		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 		msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
 
@@ -1204,7 +1203,7 @@ func TestCollector_lateMessage(t *testing.T) {
 	t.Run("late message in flight exhausted retries", func(t *testing.T) {
 		core, logs := observer.New(zap.DebugLevel)
 		logger := zap.New(core)
-		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 		msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
 
@@ -1240,7 +1239,7 @@ func TestCollector_lateMessage(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		core, logs := observer.New(zap.DebugLevel)
 		logger := zap.New(core)
-		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
@@ -1263,7 +1262,7 @@ func TestEvict(t *testing.T) {
 
 		slot := phase0.Slot(10)
 
-		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 		collector.evict(slot)
 
 		threshold := slot - slotTTL
@@ -1279,7 +1278,7 @@ func TestCollector_GetCommitteeID(t *testing.T) {
 	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
 	dutyStore := new(mockDutyTraceStore)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	slotToCommittee := hashmap.New[phase0.Slot, spectypes.CommitteeID]()
 	slotToCommittee.Set(slot, spectypes.CommitteeID{1})
@@ -1334,7 +1333,7 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 
 	listener := &mockDecidedListener{}
 	dutyStore := new(mockDutyTraceStore)
-	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, listener.OnDecided)
+	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided)
 
 	signingRoot := [32]byte{1, 2, 3, 4, 5}
 	fakeSig := [96]byte{}

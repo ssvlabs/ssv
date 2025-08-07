@@ -123,7 +123,7 @@ type GoClient struct {
 	log *zap.Logger
 
 	beaconConfigMu   sync.RWMutex
-	beaconConfig     *networkconfig.BeaconConfig
+	beaconConfig     *networkconfig.Beacon
 	beaconConfigInit chan struct{}
 
 	clients     []Client
@@ -277,7 +277,7 @@ func New(
 }
 
 // getBeaconConfig provides thread-safe access to the beacon configuration
-func (gc *GoClient) getBeaconConfig() *networkconfig.BeaconConfig {
+func (gc *GoClient) getBeaconConfig() *networkconfig.Beacon {
 	gc.beaconConfigMu.RLock()
 	defer gc.beaconConfigMu.RUnlock()
 	return gc.beaconConfig
@@ -399,7 +399,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
-func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkconfig.BeaconConfig) (*networkconfig.BeaconConfig, error) {
+func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkconfig.Beacon) (*networkconfig.Beacon, error) {
 	gc.beaconConfigMu.Lock()
 	defer gc.beaconConfigMu.Unlock()
 

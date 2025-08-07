@@ -141,12 +141,13 @@ type ErrorMessage struct {
 }
 
 type HTTPResponseError struct {
-	Err    error
-	Status int
+	Err     error
+	Status  int
+	ErrText string
 }
 
 func (h HTTPResponseError) Error() string {
-	return fmt.Sprintf("error status %d: %s", h.Status, h.Err.Error())
+	return fmt.Sprintf("error status %d (%q): %s", h.Status, h.ErrText, h.Err.Error())
 }
 
 func (h HTTPResponseError) Unwrap() error {

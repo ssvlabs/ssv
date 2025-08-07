@@ -40,7 +40,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 		return nil, func() {}
 	}
 
-	s := NewSignerStorage(db, networkconfig.TestNetwork, logger)
+	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 	return s, func() {
 		db.Close()
 	}
@@ -361,7 +361,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
+		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
@@ -373,7 +373,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
+		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 
 		// create a test account
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})

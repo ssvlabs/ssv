@@ -165,7 +165,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -244,7 +244,7 @@ func setupOperatorStorage(
 		logger.Fatal("empty test operator (or empty private key) was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

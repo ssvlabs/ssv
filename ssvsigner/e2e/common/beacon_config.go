@@ -12,8 +12,8 @@ import (
 )
 
 // MainnetBeaconConfig is the beacon configuration for the mainnet
-var MainnetBeaconConfig = networkconfig.BeaconConfig{
-	NetworkName:                          string(spectypes.MainNetwork),
+var MainnetBeaconConfig = &networkconfig.Beacon{
+	Name:                                 string(spectypes.MainNetwork),
 	SlotDuration:                         spectypes.MainNetwork.SlotDurationSec(),
 	SlotsPerEpoch:                        spectypes.MainNetwork.SlotsPerEpoch(),
 	EpochsPerSyncCommitteePeriod:         256,
