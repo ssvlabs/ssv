@@ -26,6 +26,9 @@ const (
 )
 
 type (
+	// EpochMetricRecorder records gauge metrics on an epoch-by-epoch basis for different BeaconRoles.
+	// It tracks counts and the latest epoch for each role, and ensures metrics are flushed when the epoch advances.
+	// This allows periodic metric reporting aligned with epoch boundaries.
 	EpochMetricRecorder struct {
 		mu    sync.Mutex
 		data  map[types.BeaconRole]epochCounter
@@ -38,27 +41,35 @@ type (
 	}
 )
 
-func (r *EpochMetricRecorder) Record(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole, attributes ...attribute.KeyValue) {
+// Record updates and reports the gauge metric for a given BeaconRole and epoch.
+// If the current epoch is greater than the one recorded for any role in the data map,
+// their values are flushed (recorded) with the corresponding beacon role as an attribute.
+// The method does not require the caller to explicitly include the role attribute in the `attributes`,
+// as it will be automatically added per-role during metric reporting.
+// It is safe for concurrent use.
+func (r *EpochMetricRecorder) Record(ctx context.Context, count uint32, epoch phase0.Epoch, beaconRole types.BeaconRole, attributes ...attribute.KeyValue) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	var rolesToReset []types.BeaconRole
 
-	for rKey, entry := range r.data {
+	for role, entry := range r.data {
 		if entry.epoch != 0 && entry.epoch < epoch {
-			r.gauge.Record(ctx, int64(entry.count), metric.WithAttributes(attributes...))
-			rolesToReset = append(rolesToReset, rKey)
+			attr := append([]attribute.KeyValue{observability.BeaconRoleAttribute(role)}, attributes...)
+			r.gauge.Record(ctx, int64(entry.count), metric.WithAttributes(attr...))
+
+			rolesToReset = append(rolesToReset, role)
 		}
 	}
 
-	for _, rKey := range rolesToReset {
-		r.data[rKey] = epochCounter{epoch: epoch}
+	for _, role := range rolesToReset {
+		r.data[role] = epochCounter{epoch: epoch}
 	}
 
-	entry := r.data[role]
+	entry := r.data[beaconRole]
 	entry.epoch = epoch
 	entry.count += count
-	r.data[role] = entry
+	r.data[beaconRole] = entry
 }
 
 var (
@@ -124,15 +135,11 @@ var (
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
-	submissions.Record(ctx, count, epoch, role, observability.BeaconRoleAttribute(role))
+	submissions.Record(ctx, count, epoch, role)
 }
 
 func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole, phase attributeConsensusPhase) {
-	attributes := []attribute.KeyValue{
-		observability.BeaconRoleAttribute(role),
-		attribute.String("ssv.validator.duty.phase", string(phase)),
-	}
-	quorums.Record(ctx, count, epoch, role, attributes...)
+	quorums.Record(ctx, count, epoch, role, attribute.String("ssv.validator.duty.phase", string(phase)))
 }
 
 func recordFailedSubmission(ctx context.Context, role types.BeaconRole) {
