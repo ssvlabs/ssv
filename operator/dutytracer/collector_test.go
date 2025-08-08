@@ -385,7 +385,7 @@ func TestValidatorDuties(t *testing.T) {
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
 	dutyStore := new(mockDutyTraceStore)
 
-	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
