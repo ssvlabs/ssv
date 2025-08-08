@@ -206,6 +206,10 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
+			// For every attestation duty we also have to try to perform aggregation duty even if it
+			// isn't necessarily needed - we won't know if it's needed or not until we rebuild
+			// validator signature (done during pre-consensus step) and perform some computation on
+			// it - hence scheduling it for execution here.
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}

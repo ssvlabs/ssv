@@ -127,7 +127,6 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				}
 			}
 		}
-
 	default:
 		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
 		v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
