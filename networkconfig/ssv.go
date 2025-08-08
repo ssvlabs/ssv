@@ -17,7 +17,6 @@ var supportedSSVConfigs = map[string]*SSV{
 	HoleskySSV.Name:      HoleskySSV,
 	HoleskyStageSSV.Name: HoleskyStageSSV,
 	LocalTestnetSSV.Name: LocalTestnetSSV,
-	HoleskyE2ESSV.Name:   HoleskyE2ESSV,
 	HoodiSSV.Name:        HoodiSSV,
 	HoodiStageSSV.Name:   HoodiStageSSV,
 	SepoliaSSV.Name:      SepoliaSSV,
