@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feat/exporter-v2
+      - stage
 
 jobs:
   Test-with-LFS:
