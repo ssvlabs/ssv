@@ -221,9 +221,35 @@ func (mv *messageValidator) validateQBFTLogic(
 					}
 				}
 
-				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
-				if err := signerState.SeenMsgTypes.ValidateConsensusMessage(signedSSVMessage, consensusMessage); err != nil {
+				// #nosec G115 maxRCJ never exceeds max operators count
+				rcjLen := uint8(len(consensusMessage.RoundChangeJustification))
+
+				// Rule: Round change justification length should not decrease
+				if rcjLen < signerState.MaxRCJ {
+					err := ErrRCShorterJustifications
+					err.got = len(consensusMessage.RoundChangeJustification)
+					err.want = fmt.Sprintf(">%d", signerState.MaxRCJ)
 					return err
+				}
+
+				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit per round,
+				// as well as 1 round-change per each RCJ length (not checking round changes with higher RCJ length).
+				var needMsgLimitCheck bool
+				switch consensusMessage.MsgType {
+				// There must be only one commit per round but there may be several decided messages.
+				case specqbft.CommitMsgType:
+					needMsgLimitCheck = len(signedSSVMessage.OperatorIDs) == 1
+				// There may be several round changes per round, but they must have different round change justification
+				// length. There must be only one round change per round for each RCJ length
+				case specqbft.RoundChangeMsgType:
+					needMsgLimitCheck = rcjLen == signerState.MaxRCJ
+				default:
+					needMsgLimitCheck = true
+				}
+				if needMsgLimitCheck {
+					if err := signerState.SeenMsgTypes.ValidateConsensusMessage(consensusMessage); err != nil {
+						return err
+					}
 				}
 			}
 		} else if len(signedSSVMessage.OperatorIDs) > 1 {
@@ -351,6 +377,11 @@ func (mv *messageValidator) processSignerState(
 			signerState.SeenSigners = make(map[SignersBitMask]struct{}) // lazy init on demand to reduce mem consumption
 		}
 		signerState.SeenSigners[quorum.ToBitMask()] = struct{}{}
+	}
+
+	if consensusMessage.MsgType == specqbft.RoundChangeMsgType {
+		// #nosec G115 maxRCJ never exceeds max operators count
+		signerState.MaxRCJ = uint8(len(consensusMessage.RoundChangeJustification))
 	}
 
 	return signerState.SeenMsgTypes.RecordConsensusMessage(signedSSVMessage, consensusMessage)
