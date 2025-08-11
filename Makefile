@@ -116,7 +116,6 @@ ifdef DEBUG_PORT
 	@dlv  --continue --accept-multiclient --headless --listen=:${DEBUG_PORT} --api-version=2 exec \
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 else
-	@echo "Running node on address: ${HOST_ADDRESS})"
 	@${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 
