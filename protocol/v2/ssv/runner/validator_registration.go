@@ -46,7 +46,7 @@ type ValidatorRegistrationRunner struct {
 }
 
 func NewValidatorRegistrationRunner(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
@@ -214,7 +214,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return traces.Errorf(span, "could not encode validator registration partial sig message: %w", err)
@@ -268,7 +268,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 	gasLimit := r.gasLimit
 	if gasLimit == 0 {
 		defaultGasLimit := DefaultGasLimit
-		if r.BaseRunner.NetworkConfig.EstimatedCurrentEpoch() < r.BaseRunner.NetworkConfig.GetGasLimit36Epoch() {
+		if !r.BaseRunner.NetworkConfig.GasLimit36Fork() {
 			defaultGasLimit = DefaultGasLimitOld
 		}
 		gasLimit = defaultGasLimit

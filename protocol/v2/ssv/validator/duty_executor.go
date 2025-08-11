@@ -20,7 +20,7 @@ import (
 )
 
 func (v *Validator) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) error {
-	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.GetDomainType())
+	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.DomainType)
 	if err != nil {
 		return fmt.Errorf("create duty execute msg: %w", err)
 	}
@@ -73,7 +73,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 }
 
 func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDuty) error {
-	ssvMsg, err := createCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.GetDomainType())
+	ssvMsg, err := createCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.DomainType)
 	if err != nil {
 		return fmt.Errorf("create committee duty: %w", err)
 	}
@@ -94,7 +94,7 @@ func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDu
 		With(fields.CurrentSlot(c.networkConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.StartTimeUnixMilli(c.networkConfig.GetSlotStartTime(duty.Slot)))
+		With(fields.StartTimeUnixMilli(c.networkConfig.SlotStartTime(duty.Slot)))
 
 	return c.OnExecuteDuty(ctx, logger, dec.Body.(*types.EventMsg))
 }

@@ -295,7 +295,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		SubnetsIdx:          n.idx,
 		HostAddress:         n.cfg.HostAddress,
 		HostDNS:             n.cfg.HostDNS,
-		SSVConfig:           n.cfg.NetworkConfig.SSVConfig,
+		SSVConfig:           n.cfg.NetworkConfig.SSV,
 		DiscoveredPeersPool: n.discoveredPeersPool,
 		TrimmedRecently:     n.trimmedRecently,
 	}

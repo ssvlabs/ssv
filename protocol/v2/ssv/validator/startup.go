@@ -19,7 +19,7 @@ func (v *Validator) Start() (started bool, err error) {
 		return false, fmt.Errorf("network does not support subscription")
 	}
 	for role := range v.DutyRunners {
-		identifier := spectypes.NewMsgID(v.NetworkConfig.GetDomainType(), v.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
 
 		if err := n.Subscribe(v.Share.ValidatorPubKey); err != nil {
 			atomic.StoreUint32(&v.state, uint32(NotStarted))

@@ -39,7 +39,7 @@ type Committee struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	networkConfig networkconfig.Network
+	networkConfig *networkconfig.Network
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
@@ -58,7 +58,7 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	operator *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,

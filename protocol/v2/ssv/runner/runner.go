@@ -15,6 +15,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/traces"
@@ -22,7 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type Getters interface {
@@ -69,7 +70,7 @@ type BaseRunner struct {
 	State          *State
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
-	NetworkConfig  networkconfig.Network
+	NetworkConfig  *networkconfig.Network
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
@@ -93,7 +94,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State              *State
 		Share              map[phase0.ValidatorIndex]*spectypes.Share
 		QBFTController     *controller.Controller
-		BeaconConfig       networkconfig.Beacon
+		BeaconConfig       *networkconfig.Beacon
 		RunnerRoleType     spectypes.RunnerRole
 		highestDecidedSlot phase0.Slot
 	}
@@ -103,7 +104,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State:              b.State,
 		Share:              b.Share,
 		QBFTController:     b.QBFTController,
-		BeaconConfig:       b.NetworkConfig,
+		BeaconConfig:       b.NetworkConfig.Beacon,
 		RunnerRoleType:     b.RunnerRoleType,
 		highestDecidedSlot: b.highestDecidedSlot,
 	}
@@ -136,7 +137,7 @@ func NewBaseRunner(
 	state *State,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig *networkconfig.Network,
 	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
 ) *BaseRunner {

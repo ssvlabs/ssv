@@ -55,7 +55,7 @@ type BeaconNode interface {
 
 // Options contains the configuration options for the Doppelgänger protection.
 type Options struct {
-	BeaconConfig       *networkconfig.BeaconConfig
+	BeaconConfig       *networkconfig.Beacon
 	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
@@ -68,7 +68,7 @@ type handler struct {
 	mu              sync.RWMutex
 	validatorsState map[phase0.ValidatorIndex]*doppelgangerState
 
-	beaconConfig       *networkconfig.BeaconConfig
+	beaconConfig       *networkconfig.Beacon
 	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
@@ -233,7 +233,7 @@ func (h *handler) Start(ctx context.Context) error {
 
 func (h *handler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
 	// Set a deadline until the start of the next slot, with a 100ms safety margin
-	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	h.mu.RLock()

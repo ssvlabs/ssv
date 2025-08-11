@@ -213,9 +213,11 @@ func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 }
 
 // StartValidators mocks base method.
-func (m *MockController) StartValidators(ctx context.Context) {
+func (m *MockController) StartValidators(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartValidators", ctx)
+	ret := m.ctrl.Call(m, "StartValidators", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // StartValidators indicates an expected call of StartValidators.

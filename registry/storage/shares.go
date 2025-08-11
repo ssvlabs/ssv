@@ -128,7 +128,7 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(beaconCfg networkconfig.Beacon, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		shares:        make(map[string]*types.SSVShare),
 		db:            db,
