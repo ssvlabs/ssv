@@ -49,13 +49,11 @@ type Options struct {
 }
 
 // Validate checks if the options are valid.
-func (o *Options) Validate(logger *zap.Logger) error {
-	logger.Debug("validating discovery options",
-		zap.String("host_address", o.HostAddress),
-		zap.String("host_dns", o.HostDNS),
-	)
+func (o *Options) Validate() error {
 	if len(o.HostDNS) > 0 && len(o.HostAddress) > 0 {
-		return fmt.Errorf("only one of HostDNS or HostAddress may be set")
+		return fmt.Errorf("conflicting host configuration: both HostDNS (%q) and HostAddress (%q) are set,"+
+			" specify only one",
+			o.HostDNS, o.HostAddress)
 	}
 	return nil
 }
@@ -72,7 +70,7 @@ type Service interface {
 
 // NewService creates new discovery.Service
 func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
-	if err := opts.Validate(logger); err != nil {
+	if err := opts.Validate(); err != nil {
 		return nil, err
 	}
 
