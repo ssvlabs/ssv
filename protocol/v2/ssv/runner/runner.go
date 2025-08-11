@@ -15,13 +15,15 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type Getters interface {
@@ -68,7 +70,7 @@ type BaseRunner struct {
 	State          *State
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
-	NetworkConfig  networkconfig.Network
+	NetworkConfig  *networkconfig.Network
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
@@ -92,7 +94,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State              *State
 		Share              map[phase0.ValidatorIndex]*spectypes.Share
 		QBFTController     *controller.Controller
-		BeaconConfig       networkconfig.Beacon
+		BeaconConfig       *networkconfig.Beacon
 		RunnerRoleType     spectypes.RunnerRole
 		highestDecidedSlot phase0.Slot
 	}
@@ -102,7 +104,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State:              b.State,
 		Share:              b.Share,
 		QBFTController:     b.QBFTController,
-		BeaconConfig:       b.NetworkConfig,
+		BeaconConfig:       b.NetworkConfig.Beacon,
 		RunnerRoleType:     b.RunnerRoleType,
 		highestDecidedSlot: b.highestDecidedSlot,
 	}
@@ -135,7 +137,7 @@ func NewBaseRunner(
 	state *State,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig *networkconfig.Network,
 	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
 ) *BaseRunner {
@@ -159,13 +161,13 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 	defer span.End()
 
 	if err := b.ShouldProcessDuty(duty); err != nil {
-		return observability.Errorf(span, "can't start duty: %w", err)
+		return traces.Errorf(span, "can't start duty: %w", err)
 	}
 
 	b.baseSetupForNewDuty(duty, quorum)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
-		return observability.Errorf(span, "failed to execute duty: %w", err)
+		return traces.Errorf(span, "failed to execute duty: %w", err)
 	}
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -324,11 +326,11 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 
 	byts, err := input.Encode()
 	if err != nil {
-		return observability.Errorf(span, "could not encode input data for consensus: %w", err)
+		return traces.Errorf(span, "could not encode input data for consensus: %w", err)
 	}
 
 	if err := runner.GetValCheckF()(byts); err != nil {
-		return observability.Errorf(span, "input data invalid: %w", err)
+		return traces.Errorf(span, "input data invalid: %w", err)
 	}
 
 	span.AddEvent("start new instance")
@@ -338,12 +340,12 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		specqbft.Height(slot),
 		byts,
 	); err != nil {
-		return observability.Errorf(span, "could not start new QBFT instance: %w", err)
+		return traces.Errorf(span, "could not start new QBFT instance: %w", err)
 	}
 
 	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
-		return observability.Errorf(span, "could not find newly created QBFT instance")
+		return traces.Errorf(span, "could not find newly created QBFT instance")
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance

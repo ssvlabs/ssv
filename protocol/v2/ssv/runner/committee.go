@@ -27,9 +27,10 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -59,7 +60,7 @@ type CommitteeRunner struct {
 }
 
 func NewCommitteeRunner(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
@@ -102,7 +103,7 @@ func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 
 	d, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
-		return observability.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
+		return traces.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
 	}
 
 	span.SetAttributes(observability.DutyCountAttribute(len(d.ValidatorDuties)))
@@ -110,14 +111,14 @@ func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 	for _, validatorDuty := range d.ValidatorDuties {
 		err := cr.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), d.DutySlot())
 		if err != nil {
-			return observability.Errorf(span,
+			return traces.Errorf(span,
 				"could not start %s duty at slot %d for validator %x: %w",
 				validatorDuty.Type, d.DutySlot(), validatorDuty.PubKey, err)
 		}
 	}
 	err := cr.BaseRunner.baseStartNewDuty(ctx, logger, cr, duty, quorum)
 	if err != nil {
-		return observability.Error(span, err)
+		return traces.Error(span, err)
 	}
 
 	cr.submittedDuties[spectypes.BNRoleAttester] = make(map[phase0.ValidatorIndex]struct{})
@@ -236,7 +237,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	span.AddEvent("checking if instance is decided")
 	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr, msg, &spectypes.BeaconVote{})
 	if err != nil {
-		return observability.Errorf(span, "failed processing consensus message: %w", err)
+		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
 
 	// Decided returns true only once so if it is true it must be for the current running instance
@@ -264,7 +265,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
-		return observability.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
+		return traces.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
 	}
 
 	span.SetAttributes(
@@ -378,7 +379,7 @@ listener:
 		select {
 		case err := <-errCh:
 			cancel()
-			return observability.Error(span, err)
+			return traces.Error(span, err)
 		case signature, ok := <-signaturesCh:
 			if !ok {
 				break listener
@@ -418,20 +419,20 @@ listener:
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(
-			cr.BaseRunner.NetworkConfig.GetDomainType(),
+			cr.BaseRunner.NetworkConfig.DomainType,
 			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
 	}
 	ssvMsg.Data, err = postConsensusMsg.Encode()
 	if err != nil {
-		return observability.Errorf(span, "failed to encode post consensus signature msg: %w", err)
+		return traces.Errorf(span, "failed to encode post consensus signature msg: %w", err)
 	}
 
 	span.AddEvent("signing post consensus partial signature message")
 	sig, err := cr.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return observability.Errorf(span, "could not sign SSVMessage: %w", err)
+		return traces.Errorf(span, "could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -442,7 +443,7 @@ listener:
 
 	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
-		return observability.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
+		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -488,12 +489,12 @@ func (cr *CommitteeRunner) signAttesterDuty(
 		spectypes.DomainAttester,
 	)
 	if err != nil {
-		return false, partialMsg, observability.Errorf(span, "failed signing attestation data: %w", err)
+		return false, partialMsg, traces.Errorf(span, "failed signing attestation data: %w", err)
 	}
 
 	attDataRoot, err := attestationData.HashTreeRoot()
 	if err != nil {
-		return false, partialMsg, observability.Errorf(span, "failed to hash attestation data: %w", err)
+		return false, partialMsg, traces.Errorf(span, "failed to hash attestation data: %w", err)
 	}
 
 	const eventMsg = "signed attestation data"
@@ -526,7 +527,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	span.AddEvent("base post consensus message processing")
 	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, cr, signedMsg)
 	if err != nil {
-		return observability.Errorf(span, "failed processing post consensus message: %w", err)
+		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
 
 	logger = logger.With(fields.Slot(signedMsg.Slot))
@@ -556,7 +557,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
-		return observability.Errorf(span, "could not get expected post consensus roots and beacon objects: %w", err)
+		return traces.Errorf(span, "could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
 		cr.BaseRunner.State.Finished = true
@@ -735,7 +736,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 			const errMsg = "could not submit attestations"
 			logger.Error(errMsg, zap.Error(err))
-			return observability.Errorf(span, "%s: %w", errMsg, err)
+			return traces.Errorf(span, "%s: %w", errMsg, err)
 		}
 
 		recordDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.BNRoleAttester, cr.BaseRunner.State.RunningInstance.State.Round)
@@ -752,7 +753,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		attData, err := attestations[0].Data()
 		if err != nil {
-			return observability.Errorf(span, "could not get attestation data: %w", err)
+			return traces.Errorf(span, "could not get attestation data: %w", err)
 		}
 		const eventMsg = "✅ successfully submitted attestations"
 		span.AddEvent(eventMsg, trace.WithAttributes(
@@ -792,7 +793,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 			const errMsg = "could not submit sync committee messages"
 			logger.Error(errMsg, zap.Error(err))
-			return observability.Errorf(span, "%s: %w", errMsg, err)
+			return traces.Errorf(span, "%s: %w", errMsg, err)
 		}
 
 		recordDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
@@ -1033,7 +1034,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	attData, _, err := cr.GetBeaconNode().GetAttestationData(ctx, slot)
 	if err != nil {
-		return observability.Errorf(span, "failed to get attestation data: %w", err)
+		return traces.Errorf(span, "failed to get attestation data: %w", err)
 	}
 
 	logger = logger.With(
@@ -1050,7 +1051,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	}
 
 	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
-		return observability.Errorf(span, "failed to start new duty runner instance: %w", err)
+		return traces.Errorf(span, "failed to start new duty runner instance: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")

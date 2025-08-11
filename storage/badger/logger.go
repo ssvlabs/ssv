@@ -6,7 +6,7 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // badgerLogger is a wrapper for badger.Logger
@@ -16,7 +16,7 @@ type badgerLogger struct {
 
 // newLogger creates a new instance of logger
 func newLogger(l *zap.Logger) badger.Logger {
-	return &badgerLogger{l.Named(logging.NameBadgerDBLog)}
+	return &badgerLogger{l.Named(log.NameBadgerDBLog)}
 }
 
 // Errorf implements badger.Logger

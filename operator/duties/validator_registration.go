@@ -54,7 +54,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	defer h.logger.Info("duty handler exited")
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.beaconConfig.GetSlotsPerEpoch() * frequencyEpochs
+	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
 
 	next := h.ticker.Next()
 	for {

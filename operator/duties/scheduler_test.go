@@ -15,10 +15,26 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
+)
+
+const (
+	baseDuration            = 1 * time.Millisecond
+	slotDuration            = 15 * baseDuration
+	timeout                 = 20 * baseDuration
+	noActionTimeout         = 7 * baseDuration
+	clockError              = baseDuration
+	testBlockPropagateDelay = baseDuration
+	// testSlotTickerTriggerDelay is used to wait for the slot ticker to be triggered
+	// in the attester, sync committee, and cluster handlers.
+	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
+	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
+	testSlotTickerTriggerDelay = baseDuration
+	testEpochsPerSCPeriod      = 4
+	testSlotsPerEpoch          = 12
 )
 
 type MockSlotTicker interface {
@@ -72,13 +88,51 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot]) (*Scheduler, *zap.Logger, *mockSlotTickerService, time.Duration, context.CancelFunc, *pool.ContextPool, func()) {
-	ctrl := gomock.NewController(t)
-	// A 2s timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 2 * time.Second
+func waitForSlotN(beaconCfg *networkconfig.Beacon, slots phase0.Slot) {
+	waitUntil := beaconCfg.GenesisTime.Add(beaconCfg.SlotDuration * time.Duration(slots))
+	time.Sleep(time.Until(waitUntil))
+}
 
-	ctx, cancel := context.WithCancel(t.Context())
-	logger := logging.TestLogger(t)
+func setupSchedulerAndMocks(
+	ctx context.Context,
+	t *testing.T,
+	handlers []dutyHandler,
+) (
+	*Scheduler,
+	*mockSlotTickerService,
+	*pool.ContextPool,
+) {
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, time.Now(), slotDuration)
+}
+
+func setupSchedulerAndMocksWithStartSlot(
+	ctx context.Context,
+	t *testing.T,
+	handlers []dutyHandler,
+	startSlot phase0.Slot,
+) (
+	*Scheduler,
+	*mockSlotTickerService,
+	*pool.ContextPool,
+) {
+	genesisTime := time.Now().Add(-slotDuration * time.Duration(startSlot))
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, genesisTime, slotDuration)
+}
+
+func setupSchedulerAndMocksWithParams(
+	ctx context.Context,
+	t *testing.T,
+	handlers []dutyHandler,
+	genesisTime time.Time,
+	slotDuration time.Duration,
+) (
+	*Scheduler,
+	*mockSlotTickerService,
+	*pool.ContextPool,
+) {
+	ctrl := gomock.NewController(t)
+
+	logger := log.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockExecutionClient := NewMockExecutionClient(ctrl)
@@ -86,13 +140,18 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockValidatorController := NewMockValidatorController(ctrl)
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
+
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.SlotDuration = slotDuration
+	beaconCfg.GenesisTime = genesisTime
+	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		BeaconConfig:        mockBeaconConfig,
+		BeaconConfig:        &beaconCfg,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
@@ -104,54 +163,25 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	}
 
 	s := NewScheduler(logger, opts)
-	s.blockPropagateDelay = 1 * time.Millisecond
+	s.blockPropagateDelay = testBlockPropagateDelay
 	s.indicesChg = make(chan struct{})
 	s.handlers = handlers
 
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotDuration().Return(150 * time.Millisecond).AnyTimes()
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotsPerEpoch().Return(uint64(32)).AnyTimes()
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
-			return time.Now()
-		},
-	).AnyTimes()
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) phase0.Epoch {
-			return phase0.Epoch(uint64(slot) / s.beaconConfig.GetSlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedCurrentSlot().DoAndReturn(
-		func() phase0.Slot {
-			return currentSlot.Get()
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
-		func() phase0.Epoch {
-			return phase0.Epoch(uint64(currentSlot.Get()) / s.beaconConfig.GetSlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().IntervalDuration().Return(s.beaconConfig.GetSlotDuration() / 3).AnyTimes()
-
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
 
-	startFunction := func() {
-		err := s.Start(ctx)
-		require.NoError(t, err)
+	return s, mockSlotService, schedulerPool
+}
 
-		schedulerPool.Go(func(ctx context.Context) error {
-			return s.Wait()
-		})
-	}
+func startScheduler(ctx context.Context, t *testing.T, s *Scheduler, schedulerPool *pool.ContextPool) {
+	err := s.Start(ctx)
+	require.NoError(t, err)
 
-	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
+	schedulerPool.Go(func(ctx context.Context) error {
+		return s.Wait()
+	})
 }
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
@@ -214,7 +244,14 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 	)
 }
 
-func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
+func waitForDutiesFetch(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan []*spectypes.ValidatorDuty,
+	timeout time.Duration,
+) {
+	logger := log.TestLogger(t)
+
 	select {
 	case <-fetchDutiesCall:
 		logger.Debug("duties fetched")
@@ -225,7 +262,12 @@ func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan s
 	}
 }
 
-func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
+func waitForNoAction(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan []*spectypes.ValidatorDuty,
+	timeout time.Duration,
+) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -236,7 +278,15 @@ func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan stru
 	}
 }
 
-func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration, expectedDuties []*spectypes.ValidatorDuty) {
+func waitForDutiesExecution(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan []*spectypes.ValidatorDuty,
+	timeout time.Duration,
+	expectedDuties []*spectypes.ValidatorDuty,
+) {
+	logger := log.TestLogger(t)
+
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected fetch-duties call")
@@ -262,7 +312,12 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 	}
 }
 
-func waitForDutiesFetchCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
+func waitForDutiesFetchCommittee(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan committeeDutiesMap,
+	timeout time.Duration,
+) {
 	select {
 	case <-fetchDutiesCall:
 		break
@@ -273,7 +328,12 @@ func waitForDutiesFetchCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCa
 	}
 }
 
-func waitForNoActionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
+func waitForNoActionCommittee(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan committeeDutiesMap,
+	timeout time.Duration,
+) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -284,7 +344,13 @@ func waitForNoActionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall 
 	}
 }
 
-func waitForDutiesExecutionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration, expectedDuties committeeDutiesMap) {
+func waitForDutiesExecutionCommittee(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan committeeDutiesMap,
+	timeout time.Duration,
+	expectedDuties committeeDutiesMap,
+) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -339,7 +405,7 @@ func TestScheduler_Run(t *testing.T) {
 	defer ctrl.Finish()
 
 	ctx, cancel := context.WithCancel(t.Context())
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)
@@ -354,7 +420,7 @@ func TestScheduler_Run(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.BeaconConfig,
+		BeaconConfig:      networkconfig.TestNetwork.Beacon,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
@@ -392,7 +458,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)
@@ -402,7 +468,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.BeaconConfig,
+		BeaconConfig:      networkconfig.TestNetwork.Beacon,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
@@ -423,7 +489,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	select {
 	case s.indicesChg <- struct{}{}: // second send should hang
 		break
-	case <-time.After(1 * time.Second):
+	case <-time.After(timeout):
 		t.Fatal("Channel is jammed")
 	}
 }

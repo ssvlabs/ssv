@@ -9,13 +9,13 @@ import (
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
-	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey[:]))
+	logger = logger.Named(log.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey[:]))
 
 	if !atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		return false, nil
@@ -41,7 +41,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			continue
 		}
 
-		identifier := spectypes.NewMsgID(v.NetworkConfig.GetDomainType(), share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)
 
 		// TODO: P2P
 		var valpk spectypes.ValidatorPK

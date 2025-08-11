@@ -1082,7 +1082,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	var participatingValidators []*ssvtypes.SSVShare
 	var participatingCommittees = make(map[spectypes.CommitteeID]struct{})
 	for _, share := range shares {
-		if share.IsParticipating(networkConfig, epoch) {
+		if share.IsParticipating(networkConfig.Beacon, epoch) {
 			participatingValidators = append(participatingValidators, share)
 			participatingCommittees[share.CommitteeID()] = struct{}{}
 		}
@@ -1110,6 +1110,6 @@ func createValidatorStore(shares map[spectypes.ValidatorPK]*ssvtypes.SSVShare) *
 			return share, true
 		},
 		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
-		networkConfig,
+		networkConfig.Beacon,
 	)
 }

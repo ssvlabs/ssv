@@ -14,19 +14,26 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
+	t.Parallel()
+
 	exitCh := make(chan ExitDescriptor)
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 
-	currentSlot := &SafeValue[phase0.Slot]{}
-	currentSlot.Set(0)
+	ctx, cancel := context.WithCancel(t.Context())
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
-	startFn()
+	// Set genesis time far enough in the past so that small block numbers
+	// (used as seconds-since-epoch in test headers) are always after genesis.
+	//
+	// Ensure genesis is not in the future relative to mocked block timestamps (1,2,5... seconds).
+	//
+	// Use 1-second slots so that block number == slot in the test’s 1:1 mapping assertion.
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
 	assert1to1BlockSlotMapping(t, scheduler)
@@ -72,23 +79,22 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh <- normalExit
 
 	t.Run("slot = 0, block = 1 - no execution", func(t *testing.T) {
-		currentSlot.Set(0)
-		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, nil, timeout)
+		ticker.Send(phase0.Slot(0))
+		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	t.Run("slot = 1, block = 1 - no execution", func(t *testing.T) {
-		currentSlot.Set(phase0.Slot(normalExit.BlockNumber))
-		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, nil, timeout)
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(normalExit.BlockNumber))
+		ticker.Send(phase0.Slot(normalExit.BlockNumber))
+		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	t.Run("slot = 4, block = 1 - no execution", func(t *testing.T) {
-		currentSlot.Set(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone - 1)
-		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, nil, timeout)
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone-1)
+		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone - 1)
+		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -96,9 +102,8 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		currentSlot.Set(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
-		ticker.Send(currentSlot.Get())
-		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[:1])
+		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[:1])
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -108,18 +113,17 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		currentSlot.Set(phase0.Slot(sameBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
-		ticker.Send(currentSlot.Get())
-		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[1:2])
+		ticker.Send(phase0.Slot(sameBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[1:2])
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	exitCh <- newBlockExit
 
 	t.Run("slot = 5, block = 2 - no execution", func(t *testing.T) {
-		currentSlot.Set(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
-		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, nil, timeout)
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone)
+		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
@@ -127,9 +131,8 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		currentSlot.Set(phase0.Slot(newBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
-		ticker.Send(currentSlot.Get())
-		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[2:3])
+		ticker.Send(phase0.Slot(newBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[2:3])
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
@@ -139,9 +142,8 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		currentSlot.Set(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone + 1)
-		ticker.Send(currentSlot.Get())
-		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[3:4])
+		ticker.Send(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone + 1)
+		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[3:4])
 		require.EqualValues(t, 4, blockByNumberCalls.Load())
 	})
 
@@ -159,11 +161,6 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 			return &ethtypes.Header{Time: blockNumber.Uint64()}, nil
 		},
 	).AnyTimes()
-	scheduler.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(
-		func(time time.Time) phase0.Slot {
-			return phase0.Slot(time.Unix())
-		},
-	).AnyTimes()
 
 	return &headerByNumberCalls
 }
@@ -171,7 +168,7 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	const blockNumber = 123
 
-	header, err := scheduler.executionClient.HeaderByNumber(context.TODO(), new(big.Int).SetUint64(blockNumber))
+	header, err := scheduler.executionClient.HeaderByNumber(context.TODO(), new(big.Int).SetInt64(blockNumber))
 	require.NoError(t, err)
 	require.NotNil(t, header)
 

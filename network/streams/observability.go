@@ -7,6 +7,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -17,25 +18,25 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	requestsSentCounter = observability.NewMetric(
+	requestsSentCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "requests.sent"),
 			metric.WithUnit("{request}"),
 			metric.WithDescription("total number of stream requests sent")))
 
-	requestsReceivedCounter = observability.NewMetric(
+	requestsReceivedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "requests.received"),
 			metric.WithUnit("{request}"),
 			metric.WithDescription("total number of stream requests received")))
 
-	responsesSentCounter = observability.NewMetric(
+	responsesSentCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "responses.sent"),
 			metric.WithUnit("{response}"),
 			metric.WithDescription("total number of stream responses sent(as response to a peer request)")))
 
-	responsesReceivedCounter = observability.NewMetric(
+	responsesReceivedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "responses.received"),
 			metric.WithUnit("{response}"),

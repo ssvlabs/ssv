@@ -1,7 +1,9 @@
 package duties
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,29 +17,30 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 	regCh := make(chan RegistrationDescriptor)
 	handler := NewValidatorRegistrationHandler(regCh)
 
-	currentSlot := &SafeValue[phase0.Slot]{}
-	currentSlot.Set(0)
+	ctx, cancel := context.WithCancel(t.Context())
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
-	startFn()
-	defer func() {
-		cancel()
-		close(regCh)
-		require.NoError(t, schedulerPool.Wait())
-	}()
+	// Set genesis time far enough in the past so that small block numbers
+	// (used as seconds-since-epoch in test headers) are always after genesis.
+	//
+	// Ensure genesis is not in the future relative to mocked block timestamps (1,2,5... seconds).
+	//
+	// Use 1-second slots so that block number == slot in the test’s 1:1 mapping assertion.
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
 	assert1to1BlockSlotMapping(t, scheduler)
 	require.EqualValues(t, 1, blockByNumberCalls.Load())
 
 	t.Run("duty triggered by ticker", func(t *testing.T) {
-		const slot = 1
+		const slot = phase0.Slot(1)
 
 		validatorIndex1 := phase0.ValidatorIndex(1)
 		validatorPk1 := phase0.BLSPubKey{1, 2, 3}
 		validatorIndex2 := phase0.ValidatorIndex(2)
 		validatorPk2 := phase0.BLSPubKey{4, 5, 6}
-		validatorIndex3 := phase0.ValidatorIndex(scheduler.beaconConfig.GetSlotsPerEpoch()*frequencyEpochs + 1)
+		validatorIndex3 := phase0.ValidatorIndex(scheduler.beaconConfig.SlotsPerEpoch*frequencyEpochs + 1)
 		validatorPk3 := phase0.BLSPubKey{7, 8, 9}
 
 		attestingShares := []*types.SSVShare{
@@ -80,10 +83,9 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		currentSlot.Set(slot)
-		ticker.Send(currentSlot.Get())
+		ticker.Send(slot)
 
-		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
+		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 			{
 				Type:           spectypes.BNRoleValidatorRegistration,
 				PubKey:         validatorPk1,
@@ -95,7 +97,7 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 	})
 
 	t.Run("duty triggered via validatorRegistrationCh", func(t *testing.T) {
-		const slot = 1
+		const slot = phase0.Slot(1)
 
 		validatorIndex := phase0.ValidatorIndex(1)
 		validatorPk := phase0.BLSPubKey{1, 2, 3}
@@ -106,10 +108,10 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 		regCh <- RegistrationDescriptor{
 			ValidatorPubkey: validatorPk,
 			ValidatorIndex:  validatorIndex,
-			BlockNumber:     slot,
+			BlockNumber:     uint64(slot),
 		}
 
-		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
+		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 			{
 				Type:           spectypes.BNRoleValidatorRegistration,
 				PubKey:         validatorPk,
@@ -119,4 +121,8 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 		})
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
+
+	cancel()
+	close(regCh)
+	require.NoError(t, schedulerPool.Wait())
 }
