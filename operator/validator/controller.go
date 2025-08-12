@@ -807,9 +807,9 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 }
 
 func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*spectypes.CommitteeMember, error) {
-	operators := make([]*spectypes.Operator, len(share.Committee))
+	operators := make([]*spectypes.Operator, 0, len(share.Committee))
 
-	for i, cm := range share.Committee {
+	for _, cm := range share.Committee {
 		opdata, found, err := c.operatorsStorage.GetOperatorData(nil, cm.Signer)
 		if err != nil {
 			return nil, fmt.Errorf("could not get operator data: %w", err)
@@ -827,10 +827,10 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			return nil, fmt.Errorf("could not decode public key: %w", err)
 		}
 
-		operators[i] = &spectypes.Operator{
+		operators = append(operators, &spectypes.Operator{
 			OperatorID:        cm.Signer,
 			SSVOperatorPubKey: operatorPEM,
-		}
+		})
 	}
 
 	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
