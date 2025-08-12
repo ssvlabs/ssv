@@ -126,7 +126,7 @@ func (c *Committee) ConsumeQueue(
 		sig := "undefined"
 		if msg.MsgType == spectypes.SSVConsensusMsgType {
 			signers := msg.SignedSSVMessage.OperatorIDs
-			sig = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(signers)), "-"), "[]")
+			sig = strings.Join(strings.Fields(fmt.Sprint(signers)), "-")
 		}
 		if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 			psm := msg.Body.(*spectypes.PartialSignatureMessages)
@@ -139,7 +139,8 @@ func (c *Committee) ConsumeQueue(
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
 	msgRetries := ttlcache.New(
-		ttlcache.WithTTL[retryIDType, int](10 * time.Minute),
+		//ttlcache.WithTTL[retryIDType, int](10 * time.Minute),
+		ttlcache.WithTTL[retryIDType, int](100000 * time.Hour), // TODO - testing growth
 	)
 	go msgRetries.Start()
 
