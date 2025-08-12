@@ -241,17 +241,17 @@ func (mr *MockControllerMockRecorder) StopValidator(pubKey any) *gomock.Call {
 }
 
 // UpdateFeeRecipient mocks base method.
-func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address) error {
+func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient)
+	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient, blockNumber)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateFeeRecipient indicates an expected call of UpdateFeeRecipient.
-func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient any) *gomock.Call {
+func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient, blockNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient, blockNumber)
 }
 
 // ValidatorExitChan mocks base method.
@@ -266,6 +266,20 @@ func (m *MockController) ValidatorExitChan() <-chan duties.ExitDescriptor {
 func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorExitChan", reflect.TypeOf((*MockController)(nil).ValidatorExitChan))
+}
+
+// ValidatorRegistrationChan mocks base method.
+func (m *MockController) ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorRegistrationChan")
+	ret0, _ := ret[0].(<-chan duties.RegistrationDescriptor)
+	return ret0
+}
+
+// ValidatorRegistrationChan indicates an expected call of ValidatorRegistrationChan.
+func (mr *MockControllerMockRecorder) ValidatorRegistrationChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorRegistrationChan", reflect.TypeOf((*MockController)(nil).ValidatorRegistrationChan))
 }
 
 // MockRecipients is a mock of Recipients interface.
@@ -306,6 +320,21 @@ func (m *MockRecipients) GetRecipientData(r basedb.Reader, owner common.Address)
 func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRecipientData", reflect.TypeOf((*MockRecipients)(nil).GetRecipientData), r, owner)
+}
+
+// SaveRecipientData mocks base method.
+func (m *MockRecipients) SaveRecipientData(rw basedb.ReadWriter, recipientData *storage.RecipientData) (*storage.RecipientData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveRecipientData", rw, recipientData)
+	ret0, _ := ret[0].(*storage.RecipientData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SaveRecipientData indicates an expected call of SaveRecipientData.
+func (mr *MockRecipientsMockRecorder) SaveRecipientData(rw, recipientData any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveRecipientData", reflect.TypeOf((*MockRecipients)(nil).SaveRecipientData), rw, recipientData)
 }
 
 // MockSharesStorage is a mock of SharesStorage interface.

@@ -94,8 +94,8 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
-		validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"), 1)
+		validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 		require.NoError(t, task.Execute())
 	})

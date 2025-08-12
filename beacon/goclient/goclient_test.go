@@ -3,12 +3,9 @@ package goclient
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 )
 
 func TestHealthy(t *testing.T) {
@@ -28,28 +25,24 @@ func TestHealthy(t *testing.T) {
 		name                  string
 		syncResponseList      []syncResponse
 		syncDistanceTolerance uint64
-		concurrentHealthCheck bool
 		expectedErr           error
 	}{
 		{
 			name:                  "single client: zero sync distance, not syncing",
 			syncResponseList:      []syncResponse{{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}}},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           nil,
 		},
 		{
 			name:                  "single client: sync distance within allowed limits",
 			syncResponseList:      []syncResponse{{state: &v1.SyncState{SyncDistance: 1, IsSyncing: true}}},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           nil,
 		},
 		{
 			name:                  "single client: sync distance larger than allowed",
 			syncResponseList:      []syncResponse{{state: &v1.SyncState{SyncDistance: 3, IsSyncing: true}}},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           errSyncing,
 		},
 		{
@@ -59,7 +52,6 @@ func TestHealthy(t *testing.T) {
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
 			},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           nil,
 		},
 		{
@@ -69,7 +61,6 @@ func TestHealthy(t *testing.T) {
 				{state: &v1.SyncState{SyncDistance: 3, IsSyncing: true}},
 			},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           nil,
 		},
 		{
@@ -79,7 +70,6 @@ func TestHealthy(t *testing.T) {
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
 			},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           nil,
 		},
 		{
@@ -89,7 +79,6 @@ func TestHealthy(t *testing.T) {
 				{state: &v1.SyncState{SyncDistance: 4, IsSyncing: true}},
 			},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           errSyncing,
 		},
 		{
@@ -99,7 +88,6 @@ func TestHealthy(t *testing.T) {
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
 			},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           context.DeadlineExceeded,
 		},
 		{
@@ -109,7 +97,6 @@ func TestHealthy(t *testing.T) {
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
 			},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           nil,
 		},
 		{
@@ -119,7 +106,6 @@ func TestHealthy(t *testing.T) {
 				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
 			},
 			syncDistanceTolerance: 2,
-			concurrentHealthCheck: false,
 			expectedErr:           nil,
 		},
 	}
@@ -128,7 +114,7 @@ func TestHealthy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := runHealthyTest(t, tc.syncResponseList, tc.syncDistanceTolerance, tc.concurrentHealthCheck)
+			err := runHealthyTest(t, tc.syncResponseList, tc.syncDistanceTolerance)
 			if tc.expectedErr == nil {
 				require.NoError(t, err)
 			} else {
@@ -147,20 +133,18 @@ func runHealthyTest(
 	t *testing.T,
 	syncResponseList []syncResponse,
 	syncDistanceTolerance uint64,
-	concurrentHealthCheck bool,
 ) error {
 	const (
 		commonTimeout = 100 * time.Millisecond
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	mockResponses := tests.MockResponses()
+	mockResponses := mocks.ServerResponses()
 	replaceSyncing := atomic.Bool{}
-	servers := make([]*httptest.Server, 0, len(syncResponseList))
 	urls := make([]string, 0, len(syncResponseList))
 
 	for _, syncResp := range syncResponseList {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == syncingPath && replaceSyncing.Load() {
 				output := struct {
 					Data *v1.SyncState `json:"data"`
@@ -182,7 +166,6 @@ func runHealthyTest(
 			return mockResponses[r.URL.Path], nil
 		})
 
-		servers = append(servers, mockServer)
 		urls = append(urls, mockServer.URL)
 	}
 
@@ -198,30 +181,7 @@ func runHealthyTest(
 	// so we need to let it start with synced state and then get the state from the test data.
 	replaceSyncing.Store(true)
 
-	if !concurrentHealthCheck {
-		return c.Healthy(t.Context())
-	}
-
-	var wg sync.WaitGroup
-	var errMu sync.Mutex
-	var errs error
-	for range servers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			if err := c.Healthy(t.Context()); err != nil {
-				errMu.Lock()
-				errs = errors.Join(errs, err)
-				errMu.Unlock()
-				return
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	return errs
+	return c.Healthy(t.Context())
 }
 
 func TestTimeouts(t *testing.T) {
@@ -234,7 +194,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to dial.
 	{
-		undialableServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		undialableServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
@@ -248,7 +208,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to the Validators request.
 	{
-		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
 				time.Sleep(longTimeout / 2)
@@ -282,7 +242,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to proposer duties request.
 	{
-		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
 				time.Sleep(longTimeout * 2)
@@ -302,7 +262,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Fast enough.
 	{
-		fastServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		fastServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout / 2)
 			switch r.URL.Path {
 			case "/eth/v1/config/spec":

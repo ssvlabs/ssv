@@ -46,7 +46,7 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Queues map[spectypes.RunnerRole]queueContainer
+	Queues map[spectypes.RunnerRole]QueueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
@@ -70,7 +70,7 @@ func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, optio
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
 		OperatorSigner:   options.OperatorSigner,
-		Queues:           make(map[spectypes.RunnerRole]queueContainer),
+		Queues:           make(map[spectypes.RunnerRole]QueueContainer),
 		state:            uint32(NotStarted),
 		dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator: options.MessageValidator,
@@ -83,7 +83,7 @@ func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, optio
 		//Setup the queue.
 		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
-		v.Queues[role] = queueContainer{
+		v.Queues[role] = QueueContainer{
 			Q: queue.New(options.QueueSize),
 			queueState: &queue.State{
 				HasRunningInstance: false,

@@ -39,6 +39,6 @@ func (v *Validator) Stop() {
 		defer v.mtx.Unlock()
 
 		// clear the msg q
-		v.Queues = make(map[spectypes.RunnerRole]queueContainer)
+		v.Queues = make(map[spectypes.RunnerRole]QueueContainer)
 	}
 }
