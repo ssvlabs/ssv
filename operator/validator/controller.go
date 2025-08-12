@@ -837,6 +837,9 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		})
 	}
 
+	// This check is needed in case not all operators are available in storage.
+	// It can happen after an operator is removed. In such a scenario, the committee should
+	// continue conducting duties, but the number of operators must still meet the quorum.
 	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
 	if uint64(len(operators)) < quorum {
 		return nil, fmt.Errorf("not enough committee members: %d < %d", len(operators), quorum)
