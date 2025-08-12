@@ -120,7 +120,9 @@ func (c *Committee) ConsumeQueue(
 	lens := make([]int, 0, 10)
 
 	type retryIDType string
-	retryID := func(msg *queue.SSVMessage) retryIDType {
+	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
+	// with different signers - so we can't use that for retries)
+	messageID := func(msg *queue.SSVMessage) retryIDType {
 		sig := "undefined"
 		if msg.MsgType == spectypes.SSVConsensusMsgType {
 			signers := msg.SignedSSVMessage.OperatorIDs
@@ -200,10 +202,10 @@ func (c *Committee) ConsumeQueue(
 				retryDelay = 10 * time.Millisecond
 				retryCount = 99
 			)
-			msgRetryItem := msgRetries.Get(retryID(msg))
+			msgRetryItem := msgRetries.Get(messageID(msg))
 			if msgRetryItem == nil {
-				msgRetries.Set(retryID(msg), 0, ttlcache.DefaultTTL)
-				msgRetryItem = msgRetries.Get(retryID(msg))
+				msgRetries.Set(messageID(msg), 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(messageID(msg))
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
@@ -221,7 +223,7 @@ func (c *Committee) ConsumeQueue(
 				errors.Is(err, runner.ErrWrongMsgRound) || errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
 
 				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
-				msgRetries.Set(retryID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func() {
 					time.Sleep(retryDelay)
 					q.Q.Push(msg)
@@ -234,7 +236,7 @@ func (c *Committee) ConsumeQueue(
 				logger,
 				msg,
 				logMsg,
-				fields.MessageID(msg.MsgID),
+				zap.String("message_identifier", string(messageID(msg))),
 				fields.MessageType(msg.MsgType),
 				zap.Error(err),
 				zap.Int("attempt", msgRetryCnt+1),
