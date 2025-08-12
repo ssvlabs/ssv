@@ -14,8 +14,8 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -211,7 +211,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 
 	mockValidatorsMap := validators.New(testCtx)
 
-	operatorStore, done := newOperatorStorageForTest(zap.NewNop())
+	operatorStore, done := newOperatorStorageForTest(logging.TestLogger(t))
 	defer done()
 
 	controllerOptions := MockControllerOptions{
