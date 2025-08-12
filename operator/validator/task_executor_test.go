@@ -2,9 +2,7 @@ package validator
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"testing"
 	"time"
 
@@ -307,13 +305,4 @@ func TestController_ReactivateCluster(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		require.Fail(t, "didn't get indices update")
 	}
-
-}
-
-func generateKey() string {
-	var sk [32]byte
-	if _, err := rand.Read(sk[:]); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(sk[:])
 }
