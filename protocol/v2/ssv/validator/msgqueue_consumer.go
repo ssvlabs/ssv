@@ -22,8 +22,8 @@ import (
 // MessageHandler process the msg. return error if exist
 type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
-// queueContainer wraps a queue with its corresponding state
-type queueContainer struct {
+// QueueContainer wraps a queue with its corresponding state
+type QueueContainer struct {
 	Q          queue.Queue
 	queueState *queue.State
 }
@@ -83,7 +83,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	var q queueContainer
+	var q QueueContainer
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()

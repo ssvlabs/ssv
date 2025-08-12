@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
@@ -248,7 +249,7 @@ func TestSetupValidators(t *testing.T) {
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
-	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
+	testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, feeRecipientBytes)
 
 	opStorage, done := newOperatorStorageForTest(logger)
 	defer done()
@@ -401,7 +402,7 @@ func TestSetupValidators(t *testing.T) {
 			}).AnyTimes()
 
 			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-				createPubKey(byte('0')): testValidator,
+				testValidator.Share.ValidatorPubKey: testValidator,
 			}
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
 			mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, committeeMap))
@@ -423,6 +424,7 @@ func TestSetupValidators(t *testing.T) {
 			}
 
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
+			recipientStorage.EXPECT().SaveRecipientData(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
 			inited, _ := ctr.setupValidators(tc.shares)
@@ -627,38 +629,60 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	firstFeeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode first fee recipient address")
 	secondFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
 
+	const blockNumber = uint64(2)
+
 	t.Run("Test with right owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, firstFeeRecipientBytes)
 
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-			createPubKey(byte('0')): testValidator,
+			testValidator.Share.ValidatorPubKey: testValidator,
 		}
 		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 
-		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
+		controllerOptions := MockControllerOptions{
+			validatorsMap: mockValidatorsMap,
+		}
 		ctr := setupController(t, logger, controllerOptions)
+		validatorRegistrationCh := make(chan duties.RegistrationDescriptor, 1)
+		ctr.validatorRegistrationCh = validatorRegistrationCh
 
-		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
+		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes), blockNumber)
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
 
 		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
 		require.Equal(t, secondFeeRecipientBytes, actualFeeRecipient, "Fee recipient address did not update correctly")
+
+		regDescriptor := <-validatorRegistrationCh
+		require.Equal(t, testValidator.Share.ValidatorIndex, regDescriptor.ValidatorIndex)
+		pkWant := phase0.BLSPubKey{}
+		copy(pkWant[:], testValidator.Share.ValidatorPubKey[:])
+		require.Equal(t, pkWant, regDescriptor.ValidatorPubkey)
+		require.Equal(t, secondFeeRecipientBytes, regDescriptor.FeeRecipient)
+		require.Equal(t, blockNumber, regDescriptor.BlockNumber)
 	})
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
+		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, firstFeeRecipientBytes)
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-			createPubKey(byte('0')): testValidator,
+			testValidator.Share.ValidatorPubKey: testValidator,
 		}
 		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
-		ctr := setupController(t, logger, controllerOptions)
 
-		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
+		ctr := setupController(t, logger, controllerOptions)
+		validatorRegistrationCh := make(chan duties.RegistrationDescriptor, 1)
+		ctr.validatorRegistrationCh = validatorRegistrationCh
+
+		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes), 1)
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
 
 		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
 		require.Equal(t, firstFeeRecipientBytes, actualFeeRecipient, "Fee recipient address should not have changed")
+
+		require.Len(t, validatorRegistrationCh, 0, "Validator registration channel should be empty")
 	})
 }
 
@@ -762,15 +786,22 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 	return res
 }
 
-func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
+func setupTestValidator(validatorPk spectypes.ValidatorPK, ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
 	return &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
 
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
+				ValidatorPubKey:     validatorPk,
 				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
 			},
 			OwnerAddress: common.BytesToAddress(ownerAddressBytes),
+		},
+
+		Queues: map[spectypes.RunnerRole]validator.QueueContainer{
+			spectypes.RoleValidatorRegistration: {
+				Q: queue.New(1000),
+			},
 		},
 	}
 }
@@ -1095,6 +1126,7 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 	}
 
 	mockRecipientsStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
+	mockRecipientsStorage.EXPECT().SaveRecipientData(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 
 	return validatorCtrl, mockSharesStorage
 }
