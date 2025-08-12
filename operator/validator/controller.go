@@ -814,8 +814,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			return nil, fmt.Errorf("could not get operator data: %w", err)
 		}
 		if !found {
-			//TODO alan: support removed ops
-			return nil, fmt.Errorf("operator not found")
+			continue
 		}
 
 		operatorPEM, err := base64.StdEncoding.DecodeString(string(opdata.PublicKey))
@@ -827,6 +826,11 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			OperatorID:        cm.Signer,
 			SSVOperatorPubKey: operatorPEM,
 		}
+	}
+
+	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
+	if uint64(len(operators)) < quorum {
+		return nil, fmt.Errorf("not enough committee members: %d < %d", len(operators), quorum)
 	}
 
 	f := ssvtypes.ComputeF(uint64(len(share.Committee)))
