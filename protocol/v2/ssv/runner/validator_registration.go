@@ -178,7 +178,7 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
-		return nil, spectypes.DomainError, errors.New("no running duty to compute preconsensus roots and domain")
+		return nil, spectypes.DomainError, ErrNoValidDutiesToExecute
 	}
 	vr, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {

@@ -165,10 +165,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(ctx, logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.MsgType),
-				zap.Error(err))
+		err = handler(ctx, logger, msg)
+		if err != nil {
+			v.logMsg(logger, msg, "❗ could not handle message", fields.MessageType(msg.MsgType), zap.Error(err))
 		}
 	}
 
@@ -177,7 +176,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 }
 
 func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
-	baseFields := []zap.Field{}
+	var baseFields []zap.Field
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
@@ -190,7 +189,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Uint64("signer", psm.Messages[0].Signer), // TODO: only one signer?
+			zap.Uint64("signer", psm.Messages[0].Signer), // same signer for all messages
 			fields.Slot(psm.Slot),
 		}
 	}

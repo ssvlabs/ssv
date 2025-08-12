@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sort"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -20,7 +21,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	signedMsg *spectypes.PartialSignatureMessages,
 ) error {
 	if !b.hasRunningDuty() {
-		return errors.New("no running duty")
+		return ErrNoRunningDuty
 	}
 
 	if err := b.validatePartialSigMsgForSlot(signedMsg, b.State.StartingDuty.DutySlot()); err != nil {
@@ -29,7 +30,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 
 	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
 	if err != nil {
-		return err
+		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
 	}
 
 	return b.verifyExpectedRoot(ctx, runner, signedMsg, roots, domain)
@@ -49,20 +50,20 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
-		return errors.New("no running duty")
+		return ErrNoRunningDuty
 	}
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
 	if len(b.State.DecidedValue) == 0 {
-		return errors.New("no decided value")
+		return ErrNoDecidedValue
 	}
 
 	if b.State.RunningInstance == nil {
-		return errors.New("no running consensus instance")
+		return ErrInstanceNotFound
 	}
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
 	if !decided {
-		return errors.New("consensus instance not decided")
+		return ErrNoDecidedValue
 	}
 
 	// TODO: (Alan) maybe nicer to do this without switch

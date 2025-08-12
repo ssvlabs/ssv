@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -206,16 +207,28 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.New("not processing consensus message since consensus has already finished")
 	}
 
-	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
-	if err != nil {
-		return false, nil, err
+	if !b.hasRunningDuty() {
+		return false, nil, ErrNoRunningDuty
 	}
 
-	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
-	// do not return error if no running duty
-	if !b.hasRunningDuty() {
-		logger.Debug("no running duty")
-		return false, nil, nil
+	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
+	if errors.Is(err, controller.ErrInstanceNotFound) {
+		return false, nil, fmt.Errorf("%w: %v", ErrInstanceNotFound, err)
+	}
+	if errors.Is(err, controller.ErrFutureMsg) {
+		return false, nil, fmt.Errorf("%w: %v", ErrFutureMsg, err)
+	}
+	if errors.Is(err, controller.ErrWrongMsgHeight) {
+		return false, nil, fmt.Errorf("%w: %v", ErrWrongMsgHeight, err)
+	}
+	if errors.Is(err, controller.ErrNoProposalForRound) {
+		return false, nil, fmt.Errorf("%w: %v", ErrNoProposalForRound, err)
+	}
+	if errors.Is(err, controller.ErrWrongMsgRound) {
+		return false, nil, fmt.Errorf("%w: %v", ErrWrongMsgRound, err)
+	}
+	if err != nil {
+		return false, nil, err
 	}
 
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {

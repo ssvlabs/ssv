@@ -170,12 +170,11 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Handle the message.
-		if err := handler(ctx, logger, msg); err != nil {
-			c.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.MsgType),
-				zap.Error(err))
-			if errors.Is(err, runner.ErrNoValidDuties) {
-				// Stop the queue consumer if the runner no longer has any valid duties.
+		err := handler(ctx, logger, msg)
+		if err != nil {
+			c.logMsg(logger, msg, "❗ could not handle message", fields.MessageType(msg.MsgType), zap.Error(err))
+			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
+				// Stop the queue consumer if the runner no longer has any valid duties to execute.
 				break
 			}
 		}
@@ -199,7 +198,7 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Uint64("signer", psm.Messages[0].Signer),
+			zap.Uint64("signer", psm.Messages[0].Signer), // same signer for all messages
 			fields.Slot(psm.Slot),
 		}
 	}

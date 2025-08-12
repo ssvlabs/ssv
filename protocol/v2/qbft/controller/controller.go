@@ -112,9 +112,9 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	/**
 	Main controller processing flow
 	_______________________________
-	All decided msgs are processed the same, out of instance
-	All valid future msgs are saved in a container and can trigger highest decided futuremsg
-	All other msgs (not future or decided) are processed normally by an existing instance (if found)
+	All decided msgs are processed the same, out of instance.
+	All valid future msgs are saved in a container and might be referenced later if/when a not-future message arrives.
+	All other msgs (not future or decided) are processed normally by an existing instance (if found).
 	*/
 	isDecided, err := c.IsDecidedMsg(msg)
 	if err != nil {
@@ -129,7 +129,7 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 		return nil, err
 	}
 	if isFuture {
-		return nil, fmt.Errorf("future msg from height, could not process")
+		return nil, ErrFutureMsg
 	}
 
 	return c.UponExistingInstanceMsg(ctx, logger, msg)
@@ -138,7 +138,7 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
-		return nil, errors.New("instance not found")
+		return nil, ErrInstanceNotFound
 	}
 
 	prevDecided, _ := inst.IsDecided()
@@ -149,6 +149,12 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	}
 
 	decided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
+	if errors.Is(err, instance.ErrNoProposalForRound) {
+		return nil, fmt.Errorf("%w: %v", ErrNoProposalForRound, err)
+	}
+	if errors.Is(err, instance.ErrWrongMsgRound) {
+		return nil, fmt.Errorf("%w: %v", ErrWrongMsgRound, err)
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}

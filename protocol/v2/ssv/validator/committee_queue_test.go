@@ -1256,14 +1256,14 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 }
 
 // TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
-// processing further messages if the handler returns runner.ErrNoValidDuties.
+// processing further messages if the handler returns runner.ErrNoValidDutiesToExecute.
 //
 // Flow:
 //  1. Set up a committee and a queue container with multiple messages.
 //  2. Initialize a basic committee runner.
 //  3. Define a message handler that:
 //     a. Increments a counter for processed messages.
-//     b. Returns runner.ErrNoValidDuties if a specific (e.g., the first) message is processed.
+//     b. Returns runner.ErrNoValidDutiesToExecute if a specific (e.g., the first) message is processed.
 //  4. Call ConsumeQueue with this handler.
 //  5. Verify that only the message(s) processed before the error was returned were handled.
 //  6. Verify that remaining messages are still in the queue.
@@ -1303,15 +1303,15 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 		atomic.AddInt32(&processedMessagesCount, 1)
 		if msg.MsgID == msg1.MsgID { // Return error after processing the first message
-			return runner.ErrNoValidDuties
+			return runner.ErrNoValidDutiesToExecute
 		}
 		return nil
 	}
 
 	// Run ConsumeQueue. It should stop after processing the first message because the handler
-	// returns runner.ErrNoValidDuties.
+	// returns runner.ErrNoValidDutiesToExecute.
 	// The ConsumeQueue method itself is designed to break its processing loop and return nil
-	// when its handler signals ErrNoValidDuties, treating it as a normal stop condition for the queue.
+	// when its handler signals ErrNoValidDutiesToExecute, treating it as a normal stop condition for the queue.
 	// Thus, we expect no error from the ConsumeQueue call.
 	err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
 	require.NoError(t, err)
