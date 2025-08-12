@@ -26,7 +26,7 @@ func (b *BaseRunner) signBeaconObject(
 	epoch := runner.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get beacon domain")
+		return nil, fmt.Errorf("could not get beacon domain: %w", err)
 	}
 	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
@@ -40,7 +40,7 @@ func (b *BaseRunner) signBeaconObject(
 		signatureDomain,
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not sign beacon object")
+		return nil, fmt.Errorf("could not sign beacon object: %w", err)
 	}
 
 	return &spectypes.PartialSignatureMessage{
@@ -51,45 +51,24 @@ func (b *BaseRunner) signBeaconObject(
 	}, nil
 }
 
-//func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
-//	signature, err := runner.GetSigner().SignBeaconObject(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
-//	if err != nil {
-//		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
-//	}
-//
-//	return &spectypes.SignedPartialSignatureMessage{
-//		Message:   *msg,
-//		Signature: signature,
-//		Signer:    b.Share.OperatorID,
-//	}, nil
-//}
-
 // Validate message content without verifying signatures
 func (b *BaseRunner) validatePartialSigMsgForSlot(
 	psigMsgs *spectypes.PartialSignatureMessages,
 	slot spec.Slot,
 ) error {
 	if err := psigMsgs.Validate(); err != nil {
-		return errors.Wrap(err, "PartialSignatureMessages invalid")
+		return fmt.Errorf("PartialSignatureMessages invalid: %w", err)
 	}
 
 	if psigMsgs.Slot != slot {
-		return errors.New("invalid partial sig slot")
+		return fmt.Errorf("invalid partial sig slot, expected: %d, got: %d", psigMsgs.Slot, slot)
 	}
 
 	// Get signer
 	msgSigner := psigMsgs.Messages[0].Signer // signer is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate())
 
 	// Get committee (unique for runner)
-	var shareSample *spectypes.Share
-	for _, share := range b.Share {
-		shareSample = share
-		break
-	}
-	if shareSample == nil {
-		return errors.New("can not get committee because there is no share in runner")
-	}
-	committee := shareSample.Committee
+	committee := b.Share[0].Committee
 
 	// Check if signer is in committee
 	signerInCommittee := false
@@ -126,11 +105,11 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 		if n.Signer == signer {
 			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
-				return errors.Wrap(err, "could not deserialized pk")
+				return fmt.Errorf("could not deserialized pk: %w", err)
 			}
 			sig := &bls.Sign{}
 			if err := sig.Deserialize(signature); err != nil {
-				return errors.Wrap(err, "could not deserialized Signature")
+				return fmt.Errorf("could not deserialized Signature: %w", err)
 			}
 
 			// verify
