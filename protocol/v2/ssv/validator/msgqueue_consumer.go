@@ -3,7 +3,9 @@ package validator
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -16,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -99,19 +102,28 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	}
 
 	logger.Debug("📬 queue consumer is running")
+	defer logger.Debug("📪 queue consumer is closed")
 
 	lens := make([]int, 0, 10)
+
+	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
+	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
+	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
+	msgRetries := ttlcache.New(
+		ttlcache.WithTTL[spectypes.MessageID, int](10 * time.Minute),
+	)
+	go msgRetries.Start()
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
-		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-		if runner == nil {
+		r := v.DutyRunners.DutyRunnerForMsgID(msgID)
+		if r == nil {
 			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
 		}
 		var runningInstance *instance.Instance
-		if runner.HasRunningDuty() {
-			runningInstance = runner.GetBaseRunner().State.RunningInstance
+		if r.HasRunningDuty() {
+			runningInstance = r.GetBaseRunner().State.RunningInstance
 			if runningInstance != nil {
 				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
@@ -122,7 +134,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Quorum = v.Operator.GetQuorum()
 
 		filter := queue.FilterAny
-		if !runner.HasRunningDuty() {
+		if !r.HasRunningDuty() {
 			// If no duty is running, pop only ExecuteDuty messages.
 			filter = func(m *queue.SSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
@@ -150,11 +162,11 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		if ctx.Err() != nil {
-			break
+			return nil
 		}
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
-			break
+			return nil
 		}
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
@@ -164,14 +176,52 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			lens = lens[:0]
 		}
 
-		// Handle the message.
+		// Handle the message, potentially scheduling a message-replay for later.
 		err = handler(ctx, logger, msg)
 		if err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message", fields.MessageType(msg.MsgType), zap.Error(err))
+			const (
+				retryDelay = 10 * time.Millisecond
+				retryCount = 100
+			)
+			msgRetryItem := msgRetries.Get(msg.MsgID)
+			if msgRetryItem == nil {
+				msgRetries.Set(msg.MsgID, 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(msg.MsgID)
+			}
+			msgRetryCnt := msgRetryItem.Value()
+
+			// TODO
+			logger.Debug("validator: printing msgRetries size", zap.Int("size", msgRetries.Len()))
+
+			logMsg := "❗ could not handle message"
+
+			switch {
+			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrInvalidPartialSigSlot) ||
+				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureMsg) ||
+				errors.Is(err, runner.ErrWrongMsgHeight) || errors.Is(err, runner.ErrNoProposalForRound) ||
+				errors.Is(err, runner.ErrWrongMsgRound) || errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
+
+				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay)
+				msgRetries.Set(msg.MsgID, msgRetryCnt+1, ttlcache.DefaultTTL)
+				go func() {
+					time.Sleep(retryDelay)
+					q.Q.Push(msg)
+				}()
+			default:
+				logMsg += ", dropping message"
+			}
+
+			v.logMsg(
+				logger,
+				msg,
+				logMsg,
+				fields.MessageType(msg.MsgType),
+				zap.Error(err),
+				zap.Int("attempt", msgRetryCnt+1),
+			)
 		}
 	}
 
-	logger.Debug("📪 queue consumer is closed")
 	return nil
 }
 

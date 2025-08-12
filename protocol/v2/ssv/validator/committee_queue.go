@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -95,9 +97,7 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 
 	go func() {
 		defer cancelF()
-		if err := c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r); err != nil {
-			logger.Error("❗failed consuming committee queue", zap.Error(err))
-		}
+		c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r)
 	}()
 
 	return nil
@@ -111,11 +111,20 @@ func (c *Committee) ConsumeQueue(
 	logger *zap.Logger,
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,
-) error {
-	state := *q.queueState
-
+) {
 	logger.Debug("📬 queue consumer is running")
+	defer logger.Debug("📪 queue consumer is closed")
+
+	state := *q.queueState
 	lens := make([]int, 0, 10)
+
+	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
+	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
+	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
+	msgRetries := ttlcache.New(
+		ttlcache.WithTTL[spectypes.MessageID, int](10 * time.Minute),
+	)
+	go msgRetries.Start()
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
@@ -155,11 +164,11 @@ func (c *Committee) ConsumeQueue(
 		// TODO: (Alan) bring back filter
 		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
 		if ctx.Err() != nil {
-			break
+			return
 		}
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
-			break
+			return
 		}
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
@@ -169,19 +178,58 @@ func (c *Committee) ConsumeQueue(
 			lens = lens[:0]
 		}
 
-		// Handle the message.
+		// Handle the message, potentially scheduling a message-replay for later.
 		err := handler(ctx, logger, msg)
 		if err != nil {
-			c.logMsg(logger, msg, "❗ could not handle message", fields.MessageType(msg.MsgType), zap.Error(err))
+			const (
+				retryDelay = 10 * time.Millisecond
+				retryCount = 100
+			)
+			msgRetryItem := msgRetries.Get(msg.MsgID)
+			if msgRetryItem == nil {
+				msgRetries.Set(msg.MsgID, 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(msg.MsgID)
+			}
+			msgRetryCnt := msgRetryItem.Value()
+
+			// TODO
+			logger.Debug("committee: printing msgRetries size", zap.Int("size", msgRetries.Len()))
+
+			logMsg := "❗ could not handle message"
+
+			switch {
+			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
+				logMsg += ", dropping message and terminating committee-runner"
+			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrInvalidPartialSigSlot) ||
+				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureMsg) ||
+				errors.Is(err, runner.ErrWrongMsgHeight) || errors.Is(err, runner.ErrNoProposalForRound) ||
+				errors.Is(err, runner.ErrWrongMsgRound) || errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
+
+				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay)
+				msgRetries.Set(msg.MsgID, msgRetryCnt+1, ttlcache.DefaultTTL)
+				go func() {
+					time.Sleep(retryDelay)
+					q.Q.Push(msg)
+				}()
+			default:
+				logMsg += ", dropping message"
+			}
+
+			c.logMsg(
+				logger,
+				msg,
+				logMsg,
+				fields.MessageType(msg.MsgType),
+				zap.Error(err),
+				zap.Int("attempt", msgRetryCnt+1),
+			)
+
 			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
-				// Stop the queue consumer if the runner no longer has any valid duties to execute.
-				break
+				// Optimization: stop queue consumer if the runner no longer has any valid duties to execute.
+				return
 			}
 		}
 	}
-
-	logger.Debug("📪 queue consumer is closed")
-	return nil
 }
 
 func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
