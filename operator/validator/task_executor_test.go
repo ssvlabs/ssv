@@ -2,7 +2,9 @@ package validator
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -33,8 +35,8 @@ func TestController_LiquidateCluster(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
+	require.NoError(t, secretKey.SetHexString(secretKeyStrings[0]))
+	require.NoError(t, secretKey2.SetHexString(secretKeyStrings[1]))
 
 	firstValidator := &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
@@ -96,8 +98,8 @@ func TestController_StopValidator(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
+	require.NoError(t, secretKey.SetHexString(secretKeyStrings[0]))
+	require.NoError(t, secretKey2.SetHexString(secretKeyStrings[0]))
 
 	firstValidator := &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
@@ -175,25 +177,33 @@ func TestController_StopValidator(t *testing.T) {
 
 func TestController_ReactivateCluster(t *testing.T) {
 	testCtx := t.Context()
+	numberOfValidators := 4
 
-	secretKey := &bls.SecretKey{}
-	secretKey2 := &bls.SecretKey{}
-	secretKey3 := &bls.SecretKey{}
-	secretKey4 := &bls.SecretKey{}
+	secretKeys := make([]*bls.SecretKey, 0, numberOfValidators)
+	toReactivate := make([]*types.SSVShare, 0, numberOfValidators)
 
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
-	require.NoError(t, secretKey3.SetHexString(sk3Str))
-	require.NoError(t, secretKey4.SetHexString(sk4Str))
+	for i := range numberOfValidators {
+		secretKey := &bls.SecretKey{}
+		require.NoError(t, secretKey.SetHexString(secretKeyStrings[i]))
+		secretKeys = append(secretKeys, secretKey)
 
-	shares1, err := threshold.Create(secretKey.Serialize(), 3, 4)
-	require.NoError(t, err)
-	shares2, err := threshold.Create(secretKey2.Serialize(), 3, 4)
-	require.NoError(t, err)
-	shares3, err := threshold.Create(secretKey3.Serialize(), 3, 4)
-	require.NoError(t, err)
-	shares4, err := threshold.Create(secretKey4.Serialize(), 3, 4)
-	require.NoError(t, err)
+		share, err := threshold.Create(secretKey.Serialize(), 3, 4)
+		require.NoError(t, err)
+
+		byteShare := share[1].GetPublicKey().Serialize()
+
+		shareToReactivate := types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorIndex:  phase0.ValidatorIndex(i + 1),
+				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+				SharePubKey:     byteShare,
+			},
+			Status:          v1.ValidatorStateActiveOngoing,
+			ActivationEpoch: 1,
+		}
+
+		toReactivate = append(toReactivate, &shareToReactivate)
+	}
 
 	operatorPrivKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
@@ -227,10 +237,10 @@ func TestController_ReactivateCluster(t *testing.T) {
 	}
 	ctr.indicesChange = make(chan struct{})
 
-	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
+	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKeys[0].SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(testCtx, nil, encryptedPrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(testCtx, nil, encryptedPrivKey, phase0.BLSPubKey(secretKeys[0].GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	domain, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
@@ -245,52 +255,13 @@ func TestController_ReactivateCluster(t *testing.T) {
 		testCtx,
 		spectypes.SSZBytes(root[:]),
 		domain,
-		phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),
+		phase0.BLSPubKey(secretKeys[0].GetPublicKey().Serialize()),
 		slot,
 		spectypes.DomainSyncCommittee,
 	)
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
-
-	toReactivate := []*types.SSVShare{
-		{
-			Share: spectypes.Share{
-				ValidatorIndex:  1,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
-				SharePubKey:     shares1[1].GetPublicKey().Serialize(),
-			},
-			Status:          v1.ValidatorStateActiveOngoing,
-			ActivationEpoch: 1,
-		},
-		{
-			Share: spectypes.Share{
-				ValidatorIndex:  2,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
-				SharePubKey:     shares2[1].GetPublicKey().Serialize(),
-			},
-			Status:          v1.ValidatorStateActiveOngoing,
-			ActivationEpoch: 1,
-		},
-		{
-			Share: spectypes.Share{
-				ValidatorIndex:  3,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey3.GetPublicKey().Serialize()),
-				SharePubKey:     shares3[1].GetPublicKey().Serialize(),
-			},
-			Status:          v1.ValidatorStateActiveOngoing,
-			ActivationEpoch: 1,
-		},
-		{
-			Share: spectypes.Share{
-				ValidatorIndex:  4,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey4.GetPublicKey().Serialize()),
-				SharePubKey:     shares4[1].GetPublicKey().Serialize(),
-			},
-			Status:          v1.ValidatorStateActiveOngoing,
-			ActivationEpoch: 1,
-		},
-	}
 
 	operatorIDs := []spectypes.OperatorID{1, 2, 3, 4}
 	committee := make([]*spectypes.ShareMember, 0, len(operatorIDs))
@@ -325,17 +296,10 @@ func TestController_ReactivateCluster(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, mockValidatorsMap.SizeValidators())
 
-	_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
-	require.True(t, ok, "validator not found")
-
-	_, ok = mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()))
-	require.True(t, ok, "validator not found")
-
-	_, ok = mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey3.GetPublicKey().Serialize()))
-	require.True(t, ok, "validator not found")
-
-	_, ok = mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey4.GetPublicKey().Serialize()))
-	require.True(t, ok, "validator not found")
+	for _, key := range secretKeys {
+		_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(key.GetPublicKey().Serialize()))
+		require.True(t, ok, "validator not found")
+	}
 
 	select {
 	case <-indiciesUpdate:
@@ -344,4 +308,12 @@ func TestController_ReactivateCluster(t *testing.T) {
 		require.Fail(t, "didn't get indices update")
 	}
 
+}
+
+func generateKey() string {
+	var sk [32]byte
+	if _, err := rand.Read(sk[:]); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(sk[:])
 }

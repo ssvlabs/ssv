@@ -49,12 +49,12 @@ import (
 	"github.com/ssvlabs/ssv/storage/kv"
 )
 
-const (
-	sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	sk2Str = "3648db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	sk3Str = "3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	sk4Str = "3848db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-)
+var secretKeyStrings = []string{
+	"3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+	"3648db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+	"3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+	"3848db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+}
 
 // TODO: increase test coverage, add more tests, e.g.:
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
@@ -111,8 +111,8 @@ func TestSetupValidatorsExporter(t *testing.T) {
 
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
+	require.NoError(t, secretKey.SetHexString(secretKeyStrings[0]))
+	require.NoError(t, secretKey2.SetHexString(secretKeyStrings[1]))
 
 	operatorStore, done := newOperatorStorageForTest(zap.NewNop())
 	defer done()
