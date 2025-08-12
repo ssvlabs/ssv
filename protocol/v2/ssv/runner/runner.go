@@ -261,7 +261,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 	quorumReached := false
 
 	for _, msg := range signedMsg.Messages {
-		quorumReachedPreviuosly := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
+		quorumReachedPreviously := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
 
 		// Check if it has two signatures for the same signer
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
@@ -272,7 +272,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 		hasQuorum := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
 
-		if hasQuorum && !quorumReachedPreviuosly {
+		if hasQuorum && !quorumReachedPreviously {
 			// Notify about first quorum only
 			roots = append(roots, msg.SigningRoot)
 			quorumReached = true
