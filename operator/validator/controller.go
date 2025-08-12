@@ -477,10 +477,12 @@ func (c *controller) StartValidators(ctx context.Context) {
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.Validator, []*validator.Committee) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
+
 	var errs []error
 	var fetchMetadata [][]byte
 	var validators []*validator.Validator
 	var committees []*validator.Committee
+
 	for _, validatorShare := range shares {
 		var initialized bool
 		v, vc, err := c.onShareInit(validatorShare)
@@ -500,9 +502,11 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.
 			committees = append(committees, vc)
 		}
 	}
+
 	c.logger.Info("init validators done", zap.Int("validators_size", c.validatorsMap.SizeValidators()), zap.Int("committee_size", c.validatorsMap.SizeCommittees()),
 		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("shares", len(shares)), zap.Int("initialized", len(validators)))
+
 	return validators, committees
 }
 

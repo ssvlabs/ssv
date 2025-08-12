@@ -376,8 +376,6 @@ func TestSetupValidators(t *testing.T) {
 	opStorage, done := newOperatorStorageForTest(logger)
 	defer done()
 
-	opStorage.SaveOperatorData(nil, buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-
 	bcResponse := map[phase0.ValidatorIndex]*v1.Validator{
 		0: {
 			Status: v1.ValidatorStateActiveOngoing,
@@ -394,7 +392,7 @@ func TestSetupValidators(t *testing.T) {
 		recipientMockTimes int
 		bcMockTimes        int
 		recipientFound     bool
-		inited             int
+		initedValidators   int
 		started            int
 		recipientErr       error
 		name               string
@@ -402,6 +400,7 @@ func TestSetupValidators(t *testing.T) {
 		recipientData      *registrystorage.RecipientData
 		bcResponse         map[phase0.ValidatorIndex]*v1.Validator
 		validatorStartFunc func(validator *validator.Validator) (bool, error)
+		operatorData       []*registrystorage.OperatorData
 	}{
 		{
 			name:               "setting fee recipient to storage data",
@@ -411,12 +410,13 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
-			inited:             1,
+			initedValidators:   1,
 			started:            1,
 			bcMockTimes:        1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
 		},
 		{
 			name:               "setting fee recipient to owner address",
@@ -426,12 +426,13 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
-			inited:             1,
+			initedValidators:   1,
 			started:            1,
 			bcMockTimes:        1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
 		},
 		{
 			name:               "failed to set fee recipient",
@@ -441,12 +442,13 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       errors.New("some error"),
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
-			inited:             0,
+			initedValidators:   0,
 			started:            0,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
 		},
 		{
 			name:               "start share with metadata",
@@ -456,17 +458,18 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
-			inited:             1,
+			initedValidators:   1,
 			started:            1,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
 		},
 		{
 			name:               "start share without metadata",
 			bcMockTimes:        1,
-			inited:             0,
+			initedValidators:   0,
 			started:            0,
 			recipientMockTimes: 0,
 			recipientData:      nil,
@@ -477,6 +480,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
 		},
 		{
 			name:               "failed to get GetValidatorData",
@@ -486,12 +490,13 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			bcResponse:         nil,
 			recipientFound:     false,
-			inited:             0,
+			initedValidators:   0,
 			started:            0,
 			shares:             []*types.SSVShare{shareWithoutMetaData},
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
 		},
 		{
 			name:               "failed to start validator",
@@ -501,11 +506,79 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
-			inited:             1,
+			initedValidators:   1,
 			started:            0,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, errors.New("some error")
+			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+		},
+		{
+			name: "operator data removed - enough for quorum committee members",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       operators[:],
+						ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					OwnerAddress:              common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientData:      nil,
+			recipientFound:     false,
+			recipientErr:       nil,
+			recipientMockTimes: 1,
+			bcResponse:         bcResponse,
+			initedValidators:   1,
+			started:            1,
+			bcMockTimes:        0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{
+				buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+				buildOperatorData(2, "67Ce5c69260bd819B4e0AD13f4b873074D479812"),
+				buildOperatorData(3, "67Ce5c69260bd819B4e0AD13f4b873074D479813"),
+			},
+		},
+		{
+			name: "operator data removed - not enough for quorum committee members",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       operators[:],
+						ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					OwnerAddress:              common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientData:      nil,
+			recipientFound:     false,
+			recipientErr:       nil,
+			recipientMockTimes: 1,
+			bcResponse:         bcResponse,
+			initedValidators:   0,
+			started:            0,
+			bcMockTimes:        0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{
+				buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+				buildOperatorData(2, "67Ce5c69260bd819B4e0AD13f4b873074D479812"),
 			},
 		},
 	}
@@ -531,6 +604,11 @@ func TestSetupValidators(t *testing.T) {
 
 			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
 
+			opStorage.DropOperators()
+			for _, data := range tc.operatorData {
+				opStorage.SaveOperatorData(nil, data)
+			}
+
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
@@ -550,11 +628,14 @@ func TestSetupValidators(t *testing.T) {
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
-			inited, _ := ctr.setupValidators(tc.shares)
-			require.Len(t, inited, tc.inited)
+
+			initedValidators, _ := ctr.setupValidators(tc.shares)
+			require.Len(t, initedValidators, tc.initedValidators, "%s", tc.name)
+
 			// TODO: Alan, should we check for committee too?
-			started := ctr.startValidators(inited, nil)
-			require.Equal(t, tc.started, started)
+			started := ctr.startValidators(initedValidators, nil)
+
+			require.Equal(t, tc.started, started, "%s", tc.name)
 
 			//Add any assertions here to validate the behavior
 		})
