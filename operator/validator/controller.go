@@ -819,7 +819,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			return nil, fmt.Errorf("could not get operator data: %w", err)
 		}
 		if !found {
-			c.logger.Warn("operator data not found. Will start validators only if number of available operators is more or equal to quorum",
+			c.logger.Warn("operator data not found. Will start validators only if the number of available operators is greater than or equal to the quorum",
 				fields.OperatorID(cm.Signer),
 				fields.CommitteeID(share.CommitteeID()),
 			)
