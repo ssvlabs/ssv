@@ -205,7 +205,7 @@ func (c *Committee) ConsumeQueue(
 				errors.Is(err, runner.ErrWrongMsgHeight) || errors.Is(err, runner.ErrNoProposalForRound) ||
 				errors.Is(err, runner.ErrWrongMsgRound) || errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
 
-				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay)
+				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
 				msgRetries.Set(msg.MsgID, msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func() {
 					time.Sleep(retryDelay)
@@ -219,6 +219,7 @@ func (c *Committee) ConsumeQueue(
 				logger,
 				msg,
 				logMsg,
+				fields.MessageID(msg.MsgID),
 				fields.MessageType(msg.MsgType),
 				zap.Error(err),
 				zap.Int("attempt", msgRetryCnt+1),
