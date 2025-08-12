@@ -51,7 +51,9 @@ import (
 
 const (
 	sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	sk2Str = "3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
+	sk2Str = "3648db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
+	sk3Str = "3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
+	sk4Str = "3848db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
 )
 
 // TODO: increase test coverage, add more tests, e.g.:
@@ -233,7 +235,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators(context.TODO())
+			ctr.StartValidators(t.Context())
 		})
 	}
 }
