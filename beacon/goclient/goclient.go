@@ -25,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 const (
@@ -131,13 +130,6 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 
-	// registrationMu synchronizes access to registrations
-	registrationMu sync.Mutex
-	// registrations is a set of validator-registrations (their latest versions) to be sent to
-	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
-	// participating validators
-	registrations map[phase0.BLSPubKey]*validatorRegistration
-
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
 	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
@@ -198,7 +190,6 @@ func New(
 		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
@@ -257,14 +248,6 @@ func New(
 		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * config.SlotDuration),
 	)
 
-	slotTickerProvider := func() slotticker.SlotTicker {
-		return slotticker.New(logger, slotticker.Config{
-			SlotDuration: config.SlotDuration,
-			GenesisTime:  config.GenesisTime,
-		})
-	}
-
-	go client.registrationSubmitter(ctx, slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
@@ -421,11 +404,23 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 	return gc.beaconConfig, nil
 }
 
-var errSyncing = errors.New("syncing")
+var (
+	errUndefinedResponse = fmt.Errorf("undefined response")
+	errSyncing           = fmt.Errorf("syncing")
+	errOptimistic        = fmt.Errorf("optimistic")
+)
 
-// Healthy returns if the consensus client (for single client) or at least one of consensus clients (for multi client)
-// is currently healthy. It's healthy if it: responds to requests, is not in the syncing state, is not optimistic
-// (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
+// Healthy returns if the consensus client (for single-client) or at least one of consensus clients (for multi-client)
+// is currently healthy.
+// It's healthy if it:
+// - responds to API requests
+// - is already synced (including sync-distance check)
+// - is not optimistic (see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production)
+// Note, for multi-client case this function is checking every client separately instead of simply relying on the
+// corresponding multi-client `NodeSyncing` endpoint - this is because multi-client implementation does not allow
+// for sync-distance to be > 1 while we do want to allow for that (in case we have multiple clients and none of them
+// has sync-distance of <= 1 we still want Healthy to report success so that SSV node can survive such occasional CL
+// hiccups without having to restart).
 func (gc *GoClient) Healthy(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -446,7 +441,7 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 		}()
 	}
 
-	// Wait only for the result: either one success, or all errors
+	// Wait only for the result: either one success or all errors
 	var errs error
 	for i := 0; i < len(gc.clients); i++ {
 		select {
@@ -487,12 +482,12 @@ func (gc *GoClient) checkNodeHealth(ctx context.Context, client Client) error {
 	if nodeSyncingResp == nil {
 		logger.Error(clNilResponseErrMsg)
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
-		return fmt.Errorf("node syncing response is nil")
+		return fmt.Errorf("%w: node syncing response is nil", errUndefinedResponse)
 	}
 	if nodeSyncingResp.Data == nil {
 		logger.Error(clNilResponseDataErrMsg)
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
-		return fmt.Errorf("node syncing data is nil")
+		return fmt.Errorf("%w: node syncing data is nil", errUndefinedResponse)
 	}
 	syncState := nodeSyncingResp.Data
 	recordBeaconClientStatus(ctx, statusSyncing, client.Address())
@@ -504,7 +499,7 @@ func (gc *GoClient) checkNodeHealth(ctx context.Context, client Client) error {
 	}
 	if syncState.IsOptimistic {
 		logger.Error("Consensus client is in optimistic mode")
-		return fmt.Errorf("optimistic")
+		return errOptimistic
 	}
 
 	recordBeaconClientStatus(ctx, statusSynced, client.Address())

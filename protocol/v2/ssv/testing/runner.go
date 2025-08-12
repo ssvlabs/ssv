@@ -2,15 +2,14 @@ package testing
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
+	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
@@ -19,7 +18,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -116,6 +117,9 @@ var ConstructBaseRunner = func(
 	shareMap[share.ValidatorIndex] = share
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
+	rStorage := mocks.NewMockrecipientsStorage()
+	rStorage.FeeRecipient = share.FeeRecipientAddress
+
 	var r runner.Runner
 	var err error
 
@@ -181,13 +185,17 @@ var ConstructBaseRunner = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
+		beaconNode := tests.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			common.Address{},
+			beaconNode,
 			net,
 			km,
 			opSigner,
+			rStorage,
+			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
@@ -214,7 +222,7 @@ var ConstructBaseRunner = func(
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
-		return nil, errors.New("unknown role type")
+		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
 	return r, err
 }
@@ -440,13 +448,17 @@ var ConstructBaseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
+		beaconNode := tests.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			common.Address{},
+			beaconNode,
 			net,
 			km,
 			opSigner,
+			nil, // recipientStorage is unused in these tests
+			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
@@ -475,7 +487,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 		}
 	default:
-		return nil, errors.New("unknown role type")
+		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
 	return r, err
 }
