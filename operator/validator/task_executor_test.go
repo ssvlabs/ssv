@@ -95,9 +95,7 @@ func (signable) GetRoot() ([32]byte, error) {
 func TestController_StopValidator(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
-	secretKey2 := &bls.SecretKey{}
 	require.NoError(t, secretKey.SetHexString(secretKeyStrings[0]))
-	require.NoError(t, secretKey2.SetHexString(secretKeyStrings[0]))
 
 	firstValidator := &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
