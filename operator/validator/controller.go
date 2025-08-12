@@ -811,7 +811,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 }
 
 func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*spectypes.CommitteeMember, error) {
-	operators := make([]*spectypes.Operator, 0, len(share.Committee))
+	activeOperators := make([]*spectypes.Operator, 0, len(share.Committee))
 
 	for _, cm := range share.Committee {
 		opdata, found, err := c.operatorsStorage.GetOperatorData(nil, cm.Signer)
@@ -831,7 +831,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			return nil, fmt.Errorf("could not decode public key: %w", err)
 		}
 
-		operators = append(operators, &spectypes.Operator{
+		activeOperators = append(activeOperators, &spectypes.Operator{
 			OperatorID:        cm.Signer,
 			SSVOperatorPubKey: operatorPEM,
 		})
@@ -841,8 +841,8 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 	// It can happen after an operator is removed. In such a scenario, the committee should
 	// continue conducting duties, but the number of operators must still meet the quorum.
 	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
-	if uint64(len(operators)) < quorum {
-		return nil, fmt.Errorf("not enough committee members: %d < %d", len(operators), quorum)
+	if uint64(len(activeOperators)) < quorum {
+		return nil, fmt.Errorf("not enough committee members: %d < %d", len(activeOperators), quorum)
 	}
 
 	faultyNodeTolerance := ssvtypes.ComputeF(uint64(len(share.Committee)))
@@ -857,7 +857,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		CommitteeID:       share.CommitteeID(),
 		SSVOperatorPubKey: operatorPEM,
 		FaultyNodes:       faultyNodeTolerance,
-		Committee:         operators,
+		Committee:         activeOperators,
 	}, nil
 }
 
