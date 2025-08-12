@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -118,11 +119,25 @@ func (c *Committee) ConsumeQueue(
 	state := *q.queueState
 	lens := make([]int, 0, 10)
 
+	type retryIDType string
+	retryID := func(msg *queue.SSVMessage) retryIDType {
+		sig := "undefined"
+		if msg.MsgType == spectypes.SSVConsensusMsgType {
+			signers := msg.SignedSSVMessage.OperatorIDs
+			sig = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(signers)), "-"), "[]")
+		}
+		if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
+			psm := msg.Body.(*spectypes.PartialSignatureMessages)
+			signer := psm.Messages[0].Signer // same signer for all messages
+			sig = fmt.Sprintf("%d", signer)
+		}
+		return retryIDType(fmt.Sprintf("%s-%s", msg.MsgID, sig))
+	}
 	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
 	msgRetries := ttlcache.New(
-		ttlcache.WithTTL[spectypes.MessageID, int](10 * time.Minute),
+		ttlcache.WithTTL[retryIDType, int](10 * time.Minute),
 	)
 	go msgRetries.Start()
 
@@ -183,12 +198,12 @@ func (c *Committee) ConsumeQueue(
 		if err != nil {
 			const (
 				retryDelay = 10 * time.Millisecond
-				retryCount = 100
+				retryCount = 99
 			)
-			msgRetryItem := msgRetries.Get(msg.MsgID)
+			msgRetryItem := msgRetries.Get(retryID(msg))
 			if msgRetryItem == nil {
-				msgRetries.Set(msg.MsgID, 0, ttlcache.DefaultTTL)
-				msgRetryItem = msgRetries.Get(msg.MsgID)
+				msgRetries.Set(retryID(msg), 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(retryID(msg))
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
@@ -206,7 +221,7 @@ func (c *Committee) ConsumeQueue(
 				errors.Is(err, runner.ErrWrongMsgRound) || errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
 
 				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
-				msgRetries.Set(msg.MsgID, msgRetryCnt+1, ttlcache.DefaultTTL)
+				msgRetries.Set(retryID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func() {
 					time.Sleep(retryDelay)
 					q.Q.Push(msg)
