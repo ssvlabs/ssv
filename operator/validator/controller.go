@@ -162,6 +162,7 @@ type controller struct {
 	ibftStorageMap                 *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
+	beaconSigner   ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore
