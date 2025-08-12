@@ -367,10 +367,15 @@ func TestSetupValidators(t *testing.T) {
 		OwnerAddress: common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 	}
 
-	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
-	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
-	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
+	const (
+		ownerAddr    = "67Ce5c69260bd819B4e0AD13f4b873074D479811"
+		feeRecipient = "45E668aba4b7fc8761331EC3CE77584B7A99A51A"
+	)
+
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, ownerAddr))
+	recipientData := buildFeeRecipient(ownerAddr, feeRecipient)
+	ownerAddressBytes := decodeHex(t, ownerAddr, "Failed to decode owner address")
+	feeRecipientBytes := decodeHex(t, feeRecipient, "Failed to decode second fee recipient address")
 	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
 
 	opStorage, done := newOperatorStorageForTest(logger)
@@ -416,7 +421,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
 			name:               "setting fee recipient to owner address",
@@ -432,7 +437,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
 			name:               "failed to set fee recipient",
@@ -448,7 +453,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
 			name:               "start share with metadata",
@@ -464,7 +469,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
 			name:               "start share without metadata",
@@ -480,7 +485,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
 			name:               "failed to get GetValidatorData",
@@ -496,7 +501,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
 			name:               "failed to start validator",
@@ -512,7 +517,7 @@ func TestSetupValidators(t *testing.T) {
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, errors.New("some error")
 			},
-			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
 			name: "operator data removed - enough for quorum committee members",
@@ -527,7 +532,6 @@ func TestSetupValidators(t *testing.T) {
 					Status:                    v1.ValidatorStateActiveOngoing,
 					ActivationEpoch:           activationEpoch,
 					ExitEpoch:                 exitEpoch,
-					OwnerAddress:              common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 					BeaconMetadataLastUpdated: time.Now(),
 				},
 			},
@@ -561,7 +565,6 @@ func TestSetupValidators(t *testing.T) {
 					Status:                    v1.ValidatorStateActiveOngoing,
 					ActivationEpoch:           activationEpoch,
 					ExitEpoch:                 exitEpoch,
-					OwnerAddress:              common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 					BeaconMetadataLastUpdated: time.Now(),
 				},
 			},
@@ -1015,12 +1018,12 @@ func buildOperatorData(id uint64, ownerAddress string) *registrystorage.Operator
 	}
 }
 
-func buildFeeRecipient(Owner string, FeeRecipient string) *registrystorage.RecipientData {
-	feeRecipientSlice := []byte(FeeRecipient) // Assuming FeeRecipient is a string or similar
+func buildFeeRecipient(owner string, feeRecipient string) *registrystorage.RecipientData {
+	feeRecipientSlice := []byte(feeRecipient) // Assuming FeeRecipient is a string or similar
 	var executionAddress bellatrix.ExecutionAddress
 	copy(executionAddress[:], feeRecipientSlice)
 	return &registrystorage.RecipientData{
-		Owner:        common.BytesToAddress([]byte(Owner)),
+		Owner:        common.BytesToAddress([]byte(owner)),
 		FeeRecipient: executionAddress,
 		Nonce:        nil,
 	}
