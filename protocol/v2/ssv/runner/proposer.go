@@ -161,6 +161,10 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		}
 	}
 
+	waitedOutProposerDelayEvent := fmt.Sprintf("waited out proposer delay of %dms", r.proposerDelay.Milliseconds())
+	logger.Debug(waitedOutProposerDelayEvent)
+	span.AddEvent(waitedOutProposerDelayEvent)
+
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
