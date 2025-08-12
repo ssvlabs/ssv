@@ -237,6 +237,22 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 				zap.Error(err),
 				zap.Int("attempt", msgRetryCnt+1),
 			)
+		} else {
+			// TODO - remove this debug-print
+			msgRetryCnt := 0
+			msgRetryItem := msgRetries.Get(messageID(msg))
+			if msgRetryItem != nil {
+				msgRetryCnt = msgRetryItem.Value()
+			}
+			v.logMsg(
+				logger,
+				msg,
+				"SUCCESS : ❗ could not handle message : SUCCESS",
+				zap.String("message_identifier", string(messageID(msg))),
+				fields.MessageType(msg.MsgType),
+				zap.Error(err),
+				zap.Int("attempt", msgRetryCnt+1),
+			)
 		}
 	}
 
