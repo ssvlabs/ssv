@@ -207,10 +207,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.New("not processing consensus message since consensus has already finished")
 	}
 
-	if !b.hasRunningDuty() {
-		return false, nil, ErrNoRunningDuty
-	}
-
 	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
 	if errors.Is(err, controller.ErrInstanceNotFound) {
 		return false, nil, fmt.Errorf("%w: %v", ErrInstanceNotFound, err)
@@ -229,6 +225,19 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	}
 	if err != nil {
 		return false, nil, err
+	}
+
+	// TODO: since we can replay runner messages now (implemented in https://github.com/ssvlabs/ssv/pull/2445),
+	// we don't need to have this ad-hoc handling for consensus messages (where we "apply the message-effects to
+	// the best extent we can") anymore - instead we could return `ErrNoRunningDuty` so that the message will be
+	// replayed later (and hopefully the duty will be running by that time). Technically this would mean we won't
+	// be able to process the case of "receiving decided message", but we probably don't want to anyway since
+	// that case can only happen when we either have a bug somewhere or our clock is lagging behind the rest of
+	// the cluster so much that we start duty only after the rest of the cluster has already decided QBFT for
+	// this duty.
+	if !b.hasRunningDuty() {
+		logger.Debug("no running duty")
+		return false, nil, nil
 	}
 
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
