@@ -107,10 +107,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 	lens := make([]int, 0, 10)
 
-	type retryIDType string
+	type msgIDType string
 	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
 	// with different signers, slots, types, rounds, etc. - so we can't use that for retries)
-	messageID := func(msg *queue.SSVMessage) retryIDType {
+	messageID := func(msg *queue.SSVMessage) msgIDType {
 		const idUndefined = "undefined"
 		msgSlot, err := msg.Slot()
 		if err != nil {
@@ -120,12 +120,12 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		if msg.MsgType == spectypes.SSVConsensusMsgType {
 			sm := msg.Body.(*specqbft.Message)
 			signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
-			return retryIDType(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
+			return msgIDType(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
 		}
 		if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 			psm := msg.Body.(*spectypes.PartialSignatureMessages)
 			signer := fmt.Sprintf("%d", psm.Messages[0].Signer) // same signer for all messages
-			return retryIDType(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
+			return msgIDType(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
 		}
 		return idUndefined
 	}
@@ -133,8 +133,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
 	msgRetries := ttlcache.New(
-		//ttlcache.WithTTL[retryIDType, int](10 * time.Minute),
-		ttlcache.WithTTL[retryIDType, int](100000 * time.Hour), // TODO - testing growth
+		//ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
+		ttlcache.WithTTL[msgIDType, int](100000 * time.Hour), // TODO - testing growth
 	)
 	go msgRetries.Start()
 
