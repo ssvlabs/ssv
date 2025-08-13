@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -28,11 +27,14 @@ import (
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+	logger = logger.With(fields.MessageType(msg.MsgType), fields.MessageID(msg.MsgID))
+
 	slot, err := msg.Slot()
 	if err != nil {
-		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+		logger.Error("❌ could not get slot from message", zap.Error(err))
 		return
 	}
+
 	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
@@ -43,6 +45,8 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
+
+	logger = logger.With(fields.Slot(slot), fields.DutyID(dutyID))
 
 	msg.TraceContext = ctx
 	span.SetAttributes(observability.BeaconSlotAttribute(slot))
@@ -61,7 +65,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 		}
 		c.Queues[slot] = q
 		const eventMsg = "missing queue for slot created"
-		logger.Debug(eventMsg, fields.Slot(slot))
+		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 	}
 	c.mtx.Unlock()
@@ -69,9 +73,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 	span.AddEvent("pushing message to the queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
-		logger.Warn(errMsg,
-			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msg.MsgID.String()))
+		logger.Warn(errMsg)
 		span.SetStatus(codes.Error, errMsg)
 	} else {
 		span.SetStatus(codes.Ok, "")
