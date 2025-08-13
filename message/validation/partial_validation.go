@@ -14,7 +14,7 @@ import (
 
 func (mv *messageValidator) validatePartialSignatureMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
-	committeeInfo CommitteeInfo,
+	validatorIndices []phase0.ValidatorIndex,
 	receivedAt time.Time,
 ) (
 	*spectypes.PartialSignatureMessages,
@@ -36,13 +36,13 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, e
 	}
 
-	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.indices); err != nil {
+	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, validatorIndices); err != nil {
 		return nil, err
 	}
 
 	msgID := ssvMessage.GetID()
 	state := mv.consensusState(msgID)
-	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedAt, state); err != nil {
+	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, validatorIndices, receivedAt, state); err != nil {
 		return nil, err
 	}
 
@@ -134,7 +134,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
-	committeeInfo CommitteeInfo,
+	validatorIndices []phase0.ValidatorIndex,
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
@@ -155,7 +155,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	}
 
 	randaoMsg := partialSignatureMessages.Type == spectypes.RandaoPartialSig
-	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.indices, randaoMsg); err != nil {
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, validatorIndices, randaoMsg); err != nil {
 		return err
 	}
 
@@ -184,11 +184,11 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	// - 2 for aggregation, voluntary exit and validator registration
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
-	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.indices, signerStateBySlot); err != nil {
+	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, validatorIndices, signerStateBySlot); err != nil {
 		return err
 	}
 
-	clusterValidatorCount := len(committeeInfo.indices)
+	clusterValidatorCount := len(validatorIndices)
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {

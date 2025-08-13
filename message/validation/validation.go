@@ -190,7 +190,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo.indices, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
@@ -266,28 +266,18 @@ func (mv *messageValidator) getCommitteeInfo(msgID spectypes.MessageID) (Committ
 			return CommitteeInfo{}, e
 		}
 
-		activeOperators := make([]spectypes.OperatorID, 0, len(committee.Operators))
-		for _, operator := range committee.Operators {
-			exist, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{operator})
-			if err != nil {
-				mv.logger.Error("could not check if operator exists. Assuming it does not", zap.Error(err), fields.OperatorID(operator))
-				continue
-			}
-			if exist {
-				activeOperators = append(activeOperators, operator)
-			}
+		//TODO: check if all validators exit in operator store
+		if len(committee.Indices) == 0 {
+			return CommitteeInfo{}, ErrNoValidators
 		}
+
+		activeOperators := mv.fetchActiveOperators(committee.Operators)
 
 		quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee.Operators)))
 		if uint64(len(activeOperators)) < quorum {
 			return CommitteeInfo{}, ErrInsufficientActiveOperatorsForQuorum
 		}
 
-		//TODO: check if all validators exit in operator store
-		if len(committee.Indices) == 0 {
-			return CommitteeInfo{}, ErrNoValidators
-		}
-		
 		return CommitteeInfo{
 			operatorIDs: activeOperators,
 			indices:     committee.Indices,
@@ -323,11 +313,35 @@ func (mv *messageValidator) getCommitteeInfo(msgID spectypes.MessageID) (Committ
 		operators = append(operators, c.Signer)
 	}
 
+	activeOperators := mv.fetchActiveOperators(operators)
+
+	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
+	if uint64(len(activeOperators)) < quorum {
+		return CommitteeInfo{}, ErrInsufficientActiveOperatorsForQuorum
+	}
+
 	return CommitteeInfo{
-		operatorIDs: operators,
+		operatorIDs: activeOperators,
 		indices:     []phase0.ValidatorIndex{share.ValidatorIndex},
 		committeeID: share.CommitteeID(),
 	}, nil
+}
+
+func (mv *messageValidator) fetchActiveOperators(operators []spectypes.OperatorID) []spectypes.OperatorID {
+	activeOperators := make([]spectypes.OperatorID, 0, len(operators))
+
+	for _, operator := range operators {
+		exist, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{operator})
+		if err != nil {
+			mv.logger.Error("could not check if operator exists. Assuming it does not", zap.Error(err), fields.OperatorID(operator))
+			continue
+		}
+		if exist {
+			activeOperators = append(activeOperators, operator)
+		}
+	}
+
+	return activeOperators
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
