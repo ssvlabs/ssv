@@ -60,11 +60,11 @@ func (b *BaseRunner) validatePartialSigMsg(psigMsgs *spectypes.PartialSignatureM
 	if psigMsgs.Slot < expectedSlot {
 		// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
 		// and we cannot process it anymore
-		return fmt.Errorf("invalid partial sig slot")
+		return fmt.Errorf("invalid partial sig slot: %d, want: %d", psigMsgs.Slot, expectedSlot)
 	}
 
 	if psigMsgs.Slot > expectedSlot {
-		return ErrFuturePartialSigMsg
+		return fmt.Errorf("%w, got: %d, want: %d", ErrFuturePartialSigMsg, psigMsgs.Slot, expectedSlot)
 	}
 
 	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate()).
