@@ -327,8 +327,16 @@ func (mv *messageValidator) getCommitteeInfo(msgID spectypes.MessageID) (Committ
 }
 
 func (mv *messageValidator) fetchActiveOperators(operators []spectypes.OperatorID) []spectypes.OperatorID {
-	activeOperators := make([]spectypes.OperatorID, 0, len(operators))
+	exist, err := mv.operators.OperatorsExist(nil, operators)
+	if err != nil {
+		mv.logger.Error("could not check if operator exists. Assuming it does not", zap.Error(err), fields.OperatorIDs(operators))
+		return []spectypes.OperatorID{}
+	}
+	if exist {
+		return operators
+	}
 
+	activeOperators := make([]spectypes.OperatorID, 0, len(operators))
 	for _, operator := range operators {
 		exist, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{operator})
 		if err != nil {

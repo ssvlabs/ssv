@@ -112,6 +112,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		return nil, false
 	}).AnyTimes()
 
+	operators.EXPECT().
+		OperatorsExist(gomock.Any(), []spectypes.OperatorID{1, 2, 3, 4}).
+		Return(true, nil).
+		AnyTimes()
+
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4, 5} {
 		operators.EXPECT().
 			OperatorsExist(gomock.Any(), []spectypes.OperatorID{id}).
