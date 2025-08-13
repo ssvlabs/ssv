@@ -5,6 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/eth/loganalyzer"
 	"github.com/ssvlabs/ssv/observability/log"
 )
 
@@ -21,5 +22,12 @@ func WithLogger(logger *zap.Logger) Option {
 func WithStalenessThreshold(threshold time.Duration) Option {
 	return func(es *EventSyncer) {
 		es.stalenessThreshold = threshold
+	}
+}
+
+// WithLogAnalyzer enables log analysis for debugging missing events.
+func WithLogAnalyzer(analyzer *loganalyzer.LogAnalyzer) Option {
+	return func(es *EventSyncer) {
+		es.logAnalyzer = analyzer
 	}
 }

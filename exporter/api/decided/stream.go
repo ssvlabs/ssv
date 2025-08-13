@@ -38,7 +38,6 @@ func NewStreamPublisher(logger *zap.Logger, domainType spectypes.DomainType, ws 
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
 func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws api.WebSocketServer) func(dutytracer.DecidedInfo) {
 	feed := ws.BroadcastFeed()
-	logger = logger.Named("DecidedListener")
 	cache := cache.New(time.Minute, 90*time.Second) // 1m TTL, 1.5m eviction to avoid flooding ws stream
 
 	return func(msg dutytracer.DecidedInfo) {
@@ -58,12 +57,6 @@ func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws 
 			// already sent in the last minute, skipping to avoid flooding ws stream
 			return
 		}
-		logger.Info("sending to websocket feed",
-			zap.String("validator_pk", fmt.Sprintf("%x", msg.PubKey[:])),
-			zap.String("signers", fmt.Sprintf("%v", msg.Signers)),
-			zap.Uint64("slot", uint64(msg.Slot)),
-			zap.String("role", msg.Role.String()),
-		)
 		cache.SetDefault(key, true)
 		feed.Send(api.NewParticipantsAPIMsg(domainType, participation))
 	}
