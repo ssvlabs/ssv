@@ -109,19 +109,25 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 	type retryIDType string
 	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
-	// with different signers - so we can't use that for retries)
+	// with different signers, slots, types, rounds, etc. - so we can't use that for retries)
 	messageID := func(msg *queue.SSVMessage) retryIDType {
-		sig := "undefined"
+		const idUndefined = "undefined"
+		msgSlot, err := msg.Slot()
+		if err != nil {
+			logger.Error("couldn't get message slot", zap.Error(err))
+			return idUndefined
+		}
 		if msg.MsgType == spectypes.SSVConsensusMsgType {
-			signers := msg.SignedSSVMessage.OperatorIDs
-			sig = strings.Join(strings.Fields(fmt.Sprint(signers)), "-")
+			sm := msg.Body.(*specqbft.Message)
+			signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
+			return retryIDType(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
 		}
 		if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 			psm := msg.Body.(*spectypes.PartialSignatureMessages)
-			signer := psm.Messages[0].Signer // same signer for all messages
-			sig = fmt.Sprintf("%d", signer)
+			signer := fmt.Sprintf("%d", psm.Messages[0].Signer) // same signer for all messages
+			return retryIDType(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
 		}
-		return retryIDType(fmt.Sprintf("%s-%s", msg.MsgID, sig))
+		return idUndefined
 	}
 	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
@@ -274,6 +280,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
+			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
 			zap.Uint64("signer", psm.Messages[0].Signer), // same signer for all messages
 			fields.Slot(psm.Slot),
 		}
