@@ -19,7 +19,9 @@ import (
 )
 
 const (
-	DefaultQueueSize = 32
+	// TODO - 32 per validator+role seems too restrictive, lets bump it up
+	//DefaultQueueSize = 32
+	DefaultQueueSize = 320
 )
 
 // Options represents validator-specific options.
