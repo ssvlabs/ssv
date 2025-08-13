@@ -16,11 +16,15 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
 type NewDecidedHandler func(msg qbftstorage.Participation)
+type operatorStore interface {
+	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+}
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
@@ -33,6 +37,7 @@ type Controller struct {
 	NewDecidedHandler NewDecidedHandler       `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
+	operatorStore     operatorStore
 }
 
 func NewController(
@@ -41,6 +46,7 @@ func NewController(
 	config qbft.IConfig,
 	signer ssvtypes.OperatorSigner,
 	fullNode bool,
+	operatorStore operatorStore,
 ) *Controller {
 	return &Controller{
 		Identifier:      identifier,
@@ -50,6 +56,7 @@ func NewController(
 		config:          config,
 		OperatorSigner:  signer,
 		fullNode:        fullNode,
+		operatorStore:   operatorStore,
 	}
 }
 
@@ -179,7 +186,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) (bool, err
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	i := instance.NewInstance(c.operatorStore, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

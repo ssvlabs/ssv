@@ -100,6 +100,7 @@ func TestQBFTMapping(t *testing.T) {
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
+				nil,
 				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember)),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,

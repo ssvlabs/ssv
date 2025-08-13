@@ -277,6 +277,7 @@ var baseCommitteeWithRunnerSample = func(
 				runnerSample.BaseRunner.QBFTController.GetConfig(),
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
+				nil,
 			),
 			runnerSample.GetBeaconNode(),
 			runnerSample.GetNetwork(),

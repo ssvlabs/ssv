@@ -55,6 +55,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	share := spectestingutils.TestingCommitteeMember(keySet)
 	inst := instance.NewInstance(
+		nil,
 		testConfig,
 		share,
 		identifier,

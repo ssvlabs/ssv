@@ -398,6 +398,7 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 		config,
 		spectestingutils.NewOperatorSigner(ks, 1),
 		false,
+		nil,
 	)
 	newContr.Height = contr.Height
 	newContr.StoredInstances = contr.StoredInstances
@@ -415,6 +416,7 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 func fixInstanceForRun(t *testing.T, ks *spectestingutils.TestKeySet, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	newInst := instance.NewInstance(
+		nil,
 		contr.GetConfig(),
 		share,
 		contr.Identifier,

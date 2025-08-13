@@ -754,7 +754,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorCommonOpts, c.operatorsStorage)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
@@ -785,7 +785,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
 		}...)
 
-		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
+		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts, c.operatorsStorage)
 
 		vc = validator.NewCommittee(
 			ctx,
@@ -1042,6 +1042,7 @@ func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIn
 func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
+	store registrystorage.Operators,
 ) validator.CommitteeRunnerFunc {
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
@@ -1058,7 +1059,7 @@ func SetupCommitteeRunners(
 		}
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
+		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode, store)
 		return qbftCtrl
 	}
 
@@ -1097,6 +1098,7 @@ func SetupRunners(
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
 	options *validator.CommonOptions,
+	store registrystorage.Operators,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
@@ -1123,7 +1125,7 @@ func SetupRunners(
 		config.ValueCheckF = valueCheckF
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], operator, config, options.OperatorSigner, options.FullNode)
+		qbftCtrl := qbftcontroller.NewController(identifier[:], operator, config, options.OperatorSigner, options.FullNode, store)
 		return qbftCtrl
 	}
 

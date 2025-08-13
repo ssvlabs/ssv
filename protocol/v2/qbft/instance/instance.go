@@ -41,6 +41,7 @@ type Instance struct {
 }
 
 func NewInstance(
+	operatorStore operatorStore,
 	config qbft.IConfig,
 	committeeMember *spectypes.CommitteeMember,
 	identifier []byte,
@@ -81,7 +82,7 @@ func (i *Instance) ForceStop() {
 func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
-		i.logger = logger
+		i.logger = logger.Named("qbft_instance")
 		i.bumpToRound(ctx, specqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
@@ -272,14 +273,16 @@ func (i *Instance) CanProcessMessages() bool {
 }
 
 func (i *Instance) RefreshState() {
-	ticker := time.NewTicker(time.Second * 15)
+	const interval = time.Second * 15
+	i.logger.Info("launching QBFT instance state refresh", zap.Duration("interval", interval))
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
 			activeOperators := make([]*spectypes.Operator, 0, len(i.State.CommitteeMember.Committee))
-
 			for _, operator := range i.State.CommitteeMember.Committee {
 				exist, err := i.operatorStore.OperatorsExist(nil, []spectypes.OperatorID{operator.OperatorID})
 				if err != nil {
@@ -291,8 +294,16 @@ func (i *Instance) RefreshState() {
 						fields.OperatorID(operator.OperatorID),
 						fields.CommitteeID(i.State.CommitteeMember.CommitteeID))
 				}
+
+				i.logger.Info("operator is active, adding to the list", fields.OperatorID(operator.OperatorID))
 				activeOperators = append(activeOperators, operator)
 			}
+
+			i.logger.Info("updating committee operator list",
+				fields.CommitteeID(i.State.CommitteeMember.CommitteeID),
+				zap.Int("active_operators", len(activeOperators)),
+				zap.Int("previous_operators", len(i.State.CommitteeMember.Committee)),
+			)
 
 			i.State.CommitteeMember.Committee = activeOperators
 		default:
