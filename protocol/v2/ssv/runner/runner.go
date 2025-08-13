@@ -231,10 +231,10 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	// we don't need to have this ad-hoc handling for consensus messages (where we "apply the message-effects to
 	// the best extent we can") anymore - instead we could return `ErrNoRunningDuty` so that the message will be
 	// replayed later (and hopefully the duty will be running by that time). Technically this would mean we won't
-	// be able to process the case of "receiving decided message", but we probably don't want to anyway since
-	// that case can only happen when we either have a bug somewhere or our clock is lagging behind the rest of
-	// the cluster so much that we start duty only after the rest of the cluster has already decided QBFT for
-	// this duty.
+	// be able to process the case of "having received a decided message BEFORE we've started corresponding duty",
+	// but we probably don't want to anyway since that case can only happen when we either have a bug somewhere
+	// or our clock is lagging behind the rest of the cluster so much that we start duty only after the rest of
+	// the cluster has already decided QBFT for this duty.
 	if !b.hasRunningDuty() {
 		logger.Debug("no running duty")
 		return false, nil, nil
