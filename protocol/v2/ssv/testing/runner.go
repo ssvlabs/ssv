@@ -98,7 +98,7 @@ var ConstructBaseRunner = func(
 
 	config := testing.TestingConfig(logger, keySet)
 	config.ValueCheckF = valCheck
-	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+	config.ProposerF = func(committee []*spectypes.Operator, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 		return 1
 	}
 	config.Network = net
@@ -361,7 +361,7 @@ var ConstructBaseRunnerWithShareMap = func(
 
 		config := testing.TestingConfig(logger, keySetInstance)
 		config.ValueCheckF = valCheck
-		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+		config.ProposerF = func(committee []*spectypes.Operator, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		}
 		config.Network = net

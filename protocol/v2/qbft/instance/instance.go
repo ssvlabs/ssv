@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -14,14 +15,21 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+type operatorStore interface {
+	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+}
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
-	State  *specqbft.State
-	config qbft.IConfig
-	signer ssvtypes.OperatorSigner
+	logger        *zap.Logger
+	State         *specqbft.State
+	config        qbft.IConfig
+	signer        ssvtypes.OperatorSigner
+	operatorStore operatorStore
 
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
@@ -73,6 +81,7 @@ func (i *Instance) ForceStop() {
 func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
+		i.logger = logger
 		i.bumpToRound(ctx, specqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
@@ -82,7 +91,8 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 			fields.Round(i.State.Round),
 			fields.Height(i.State.Height))
 
-		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
+		proposerID := proposer(i.State.CommitteeMember.Committee, i.GetConfig(), specqbft.FirstRound, i.State.Height)
+
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
@@ -107,6 +117,8 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 				}
 			}
 		}
+
+		go i.RefreshState()
 	})
 }
 
@@ -257,4 +269,36 @@ func (i *Instance) bumpToRound(ctx context.Context, round specqbft.Round) {
 // CanProcessMessages will return true if instance can process messages
 func (i *Instance) CanProcessMessages() bool {
 	return !i.forceStop && i.State.Round < i.config.GetCutOffRound()
+}
+
+func (i *Instance) RefreshState() {
+	ticker := time.NewTicker(time.Second * 15)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			activeOperators := make([]*spectypes.Operator, 0, len(i.State.CommitteeMember.Committee))
+
+			for _, operator := range i.State.CommitteeMember.Committee {
+				exist, err := i.operatorStore.OperatorsExist(nil, []spectypes.OperatorID{operator.OperatorID})
+				if err != nil {
+					i.logger.Error("could not fetch operator from the store", fields.OperatorID(operator.OperatorID))
+					continue
+				}
+				if !exist {
+					i.logger.Info("operator no longer exists in committee. Will update committee",
+						fields.OperatorID(operator.OperatorID),
+						fields.CommitteeID(i.State.CommitteeMember.CommitteeID))
+				}
+				activeOperators = append(activeOperators, operator)
+			}
+
+			i.State.CommitteeMember.Committee = activeOperators
+		default:
+			if i.forceStop {
+				return
+			}
+		}
+	}
 }

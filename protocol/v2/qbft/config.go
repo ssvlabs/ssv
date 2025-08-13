@@ -10,6 +10,8 @@ import (
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 
+type ProposerF func(committee []*spectypes.Operator, height specqbft.Height, round specqbft.Round) spectypes.OperatorID
+
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
 	GetShareSigner() ekm.BeaconSigner
@@ -22,7 +24,7 @@ type IConfig interface {
 	// GetValueCheckF returns value check function
 	GetValueCheckF() specqbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() specqbft.ProposerF
+	GetProposerF() ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() specqbft.Network
 	// GetTimer returns round timer
@@ -35,7 +37,7 @@ type Config struct {
 	BeaconSigner ekm.BeaconSigner
 	Domain       spectypes.DomainType
 	ValueCheckF  specqbft.ProposedValueCheckF
-	ProposerF    specqbft.ProposerF
+	ProposerF    ProposerF
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
 	CutOffRound  specqbft.Round
@@ -57,7 +59,7 @@ func (c *Config) GetValueCheckF() specqbft.ProposedValueCheckF {
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() specqbft.ProposerF {
+func (c *Config) GetProposerF() ProposerF {
 	return c.ProposerF
 }
 

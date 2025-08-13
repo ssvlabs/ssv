@@ -82,7 +82,7 @@ func isValidProposal(
 		return errors.New("signer not in committee")
 	}
 
-	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{proposer(state, config, msg.QBFTMessage.Round)}) {
+	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{proposer(state.CommitteeMember.Committee, config, msg.QBFTMessage.Round, msg.QBFTMessage.Height)}) {
 		return errors.New("proposal leader invalid")
 	}
 
@@ -254,24 +254,10 @@ func isProposalJustification(
 	}
 }
 
-func proposer(state *specqbft.State, config qbft.IConfig, round specqbft.Round) spectypes.OperatorID {
-	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
-	return config.GetProposerF()(state, round)
+func proposer(committee []*spectypes.Operator, config qbft.IConfig, round specqbft.Round, height specqbft.Height) spectypes.OperatorID {
+	return config.GetProposerF()(committee, height, round)
 }
 
-// CreateProposal
-/**
-  	Proposal(
-                        signProposal(
-                            UnsignedProposal(
-                                |current.blockchain|,
-                                newRound,
-                                digest(block)),
-                            current.id),
-                        block,
-                        extractSignedRoundChanges(roundChanges),
-                        extractSignedPrepares(prepares));
-*/
 func CreateProposal(state *specqbft.State, signer ssvtypes.OperatorSigner, fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {

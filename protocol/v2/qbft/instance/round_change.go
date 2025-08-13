@@ -232,7 +232,7 @@ func isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if proposer(state, config, roundChangeMsg.QBFTMessage.Round) != state.CommitteeMember.OperatorID {
+	if proposer(state.CommitteeMember.Committee, config, roundChangeMsg.QBFTMessage.Round, roundChangeMsg.QBFTMessage.Height) != state.CommitteeMember.OperatorID {
 		return errors.New("not proposer")
 	}
 

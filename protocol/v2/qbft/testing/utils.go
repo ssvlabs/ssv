@@ -30,7 +30,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *q
 			}
 			return nil
 		},
-		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
+		ProposerF: func(committee []*types.Operator, height specqbft.Height, round specqbft.Round) types.OperatorID {
 			return 1
 		},
 		Network:     testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
