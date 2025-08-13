@@ -2,6 +2,7 @@ package validation
 
 import (
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/logging"
 	"go.uber.org/zap"
 )
 
@@ -11,7 +12,7 @@ type Option func(validator *messageValidator)
 // WithLogger sets the logger for the messageValidator.
 func WithLogger(logger *zap.Logger) Option {
 	return func(mv *messageValidator) {
-		mv.logger = logger
+		mv.logger = logger.Named(logging.NameMessageValidator)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/utils/casts"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -167,7 +168,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	}
 
 	// TODO: leverage the validatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
-	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
+	committeeInfo, err := mv.getCommitteeInfo(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err
 	}
@@ -252,7 +253,7 @@ type CommitteeInfo struct {
 	committeeID spectypes.CommitteeID
 }
 
-func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
+func (mv *messageValidator) getCommitteeInfo(msgID spectypes.MessageID) (CommitteeInfo, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
@@ -265,12 +266,30 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, e
 		}
 
+		activeOperators := make([]spectypes.OperatorID, 0, len(committee.Operators))
+		for _, operator := range committee.Operators {
+			exist, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{operator})
+			if err != nil {
+				mv.logger.Error("could not check if operator exists. Assuming it does not", zap.Error(err), fields.OperatorID(operator))
+				continue
+			}
+			if exist {
+				activeOperators = append(activeOperators, operator)
+			}
+		}
+
+		quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee.Operators)))
+		if uint64(len(activeOperators)) < quorum {
+			return CommitteeInfo{}, ErrInsufficientActiveOperatorsForQuorum
+		}
+
+		//TODO: check if all validators exit in operator store
 		if len(committee.Indices) == 0 {
 			return CommitteeInfo{}, ErrNoValidators
 		}
-
+		
 		return CommitteeInfo{
-			operatorIDs: committee.Operators,
+			operatorIDs: activeOperators,
 			indices:     committee.Indices,
 			committeeID: committeeID,
 		}, nil

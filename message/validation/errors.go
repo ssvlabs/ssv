@@ -119,6 +119,7 @@ var (
 	ErrUnexpectedRoundChangeJustifications     = Error{text: "round change justifications unexpected for this message type", reject: true}
 	ErrNoPartialSignatureMessages              = Error{text: "no partial signature messages", reject: true}
 	ErrNoValidators                            = Error{text: "no validators for this committee ID", reject: true}
+	ErrInsufficientActiveOperatorsForQuorum    = Error{text: "insufficient active operators to reach quorum", reject: true}
 	ErrNoSignatures                            = Error{text: "no signatures", reject: true}
 	ErrSignersAndSignaturesWithDifferentLength = Error{text: "signature and operator ID length mismatch", reject: true}
 	ErrPartialSigOneSigner                     = Error{text: "partial signature message must have only one signer", reject: true}
