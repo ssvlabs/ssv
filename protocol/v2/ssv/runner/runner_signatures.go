@@ -51,30 +51,20 @@ func (b *BaseRunner) signBeaconObject(
 	}, nil
 }
 
-//func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
-//	signature, err := runner.GetSigner().SignBeaconObject(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
-//	if err != nil {
-//		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
-//	}
-//
-//	return &spectypes.SignedPartialSignatureMessage{
-//		Message:   *msg,
-//		Signature: signature,
-//		Signer:    b.Share.OperatorID,
-//	}, nil
-//}
-
 // Validate message content without verifying signatures
-func (b *BaseRunner) validatePartialSigMsgForSlot(
-	psigMsgs *spectypes.PartialSignatureMessages,
-	slot spec.Slot,
-) error {
+func (b *BaseRunner) validatePartialSigMsg(psigMsgs *spectypes.PartialSignatureMessages, expectedSlot spec.Slot) error {
 	if err := psigMsgs.Validate(); err != nil {
 		return errors.Wrap(err, "PartialSignatureMessages invalid")
 	}
 
-	if psigMsgs.Slot != slot {
-		return ErrInvalidPartialSigSlot
+	if psigMsgs.Slot < expectedSlot {
+		// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
+		// and we cannot process it anymore
+		return fmt.Errorf("invalid partial sig slot")
+	}
+
+	if psigMsgs.Slot > expectedSlot {
+		return ErrFuturePartialSigMsg
 	}
 
 	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate()).

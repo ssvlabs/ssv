@@ -12,16 +12,17 @@ var (
 	// ErrNoRunningDuty means we might not have started the duty yet, while another operator already did + sent this
 	// message to us.
 	ErrNoRunningDuty = fmt.Errorf("no running duty")
-	// ErrInvalidPartialSigSlot means the message we've got is targeting slot that's different from the one our duty
-	// is targeting, not sure how/why this happens, but for now we'll replay this message in case this is similar to
-	// "future message"-case.
-	ErrInvalidPartialSigSlot = fmt.Errorf("invalid partial sig slot")
+	// ErrFuturePartialSigMsg means the message we've got is "from the future"; it can happen if we haven't advanced
+	// the runner to the slot the message is targeting yet, while another operator already did + sent this message
+	// to us.
+	ErrFuturePartialSigMsg = fmt.Errorf("future partial sig msg")
 	// ErrInstanceNotFound means we might not have started the QBFT instance yet, while another operator already did
 	// + sent this message to us.
 	ErrInstanceNotFound = fmt.Errorf("instance not found")
-	// ErrFutureMsg means the message we've got is "from the future"; it means we haven't started QBFT instance for
-	// the slot the message is targeting yet, while another operator already did + sent this message to us.
-	ErrFutureMsg = fmt.Errorf("future msg")
+	// ErrFutureConsensusMsg means the message we've got is "from the future"; it can happen if we haven't started
+	// QBFT instance for the slot the message is targeting yet, while another operator already did + sent this
+	// message to us.
+	ErrFutureConsensusMsg = fmt.Errorf("future consensus msg")
 	// ErrWrongMsgHeight means the message we've got is targeting QBFT height that's different from the one our
 	// QBFT instance is targeting, not sure how/why this happens, but for now we'll replay this message in case
 	// this is similar to "future message" case.

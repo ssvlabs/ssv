@@ -123,7 +123,7 @@ func (c *Committee) ConsumeQueue(
 
 	type msgIDType string
 	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
-	// with different signers, slots, types, rounds, etc. - so we can't use that for retries)
+	// with different signers, slots, types, rounds, etc. - so we can't use just msg.ID as a unique identifier)
 	messageID := func(msg *queue.SSVMessage) msgIDType {
 		const idUndefined = "undefined"
 		msgSlot, err := msg.Slot()
@@ -226,8 +226,8 @@ func (c *Committee) ConsumeQueue(
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
 				logMsg += ", dropping message and terminating committee-runner"
-			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrInvalidPartialSigSlot) ||
-				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureMsg) ||
+			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrFuturePartialSigMsg) ||
+				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureConsensusMsg) ||
 				errors.Is(err, runner.ErrWrongMsgHeight) || errors.Is(err, runner.ErrNoProposalForRound) ||
 				errors.Is(err, runner.ErrWrongMsgRound) || errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
 

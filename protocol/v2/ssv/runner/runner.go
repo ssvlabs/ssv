@@ -212,7 +212,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, fmt.Errorf("%w: %v", ErrInstanceNotFound, err)
 	}
 	if errors.Is(err, controller.ErrFutureMsg) {
-		return false, nil, fmt.Errorf("%w: %v", ErrFutureMsg, err)
+		return false, nil, fmt.Errorf("%w: %v", ErrFutureConsensusMsg, err)
 	}
 	if errors.Is(err, controller.ErrWrongMsgHeight) {
 		return false, nil, fmt.Errorf("%w: %v", ErrWrongMsgHeight, err)
