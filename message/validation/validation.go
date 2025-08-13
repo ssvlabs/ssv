@@ -266,7 +266,6 @@ func (mv *messageValidator) getCommitteeInfo(msgID spectypes.MessageID) (Committ
 			return CommitteeInfo{}, e
 		}
 
-		//TODO: check if all validators exit in operator store
 		if len(committee.Indices) == 0 {
 			return CommitteeInfo{}, ErrNoValidators
 		}
