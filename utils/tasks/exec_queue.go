@@ -14,13 +14,6 @@ type Fn = queue.Fn
 // ExecQueueOpt enables to inject more parameters
 type ExecQueueOpt func(*executionQueue)
 
-// WithoutErrors disables errors
-func WithoutErrors() ExecQueueOpt {
-	return func(q *executionQueue) {
-		q.errs = nil
-	}
-}
-
 // executionQueue implements Queue interface
 type executionQueue struct {
 	waiting []Fn

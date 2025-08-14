@@ -2,9 +2,7 @@ package stringer
 
 import (
 	"encoding/hex"
-	"fmt"
 	"strconv"
-	"time"
 )
 
 type HexStringer struct {
@@ -13,14 +11,6 @@ type HexStringer struct {
 
 func (h HexStringer) String() string {
 	return hex.EncodeToString(h.Val)
-}
-
-type Int64Stringer struct {
-	Val int64
-}
-
-func (h Int64Stringer) String() string {
-	return strconv.Itoa(int(h.Val))
 }
 
 type Uint64Stringer struct {
@@ -45,12 +35,4 @@ type FuncStringer struct {
 
 func (s FuncStringer) String() string {
 	return s.Fn()
-}
-
-type SinceSeconds struct {
-	Val time.Time
-}
-
-func (s SinceSeconds) String() string {
-	return fmt.Sprintf("%f", time.Since(s.Val).Seconds())
 }
