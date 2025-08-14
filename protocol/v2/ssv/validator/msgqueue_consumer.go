@@ -215,7 +215,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
 				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
-				go func() {
+				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
 						logger.Warn(
@@ -224,7 +224,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 							fields.MessageType(msg.MsgType),
 						)
 					}
-				}()
+				}(msg)
 			default:
 				logMsg += ", dropping message"
 			}
