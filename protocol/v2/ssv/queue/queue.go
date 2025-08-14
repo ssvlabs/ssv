@@ -53,12 +53,6 @@ func New(capacity int) Queue {
 	}
 }
 
-// NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
-// with a capacity of 32 and a PusherDropping.
-func NewDefault() Queue {
-	return New(32)
-}
-
 func (q *priorityQueue) Push(msg *SSVMessage) {
 	q.inbox <- msg
 }

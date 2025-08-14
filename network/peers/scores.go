@@ -1,7 +1,6 @@
 package peers
 
 import (
-	"sort"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -65,33 +64,3 @@ wantedScoresLoop:
 	}
 	return scores, nil
 }
-
-// GetTopScores accepts a map of scores and returns the best n peers
-func GetTopScores(peerScores map[peer.ID]PeerScore, n int) map[peer.ID]PeerScore {
-	pl := make(peerScoresList, len(peerScores))
-	i := 0
-	for k, v := range peerScores {
-		pl[i] = peerScorePair{k, v}
-		i++
-	}
-	sort.Sort(sort.Reverse(pl))
-	res := make(map[peer.ID]PeerScore)
-	for _, item := range pl {
-		res[item.Key] = item.Score
-		if len(res) >= n {
-			break
-		}
-	}
-	return res
-}
-
-type peerScorePair struct {
-	Key   peer.ID
-	Score PeerScore
-}
-
-type peerScoresList []peerScorePair
-
-func (p peerScoresList) Len() int           { return len(p) }
-func (p peerScoresList) Less(i, j int) bool { return p[i].Score < p[j].Score }
-func (p peerScoresList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }

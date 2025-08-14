@@ -38,10 +38,6 @@ func NewProber(logger *zap.Logger, unhealthyHandler func(), nodes map[string]Nod
 	}
 }
 
-func (p *Prober) Healthy(context.Context) (bool, error) {
-	return p.healthy.Load(), nil
-}
-
 func (p *Prober) Start(ctx context.Context) {
 	go func() {
 		if err := p.Run(ctx); err != nil {

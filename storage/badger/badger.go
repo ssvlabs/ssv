@@ -34,11 +34,6 @@ func New(logger *zap.Logger, options basedb.Options) (*DB, error) {
 	return createDB(logger, options, false)
 }
 
-// NewInMemory creates an in-memory DB instance.
-func NewInMemory(logger *zap.Logger, options basedb.Options) (*DB, error) {
-	return createDB(logger, options, true)
-}
-
 func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*DB, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.

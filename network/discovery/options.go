@@ -39,18 +39,6 @@ type DiscV5Options struct {
 	EnableLogging bool
 }
 
-// DefaultOptions returns the default options
-func DefaultOptions(privateKey *ecdsa.PrivateKey) DiscV5Options {
-	return DiscV5Options{
-		NetworkKey: privateKey,
-		Bootnodes:  make([]string, 0),
-		Port:       commons.DefaultUDP,
-		TCPPort:    commons.DefaultTCP,
-		IP:         commons.DefaultIP,
-		BindIP:     net.IPv4zero.String(),
-	}
-}
-
 // Validate validates the options
 func (opts *DiscV5Options) Validate() error {
 	if opts.NetworkKey == nil {

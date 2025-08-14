@@ -207,18 +207,6 @@ func TestSharesStorage(t *testing.T) {
 		require.Equal(t, 1, len(validators))
 	})
 
-	t.Run("List_Filter_ByAttesting", func(t *testing.T) {
-		const epoch = 1
-		var attestingShares int
-		for _, shares := range persistedActiveValidatorShares {
-			if shares.IsAttesting(epoch) {
-				attestingShares++
-			}
-		}
-		validators := storage.Shares.List(nil, ByAttesting(epoch))
-		require.Equal(t, attestingShares, len(validators))
-	})
-
 	t.Run("KV_reuse_works", func(t *testing.T) {
 		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, storage.db, []byte("test"))
 		require.NoError(t, err)

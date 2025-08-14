@@ -1,3 +1,8 @@
+//go:build testutils
+
+// This file contains helpers for tests only.
+// It will not be compiled into production binaries.
+
 package p2pv1
 
 import (
@@ -44,7 +49,7 @@ type LocalNet struct {
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := p2pcommons.GenNetworkKey()
+	bnSk, err := testing.GenNetworkKey()
 	if err != nil {
 		return err
 	}

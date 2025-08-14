@@ -1,3 +1,5 @@
+//go:build testutils
+
 package records
 
 import (

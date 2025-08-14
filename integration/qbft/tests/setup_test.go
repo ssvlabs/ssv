@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -27,12 +26,6 @@ var sharedData *SharedData
 
 type SharedData struct {
 	Nodes map[spectypes.OperatorID]network.P2PNetwork
-}
-
-func GetSharedData(t *testing.T) SharedData { //singleton B-)
-	require.NotNil(t, sharedData, "shared data hadn't set up, try to run test with -test.main flag")
-
-	return *sharedData
 }
 
 func TestMain(m *testing.M) {

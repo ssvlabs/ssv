@@ -62,6 +62,20 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 	)
 }
 
+// WithLogBatchSize sets log batch size.
+func WithLogBatchSize(size uint64) Option {
+	return func(s *ExecutionClient) {
+		s.logBatchSize = size
+	}
+}
+
+// WithLogBatchSizeMulti sets log batch size.
+func WithLogBatchSizeMulti(size uint64) OptionMulti {
+	return func(s *MultiClient) {
+		s.logBatchSize = size
+	}
+}
+
 // testEnv is a helper struct to set up and manage test environment.
 type testEnv struct {
 	ctx          context.Context
