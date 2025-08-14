@@ -149,6 +149,7 @@ func (c *Committee) ConsumeQueue(
 		ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
 	)
 	go msgRetries.Start()
+	defer msgRetries.Stop()
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.

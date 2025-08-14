@@ -134,6 +134,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
 	)
 	go msgRetries.Start()
+	defer msgRetries.Stop()
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
