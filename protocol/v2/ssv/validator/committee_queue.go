@@ -254,22 +254,6 @@ func (c *Committee) ConsumeQueue(
 				// Optimization: stop queue consumer if the runner no longer has any valid duties to execute.
 				return
 			}
-		} else {
-			// TODO - remove this debug-print
-			msgRetryCnt := 0
-			msgRetryItem := msgRetries.Get(messageID(msg))
-			if msgRetryItem != nil {
-				msgRetryCnt = msgRetryItem.Value()
-			}
-			c.logMsg(
-				logger,
-				msg,
-				"SUCCESS : ❗ could not handle message : SUCCESS",
-				zap.String("message_identifier", string(messageID(msg))),
-				fields.MessageType(msg.MsgType),
-				zap.Error(err),
-				zap.Int("attempt", msgRetryCnt+1),
-			)
 		}
 	}
 }
