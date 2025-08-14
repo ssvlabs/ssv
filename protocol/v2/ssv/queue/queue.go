@@ -3,6 +3,8 @@ package queue
 import (
 	"context"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -40,6 +42,8 @@ type Queue interface {
 }
 
 type priorityQueue struct {
+	logger *zap.Logger
+
 	head     *item
 	inbox    chan *SSVMessage
 	lastRead time.Time
@@ -47,25 +51,22 @@ type priorityQueue struct {
 
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
-func New(capacity int) Queue {
+func New(logger *zap.Logger, capacity int) Queue {
 	return &priorityQueue{
-		inbox: make(chan *SSVMessage, capacity),
+		logger: logger,
+		inbox:  make(chan *SSVMessage, capacity),
 	}
 }
 
-// NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
-// with a capacity of 32 and a PusherDropping.
-func NewDefault() Queue {
-	return New(32)
-}
-
 func (q *priorityQueue) Push(msg *SSVMessage) {
+	q.maybeAlertInboxIsTooLarge()
 	q.inbox <- msg
 }
 
 func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 	select {
 	case q.inbox <- msg:
+		q.maybeAlertInboxIsTooLarge()
 		return true
 	default:
 		return false
@@ -194,6 +195,14 @@ func (q *priorityQueue) Len() int {
 		n++
 	}
 	return n
+}
+
+// maybeAlertInboxIsTooLarge logs a warning that we'd ideally never want to hit, if we do - we'd want to do
+// something about it.
+func (q *priorityQueue) maybeAlertInboxIsTooLarge() {
+	if len(q.inbox) > cap(q.inbox)/2 {
+		q.logger.Warn("queue is half-full")
+	}
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

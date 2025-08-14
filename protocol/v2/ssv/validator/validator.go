@@ -55,10 +55,10 @@ type Validator struct {
 }
 
 // NewValidator creates a new instance of Validator.
-func NewValidator(pctx context.Context, cancel func(), options *Options) *Validator {
+func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
 	v := &Validator{
 		mtx:              &sync.RWMutex{},
-		ctx:              pctx,
+		ctx:              ctx,
 		cancel:           cancel,
 		NetworkConfig:    options.NetworkConfig,
 		DutyRunners:      options.DutyRunners,
@@ -81,7 +81,7 @@ func NewValidator(pctx context.Context, cancel func(), options *Options) *Valida
 		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
 		v.Queues[role] = QueueContainer{
-			Q: queue.New(options.QueueSize),
+			Q: queue.New(logger, options.QueueSize),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,

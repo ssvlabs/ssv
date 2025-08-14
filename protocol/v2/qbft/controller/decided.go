@@ -70,7 +70,8 @@ func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
 		return errors.New("not a decided msg")
 	}
 
-	if err := instance.BaseCommitValidationVerifySignature(msg, msg.QBFTMessage.Height, c.CommitteeMember.Committee); err != nil {
+	err = instance.BaseCommitValidationVerifySignature(msg, msg.QBFTMessage.Height, c.CommitteeMember.Committee)
+	if err != nil {
 		return errors.Wrap(err, "invalid decided msg")
 	}
 

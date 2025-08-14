@@ -860,7 +860,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		}
 		opts := c.validatorCommonOpts.NewOptions(share, operator, dutyRunners)
 
-		v = validator.NewValidator(validatorCtx, validatorCancel, opts)
+		v = validator.NewValidator(validatorCtx, validatorCancel, c.logger, opts)
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")

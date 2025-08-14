@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -207,12 +208,30 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
+	if errors.Is(err, controller.ErrInstanceNotFound) {
+		return false, nil, fmt.Errorf("%w: %v", ErrInstanceNotFound, err)
+	}
+	if errors.Is(err, controller.ErrFutureMsg) {
+		return false, nil, fmt.Errorf("%w: %v", ErrFutureConsensusMsg, err)
+	}
+	if errors.Is(err, controller.ErrNoProposalForRound) {
+		return false, nil, fmt.Errorf("%w: %v", ErrNoProposalForRound, err)
+	}
+	if errors.Is(err, controller.ErrWrongMsgRound) {
+		return false, nil, fmt.Errorf("%w: %v", ErrWrongMsgRound, err)
+	}
 	if err != nil {
 		return false, nil, err
 	}
 
-	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
-	// do not return error if no running duty
+	// TODO: since we can replay runner messages now (implemented in https://github.com/ssvlabs/ssv/pull/2445),
+	// we don't need to have this ad-hoc handling for consensus messages (where we "apply the message-effects to
+	// the best extent we can") anymore - instead we could return `ErrNoRunningDuty` so that the message will be
+	// replayed later (and hopefully the duty will be running by that time). Technically this would mean we won't
+	// be able to process the case of "having received a decided message BEFORE we've started corresponding duty",
+	// but we probably don't want to anyway since that case can only happen when we either have a bug somewhere
+	// or our clock is lagging behind the rest of the cluster so much that we start duty only after the rest of
+	// the cluster has already decided QBFT for this duty.
 	if !b.hasRunningDuty() {
 		logger.Debug("no running duty")
 		return false, nil, nil

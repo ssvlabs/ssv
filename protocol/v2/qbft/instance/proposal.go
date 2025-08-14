@@ -66,7 +66,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 		return errors.New("msg type is not proposal")
 	}
 	if msg.QBFTMessage.Height != i.State.Height {
-		return errors.New("wrong msg height")
+		return ErrWrongMsgHeight
 	}
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
 		return errors.New("msg allows 1 signer")
