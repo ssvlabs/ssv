@@ -1,11 +1,17 @@
 package log
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"go.uber.org/zap"
 )
+
+// WithContext returns a context with the logger.
+func WithContext(ctx context.Context, logger *zap.Logger) context.Context {
+	return context.WithValue(ctx, loggerKey, logger)
+}
 
 func TestWithFromContext(t *testing.T) {
 	t.Run("NamedCheck", func(t *testing.T) {

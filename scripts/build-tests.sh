@@ -5,6 +5,13 @@
 
 set -o pipefail
 
+
+case " $GOFLAGS " in
+  *"-tags=blst_enabled,testutils"*) ;;
+  *) export GOFLAGS="$GOFLAGS -tags=blst_enabled,testutils" ;;
+esac
+
+
 # Resolve repository root so the script works from any CWD
 SCRIPT_DIR="$(cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd -P)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd -P)"

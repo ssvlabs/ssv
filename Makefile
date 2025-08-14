@@ -31,51 +31,60 @@ GET_TOOL=go get -modfile=tool.mod -tool
 RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
-.PHONY: lint
-lint:
-	GOWORK=off $(RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -v ./...
-	@$(MAKE) ssvsigner-lint
+TEST_TAGS=blst_enabled,testutils
 
-.PHONY: ssvsigner-lint
-ssvsigner-lint:
+.PHONY: lint
+lint: golangci-lint deadcode-lint
+
+.PHONY: golangci-lint
+golangci-lint:
+	GOWORK=off $(RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -v ./...
+	@$(MAKE) ssvsigner-golangci-lint
+
+.PHONY: ssvsigner-golangci-lint
+ssvsigner-golangci-lint:
 	cd ssvsigner && GOWORK=off $(SSVSIGNER_RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -c ../.golangci.yaml -v ./...
+
+.PHONY: deadcode-lint
+deadcode-lint:
+	./scripts/deadcode.sh
 
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
-	@cd ssvsigner && go test -tags blst_enabled,testutils -timeout 20m ${COV_CMD} -p 1 -v ./...
+	@cd ssvsigner && go test -tags $(TEST_TAGS) -timeout 20m ${COV_CMD} -p 1 -v ./...
 
 .PHONY: integration-test
 integration-test:
 	@echo "Running integration tests"
-	@go test -tags blst_enabled,testutils -count=1 -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
+	@go test -tags $(TEST_TAGS) -count=1 -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
 
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags blst_enabled,testutils -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+	@go test -tags $(TEST_TAGS) -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
 	@$(MAKE) ssvsigner-test
 
 .PHONY: ssvsigner-test
 ssvsigner-test:
 	@echo "Running ssv-signer unit tests"
-	@cd ssvsigner && go test -tags blst_enabled,testutils -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "ssvsigner/e2e"`
+	@cd ssvsigner && go test -tags $(TEST_TAGS) -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "ssvsigner/e2e"`
 
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled,testutils -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
+	@go test -tags $(TEST_TAGS) -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
 
 .PHONY: all-spec-test-raceless
 all-spec-test-raceless:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled,testutils -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
+	@go test -tags $(TEST_TAGS) -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
 
 .PHONY: spec-test-raceless
 spec-test-raceless:
 	@echo "Running spec tests without race flag"
-	@go test -tags blst_enabled,testutils -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
+	@go test -tags $(TEST_TAGS) -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
 
 .PHONY: benchmark
 benchmark:
@@ -182,6 +191,7 @@ tools:
 	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
 	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	$(GET_TOOL) golang.org/x/tools/cmd/deadcode@latest
 	$(RUN_TOOL)
 
 .PHONY: format

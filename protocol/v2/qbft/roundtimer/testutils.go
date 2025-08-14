@@ -1,3 +1,5 @@
+//go:build testutils
+
 package roundtimer
 
 import specqbft "github.com/ssvlabs/ssv-spec/qbft"

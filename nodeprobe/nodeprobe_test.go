@@ -11,6 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
+func (p *Prober) Healthy(context.Context) (bool, error) {
+	return p.healthy.Load(), nil
+}
+
 func TestProber(t *testing.T) {
 	ctx := t.Context()
 

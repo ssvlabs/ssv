@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -126,10 +125,6 @@ func ValidatorIndex(index phase0.ValidatorIndex) zapcore.Field {
 
 func DutyExecutorID(senderID []byte) zapcore.Field {
 	return zap.Stringer(FieldDutyExecutorID, stringer.HexStringer{Val: senderID})
-}
-
-func AddressURL(val url.URL) zapcore.Field {
-	return zap.Stringer(FieldAddress, &val)
 }
 
 func Address(val string) zapcore.Field {

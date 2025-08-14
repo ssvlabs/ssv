@@ -46,14 +46,6 @@ func New(ctx context.Context, opts ...Option) *ValidatorsMap {
 // Option defines EventSyncer configuration option.
 type Option func(*ValidatorsMap)
 
-// WithInitialState sets initial state
-func WithInitialState(vstate map[spectypes.ValidatorPK]*validator.Validator, mstate map[spectypes.CommitteeID]*validator.Committee) Option {
-	return func(vm *ValidatorsMap) {
-		vm.validators = vstate
-		vm.committees = mstate
-	}
-}
-
 // ForEachValidator loops over validators applying iterator func
 func (vm *ValidatorsMap) ForEachValidator(iterator validatorIterator) bool {
 	vm.validatorsMx.RLock()
