@@ -23,10 +23,6 @@ var (
 	// QBFT instance for the slot the message is targeting yet, while another operator already did + sent this
 	// message to us.
 	ErrFutureConsensusMsg = fmt.Errorf("future consensus msg")
-	// ErrWrongMsgHeight means the message we've got is targeting QBFT height that's different from the one our
-	// QBFT instance is targeting, not sure how/why this happens, but for now we'll replay this message in case
-	// this is similar to "future message" case.
-	ErrWrongMsgHeight = fmt.Errorf("wrong msg height")
 	// ErrNoProposalForRound means we might not have received a proposal-message yet, while another operator already
 	// did and started preparing it.
 	ErrNoProposalForRound = fmt.Errorf("no proposal for round")

@@ -214,9 +214,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	if errors.Is(err, controller.ErrFutureMsg) {
 		return false, nil, fmt.Errorf("%w: %v", ErrFutureConsensusMsg, err)
 	}
-	if errors.Is(err, controller.ErrWrongMsgHeight) {
-		return false, nil, fmt.Errorf("%w: %v", ErrWrongMsgHeight, err)
-	}
 	if errors.Is(err, controller.ErrNoProposalForRound) {
 		return false, nil, fmt.Errorf("%w: %v", ErrNoProposalForRound, err)
 	}
