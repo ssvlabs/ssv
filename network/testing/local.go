@@ -1,3 +1,8 @@
+//go:build testutils
+
+// This file contains helpers for tests only.
+// It will not be compiled into production binaries.
+
 package testing
 
 import (

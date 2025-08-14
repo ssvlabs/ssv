@@ -1,3 +1,5 @@
+//go:build testutils
+
 // Copyright 2023 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //

@@ -50,7 +50,7 @@ compile_dir() {
 	# Compile tests only (-c), discard binaries (-o /dev/null). Errors are printed inline.
 	run_with_timeout /usr/bin/time -p sh -c "cd '$dir' && \
 		go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... | sed '/^$/d' | \
-		xargs -n1 -P $NPROC -I{} sh -c 'go test -tags blst_enabled -c "{}" -o /dev/null 2>&1 || { printf \"%s\\n\" \"{}\" >> '"$tmpfile"'; }'"
+		xargs -n1 -P $NPROC -I{} sh -c 'go test -tags blst_enabled,testutils -c "{}" -o /dev/null 2>&1 || { printf \"%s\\n\" \"{}\" >> '"$tmpfile"'; }'"
 
 	status=0
 	if [ -s "$tmpfile" ]; then

@@ -2,7 +2,6 @@ package commons
 
 import (
 	"crypto/ecdsa"
-	crand "crypto/rand"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
@@ -57,13 +56,4 @@ func ECDSAPubToInterface(pubkey *ecdsa.PublicKey) (crypto.PubKey, error) {
 	xVal.Zero()
 	yVal.Zero()
 	return newKey, nil
-}
-
-// GenNetworkKey generates a new network key
-func GenNetworkKey() (*ecdsa.PrivateKey, error) {
-	privInterfaceKey, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
-	if err != nil {
-		return nil, errors.WithMessage(err, "could not generate 256k1 key")
-	}
-	return ECDSAPrivFromInterface(privInterfaceKey)
 }

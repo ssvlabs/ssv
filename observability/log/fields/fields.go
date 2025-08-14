@@ -144,10 +144,6 @@ func ENR(val *enode.Node) zapcore.Field {
 	return zap.Stringer(FieldENR, val)
 }
 
-func ENRStr(val string) zapcore.Field {
-	return zap.String(FieldENR, val)
-}
-
 func TargetNodeENR(val *enode.Node) zapcore.Field {
 	return zap.Stringer(FieldTargetNodeENR, val)
 }
