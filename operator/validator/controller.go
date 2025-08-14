@@ -849,7 +849,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 	// continue conducting duties, but the number of operators must still meet the quorum.
 	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
 	if activeOperators < quorum {
-		return nil, fmt.Errorf("not enough committee members: %d < %d", activeOperators, quorum)
+		return nil, fmt.Errorf("insufficient active operators for quorum: %d available, %d required", activeOperators, quorum)
 	}
 
 	faultyNodeTolerance := ssvtypes.ComputeF(uint64(len(share.Committee)))
