@@ -119,7 +119,6 @@ func (c *Committee) ConsumeQueue(
 	defer logger.Debug("📪 queue consumer is closed")
 
 	state := *q.queueState
-	lens := make([]int, 0, 10)
 
 	type msgIDType string
 	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
@@ -196,13 +195,6 @@ func (c *Committee) ConsumeQueue(
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			return
 		}
-		lens = append(lens, q.Q.Len())
-		if len(lens) >= 10 {
-			logger.Debug("📬 [TEMPORARY] queue statistics",
-				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-				zap.Ints("past_10_lengths", lens))
-			lens = lens[:0]
-		}
 
 		// Handle the message, potentially scheduling a message-replay for later.
 		err := handler(ctx, logger, msg)
@@ -213,8 +205,8 @@ func (c *Committee) ConsumeQueue(
 			// to execute as well.
 			// Retry delay should be small so we can proceed with the corresponding duty execution asap.
 			const (
-				retryDelay = 10 * time.Millisecond
-				retryCount = 99
+				retryDelay = 25 * time.Millisecond
+				retryCount = 40
 			)
 			msgRetryItem := msgRetries.Get(messageID(msg))
 			if msgRetryItem == nil {
@@ -240,7 +232,13 @@ func (c *Committee) ConsumeQueue(
 				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func() {
 					time.Sleep(retryDelay)
-					q.Q.Push(msg)
+					if pushed := q.Q.TryPush(msg); !pushed {
+						logger.Warn(
+							"❗ not gonna replay message because the queue is full",
+							zap.String("message_identifier", string(messageID(msg))),
+							fields.MessageType(msg.MsgType),
+						)
+					}
 				}()
 			default:
 				logMsg += ", dropping message"
