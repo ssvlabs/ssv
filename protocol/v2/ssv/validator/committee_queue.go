@@ -55,7 +55,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 	q, ok := c.Queues[slot]
 	if !ok {
 		q = QueueContainer{
-			Q: queue.New(1000), // TODO alan: get queue opts from options
+			Q: queue.New(logger, 1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
@@ -146,8 +146,7 @@ func (c *Committee) ConsumeQueue(
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
 	msgRetries := ttlcache.New(
-		//ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
-		ttlcache.WithTTL[msgIDType, int](100000 * time.Hour), // TODO - testing growth
+		ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
 	)
 	go msgRetries.Start()
 
@@ -214,9 +213,6 @@ func (c *Committee) ConsumeQueue(
 				msgRetryItem = msgRetries.Get(messageID(msg))
 			}
 			msgRetryCnt := msgRetryItem.Value()
-
-			// TODO
-			logger.Debug("committee: printing msgRetries size", zap.Int("size", msgRetries.Len()))
 
 			logMsg := "❗ could not handle message"
 

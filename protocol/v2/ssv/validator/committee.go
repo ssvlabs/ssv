@@ -157,7 +157,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
 		c.Queues[duty.Slot] = QueueContainer{
-			Q: queue.New(1000), // TODO alan: get queue opts from options
+			Q: queue.New(logger, 1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),

@@ -131,8 +131,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
 	msgRetries := ttlcache.New(
-		//ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
-		ttlcache.WithTTL[msgIDType, int](100000 * time.Hour), // TODO - testing growth
+		ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
 	)
 	go msgRetries.Start()
 
@@ -204,9 +203,6 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 				msgRetryItem = msgRetries.Get(messageID(msg))
 			}
 			msgRetryCnt := msgRetryItem.Value()
-
-			// TODO
-			logger.Debug("validator: printing msgRetries size", zap.Int("size", msgRetries.Len()))
 
 			logMsg := "❗ could not handle message"
 

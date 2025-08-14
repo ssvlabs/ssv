@@ -21,6 +21,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -41,8 +44,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -800,7 +801,7 @@ func setupTestValidator(validatorPk spectypes.ValidatorPK, ownerAddressBytes, fe
 
 		Queues: map[spectypes.RunnerRole]validator.QueueContainer{
 			spectypes.RoleValidatorRegistration: {
-				Q: queue.New(1000),
+				Q: queue.New(zap.NewNop(), 1000),
 			},
 		},
 	}

@@ -236,7 +236,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID2, qbftMsg2)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -304,7 +304,7 @@ func TestStartConsumeQueue(t *testing.T) {
 	slot := phase0.Slot(123)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: false,
 			Height:             specqbft.Height(slot),
@@ -402,7 +402,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	})
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -508,7 +508,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -587,7 +587,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -668,7 +668,7 @@ func TestChangingFilterState(t *testing.T) {
 		}
 
 		q := QueueContainer{
-			Q: queue.New(1),
+			Q: queue.New(logger, 1),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -792,7 +792,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			slot := phase0.Slot(123)
 
 			q := QueueContainer{
-				Q: queue.New(10),
+				Q: queue.New(logger, 10),
 				queueState: &queue.State{
 					HasRunningInstance: tc.hasRunningDuty,
 					Height:             specqbft.Height(slot),
@@ -953,7 +953,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			slot := phase0.Slot(123)
 
 			q := QueueContainer{
-				Q: queue.New(10),
+				Q: queue.New(logger, 10),
 				queueState: &queue.State{
 					HasRunningInstance: true,
 					Height:             specqbft.Height(slot),
@@ -1061,7 +1061,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	}
 
 	q := QueueContainer{
-		Q: queue.New(10),
+		Q: queue.New(logger, 10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1164,7 +1164,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
 	qContainer := QueueContainer{
-		Q: queue.New(queueCapacity),
+		Q: queue.New(logger, queueCapacity),
 		queueState: &queue.State{
 			HasRunningInstance: false,
 			Height:             specqbft.Height(slot),
@@ -1262,7 +1262,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 
 	slot := phase0.Slot(123)
 	q := QueueContainer{
-		Q: queue.New(10),
+		Q: queue.New(logger, 10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1328,7 +1328,7 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 	qc := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1546,7 +1546,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		queueCapacity := 3
 
 		qContainer := QueueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1620,7 +1620,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		queueCapacity := 3
 
 		qContainer := QueueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1728,7 +1728,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		slot := phase0.Slot(456)
 
 		q := QueueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
