@@ -83,7 +83,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
 		guard := validator.NewCommitteeDutyGuard()
-		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
+		c = baseCommitteeWithRunnerSample(logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
 
 		if test.DontStartDuty {
 			r := test.Runner.(*runner.CommitteeRunner)
@@ -237,13 +237,11 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 }
 
 var baseCommitteeWithRunnerSample = func(
-	ctx context.Context,
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
 	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
-
 	var keySetSample *spectestingutils.TestKeySet
 	for _, ks := range keySetMap {
 		keySetSample = ks
@@ -276,11 +274,8 @@ var baseCommitteeWithRunnerSample = func(
 		)
 		return r.(*runner.CommitteeRunner), err
 	}
-	ctx, cancel := context.WithCancel(ctx)
 
 	c := validator.NewCommittee(
-		ctx,
-		cancel,
 		logger,
 		runnerSample.GetBaseRunner().NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),

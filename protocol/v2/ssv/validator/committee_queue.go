@@ -95,9 +95,9 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 		return fmt.Errorf("no runner found for slot %d", duty.Slot)
 	}
 
-	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
-
+	// queueCtx enforces a deadline for queue consumer to terminate and clean up resources at some point
+	// in the future (when this queue becomes no longer relevant)
+	queueCtx, cancelF := context.WithDeadline(ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 	go func() {
 		defer cancelF()
 		c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r)

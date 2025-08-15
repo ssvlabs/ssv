@@ -774,7 +774,6 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 				)
 				return
 			}
-			deletedCommittee.Stop()
 		}
 	}
 }
@@ -819,17 +818,10 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	// Start a committee validator.
 	vc, found := c.validatorsMap.GetCommittee(operator.CommitteeID)
 	if !found {
-		// Share context with both the validator and the runners,
-		// so that when the validator is stopped, the runners are stopped as well.
-		ctx, cancel := context.WithCancel(c.ctx)
-
 		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
-
-		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
+		committeeRunnerFunc := SetupCommitteeRunners(c.ctx, opts)
 
 		vc = validator.NewCommittee(
-			ctx,
-			cancel,
 			c.logger,
 			c.networkConfig,
 			operator,

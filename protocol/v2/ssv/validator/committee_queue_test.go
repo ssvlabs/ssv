@@ -160,7 +160,6 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	slot := phase0.Slot(123)
 
 	committee := &Committee{
-		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig:   networkconfig.TestNetwork,
@@ -211,7 +210,6 @@ func TestConsumeQueueBasic(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
 		Queues:        make(map[phase0.Slot]QueueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig: networkconfig.TestNetwork,
@@ -291,11 +289,8 @@ func TestStartConsumeQueue(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
 		Queues:        make(map[phase0.Slot]QueueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig: networkconfig.TestNetwork,
@@ -357,7 +352,6 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -476,7 +470,6 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -555,7 +548,6 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -784,7 +776,6 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				ctx:     ctx,
 				Queues:  make(map[phase0.Slot]QueueContainer),
 				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
@@ -945,7 +936,6 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				ctx:     ctx,
 				Queues:  make(map[phase0.Slot]QueueContainer),
 				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
@@ -1031,7 +1021,6 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -1156,7 +1145,6 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	queueCapacity := 2
 	committee := &Committee{
-		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
 		networkConfig:   networkconfig.TestNetwork,
@@ -1256,9 +1244,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	committee := &Committee{
-		ctx: ctx,
-	}
+	committee := &Committee{}
 
 	slot := phase0.Slot(123)
 	q := QueueContainer{
@@ -1323,7 +1309,6 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	// --- Setup a single-slot committee and its queue ---
 	slot := phase0.Slot(42)
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -1534,7 +1519,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		slot := phase0.Slot(123)
 
 		committee := &Committee{
-			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
@@ -1609,7 +1593,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		slot := phase0.Slot(789)
 
 		committee := &Committee{
-			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
@@ -1703,7 +1686,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		defer cancel()
 
 		committee := &Committee{
-			ctx:     ctx,
 			Queues:  make(map[phase0.Slot]QueueContainer),
 			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
