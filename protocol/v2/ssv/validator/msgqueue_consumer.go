@@ -70,10 +70,7 @@ func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 
 // StartQueueConsumer start ConsumeQueue with handler
 func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
-	for ctx.Err() == nil {
+	for v.ctx.Err() == nil {
 		err := v.ConsumeQueue(msgID, handler)
 		if err != nil {
 			v.logger.Debug("❗ failed consuming queue", zap.Error(err))
@@ -84,8 +81,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
 func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
+	ctx := v.ctx
 
 	var q QueueContainer
 	err := func() error {
@@ -184,6 +180,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		if ctx.Err() != nil {
+			// Optimization: terminate fast if we can.
 			return nil
 		}
 		if msg == nil {

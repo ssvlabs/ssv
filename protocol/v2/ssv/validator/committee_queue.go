@@ -189,6 +189,7 @@ func (c *Committee) ConsumeQueue(
 		// TODO: (Alan) bring back filter
 		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
 		if ctx.Err() != nil {
+			// Optimization: terminate fast if we can.
 			return
 		}
 		if msg == nil {
