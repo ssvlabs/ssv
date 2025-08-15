@@ -191,6 +191,11 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		// Handle the message, potentially scheduling a message-replay for later.
 		err = handler(ctx, msg)
 		if err != nil {
+			// We'll re-queue the message to be replayed later in case the error we got is retryable.
+			// We are aiming to cover most of the slot time (~12s), but we don't need to cover all 12s
+			// since most duties must finish well before that anyway, and will take additional time
+			// to execute as well.
+			// Retry delay should be small so we can proceed with the corresponding duty execution asap.
 			const (
 				retryDelay = 25 * time.Millisecond
 				retryCount = 40
