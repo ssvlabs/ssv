@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 const (
@@ -53,7 +55,7 @@ type priorityQueue struct {
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
 func New(logger *zap.Logger, capacity int) Queue {
 	return &priorityQueue{
-		logger: logger,
+		logger: logger.Named(log.NameSSVMessageQueue),
 		inbox:  make(chan *SSVMessage, capacity),
 	}
 }
