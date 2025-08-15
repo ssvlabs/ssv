@@ -45,8 +45,8 @@ type DutiesExecutor interface {
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
-	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
-	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty)
+	ExecuteCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 }
 
 type BeaconNode interface {
@@ -423,7 +423,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
 			recordDutyExecuted(ctx, duty.RunnerRole())
-			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
+			s.dutyExecutor.ExecuteDuty(ctx, duty)
 		}(ctx)
 	}
 
@@ -437,10 +437,10 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 	for _, committee := range duties {
 		duty := committee.duty
-		logger := s.loggerWithCommitteeDutyContext(committee) // TODO: extract this in dutyExecutor (validator controller), don't pass logger to ExecuteCommitteeDuty
-		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+		logger := s.loggerWithCommitteeDutyContext(committee)
 
 		const eventMsg = "🔧 executing committee duty"
+		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
 		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.CommitteeIDAttribute(committee.id),
@@ -461,7 +461,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		go func(ctx context.Context) {
 			s.waitOneThirdOrValidBlock(duty.Slot)
 			recordDutyExecuted(ctx, duty.RunnerRole())
-			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
+			s.dutyExecutor.ExecuteCommitteeDuty(ctx, committee.id, duty)
 		}(ctx)
 	}
 

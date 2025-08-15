@@ -117,7 +117,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.ProcessMessage(ctx, logger, dmsg)
+			err = c.ProcessMessage(ctx, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -141,7 +141,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = v.ProcessMessage(ctx, logger, dmsg)
+			err = v.ProcessMessage(ctx, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -297,7 +297,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().NetworkConfig.Beacon,
+		runnerSample.GetBaseRunner().NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
