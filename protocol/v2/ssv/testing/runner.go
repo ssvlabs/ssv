@@ -138,7 +138,7 @@ var ConstructBaseRunner = func(
 			dgHandler,
 		)
 	case spectypes.RoleAggregator:
-		r, err = runner.NewAggregatorRunner(
+		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
@@ -149,6 +149,13 @@ var ConstructBaseRunner = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
 			logger,
@@ -394,7 +401,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			dgHandler,
 		)
 	case spectypes.RoleAggregator:
-		r, err = runner.NewAggregatorRunner(
+		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
@@ -405,6 +412,13 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
 			logger,
