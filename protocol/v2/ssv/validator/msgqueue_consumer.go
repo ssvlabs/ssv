@@ -3,7 +3,10 @@ package validator
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -16,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -66,10 +70,7 @@ func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 
 // StartQueueConsumer start ConsumeQueue with handler
 func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
-	for ctx.Err() == nil {
+	for v.ctx.Err() == nil {
 		err := v.ConsumeQueue(msgID, handler)
 		if err != nil {
 			v.logger.Debug("❗ failed consuming queue", zap.Error(err))
@@ -80,8 +81,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
 func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
+	ctx := v.ctx
 
 	var q QueueContainer
 	err := func() error {
@@ -99,19 +99,49 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	}
 
 	v.logger.Debug("📬 queue consumer is running")
+	defer v.logger.Debug("📪 queue consumer is closed")
 
-	lens := make([]int, 0, 10)
+	type msgIDType string
+	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
+	// with different signers, slots, types, rounds, etc. - so we can't use just msg.ID as a unique identifier)
+	messageID := func(msg *queue.SSVMessage) msgIDType {
+		const idUndefined = "undefined"
+		msgSlot, err := msg.Slot()
+		if err != nil {
+			v.logger.Error("couldn't get message slot", zap.Error(err))
+			return idUndefined
+		}
+		if msg.MsgType == spectypes.SSVConsensusMsgType {
+			sm := msg.Body.(*specqbft.Message)
+			signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
+			return msgIDType(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
+		}
+		if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
+			psm := msg.Body.(*spectypes.PartialSignatureMessages)
+			signer := fmt.Sprintf("%d", psm.Messages[0].Signer) // same signer for all messages
+			return msgIDType(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
+		}
+		return idUndefined
+	}
+	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
+	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
+	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
+	msgRetries := ttlcache.New(
+		ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
+	)
+	go msgRetries.Start()
+	defer msgRetries.Stop()
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
-		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-		if runner == nil {
+		r := v.DutyRunners.DutyRunnerForMsgID(msgID)
+		if r == nil {
 			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
 		}
 		var runningInstance *instance.Instance
-		if runner.HasRunningDuty() {
-			runningInstance = runner.GetBaseRunner().State.RunningInstance
+		if r.HasRunningDuty() {
+			runningInstance = r.GetBaseRunner().State.RunningInstance
 			if runningInstance != nil {
 				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
@@ -122,7 +152,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		state.Quorum = v.Operator.GetQuorum()
 
 		filter := queue.FilterAny
-		if !runner.HasRunningDuty() {
+		if !r.HasRunningDuty() {
 			// If no duty is running, pop only ExecuteDuty messages.
 			filter = func(m *queue.SSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
@@ -150,34 +180,73 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		if ctx.Err() != nil {
-			break
+			// Optimization: terminate fast if we can.
+			return nil
 		}
 		if msg == nil {
 			v.logger.Error("❗ got nil message from queue, but context is not done!")
-			break
-		}
-		lens = append(lens, q.Q.Len())
-		if len(lens) >= 10 {
-			v.logger.Debug("📬 [TEMPORARY] queue statistics",
-				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-				zap.Ints("past_10_lengths", lens))
-			lens = lens[:0]
+			return nil
 		}
 
-		// Handle the message.
-		if err := handler(ctx, msg); err != nil {
-			v.logMsg(msg, "❗ could not handle message",
+		// Handle the message, potentially scheduling a message-replay for later.
+		err = handler(ctx, msg)
+		if err != nil {
+			// We'll re-queue the message to be replayed later in case the error we got is retryable.
+			// We are aiming to cover most of the slot time (~12s), but we don't need to cover all 12s
+			// since most duties must finish well before that anyway, and will take additional time
+			// to execute as well.
+			// Retry delay should be small so we can proceed with the corresponding duty execution asap.
+			const (
+				retryDelay = 25 * time.Millisecond
+				retryCount = 40
+			)
+			msgRetryItem := msgRetries.Get(messageID(msg))
+			if msgRetryItem == nil {
+				msgRetries.Set(messageID(msg), 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(messageID(msg))
+			}
+			msgRetryCnt := msgRetryItem.Value()
+
+			logMsg := "❗ could not handle message"
+
+			switch {
+			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrFuturePartialSigMsg) ||
+				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureConsensusMsg) ||
+				errors.Is(err, runner.ErrNoProposalForRound) || errors.Is(err, runner.ErrWrongMsgRound) ||
+				errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
+
+				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
+				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+				go func(msg *queue.SSVMessage) {
+					time.Sleep(retryDelay)
+					if pushed := q.Q.TryPush(msg); !pushed {
+						v.logger.Warn(
+							"❗ not gonna replay message because the queue is full",
+							zap.String("message_identifier", string(messageID(msg))),
+							fields.MessageType(msg.MsgType),
+						)
+					}
+				}(msg)
+			default:
+				logMsg += ", dropping message"
+			}
+
+			v.logMsg(
+				msg,
+				logMsg,
+				zap.String("message_identifier", string(messageID(msg))),
 				fields.MessageType(msg.MsgType),
-				zap.Error(err))
+				zap.Error(err),
+				zap.Int("attempt", msgRetryCnt+1),
+			)
 		}
 	}
 
-	v.logger.Debug("📪 queue consumer is closed")
 	return nil
 }
 
 func (v *Validator) logMsg(msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
-	baseFields := []zap.Field{}
+	var baseFields []zap.Field
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
@@ -192,6 +261,7 @@ func (v *Validator) logMsg(msg *queue.SSVMessage, logMsg string, withFields ...z
 		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
 		signer := psm.Messages[0].Signer
 		baseFields = []zap.Field{
+			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
 			zap.Uint64("signer", signer),
 			fields.Slot(psm.Slot),
 		}

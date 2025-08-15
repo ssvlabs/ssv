@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -13,16 +12,14 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -83,22 +80,9 @@ func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committe
 	committeeRunner *runner.CommitteeRunner) {
 	t.Helper()
 
-	errCh := make(chan error, 1)
 	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			errCh <- err
-		}
-		close(errCh)
+		committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
 	}()
-
-	select {
-	case err, ok := <-errCh:
-		if ok && err != nil {
-			t.Errorf("ConsumeQueue returned an unexpected error: %v", err)
-		}
-	default:
-	}
 }
 
 // collectMessagesFromQueue collects and returns messages received on the provided channel.
@@ -176,7 +160,6 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	slot := phase0.Slot(123)
 
 	committee := &Committee{
-		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig:   networkconfig.TestNetwork,
@@ -227,7 +210,6 @@ func TestConsumeQueueBasic(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
 		Queues:        make(map[phase0.Slot]QueueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig: networkconfig.TestNetwork,
@@ -252,7 +234,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID2, qbftMsg2)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -307,11 +289,8 @@ func TestStartConsumeQueue(t *testing.T) {
 	defer ctrl.Finish()
 
 	logger, _ := zap.NewDevelopment()
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
 		Queues:        make(map[phase0.Slot]QueueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig: networkconfig.TestNetwork,
@@ -320,7 +299,7 @@ func TestStartConsumeQueue(t *testing.T) {
 	slot := phase0.Slot(123)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: false,
 			Height:             specqbft.Height(slot),
@@ -373,7 +352,6 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -418,7 +396,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	})
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -492,7 +470,6 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -524,7 +501,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -571,7 +548,6 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -603,7 +579,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
 	q := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -684,7 +660,7 @@ func TestChangingFilterState(t *testing.T) {
 		}
 
 		q := QueueContainer{
-			Q: queue.New(1),
+			Q: queue.New(logger, 1),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -695,7 +671,7 @@ func TestChangingFilterState(t *testing.T) {
 		q.Q.TryPush(prepareMsg)
 
 		c := &Committee{}
-		_ = c.ConsumeQueue(ctx, q, logger, handler, rnr)
+		c.ConsumeQueue(ctx, q, logger, handler, rnr)
 		return seen
 	}
 
@@ -800,7 +776,6 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				ctx:     ctx,
 				Queues:  make(map[phase0.Slot]QueueContainer),
 				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
@@ -808,7 +783,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			slot := phase0.Slot(123)
 
 			q := QueueContainer{
-				Q: queue.New(10),
+				Q: queue.New(logger, 10),
 				queueState: &queue.State{
 					HasRunningInstance: tc.hasRunningDuty,
 					Height:             specqbft.Height(slot),
@@ -961,7 +936,6 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				ctx:     ctx,
 				Queues:  make(map[phase0.Slot]QueueContainer),
 				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
@@ -969,7 +943,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			slot := phase0.Slot(123)
 
 			q := QueueContainer{
-				Q: queue.New(10),
+				Q: queue.New(logger, 10),
 				queueState: &queue.State{
 					HasRunningInstance: true,
 					Height:             specqbft.Height(slot),
@@ -1047,7 +1021,6 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
@@ -1077,7 +1050,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	}
 
 	q := QueueContainer{
-		Q: queue.New(10),
+		Q: queue.New(logger, 10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1172,7 +1145,6 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	queueCapacity := 2
 	committee := &Committee{
-		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
 		networkConfig:   networkconfig.TestNetwork,
@@ -1180,7 +1152,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
 	qContainer := QueueContainer{
-		Q: queue.New(queueCapacity),
+		Q: queue.New(logger, queueCapacity),
 		queueState: &queue.State{
 			HasRunningInstance: false,
 			Height:             specqbft.Height(slot),
@@ -1256,14 +1228,14 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 }
 
 // TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
-// processing further messages if the handler returns runner.ErrNoValidDuties.
+// processing further messages if the handler returns runner.ErrNoValidDutiesToExecute.
 //
 // Flow:
 //  1. Set up a committee and a queue container with multiple messages.
 //  2. Initialize a basic committee runner.
 //  3. Define a message handler that:
 //     a. Increments a counter for processed messages.
-//     b. Returns runner.ErrNoValidDuties if a specific (e.g., the first) message is processed.
+//     b. Returns runner.ErrNoValidDutiesToExecute if a specific (e.g., the first) message is processed.
 //  4. Call ConsumeQueue with this handler.
 //  5. Verify that only the message(s) processed before the error was returned were handled.
 //  6. Verify that remaining messages are still in the queue.
@@ -1272,13 +1244,11 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	committee := &Committee{
-		ctx: ctx,
-	}
+	committee := &Committee{}
 
 	slot := phase0.Slot(123)
 	q := QueueContainer{
-		Q: queue.New(10),
+		Q: queue.New(logger, 10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1303,18 +1273,17 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	handler := func(ctx context.Context, msg *queue.SSVMessage) error {
 		atomic.AddInt32(&processedMessagesCount, 1)
 		if msg.MsgID == msg1.MsgID { // Return error after processing the first message
-			return runner.ErrNoValidDuties
+			return runner.ErrNoValidDutiesToExecute
 		}
 		return nil
 	}
 
 	// Run ConsumeQueue. It should stop after processing the first message because the handler
-	// returns runner.ErrNoValidDuties.
+	// returns runner.ErrNoValidDutiesToExecute.
 	// The ConsumeQueue method itself is designed to break its processing loop and return nil
-	// when its handler signals ErrNoValidDuties, treating it as a normal stop condition for the queue.
+	// when its handler signals ErrNoValidDutiesToExecute, treating it as a normal stop condition for the queue.
 	// Thus, we expect no error from the ConsumeQueue call.
-	err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	require.NoError(t, err)
+	committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&processedMessagesCount))
 	assert.Equal(t, 2, q.Q.Len())
@@ -1340,12 +1309,11 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	// --- Setup a single-slot committee and its queue ---
 	slot := phase0.Slot(42)
 	committee := &Committee{
-		ctx:     ctx,
 		Queues:  make(map[phase0.Slot]QueueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 	qc := QueueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1471,14 +1439,9 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 		return nil
 	}
 
-	errCh := make(chan error, 1)
 	go func() {
 		defer close(bucketChan)
-		err := committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			errCh <- err
-		}
-		close(errCh)
+		committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
 	}()
 
 	// Wait for exactly len(allMsgs) messages (or fail on timeout)
@@ -1556,7 +1519,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		slot := phase0.Slot(123)
 
 		committee := &Committee{
-			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
@@ -1568,7 +1530,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		queueCapacity := 3
 
 		qContainer := QueueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1631,7 +1593,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		slot := phase0.Slot(789)
 
 		committee := &Committee{
-			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
@@ -1642,7 +1603,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		queueCapacity := 3
 
 		qContainer := QueueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1725,7 +1686,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		defer cancel()
 
 		committee := &Committee{
-			ctx:     ctx,
 			Queues:  make(map[phase0.Slot]QueueContainer),
 			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
@@ -1750,7 +1710,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		slot := phase0.Slot(456)
 
 		q := QueueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1777,13 +1737,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		var consumerWg sync.WaitGroup
 		consumerWg.Add(1)
 
-		consumerErrCh := make(chan error, 1)
 		go func() {
 			defer consumerWg.Done()
-			err := committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
-			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				consumerErrCh <- err
-			}
+			committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
 		}()
 
 		// Fill with filtered Prepare messages
@@ -1836,13 +1792,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		var consumer2Wg sync.WaitGroup
 		consumer2Wg.Add(1)
 
-		consumer2ErrCh := make(chan error, 1)
 		go func() {
 			defer consumer2Wg.Done()
-			err := committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
-			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				consumer2ErrCh <- err
-			}
+			committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
 		}()
 
 		// Observe how many of the old Prepares now drain

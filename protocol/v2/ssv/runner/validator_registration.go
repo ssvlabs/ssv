@@ -178,11 +178,11 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
-		return nil, spectypes.DomainError, errors.New("no running duty to compute preconsensus roots and domain")
+		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
 	}
 	vr, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate validator registration")
+		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}
 	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
 }
@@ -344,7 +344,7 @@ func (r *ValidatorRegistrationRunner) Decode(data []byte) error {
 func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode ValidatorRegistrationRunner")
+		return [32]byte{}, fmt.Errorf("could not encode ValidatorRegistrationRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

@@ -83,7 +83,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
 		guard := validator.NewCommitteeDutyGuard()
-		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
+		c = baseCommitteeWithRunnerSample(logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
 
 		if test.DontStartDuty {
 			r := test.Runner.(*runner.CommitteeRunner)
@@ -196,21 +196,6 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	}
 }
 
-//func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-//	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
-//	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
-//	for _, r1 := range test.BeaconBroadcastedRoots {
-//		found := false
-//		for _, r2 := range broadcastedRoots {
-//			if r1 == hex.EncodeToString(r2[:]) {
-//				found = true
-//				break
-//			}
-//		}
-//		require.Truef(t, found, "broadcasted beacon root not found")
-//	}
-//}
-
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testType := reflect.TypeOf(test).String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
@@ -252,13 +237,11 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 }
 
 var baseCommitteeWithRunnerSample = func(
-	ctx context.Context,
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
 	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
-
 	var keySetSample *spectestingutils.TestKeySet
 	for _, ks := range keySetMap {
 		keySetSample = ks
@@ -291,11 +274,8 @@ var baseCommitteeWithRunnerSample = func(
 		)
 		return r.(*runner.CommitteeRunner), err
 	}
-	ctx, cancel := context.WithCancel(ctx)
 
 	c := validator.NewCommittee(
-		ctx,
-		cancel,
 		logger,
 		runnerSample.GetBaseRunner().NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
