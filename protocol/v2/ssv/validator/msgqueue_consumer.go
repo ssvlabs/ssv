@@ -24,7 +24,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
+type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
 
 // QueueContainer wraps a queue with its corresponding state
 type QueueContainer struct {
@@ -69,21 +69,21 @@ func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 }
 
 // StartQueueConsumer start ConsumeQueue with handler
-func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
+func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(logger, msgID, handler)
+		err := v.ConsumeQueue(msgID, handler)
 		if err != nil {
-			logger.Debug("❗ failed consuming queue", zap.Error(err))
+			v.logger.Debug("❗ failed consuming queue", zap.Error(err))
 		}
 	}
 }
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) error {
+func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -102,8 +102,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		return err
 	}
 
-	logger.Debug("📬 queue consumer is running")
-	defer logger.Debug("📪 queue consumer is closed")
+	v.logger.Debug("📬 queue consumer is running")
+	defer v.logger.Debug("📪 queue consumer is closed")
 
 	type msgIDType string
 	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
@@ -112,7 +112,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		const idUndefined = "undefined"
 		msgSlot, err := msg.Slot()
 		if err != nil {
-			logger.Error("couldn't get message slot", zap.Error(err))
+			v.logger.Error("couldn't get message slot", zap.Error(err))
 			return idUndefined
 		}
 		if msg.MsgType == spectypes.SSVConsensusMsgType {
@@ -187,12 +187,12 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			return nil
 		}
 		if msg == nil {
-			logger.Error("❗ got nil message from queue, but context is not done!")
+			v.logger.Error("❗ got nil message from queue, but context is not done!")
 			return nil
 		}
 
 		// Handle the message, potentially scheduling a message-replay for later.
-		err = handler(ctx, logger, msg)
+		err = handler(ctx, msg)
 		if err != nil {
 			const (
 				retryDelay = 25 * time.Millisecond
@@ -218,7 +218,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
-						logger.Warn(
+						v.logger.Warn(
 							"❗ not gonna replay message because the queue is full",
 							zap.String("message_identifier", string(messageID(msg))),
 							fields.MessageType(msg.MsgType),
@@ -230,7 +230,6 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			}
 
 			v.logMsg(
-				logger,
 				msg,
 				logMsg,
 				zap.String("message_identifier", string(messageID(msg))),
@@ -244,7 +243,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	return nil
 }
 
-func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
+func (v *Validator) logMsg(msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	var baseFields []zap.Field
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
@@ -257,13 +256,15 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	}
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
+		signer := psm.Messages[0].Signer
 		baseFields = []zap.Field{
 			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
-			zap.Uint64("signer", psm.Messages[0].Signer), // same signer for all messages
+			zap.Uint64("signer", signer),
 			fields.Slot(psm.Slot),
 		}
 	}
-	logger.Debug(logMsg, append(baseFields, withFields...)...)
+	v.logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
 
 // GetLastHeight returns the last height for the given identifier

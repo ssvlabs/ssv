@@ -76,7 +76,7 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 
 // runConsumeQueueAsync wraps ConsumeQueue execution in a goroutine.
 func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committee, q QueueContainer,
-	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
+	logger *zap.Logger, handler func(context.Context, *queue.SSVMessage) error,
 	committeeRunner *runner.CommitteeRunner) {
 	t.Helper()
 
@@ -128,10 +128,10 @@ func collectMessagesFromQueue(t *testing.T, msgChannel <-chan *queue.SSVMessage,
 
 // setupMessageCollection creates a message channel and handler function for queue message processing.
 // It returns the message channel and the handler function that adds messages to this channel.
-func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.Context, *zap.Logger, *queue.SSVMessage) error) {
+func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.Context, *queue.SSVMessage) error) {
 	msgChannel := make(chan *queue.SSVMessage, max(1, capacity))
 
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, msg *queue.SSVMessage) error {
 		msgChannel <- msg
 		return nil
 	}
@@ -163,7 +163,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig:    networkconfig.TestNetwork.Beacon,
+		networkConfig:   networkconfig.TestNetwork,
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
@@ -211,10 +211,10 @@ func TestConsumeQueueBasic(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:          ctx,
-		Queues:       make(map[phase0.Slot]QueueContainer),
-		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig: networkconfig.TestNetwork.Beacon,
+		ctx:           ctx,
+		Queues:        make(map[phase0.Slot]QueueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
 	}
 
 	slot := phase0.Slot(123)
@@ -295,10 +295,10 @@ func TestStartConsumeQueue(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:          ctx,
-		Queues:       make(map[phase0.Slot]QueueContainer),
-		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig: networkconfig.TestNetwork.Beacon,
+		ctx:           ctx,
+		Queues:        make(map[phase0.Slot]QueueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
 	}
 
 	slot := phase0.Slot(123)
@@ -660,7 +660,7 @@ func TestChangingFilterState(t *testing.T) {
 		defer cancel()
 
 		var seen *queue.SSVMessage
-		handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
+		handler := func(_ context.Context, m *queue.SSVMessage) error {
 			seen = m
 			// Return error to make ConsumeQueue exit early after processing one message.
 			// This is intentional for this test which just needs to check if a message was filtered.
@@ -829,7 +829,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
 
-			handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+			handler := func(ctx context.Context, msg *queue.SSVMessage) error {
 				msgChannel <- msg
 				return nil
 			}
@@ -1087,7 +1087,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 
 	msgChannel := make(chan *queue.SSVMessage, len(testMessages))
 
-	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, msg *queue.SSVMessage) error {
 		msgChannel <- msg
 		return nil
 	}
@@ -1159,7 +1159,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
-		beaconConfig:    networkconfig.TestNetwork.Beacon,
+		networkConfig:   networkconfig.TestNetwork,
 	}
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
@@ -1284,7 +1284,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	}
 
 	var processedMessagesCount int32
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, msg *queue.SSVMessage) error {
 		atomic.AddInt32(&processedMessagesCount, 1)
 		if msg.MsgID == msg1.MsgID { // Return error after processing the first message
 			return runner.ErrNoValidDutiesToExecute
@@ -1449,7 +1449,7 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 
 	// --- Drain the queue, capturing the priority bucket of each popped message ---
 	bucketChan := make(chan int, len(allMsgs))
-	handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
+	handler := func(_ context.Context, m *queue.SSVMessage) error {
 		bucketChan <- priority(m)
 		return nil
 	}
@@ -1538,7 +1538,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			beaconConfig:    networkconfig.TestNetwork.Beacon,
+			networkConfig:   networkconfig.TestNetwork,
 		}
 
 		currentRound := specqbft.Round(1)
@@ -1613,7 +1613,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			beaconConfig:    networkconfig.TestNetwork.Beacon,
+			networkConfig:   networkconfig.TestNetwork,
 		}
 
 		currentRound := specqbft.Round(1)
@@ -1743,7 +1743,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			handlerCalled    = make(chan struct{}, queueCapacity*3)
 		)
 
-		processFn := func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+		processFn := func(_ context.Context, msg *queue.SSVMessage) error {
 			processMsgsMutex.Lock()
 			processedMsgs = append(processedMsgs, msg)
 			processMsgsMutex.Unlock()

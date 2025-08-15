@@ -35,7 +35,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 		return
 	}
 
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
 		trace.WithAttributes(
@@ -96,7 +96,7 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, c.beaconConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 
 	go func() {
 		defer cancelF()
@@ -197,7 +197,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Handle the message, potentially scheduling a message-replay for later.
-		err := handler(ctx, logger, msg)
+		err := handler(ctx, msg)
 		if err != nil {
 			// We'll re-queue the message to be replayed later in case the error we got is retryable.
 			// We are aiming to cover most of the slot time (~12s), but we don't need to cover all 12s
@@ -272,9 +272,11 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	}
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		// signer must be the same for all messages, at least 1 message must be present (this is validated prior)
+		signer := psm.Messages[0].Signer
 		baseFields = []zap.Field{
 			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
-			zap.Uint64("signer", psm.Messages[0].Signer), // same signer for all messages
+			zap.Uint64("signer", signer),
 			fields.Slot(psm.Slot),
 		}
 	}
