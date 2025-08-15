@@ -19,13 +19,13 @@ func Test_isAggregatorFn(t *testing.T) {
 
 	const goRoutines = 1000
 	results := make(chan bool)
-	for i := 0; i < goRoutines; i++ {
+	for range goRoutines {
 		go func() {
 			result := isAggFn(targetAggregatorsPerCommittee, committeeCount, slotSig)
 			results <- result
 		}()
 	}
-	for i := 0; i < goRoutines; i++ {
+	for range goRoutines {
 		result := <-results
 		require.Equal(t, sampleResult, result)
 	}
