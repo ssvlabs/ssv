@@ -32,12 +32,6 @@ type Bootnode struct {
 	ENR string // Ethereum Node Records https://eips.ethereum.org/EIPS/eip-778
 }
 
-// Close implements io.Closer
-func (b *Bootnode) Close() error {
-	b.cancel()
-	return nil
-}
-
 // NewBootnode creates a new bootnode
 func NewBootnode(pctx context.Context, logger *zap.Logger, ssvConfig *networkconfig.SSV, opts *BootnodeOptions) (*Bootnode, error) {
 	ctx, cancel := context.WithCancel(pctx)
@@ -55,6 +49,12 @@ func NewBootnode(pctx context.Context, logger *zap.Logger, ssvConfig *networkcon
 		disc:   disc,
 		ENR:    enr,
 	}, nil
+}
+
+// Close implements io.Closer
+func (b *Bootnode) Close() error {
+	b.cancel()
+	return nil
 }
 
 func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, ssvConfig *networkconfig.SSV, opts *BootnodeOptions) (Service, error) {
