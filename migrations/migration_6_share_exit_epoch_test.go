@@ -117,15 +117,6 @@ func assertMigratedShares(t *testing.T, db basedb.Database, key []byte, seededSh
 	}
 }
 
-// Encode encodes Share using ssz.
-func (s *migration_6_OldStorageShare) Encode() ([]byte, error) {
-	result, err := s.MarshalSSZ()
-	if err != nil {
-		return nil, fmt.Errorf("marshal ssz: %w", err)
-	}
-	return result, nil
-}
-
 func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*migration_6_OldStorageShare, error) {
 	dbShares := make([]basedb.Obj, 0, numOfItems)
 	seededShares := make([]*migration_6_OldStorageShare, 0, numOfItems)
@@ -145,7 +136,7 @@ func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*mig
 
 		seededShares = append(seededShares, share)
 
-		shareBytes, err := share.Encode()
+		shareBytes, err := share.MarshalSSZ()
 		if err != nil {
 			return nil, err
 		}
