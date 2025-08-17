@@ -50,12 +50,6 @@ var (
 	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
 )
 
-func WithStalenessThreshold(threshold time.Duration) Option {
-	return func(es *EventSyncer) {
-		es.stalenessThreshold = threshold
-	}
-}
-
 func TestEventSyncer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	const testTimeout = 5 * time.Second
@@ -132,8 +126,8 @@ func TestEventSyncer(t *testing.T) {
 		client,
 		eh,
 		WithLogger(logger),
-		WithStalenessThreshold(time.Second*10),
 	)
+	eventSyncer.stalenessThreshold = time.Second * 10
 
 	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
 	err = eventSyncer.Healthy(ctx)
