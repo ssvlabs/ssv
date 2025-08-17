@@ -1,5 +1,3 @@
-//go:build testutils
-
 package mocks
 
 import (

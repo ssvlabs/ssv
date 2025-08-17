@@ -3,12 +3,12 @@ set -eo pipefail
 
 echo -e "\033[36mINFO\033[0m [deadcode] Running deadcode lint"
 
-TAGS="blst_enabled,testutils"
+TAGS="blst_enabled"
 MOD="$(go list -m -f '{{.Path}}')"
 
 # Analyze the same entrypoint you build (adjust if you have multiple mains)
 OUT="$(GOFLAGS="-tags=$TAGS" go tool -modfile=tool.mod deadcode -filter="^${MOD}($|/)" ./cmd/ssvnode \
-  | grep -Ev 'ssvsigner|ssv-spec' || true)"
+  | grep -Ev 'ssvsigner|ssv-spec|test|mock' || true)"
 
 if [[ -n "$OUT" ]]; then
   echo "$OUT"

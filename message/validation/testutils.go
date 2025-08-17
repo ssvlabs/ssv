@@ -1,5 +1,3 @@
-//go:build testutils
-
 package validation
 
 import "github.com/libp2p/go-libp2p/core/peer"
