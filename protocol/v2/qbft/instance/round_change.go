@@ -141,10 +141,13 @@ func (i *Instance) hasReceivedPartialQuorum() (bool, []*specqbft.ProcessingMessa
 	return specqbft.HasPartialQuorum(i.State.CommitteeMember, rc), rc
 }
 
-// hasReceivedProposalJustificationForLeadingRound returns
-// if first round or not received round change msgs with prepare justification - returns first rc msg in container and value to propose
-// if received round change msgs with prepare justification - returns the highest prepare justification round change msg and value to propose
-// (all the above considering the operator is a leader for the round
+// hasReceivedProposalJustificationForLeadingRound (if operator is a leader for the round):
+//   - if first round or not received round change msgs with prepare justification
+//     returns first round change msg in container and value to propose
+//   - if received round change msgs with prepare justification returns the highest
+//     prepare justification round change msg and value to propose
+//
+// If operator is not a leader for the round - return nil, nil, nil.
 func (i *Instance) hasReceivedProposalJustificationForLeadingRound(
 	roundChangeMessage *specqbft.ProcessingMessage,
 ) (*specqbft.ProcessingMessage, []byte, error) {
@@ -155,7 +158,7 @@ func (i *Instance) hasReceivedProposalJustificationForLeadingRound(
 	}
 
 	// Important!
-	// We iterate on all round chance msgs for liveliness in case the last round change msg is malicious.
+	// We iterate on all round change msgs for liveliness in case the last round change msg is malicious.
 	for _, containerRoundChangeMessage := range roundChanges {
 		// Chose proposal value.
 		// If justifiedRoundChangeMsg has no prepare justification chose state value
@@ -351,7 +354,7 @@ func highestPrepared(roundChanges []*specqbft.ProcessingMessage) (*specqbft.Proc
 	return ret, nil
 }
 
-// returns the min round number out of the signed round change messages and the current round
+// returns the min round number out of the signed round change messages
 func minRound(roundChangeMsgs []*specqbft.ProcessingMessage) specqbft.Round {
 	ret := specqbft.NoRound
 	for _, msg := range roundChangeMsgs {

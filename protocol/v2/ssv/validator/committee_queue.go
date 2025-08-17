@@ -30,7 +30,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
 		return
 	}
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
 		trace.WithAttributes(
@@ -91,7 +91,7 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, c.beaconConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 
 	go func() {
 		defer cancelF()
@@ -170,7 +170,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Handle the message.
-		if err := handler(ctx, logger, msg); err != nil {
+		if err := handler(ctx, msg); err != nil {
 			c.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.MsgType),
 				zap.Error(err))
@@ -198,38 +198,12 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	}
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
+		signer := psm.Messages[0].Signer
 		baseFields = []zap.Field{
-			zap.Uint64("signer", psm.Messages[0].Signer),
+			zap.Uint64("signer", signer),
 			fields.Slot(psm.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
-
-//
-//// GetLastHeight returns the last height for the given identifier
-//func (v *Committee) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Height(0)
-//	}
-//	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-//		return ctrl.Height
-//	}
-//	return specqbft.Height(0)
-//}
-//
-//// GetLastRound returns the last height for the given identifier
-//func (v *Committee) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Round(1)
-//	}
-//	if r != nil && r.HasRunningDuty() {
-//		inst := r.GetBaseRunner().State.RunningInstance
-//		if inst != nil {
-//			return inst.State.Round
-//		}
-//	}
-//	return specqbft.Round(1)
-//}

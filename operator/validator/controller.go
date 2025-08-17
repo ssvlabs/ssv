@@ -3,8 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -648,15 +646,17 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
+func (c *controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) {
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
 	dutyID := fields.FormatDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
-			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
-			observability.BeaconSlotAttribute(duty.Slot),
-			observability.BeaconRoleAttribute(duty.Type),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconRoleAttribute(duty.Type),
+			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
+			observability.BeaconEpochAttribute(dutyEpoch),
+			observability.BeaconSlotAttribute(duty.Slot),
 			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
 			observability.DutyIDAttribute(dutyID),
@@ -664,45 +664,38 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
-	// so we need to copy the pubkey val to avoid pointer
-	pk := make([]byte, 48)
-	copy(pk, duty.PubKey[:])
+	logger := c.logger.
+		With(fields.Role(duty.RunnerRole())).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.Slot(duty.Slot)).
+		With(fields.ValidatorIndex(duty.ValidatorIndex)).
+		With(fields.Validator(duty.PubKey[:])).
+		With(fields.DutyID(dutyID))
 
-	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.DomainType)
-		if err != nil {
-			logger.Error("could not create duty execute msg", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
-		dec, err := queue.DecodeSSVMessage(ssvMsg)
-		if err != nil {
-			logger.Error("could not decode duty execute msg", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
-		dec.TraceContext = ctx
-		span.AddEvent("pushing message to the queue")
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-			const eventMsg = "dropping ExecuteDuty message because the queue is full"
-			logger.Warn(eventMsg)
-			span.AddEvent(eventMsg)
-		}
-	} else {
-		const eventMsg = "could not find validator"
+	v, ok := c.GetValidator(spectypes.ValidatorPK(duty.PubKey))
+	if !ok {
+		eventMsg := fmt.Sprintf("could not find validator: %s", duty.PubKey.String())
 		logger.Warn(eventMsg)
 		span.AddEvent(eventMsg)
+		span.SetStatus(codes.Ok, "")
+		return
+	}
+
+	span.AddEvent("executing validator duty")
+	if err := v.ExecuteDuty(ctx, duty); err != nil {
+		logger.Error("could not execute validator duty", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
 	}
 
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+func (c *controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 	cm, ok := c.validatorsMap.GetCommittee(committeeID)
 	if !ok {
 		const eventMsg = "could not find committee"
-		logger.Warn(eventMsg, fields.CommitteeID(committeeID))
+		c.logger.Warn(eventMsg, fields.CommitteeID(committeeID))
 		return
 	}
 
@@ -711,80 +704,35 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		committee = append(committee, operator.OperatorID)
 	}
 
-	dutyID := fields.FormatCommitteeDutyID(committee, c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot)
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
+	dutyID := fields.FormatCommitteeDutyID(committee, dutyEpoch, duty.Slot)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconEpochAttribute(dutyEpoch),
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.CommitteeIDAttribute(committeeID),
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyIDAttribute(dutyID),
 		),
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
-	if err != nil {
-		logger.Error("could not create duty execute msg", zap.Error(err))
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-	dec, err := queue.DecodeSSVMessage(ssvMsg)
-	if err != nil {
-		logger.Error("could not decode duty execute msg", zap.Error(err))
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-	if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
+	logger := c.logger.
+		With(fields.Role(duty.RunnerRole())).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.Slot(duty.Slot)).
+		With(fields.CommitteeID(committeeID)).
+		With(fields.DutyID(dutyID))
+
+	span.AddEvent("executing committee duty")
+	if err := cm.ExecuteDuty(ctx, duty); err != nil {
 		logger.Error("could not execute committee duty", zap.Error(err))
-		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return
 	}
 
 	span.SetStatus(codes.Ok, "")
-}
-
-// CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
-func CreateDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeDutyData := ssvtypes.ExecuteDutyData{Duty: duty}
-	data, err := json.Marshal(executeDutyData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
-	}
-
-	return dutyDataToSSVMsg(domain, pubKey, duty.RunnerRole(), data)
-}
-
-// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
-func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeCommitteeDutyData := ssvtypes.ExecuteCommitteeDutyData{Duty: duty}
-	data, err := json.Marshal(executeCommitteeDutyData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
-	}
-
-	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
-}
-
-func dutyDataToSSVMsg(
-	domain spectypes.DomainType,
-	msgIdentifier []byte,
-	runnerRole spectypes.RunnerRole,
-	data []byte,
-) (*spectypes.SSVMessage, error) {
-	msg := ssvtypes.EventMsg{
-		Type: ssvtypes.ExecuteDuty,
-		Data: data,
-	}
-	msgData, err := msg.Encode()
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode event msg: %w", err)
-	}
-
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, msgIdentifier, runnerRole),
-		Data:    msgData,
-	}, nil
 }
 
 func (c *controller) FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
@@ -860,7 +808,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		}
 		opts := c.validatorCommonOpts.NewOptions(share, operator, dutyRunners)
 
-		v = validator.NewValidator(validatorCtx, validatorCancel, opts)
+		v = validator.NewValidator(validatorCtx, validatorCancel, c.logger, opts)
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
@@ -877,20 +825,13 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
 
-		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
-
-		logger := c.logger.With([]zap.Field{
-			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
-			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
-		}...)
-
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
 		vc = validator.NewCommittee(
 			ctx,
 			cancel,
-			logger,
-			c.networkConfig.Beacon,
+			c.logger,
+			c.networkConfig,
 			operator,
 			committeeRunnerFunc,
 			nil,
@@ -1010,7 +951,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare) error {
 
 func (c *controller) validatorStart(validator *validator.Validator) (bool, error) {
 	if c.validatorStartFunc == nil {
-		return validator.Start(c.logger)
+		return validator.Start()
 	}
 	return c.validatorStartFunc(validator)
 }
