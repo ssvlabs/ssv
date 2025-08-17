@@ -62,20 +62,6 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 	)
 }
 
-// WithLogBatchSize sets log batch size.
-func WithLogBatchSize(size uint64) Option {
-	return func(s *ExecutionClient) {
-		s.logBatchSize = size
-	}
-}
-
-// WithLogBatchSizeMulti sets log batch size.
-func WithLogBatchSizeMulti(size uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.logBatchSize = size
-	}
-}
-
 // testEnv is a helper struct to set up and manage test environment.
 type testEnv struct {
 	ctx          context.Context
@@ -397,7 +383,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			srv := httptest.NewServer(wrapped)
 			t.Cleanup(srv.Close)
 
-			opts := []Option{WithFollowDistance(0), WithLogBatchSize(100000)}
+			opts := []Option{WithFollowDistance(0)}
 
 			client, err := New(t.Context(),
 				srv.URL,
@@ -591,7 +577,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
-	err = env.createClient(WithLogger(logger), WithLogBatchSize(2))
+	err = env.createClient(WithLogger(logger))
 	require.NoError(t, err)
 
 	// Create blocks with transactions
