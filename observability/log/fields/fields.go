@@ -33,6 +33,7 @@ const (
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
+	FieldCommittee           = "committee"
 	FieldCommitteeID         = "committee_id"
 	FieldConnectionID        = "connection_id"
 	FieldPreConsensusTime    = "pre_consensus_time"
@@ -301,7 +302,7 @@ func FormatDutyID(epoch phase0.Epoch, slot phase0.Slot, beaconRole spectypes.Bea
 	return fmt.Sprintf("%v-e%v-s%v-v%v", beaconRole.String(), epoch, slot, index)
 }
 
-func FormatCommittee(operators []spectypes.OperatorID) string {
+func formatCommittee(operators []spectypes.OperatorID) string {
 	opids := make([]string, 0, len(operators))
 	for _, op := range operators {
 		opids = append(opids, fmt.Sprint(op))
@@ -310,7 +311,7 @@ func FormatCommittee(operators []spectypes.OperatorID) string {
 }
 
 func FormatCommitteeDutyID(operators []spectypes.OperatorID, epoch phase0.Epoch, slot phase0.Slot) string {
-	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
+	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", formatCommittee(operators), epoch, slot)
 }
 
 func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
@@ -329,6 +330,10 @@ func Root(r [32]byte) zap.Field {
 }
 func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
+}
+
+func Committee(operatorIDs []spectypes.OperatorID) zap.Field {
+	return zap.String(FieldCommittee, formatCommittee(operatorIDs))
 }
 
 func CommitteeID(val spectypes.CommitteeID) zap.Field {

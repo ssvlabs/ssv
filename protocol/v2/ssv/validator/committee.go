@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"sync"
 
@@ -68,11 +67,9 @@ func NewCommittee(
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
 	}
 
-	committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
-	logger = logger.Named(log.NameCommittee).With([]zap.Field{
-		zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
-		zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
-	}...)
+	logger = logger.Named(log.NameCommittee).
+		With(fields.Committee(types.OperatorIDsFromOperators(operator.Committee))).
+		With(fields.CommitteeID(operator.CommitteeID))
 
 	return &Committee{
 		logger:          logger,
@@ -257,7 +254,6 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		With(fields.MessageType(msgType)).
 		With(fields.MessageID(msgID)).
 		With(fields.Role(msgID.GetRoleType())).
-		With(fields.CommitteeID(committeeID)).
 		With(fields.Slot(slot)).
 		With(fields.DutyID(dutyID))
 
