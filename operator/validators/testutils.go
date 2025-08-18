@@ -6,7 +6,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
-// WithInitialState sets initial state
+// Test helper to set initial state during tests.
 func WithInitialState(vstate map[spectypes.ValidatorPK]*validator.Validator, mstate map[spectypes.CommitteeID]*validator.Committee) Option {
 	return func(vm *ValidatorsMap) {
 		vm.validators = vstate
