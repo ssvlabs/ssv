@@ -26,8 +26,6 @@ import (
 )
 
 const (
-	FieldABI                 = "abi"
-	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
 	FieldAddresses           = "addresses"
 	FieldBeaconRole          = "beacon_role"
@@ -35,17 +33,12 @@ const (
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
-	FieldBlockVersion        = "block_version"
-	FieldClusterIndex        = "cluster_index"
 	FieldCommitteeID         = "committee_id"
-	FieldCommitteeIndex      = "committee_index"
-	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldPostConsensusTime   = "post_consensus_time"
 	FieldConsensusTime       = "consensus_time"
 	FieldBlockTime           = "block_time"
-	FieldBeaconDataTime      = "beacon_data_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
@@ -55,9 +48,7 @@ const (
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldEpoch               = "epoch"
-	FieldErrors              = "errors"
 	FieldEvent               = "event"
-	FieldEventID             = "event_id"
 	FieldFeeRecipient        = "fee_recipient"
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
@@ -65,7 +56,6 @@ const (
 	FieldMessageID           = "msg_id"
 	FieldMessageType         = "msg_type"
 	FieldName                = "name"
-	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"
 	FieldOperatorIDs         = "operator_ids"
 	FieldOperatorPubKey      = "operator_pubkey"
@@ -75,17 +65,14 @@ const (
 	FieldPrivKey             = "privkey"
 	FieldProtocolID          = "protocol_id"
 	FieldPubKey              = "pubkey"
-	FieldQuorumTime          = "quorum_time"
 	FieldRole                = "role"
 	FieldRound               = "round"
 	FieldSlot                = "slot"
-	FieldStartTimeUnixMilli  = "start_time_unix_milli"
+	FieldSlotStartTime       = "slot_start_time"
 	FieldSubmissionTime      = "submission_time"
 	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldTotalDutyTime       = "total_duty_time"
 	FieldSubnets             = "subnets"
-	FieldSyncOffset          = "sync_offset"
-	FieldSyncResults         = "sync_results"
 	FieldTargetNodeENR       = "target_node_enr"
 	FieldToBlock             = "to_block"
 	FieldTook                = "took"
@@ -175,12 +162,8 @@ func CurrentSlot(slot phase0.Slot) zapcore.Field {
 	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(slot)})
 }
 
-func StartTimeUnixMilli(time time.Time) zapcore.Field {
-	return zap.Stringer(FieldStartTimeUnixMilli, stringer.FuncStringer{
-		Fn: func() string {
-			return strconv.Itoa(int(time.UnixMilli()))
-		},
-	})
+func SlotStartTime(time time.Time) zapcore.Field {
+	return zap.Time(FieldSlotStartTime, time)
 }
 
 func BlockCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {

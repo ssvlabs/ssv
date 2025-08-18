@@ -477,7 +477,7 @@ func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Lo
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(s.beaconConfig.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.beaconConfig.SlotStartTime(duty.Slot)))
+		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
@@ -493,7 +493,7 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty)
 		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.StartTimeUnixMilli(s.beaconConfig.SlotStartTime(duty.Slot)))
+		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
 }
 
 // advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,

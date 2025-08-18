@@ -94,7 +94,7 @@ func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDu
 		With(fields.CurrentSlot(c.networkConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.StartTimeUnixMilli(c.networkConfig.SlotStartTime(duty.Slot)))
+		With(fields.SlotStartTime(c.networkConfig.SlotStartTime(duty.Slot)))
 
 	return c.OnExecuteDuty(ctx, logger, dec.Body.(*types.EventMsg))
 }

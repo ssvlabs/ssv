@@ -20,8 +20,10 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		return traces.Errorf(span, "instance stopped processing timeouts")
 	}
 
-	newRound := i.State.Round + 1
-	logger.Debug("⌛ round timed out", fields.Round(newRound))
+	prevRound := i.State.Round
+	newRound := prevRound + 1
+
+	logger.Debug("⌛ round timed out", fields.Round(prevRound))
 
 	// TODO: previously this was done outside of a defer, which caused the
 	// round to be bumped before the round change message was created & broadcasted.
@@ -42,7 +44,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		return traces.Errorf(span, "could not calculate root for round change: %w", err)
 	}
 
-	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
+	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
 
 	const eventMsg = "📢 broadcasting round change message"
 	span.AddEvent(eventMsg,
