@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -28,22 +29,38 @@ type QueueContainer struct {
 	queueState *queue.State
 }
 
-// HandleMessage handles a spectypes.SSVMessage.
+// EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	traceCtx, dutyID := v.fetchTraceContext(ctx, msg.GetID())
-	ctx, span := tracer.Start(traceCtx,
-		observability.InstrumentName(observabilityNamespace, "handle_message"),
+func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
+	msgType := msg.GetType()
+	msgID := msg.GetID()
+	// TODO - the only case we get an error from msg.Slot() is when we are handling an "event" (it doesn't
+	// have slot on it) ... that's unfortunate but it's simpler to just treat it as 0th slot than try and handle
+	// this scenario separately (we'll add slots to events in https://github.com/ssvlabs/ssv/issues/2452)
+	slot, _ := msg.Slot()
+	dutyID := v.lookUpDutyID(msgID)
+
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "enqueue_validator_message"),
 		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.GetType()),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 
+	logger := v.logger.
+		With(fields.MessageType(msgType)).
+		With(fields.MessageID(msgID)).
+		With(fields.Role(msgID.GetRoleType())).
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID))
+
 	msg.TraceContext = ctx
+
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {

@@ -21,28 +21,41 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// HandleMessage handles a spectypes.SSVMessage.
+// EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	slot, err := msg.Slot()
-	if err != nil {
-		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
-		return
-	}
+func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
+	msgType := msg.GetType()
+	msgID := msg.GetID()
+	committeeID := c.CommitteeMember.CommitteeID
+	// TODO - the only case we get an error from msg.Slot() is when we are handling an "event" (it doesn't
+	// have slot on it) ... that's unfortunate but it's simpler to just treat it as 0th slot than try and handle
+	// this scenario separately (we'll add slots to events in https://github.com/ssvlabs/ssv/issues/2452)
+	slot, _ := msg.Slot()
 	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
-		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
+		observability.InstrumentName(observabilityNamespace, "enqueue_committee_message"),
 		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.GetType()),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.CommitteeIDAttribute(committeeID),
+			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 
+	logger := c.logger.
+		With(fields.MessageType(msgType)).
+		With(fields.MessageID(msgID)).
+		With(fields.Role(msgID.GetRoleType())).
+		With(fields.CommitteeID(committeeID)).
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID))
+
 	msg.TraceContext = ctx
-	span.SetAttributes(observability.BeaconSlotAttribute(slot))
+
 	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
 	q, ok := c.Queues[slot]

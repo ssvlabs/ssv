@@ -177,10 +177,10 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	}
 
 	// Prunes all expired committee runners, when new runner is created
-	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
-	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+	logger = logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
+	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
 		span.RecordError(err)
-		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
+		logger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -230,20 +230,36 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
-	traceContext, dutyID := c.buildTraceContext(ctx, msg)
-	ctx, span := tracer.Start(traceContext,
+	msgType := msg.GetType()
+	msgID := msg.GetID()
+	committeeID := c.CommitteeMember.CommitteeID
+	// TODO - the only case we get an error from msg.Slot() is when we are handling an "event" (it doesn't
+	// have slot on it) ... that's unfortunate but it's simpler to just treat it as 0th slot than try and handle
+	// this scenario separately (we'll add slots to events in https://github.com/ssvlabs/ssv/issues/2452)
+	slot, _ := msg.Slot()
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
 		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.CommitteeIDAttribute(committeeID),
+			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID),
-		))
+		),
+		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)),
+	)
 	defer span.End()
 
-	msgType := msg.GetType()
-	span.SetAttributes(observability.ValidatorMsgTypeAttribute(msgType))
-
-	logger := c.logger.With(zap.String("message_type", message.MsgTypeToString(msgType)))
+	logger := c.logger.
+		With(fields.MessageType(msgType)).
+		With(fields.MessageID(msgID)).
+		With(fields.Role(msgID.GetRoleType())).
+		With(fields.CommitteeID(committeeID)).
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID))
 
 	// Validate message
 	if msgType != message.SSVEventMsgType {
@@ -272,7 +288,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 		c.mtx.RLock()
-		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
+		r, exists := c.Runners[slot]
 		c.mtx.RUnlock()
 		if !exists {
 			return traces.Errorf(span, "no runner found for message's slot")
@@ -318,17 +334,6 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 
 	span.SetStatus(codes.Ok, "")
 	return nil
-}
-
-func (c *Committee) buildTraceContext(ctx context.Context, msg *queue.SSVMessage) (context.Context, string) {
-	slot, err := msg.Slot()
-	if err != nil {
-		c.logger.Warn("could not get slot from message while building Trace context", zap.Error(err))
-		return ctx, "unknown"
-	}
-
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
-	return traces.Context(ctx, dutyID), dutyID
 }
 
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {

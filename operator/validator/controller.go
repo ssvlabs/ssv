@@ -343,9 +343,9 @@ func (c *controller) handleRouterMessages() {
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.HandleMessage(ctx, c.logger, m)
+					v.EnqueueMessage(ctx, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.HandleMessage(ctx, c.logger, m)
+					vc.EnqueueMessage(ctx, m)
 				} else if c.validatorCommonOpts.ExporterOptions.Enabled {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
