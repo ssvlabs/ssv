@@ -55,7 +55,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
 	if len(b.State.DecidedValue) == 0 {
-		return ErrNoDecidedValue
+		return fmt.Errorf("no decided value")
 	}
 
 	if b.State.RunningInstance == nil {
@@ -63,7 +63,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
 	if !decided {
-		return ErrNoDecidedValue
+		return fmt.Errorf("no decided value")
 	}
 
 	// TODO: (Alan) maybe nicer to do this without switch

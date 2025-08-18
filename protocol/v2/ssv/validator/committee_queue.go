@@ -223,8 +223,8 @@ func (c *Committee) ConsumeQueue(
 				logMsg += ", dropping message and terminating committee-runner"
 			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrFuturePartialSigMsg) ||
 				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureConsensusMsg) ||
-				errors.Is(err, runner.ErrNoProposalForRound) || errors.Is(err, runner.ErrWrongMsgRound) ||
-				errors.Is(err, runner.ErrNoDecidedValue)) && msgRetryCnt < retryCount:
+				errors.Is(err, runner.ErrNoProposalForRound) || errors.Is(err, runner.ErrWrongMsgRound)) &&
+				msgRetryCnt < retryCount:
 
 				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
 				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)

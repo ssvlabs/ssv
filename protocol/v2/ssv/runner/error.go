@@ -29,7 +29,4 @@ var (
 	// ErrWrongMsgRound means we might not have changed the round to the next one yet, while another operator already
 	// did + sent this message to us.
 	ErrWrongMsgRound = fmt.Errorf("wrong msg round")
-	// ErrNoDecidedValue means we might not have finished QBFT consensus phase yet, while another operator already
-	// did + sent this message to us.
-	ErrNoDecidedValue = fmt.Errorf("no decided value")
 )
