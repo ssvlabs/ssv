@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"math"
 	"time"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var (
@@ -19,27 +17,6 @@ func DurationFromUint64(t uint64) time.Duration {
 		return time.Duration(math.MaxInt64) // todo: error handling refactor
 	}
 	return time.Duration(t) // #nosec G115
-}
-
-func BeaconRoleToRunnerRole(runnerRole spectypes.BeaconRole) spectypes.RunnerRole {
-	switch runnerRole {
-	case spectypes.BNRoleAttester:
-		return spectypes.RoleCommittee
-	case spectypes.BNRoleAggregator:
-		return spectypes.RoleAggregator
-	case spectypes.BNRoleProposer:
-		return spectypes.RoleProposer
-	case spectypes.BNRoleSyncCommittee:
-		return spectypes.RoleCommittee
-	case spectypes.BNRoleSyncCommitteeContribution:
-		return spectypes.RoleSyncCommitteeContribution
-	case spectypes.BNRoleValidatorRegistration:
-		return spectypes.RoleValidatorRegistration
-	case spectypes.BNRoleVoluntaryExit:
-		return spectypes.RoleVoluntaryExit
-	default:
-		return spectypes.RoleUnknown
-	}
 }
 
 // DurationToUint64 returns error if duration is negative and converts time.Duration to uint64 safe otherwise

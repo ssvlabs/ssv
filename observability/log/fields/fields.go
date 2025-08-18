@@ -4,12 +4,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/common"
@@ -21,11 +19,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/observability/log/fields/stringer"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -101,20 +97,10 @@ const (
 	FieldValidatorIndex      = "validator_index"
 )
 
-func FromBlock(val uint64) zapcore.Field {
-	return zap.Uint64(FieldFromBlock, val)
-}
-
-func SyncOffset(val fmt.Stringer) zapcore.Field {
-	return zap.Stringer(FieldSyncOffset, val)
-}
+func FromBlock(val uint64) zapcore.Field { return zap.Uint64(FieldFromBlock, val) }
 
 func TxHash(val fmt.Stringer) zapcore.Field {
 	return zap.Stringer(FieldTxHash, val)
-}
-
-func EventID(val fmt.Stringer) zapcore.Field {
-	return zap.Stringer(FieldEventID, val)
 }
 
 func PrivKey(val []byte) zapcore.Field {
@@ -141,10 +127,6 @@ func DutyExecutorID(senderID []byte) zapcore.Field {
 	return zap.Stringer(FieldDutyExecutorID, stringer.HexStringer{Val: senderID})
 }
 
-func AddressURL(val url.URL) zapcore.Field {
-	return zap.Stringer(FieldAddress, &val)
-}
-
 func Address(val string) zapcore.Field {
 	return zap.String(FieldAddress, val)
 }
@@ -155,10 +137,6 @@ func Addresses(vals []string) zapcore.Field {
 
 func ENR(val *enode.Node) zapcore.Field {
 	return zap.Stringer(FieldENR, val)
-}
-
-func ENRStr(val string) zapcore.Field {
-	return zap.String(FieldENR, val)
 }
 
 func TargetNodeENR(val *enode.Node) zapcore.Field {
@@ -213,20 +191,12 @@ func IndexCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
 	return zap.Stringer(FieldIndexCacheMetrics, metrics)
 }
 
-func SyncResults(msgs protocolp2p.SyncResults) zapcore.Field {
-	return zap.Stringer(FieldSyncResults, msgs)
-}
-
 func OperatorID(operatorId spectypes.OperatorID) zap.Field {
 	return zap.Uint64(FieldOperatorId, operatorId)
 }
 
 func OperatorIDs(operatorIDs []spectypes.OperatorID) zap.Field {
 	return zap.Uint64s(FieldOperatorIDs, operatorIDs)
-}
-
-func OperatorIDStr(operatorId string) zap.Field {
-	return zap.String(FieldOperatorId, operatorId)
 }
 
 func Height(height specqbft.Height) zap.Field {
@@ -256,10 +226,6 @@ func MessageType(val spectypes.MsgType) zap.Field {
 	return zap.String(FieldMessageType, message.MsgTypeToString(val))
 }
 
-func QBFTMessageType(val specqbft.MessageType) zap.Field {
-	return zap.String(FieldMessageType, message.QBFTMsgTypeToString(val))
-}
-
 func EventName(val string) zap.Field {
 	return zap.String(FieldEvent, val)
 }
@@ -270,10 +236,6 @@ func BlockNumber(val uint64) zap.Field {
 
 func BlockHash(val phase0.Hash32) zap.Field {
 	return zap.Stringer(FieldBlockHash, val)
-}
-
-func BlockVersion(val spec.DataVersion) zap.Field {
-	return zap.Stringer(FieldBlockVersion, val)
 }
 
 func Name(val string) zap.Field {
@@ -312,10 +274,6 @@ func BlockTime(val time.Duration) zap.Field {
 	return zap.String(FieldBlockTime, FormatDuration(val))
 }
 
-func BeaconDataTime(val time.Duration) zap.Field {
-	return zap.String(FieldBeaconDataTime, FormatDuration(val))
-}
-
 func SubmissionTime(val time.Duration) zap.Field {
 	return zap.String(FieldSubmissionTime, FormatDuration(val))
 }
@@ -346,22 +304,6 @@ func Domain(val spectypes.DomainType) zap.Field {
 
 func ProtocolID(val [6]byte) zap.Field {
 	return zap.String(FieldProtocolID, hex.EncodeToString(val[:]))
-}
-
-func Network(val string) zap.Field {
-	return zap.String(FieldNetwork, val)
-}
-
-func ABIVersion(val string) zap.Field {
-	return zap.String(FieldABIVersion, val)
-}
-
-func ABI(val string) zap.Field {
-	return zap.String(FieldABI, val)
-}
-
-func Errors(val []error) zap.Field {
-	return zap.Errors(FieldErrors, val)
 }
 
 func ToBlock(val uint64) zap.Field {
@@ -404,14 +346,6 @@ func Root(r [32]byte) zap.Field {
 }
 func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
-}
-
-func Config(val fmt.Stringer) zap.Field {
-	return zap.Stringer(FieldConfig, val)
-}
-
-func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
-	return zap.Uint64(FieldClusterIndex, cluster.Index)
 }
 
 func CommitteeID(val spectypes.CommitteeID) zap.Field {

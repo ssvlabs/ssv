@@ -45,6 +45,25 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
+	switch mt {
+	case spectypes.PostConsensusPartialSig:
+		return "PostConsensusPartialSig"
+	case spectypes.RandaoPartialSig:
+		return "RandaoPartialSig"
+	case spectypes.SelectionProofPartialSig:
+		return "SelectionProofPartialSig"
+	case spectypes.ContributionProofs:
+		return "ContributionProofs"
+	case spectypes.ValidatorRegistrationPartialSig:
+		return "ValidatorRegistrationPartialSig"
+	case spectypes.VoluntaryExitPartialSig:
+		return "VoluntaryExitPartialSig"
+	default:
+		return fmt.Sprintf("unknown(%d)", mt)
+	}
+}
+
 func Test_ValidateSSVMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -812,7 +831,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
+					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), PartialMsgTypeToString(msgType))
 					t.Run(subtestName, func(t *testing.T) {
 						ds := dutystore.New()
 						ds.Proposer.Set(spectestingutils.TestingDutyEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
@@ -891,7 +910,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
+					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), PartialMsgTypeToString(msgType))
 					t.Run(subtestName, func(t *testing.T) {
 						ds := dutystore.New()
 						ds.Proposer.Set(spectestingutils.TestingDutyEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{

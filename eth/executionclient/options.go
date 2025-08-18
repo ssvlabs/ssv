@@ -100,20 +100,6 @@ func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
 	}
 }
 
-// WithLogBatchSize sets log batch size.
-func WithLogBatchSize(size uint64) Option {
-	return func(s *ExecutionClient) {
-		s.logBatchSize = size
-	}
-}
-
-// WithLogBatchSizeMulti sets log batch size.
-func WithLogBatchSizeMulti(size uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.logBatchSize = size
-	}
-}
-
 // WithSyncDistanceTolerance sets the number of blocks that is acceptable to lag behind.
 func WithSyncDistanceTolerance(count uint64) Option {
 	return func(s *ExecutionClient) {

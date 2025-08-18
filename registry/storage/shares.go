@@ -542,13 +542,6 @@ func ByActiveValidator() SharesFilter {
 	}
 }
 
-// ByAttesting filters for attesting validators.
-func ByAttesting(epoch phase0.Epoch) SharesFilter {
-	return func(share *types.SSVShare) bool {
-		return share.IsAttesting(epoch)
-	}
-}
-
 // ByClusterIDHash filters by cluster id.
 func ByClusterIDHash(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {
