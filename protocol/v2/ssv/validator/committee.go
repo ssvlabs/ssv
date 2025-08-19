@@ -219,6 +219,20 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
 	msgID := msg.GetID()
+
+	// Validate message (+ verify SignedSSVMessage's signature)
+	if msgType != message.SSVEventMsgType {
+		if err := msg.SignedSSVMessage.Validate(); err != nil {
+			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
+		}
+		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
+			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
+		}
+		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
+			return fmt.Errorf("Message invalid: %w", err)
+		}
+	}
+
 	slot, err := msg.Slot()
 	if err != nil {
 		return fmt.Errorf("couldn't get message slot: %w", err)
@@ -245,23 +259,6 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)),
 	)
 	defer span.End()
-
-	// Validate message
-	if msgType != message.SSVEventMsgType {
-		span.AddEvent("validating message and signature")
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return traces.Errorf(span, "invalid SignedSSVMessage: %w", err)
-		}
-
-		// Verify SignedSSVMessage's signature
-		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return traces.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
-		}
-
-		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return traces.Errorf(span, "Message invalid: %w", err)
-		}
-	}
 
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
