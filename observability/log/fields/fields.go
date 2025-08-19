@@ -28,7 +28,6 @@ import (
 const (
 	FieldAddress             = "address"
 	FieldAddresses           = "addresses"
-	FieldBeaconRole          = "beacon_role"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
@@ -67,7 +66,8 @@ const (
 	FieldPrivKey             = "privkey"
 	FieldProtocolID          = "protocol_id"
 	FieldPubKey              = "pubkey"
-	FieldRole                = "role"
+	FieldBeaconRole          = "beacon_role"
+	FieldRunnerRole          = "runner_role"
 	FieldSlot                = "slot"
 	FieldSlotStartTime       = "slot_start_time"
 	FieldSubmissionTime      = "submission_time"
@@ -195,12 +195,8 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldBeaconRole, val)
 }
 
-func Role(val spectypes.RunnerRole) zap.Field {
-	return zap.String(FieldRole, formatRunnerRole(val))
-}
-
-func ExporterRole(val spectypes.BeaconRole) zap.Field {
-	return zap.Stringer(FieldRole, val)
+func RunnerRole(val spectypes.RunnerRole) zap.Field {
+	return zap.String(FieldRunnerRole, formatRunnerRole(val))
 }
 
 func MessageID(val spectypes.MessageID) zap.Field {

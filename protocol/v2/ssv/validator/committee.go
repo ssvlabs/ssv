@@ -228,7 +228,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	logger := c.logger.
 		With(fields.MessageType(msgType)).
 		With(fields.MessageID(msgID)).
-		With(fields.Role(msgID.GetRoleType())).
+		With(fields.RunnerRole(msgID.GetRoleType())).
 		With(fields.Slot(slot)).
 		With(fields.DutyID(dutyID))
 

@@ -38,7 +38,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	logger := v.logger.
 		With(fields.MessageType(msgType)).
 		With(fields.MessageID(msgID)).
-		With(fields.Role(msgID.GetRoleType()))
+		With(fields.RunnerRole(msgID.GetRoleType()))
 
 	slot, err := msg.Slot()
 	if err != nil {
@@ -81,7 +81,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	}
 
 	const errMsg = "❌ missing queue for role type"
-	logger.Error(errMsg, fields.Role(msg.MsgID.GetRoleType()))
+	logger.Error(errMsg, fields.RunnerRole(msg.MsgID.GetRoleType()))
 	span.SetStatus(codes.Error, errMsg)
 }
 

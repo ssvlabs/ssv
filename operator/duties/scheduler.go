@@ -489,7 +489,7 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty)
 	return s.logger.
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
-		With(fields.Role(duty.RunnerRole())).
+		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).

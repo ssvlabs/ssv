@@ -79,7 +79,7 @@ func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDu
 	committeeDutyID := fields.BuildCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot)
 	logger := c.logger.
 		With(fields.DutyID(committeeDutyID)).
-		With(fields.Role(duty.RunnerRole())).
+		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.CurrentSlot(c.networkConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).

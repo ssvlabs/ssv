@@ -665,7 +665,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorD
 	defer span.End()
 
 	logger := c.logger.
-		With(fields.Role(duty.RunnerRole())).
+		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.Epoch(dutyEpoch)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.ValidatorIndex(duty.ValidatorIndex)).
@@ -719,7 +719,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spect
 	defer span.End()
 
 	logger := c.logger.
-		With(fields.Role(duty.RunnerRole())).
+		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.Epoch(dutyEpoch)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.CommitteeID(committeeID)).

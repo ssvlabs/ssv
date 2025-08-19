@@ -30,7 +30,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	logger := c.logger.
 		With(fields.MessageType(msgType)).
 		With(fields.MessageID(msgID)).
-		With(fields.Role(msgID.GetRoleType()))
+		With(fields.RunnerRole(msgID.GetRoleType()))
 
 	slot, err := msg.Slot()
 	if err != nil {

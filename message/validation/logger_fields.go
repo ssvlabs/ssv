@@ -35,7 +35,7 @@ type LoggerFields struct {
 func (d LoggerFields) AsZapFields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.DutyExecutorID(d.DutyExecutorID),
-		fields.Role(d.Role),
+		fields.RunnerRole(d.Role),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
 	}

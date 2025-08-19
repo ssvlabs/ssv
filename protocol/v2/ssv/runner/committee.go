@@ -577,13 +577,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	for root := range deduplicatedRoots {
 		// Get validators related to the given root
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
-
 		if !found {
 			// Edge case: since operators may have divergent sets of validators,
 			// it's possible that an operator doesn't have the validator associated to a root.
 			// In this case, we simply continue.
 			continue
 		}
+
 		const eventMsg = "found validators for root"
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconRoleAttribute(role),
@@ -592,7 +592,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		))
 		logger.Debug(eventMsg,
 			fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
-			zap.String("role", role.String()),
+			fields.BeaconRole(role),
 			zap.String("root", hex.EncodeToString(root[:])),
 			zap.Any("validators", validators),
 		)
