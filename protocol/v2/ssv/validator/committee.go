@@ -221,7 +221,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	msgID := msg.GetID()
 	slot, err := msg.Slot()
 	if err != nil {
-		return fmt.Errorf("❌ couldn't get message slot: %w", err)
+		return fmt.Errorf("couldn't get message slot: %w", err)
 	}
 	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
 

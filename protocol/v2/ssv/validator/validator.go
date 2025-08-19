@@ -131,7 +131,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	msgID := msg.GetID()
 	slot, err := msg.Slot()
 	if err != nil {
-		return fmt.Errorf("❌ couldn't get message slot: %w", err)
+		return fmt.Errorf("couldn't get message slot: %w", err)
 	}
 	dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
 
