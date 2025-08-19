@@ -353,7 +353,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
 		zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
-		fields.Round(r.GetState().RunningInstance.State.Round))
+		fields.QBFTRound(r.GetState().RunningInstance.State.Round))
 
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
@@ -369,8 +369,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
-		fields.Height(r.BaseRunner.QBFTController.Height),
-		fields.Round(r.GetState().RunningInstance.State.Round),
+		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
+		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
 		zap.Bool("blinded", r.decidedBlindedBlock()),
 	)
 	var (
@@ -427,8 +427,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	))
 	logger.Info(eventMsg,
 		fields.Slot(validatorConsensusData.Duty.Slot),
-		fields.Height(r.BaseRunner.QBFTController.Height),
-		fields.Round(r.GetState().RunningInstance.State.Round),
+		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
+		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
 		zap.String("block_hash", bSummary.Hash.String()),
 		zap.Bool("blinded", bSummary.Blinded),
 		fields.Took(time.Since(start)),

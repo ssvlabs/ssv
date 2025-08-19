@@ -484,7 +484,7 @@ func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Lo
 func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
 	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
 	return s.logger.
 		With(fields.CommitteeID(committeeDuty.id)).

@@ -23,7 +23,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	prevRound := i.State.Round
 	newRound := prevRound + 1
 
-	logger.Debug("⌛ round timed out", fields.Round(prevRound))
+	logger.Debug("⌛ round timed out", fields.QBFTRound(prevRound))
 
 	// TODO: previously this was done outside of a defer, which caused the
 	// round to be bumped before the round change message was created & broadcasted.
@@ -54,10 +54,10 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		))
 
 	logger.Debug(eventMsg,
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.Height(i.State.Height),
+		fields.QBFTHeight(i.State.Height),
 		zap.String("reason", "timeout"))
 
 	if err := i.Broadcast(roundChange); err != nil {

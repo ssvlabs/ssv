@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -102,13 +103,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)),
-	)
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "start_committee_duty"))
 	defer span.End()
 
 	span.AddEvent("prepare duty and runner")
@@ -134,13 +129,8 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 ) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)),
-	)
+
+	_, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"))
 	defer span.End()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
@@ -229,26 +219,11 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
 	msgID := msg.GetID()
-	committeeID := c.CommitteeMember.CommitteeID
-	// TODO - the only case we get an error from msg.Slot() is when we are handling an "event" (it doesn't
-	// have slot on it) ... that's unfortunate but it's simpler to just treat it as 0th slot than try and handle
-	// this scenario separately (we'll add slots to events in https://github.com/ssvlabs/ssv/issues/2452)
-	slot, _ := msg.Slot()
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
-
-	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
-		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
-		trace.WithAttributes(
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.ValidatorMsgIDAttribute(msgID),
-			observability.RunnerRoleAttribute(msgID.GetRoleType()),
-			observability.CommitteeIDAttribute(committeeID),
-			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
-		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)),
-	)
-	defer span.End()
+	slot, err := msg.Slot()
+	if err != nil {
+		return fmt.Errorf("❌ couldn't get message slot: %w", err)
+	}
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
 
 	logger := c.logger.
 		With(fields.MessageType(msgType)).
@@ -256,6 +231,20 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		With(fields.Role(msgID.GetRoleType())).
 		With(fields.Slot(slot)).
 		With(fields.DutyID(dutyID))
+
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
+			observability.BeaconSlotAttribute(slot),
+			observability.DutyIDAttribute(dutyID),
+		),
+		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)),
+	)
+	defer span.End()
 
 	// Validate message
 	if msgType != message.SSVEventMsgType {
@@ -343,7 +332,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
 			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
-			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
+			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)

@@ -94,11 +94,7 @@ func NewCommitteeRunner(
 }
 
 func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.start_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.start_committee_duty"))
 	defer span.End()
 
 	d, ok := duty.(*spectypes.CommitteeDuty)
@@ -764,8 +760,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		logger.Info(eventMsg,
 			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
-			fields.Height(cr.BaseRunner.QBFTController.Height),
-			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+			fields.QBFTHeight(cr.BaseRunner.QBFTController.Height),
+			fields.QBFTRound(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
@@ -817,8 +813,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
 		))
 		logger.Info(eventMsg,
-			fields.Height(cr.BaseRunner.QBFTController.Height),
-			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+			fields.QBFTHeight(cr.BaseRunner.QBFTController.Height),
+			fields.QBFTRound(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),

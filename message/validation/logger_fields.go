@@ -46,7 +46,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 
 	if d.Consensus != nil {
 		result = append(result,
-			fields.Round(d.Consensus.Round),
+			fields.QBFTRound(d.Consensus.Round),
 			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType)),
 		)
 	}
@@ -95,7 +95,7 @@ func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	if lf.Role == spectypes.RoleCommittee {
 		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
 		if ok {
-			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
+			lf.DutyID = fields.BuildCommitteeDutyID(c.Operators, mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
 		}
 	} else {
 		// get the validator index from the msgid
