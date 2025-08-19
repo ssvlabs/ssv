@@ -103,7 +103,12 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "start_committee_duty"))
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.BeaconSlotAttribute(duty.Slot)))
 	defer span.End()
 
 	span.AddEvent("prepare duty and runner")
@@ -127,11 +132,16 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	runnableDuty *spectypes.CommitteeDuty,
 	err error,
 ) {
+	_, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.BeaconSlotAttribute(duty.Slot)))
+	defer span.End()
+
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-
-	_, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"))
-	defer span.End()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return nil, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)

@@ -135,7 +135,11 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "base_runner.start_duty"))
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "base_runner.start_duty"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
 	if err := b.ShouldProcessDuty(duty); err != nil {

@@ -44,7 +44,5 @@ func (m *metricsRecorder) RecordRoundChange(ctx context.Context, round qbft.Roun
 		metric.WithAttributes(
 			roleAttribute(m.role),
 			observability.DutyRoundAttribute(round),
-			reasonAttribute(reason),
-		),
-	)
+			reasonAttribute(reason)))
 }

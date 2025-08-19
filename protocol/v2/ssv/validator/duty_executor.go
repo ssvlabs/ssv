@@ -8,6 +8,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
@@ -38,7 +39,11 @@ func (v *Validator) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDu
 }
 
 func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "on_execute_duty"))
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "on_execute_duty"),
+		trace.WithAttributes(
+			observability.ValidatorEventTypeAttribute(msg.Type),
+		))
 	defer span.End()
 
 	executeDutyData, err := msg.GetExecuteDutyData()
@@ -46,6 +51,11 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 		return traces.Errorf(span, "failed to get execute duty data: %w", err)
 	}
 	duty := executeDutyData.Duty
+
+	span.SetAttributes(
+		observability.BeaconSlotAttribute(duty.Slot),
+		observability.RunnerRoleAttribute(duty.RunnerRole()),
+	)
 
 	// force the validator to be started (subscribed to validator's topic and synced)
 	span.AddEvent("start validator")
@@ -89,7 +99,11 @@ func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDu
 }
 
 func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "on_execute_committee_duty"))
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "on_execute_committee_duty"),
+		trace.WithAttributes(
+			observability.ValidatorEventTypeAttribute(msg.Type),
+		))
 	defer span.End()
 
 	executeDutyData, err := msg.GetExecuteCommitteeDutyData()
@@ -98,7 +112,11 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	}
 	duty := executeDutyData.Duty
 
-	span.SetAttributes(observability.DutyCountAttribute(len(duty.ValidatorDuties)))
+	span.SetAttributes(
+		observability.BeaconSlotAttribute(duty.Slot),
+		observability.RunnerRoleAttribute(duty.RunnerRole()),
+		observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+	)
 
 	span.AddEvent("start duty")
 	if err := c.StartDuty(ctx, logger, duty); err != nil {
