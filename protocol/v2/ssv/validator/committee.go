@@ -229,7 +229,11 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
 		}
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return fmt.Errorf("Message invalid: %w", err)
+			// TODO - we should improve this error message as is suggested by the commented-out code here
+			// (and also remove nolint annotation), currently we cannot do it due to spec-tests expecting
+			// this exact format we are stuck with.
+			//return fmt.Errorf("SSVMessage invalid: %w", err)
+			return fmt.Errorf("Message invalid: %w", err) //nolint:staticcheck
 		}
 	}
 
