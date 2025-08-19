@@ -526,8 +526,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
 
-	logger = logger.With(fields.Slot(signedMsg.Slot))
-
 	indices := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
 		indices[i] = uint64(msg.ValidatorIndex)
@@ -538,7 +536,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		zap.Bool("quorum", hasQuorum),
-		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
 		zap.Int("roots", len(roots)),
 		zap.Uint64s("validators", indices))
@@ -591,7 +588,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			observability.ValidatorCountAttribute(len(validators)),
 		))
 		logger.Debug(eventMsg,
-			fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			fields.BeaconRole(role),
 			zap.String("root", hex.EncodeToString(root[:])),
 			zap.Any("validators", validators),
@@ -635,7 +631,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
 					span.AddEvent(eventMsg)
-					vlogger.Error(eventMsg, fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()), zap.Error(err))
+					vlogger.Error(eventMsg, zap.Error(err))
 
 					errCh <- fmt.Errorf("%s: %w", eventMsg, err)
 					return
@@ -1033,10 +1029,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		return traces.Errorf(span, "failed to get attestation data: %w", err)
 	}
 
-	logger = logger.With(
-		zap.Duration("attestation_data_time", time.Since(start)),
-		fields.Slot(slot),
-	)
+	logger = logger.With(zap.Duration("attestation_data_time", time.Since(start)))
 
 	cr.measurements.StartConsensus()
 
