@@ -659,7 +659,6 @@ func (c *controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorD
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
-			observability.DutyIDAttribute(dutyID),
 		),
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
@@ -713,7 +712,6 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spect
 			observability.BeaconEpochAttribute(dutyEpoch),
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.CommitteeIDAttribute(committeeID),
-			observability.DutyIDAttribute(dutyID),
 		),
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()

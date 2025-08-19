@@ -58,7 +58,6 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 			observability.ValidatorMsgIDAttribute(msgID),
 			observability.RunnerRoleAttribute(msgID.GetRoleType()),
 			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 
