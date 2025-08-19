@@ -494,14 +494,14 @@ type mockTraceStore struct {
 	validatorDecideds           map[string][]qbftstorage.ParticipantsRangeEntry
 	committeeDecideds           map[string][]qbftstorage.ParticipantsRangeEntry
 	GetValidatorDutyFunc        func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
-	GetValidatorDutiesFunc      func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
+	GetValidatorDutiesFunc      func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, []error)
 	GetCommitteeDutyFunc        func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error)
-	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error)
+	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, []error)
 	GetCommitteeIDFunc          func(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
-	GetValidatorDecidedsFunc    func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetCommitteeDecidedsFunc    func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetValidatorDecidedsFunc    func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, []error)
+	GetCommitteeDecidedsFunc    func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error)
+	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error)
+	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error)
 }
 
 func newMockTraceStore() *mockTraceStore {
@@ -518,7 +518,7 @@ func (m *mockTraceStore) GetValidatorDuty(role spectypes.BeaconRole, slot phase0
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error) {
+func (m *mockTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, []error) {
 	if m.GetValidatorDutiesFunc != nil {
 		return m.GetValidatorDutiesFunc(role, slot)
 	}
@@ -532,7 +532,7 @@ func (m *mockTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*exportertypes.CommitteeDutyTrace, error) {
+func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*exportertypes.CommitteeDutyTrace, []error) {
 	if m.GetCommitteeDutiesFunc != nil {
 		return m.GetCommitteeDutiesFunc(slot)
 	}
@@ -546,7 +546,7 @@ func (m *mockTraceStore) GetCommitteeID(slot phase0.Slot, pubkey spectypes.Valid
 	return spectypes.CommitteeID{}, 0, nil
 }
 
-func (m *mockTraceStore) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *mockTraceStore) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 	if m.GetValidatorDecidedsFunc != nil {
 		return m.GetValidatorDecidedsFunc(role, slot, pubKeys)
 	}
@@ -554,7 +554,7 @@ func (m *mockTraceStore) GetValidatorDecideds(role spectypes.BeaconRole, slot ph
 	return m.validatorDecideds[key], nil
 }
 
-func (m *mockTraceStore) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *mockTraceStore) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 	if m.GetAllValidatorDecidedsFunc != nil {
 		return m.GetAllValidatorDecidedsFunc(role, slot)
 	}
@@ -562,14 +562,14 @@ func (m *mockTraceStore) GetAllValidatorDecideds(role spectypes.BeaconRole, slot
 	return m.validatorDecideds[key], nil
 }
 
-func (m *mockTraceStore) GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *mockTraceStore) GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 	if m.GetCommitteeDecidedsFunc != nil {
 		return m.GetCommitteeDecidedsFunc(slot, pubKey)
 	}
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 	if m.GetAllCommitteeDecidedsFunc != nil {
 		return m.GetAllCommitteeDecidedsFunc(slot)
 	}
@@ -646,7 +646,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				copy(pk[:], pkBytes)
 
 				// Mock GetCommitteeDecideds to return entries for the requested pubkey
-				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -774,7 +774,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				var pk1, pk2 spectypes.ValidatorPK
 				copy(pk1[:], pk1Bytes)
 				copy(pk2[:], pk2Bytes)
-				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -788,7 +788,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 						},
 					}, nil
 				}
-				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -840,7 +840,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				copy(pk2[:], pk2Bytes)
 
 				// Mock GetValidatorDecideds to return entries only for the requested pubkey
-				store.GetValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -851,7 +851,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				}
 
 				// Mock GetCommitteeDecideds to return entries only for the requested pubkey
-				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -894,8 +894,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"roles": []string{"ATTESTER"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
-					return nil, fmt.Errorf("forced error on GetAllCommitteeDecideds")
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error) {
+					return nil, []error{fmt.Errorf("forced error on GetAllCommitteeDecideds")}
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -916,8 +916,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
-					return nil, fmt.Errorf("forced error on GetCommitteeDecideds")
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error) {
+					return nil, []error{fmt.Errorf("forced error on GetCommitteeDecideds")}
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -938,8 +938,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
-					return nil, dutytracer.ErrNotFound
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error) {
+					return nil, []error{dutytracer.ErrNotFound}
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -959,8 +959,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"roles": []string{"PROPOSER"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
-					return nil, fmt.Errorf("forced error on GetAllValidatorDecideds")
+				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error) {
+					return nil, []error{fmt.Errorf("forced error on GetAllValidatorDecideds")}
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -981,8 +981,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				store.GetValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
-					return nil, fmt.Errorf("forced error on GetValidatorDecideds")
+				store.GetValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, []error) {
+					return nil, []error{fmt.Errorf("forced error on GetValidatorDecideds")}
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -1062,7 +1062,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
-				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -1093,7 +1093,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
-				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -1123,7 +1123,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
-				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, []error) {
 					return []qbftstorage.ParticipantsRangeEntry{
 						{
 							Slot:    slot,
@@ -1258,7 +1258,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (traces []*exportertypes.CommitteeDutyTrace, err error) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (traces []*exportertypes.CommitteeDutyTrace, errs []error) {
 					traces = []*exportertypes.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
 					}
@@ -1332,8 +1332,8 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error) {
-					return nil, fmt.Errorf("forced error on GetCommitteeDuties")
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, []error) {
+					return nil, []error{fmt.Errorf("forced error on GetCommitteeDuties")}
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -1526,7 +1526,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 					return share, true
 				}
 
-				store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error) {
+				store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, []error) {
 					results := []*dutytracer.ValidatorDutyTrace{
 						{
 							ValidatorDutyTrace: exportertypes.ValidatorDutyTrace{

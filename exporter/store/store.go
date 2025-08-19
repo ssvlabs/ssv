@@ -83,21 +83,22 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 	return duty, nil
 }
 
-func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (duties []*model.ValidatorDutyTrace, err error) {
+func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (duties []*model.ValidatorDutyTrace, errs []error) {
 	prefix := s.makeValidatorPrefix(slot, role)
-	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
+	scanErr := s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
 		duty := new(model.ValidatorDutyTrace)
 		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
-			return fmt.Errorf("unmarshall validator duty: %w", err)
+			errs = append(errs, fmt.Errorf("unmarshall validator duty: %w", err))
+			return nil
 		}
 		duties = append(duties, duty)
 		return nil
 	})
-	if err != nil {
-		return nil, err
+	if scanErr != nil {
+		errs = append(errs, scanErr)
 	}
 
-	return
+	return duties, errs
 }
 
 func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (id spectypes.CommitteeID, err error) {
@@ -197,24 +198,26 @@ func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
 	return nil
 }
 
-func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
+func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, []error) {
 	prefix := s.makeCommitteeSlotPrefix(slot)
 
 	var duties []*model.CommitteeDutyTrace
+	var errs []error
 	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 		duty := new(model.CommitteeDutyTrace)
 		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
-			return fmt.Errorf("unmarshall committee duty: %w", err)
+			errs = append(errs, fmt.Errorf("unmarshall committee duty: %w", err))
+			return nil
 		}
 		duties = append(duties, duty)
 		return nil
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("get all committee IDs: %w", err)
+		errs = append(errs, fmt.Errorf("get all committee IDs: %w", err))
 	}
 
-	return duties, nil
+	return duties, errs
 }
 
 func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *model.CommitteeDutyTrace, err error) {
