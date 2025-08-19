@@ -260,8 +260,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID),
 		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)),
-	)
+		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()
 
 	switch msgType {

@@ -51,8 +51,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 			observability.RunnerRoleAttribute(msgID.GetRoleType()),
 			observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
 			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
-		))
+			observability.DutyIDAttribute(dutyID)))
 	defer span.End()
 
 	msg.TraceContext = ctx
