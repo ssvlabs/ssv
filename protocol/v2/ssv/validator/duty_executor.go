@@ -50,12 +50,13 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	if err != nil {
 		return traces.Errorf(span, "failed to get execute duty data: %w", err)
 	}
+	duty := executeDutyData.Duty
 
 	span.SetAttributes(
-		observability.BeaconSlotAttribute(executeDutyData.Duty.Slot),
-		observability.RunnerRoleAttribute(executeDutyData.Duty.RunnerRole()),
+		observability.BeaconSlotAttribute(duty.Slot),
+		observability.RunnerRoleAttribute(duty.RunnerRole()),
 	)
-	logger = logger.With(fields.Slot(executeDutyData.Duty.DutySlot()), fields.Role(executeDutyData.Duty.RunnerRole()))
+	logger = logger.With(fields.Slot(duty.DutySlot()), fields.Role(duty.RunnerRole()))
 
 	// force the validator to be started (subscribed to validator's topic and synced)
 	span.AddEvent("start validator")
@@ -64,7 +65,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	}
 
 	span.AddEvent("start duty")
-	if err := v.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {
+	if err := v.StartDuty(ctx, logger, duty); err != nil {
 		return traces.Errorf(span, "could not start duty: %w", err)
 	}
 
@@ -110,19 +111,20 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	if err != nil {
 		return traces.Errorf(span, "failed to get execute committee duty data: %w", err)
 	}
+	duty := executeDutyData.Duty
 
 	span.SetAttributes(
-		observability.BeaconSlotAttribute(executeDutyData.Duty.Slot),
-		observability.RunnerRoleAttribute(executeDutyData.Duty.RunnerRole()),
-		observability.DutyCountAttribute(len(executeDutyData.Duty.ValidatorDuties)),
+		observability.BeaconSlotAttribute(duty.Slot),
+		observability.RunnerRoleAttribute(duty.RunnerRole()),
+		observability.DutyCountAttribute(len(duty.ValidatorDuties)),
 	)
 	span.AddEvent("start duty")
-	if err := c.StartDuty(ctx, logger, executeDutyData.Duty); err != nil {
+	if err := c.StartDuty(ctx, logger, duty); err != nil {
 		return traces.Errorf(span, "could not start committee duty: %w", err)
 	}
 
 	span.AddEvent("start consume queue")
-	if err := c.StartConsumeQueue(ctx, logger, executeDutyData.Duty); err != nil {
+	if err := c.StartConsumeQueue(ctx, logger, duty); err != nil {
 		return traces.Errorf(span, "could not start committee consume queue: %w", err)
 	}
 
