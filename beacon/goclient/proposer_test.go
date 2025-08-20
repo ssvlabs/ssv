@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,11 @@ import (
 const (
 	// proposalPreparationEndpoint is the beacon API endpoint for submitting proposal preparations
 	proposalPreparationEndpoint = "/eth/v1/validator/prepare_beacon_proposer"
+)
+
+var (
+	// testDataMutex protects concurrent access to test data creation
+	testDataMutex sync.Mutex
 )
 
 // Mock beacon server response options for proposal endpoints
@@ -118,6 +124,10 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 
 // Create a proposal response with the given fee recipient using ssv-spec testing utilities
 func createProposalResponse(slot phase0.Slot, feeRecipient bellatrix.ExecutionAddress, blinded bool) []byte {
+	// Use mutex to prevent concurrent modification of shared test data
+	testDataMutex.Lock()
+	defer testDataMutex.Unlock()
+	
 	if blinded {
 		// Get a blinded block from ssv-spec testing utilities
 		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
