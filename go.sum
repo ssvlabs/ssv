@@ -759,12 +759,12 @@ github.com/spf13/pflag v1.0.6/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.0.0/go.mod h1:A8kyI5cUJhb8N+3pkfONlcEcZbueH6nhAm0Fq7SrnBM=
 github.com/ssvlabs/eth2-key-manager v1.5.5 h1:AzwNowGvcmVpRCVHq10FVnpkVIUpoDo5YbJWNMnYA8Q=
 github.com/ssvlabs/eth2-key-manager v1.5.5/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
-github.com/ssvlabs/go-eth2-client v0.6.31-0.20250610091445-4c697a8c1568 h1:aOL0gvDaa9GyAbQIgptzYndUs2+a4fmv1vlpWImx9Ck=
-github.com/ssvlabs/go-eth2-client v0.6.31-0.20250610091445-4c697a8c1568/go.mod h1:fvULSL9WtNskkOB4i+Yyr6BKpNHXvmpGZj9969fCrfY=
+github.com/ssvlabs/go-eth2-client v0.6.31-0.20250807154556-0c7614aa26d4 h1:/Sq9pcFbr4GJlNIdfMCUHpsCSbYL49TXL/BH0AwD7GU=
+github.com/ssvlabs/go-eth2-client v0.6.31-0.20250807154556-0c7614aa26d4/go.mod h1:fvULSL9WtNskkOB4i+Yyr6BKpNHXvmpGZj9969fCrfY=
 github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo8=
 github.com/ssvlabs/ssv-spec v1.1.3/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250805154515-9842ed14d5d2 h1:Pn/eFiZKlTlRowsB6h2EHRs1GR3R+liazwS0B4JdIfY=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250805154515-9842ed14d5d2/go.mod h1:2T2khqwD1/5qYa+jTVeJGO08jRm23lCoT/Vw6Mc+Jbs=
+github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250806153219-2dc63a642d9d h1:oMznS0mfgfEob1B0nSLZpGaAq0r1dhHFLOZ7PF/JbcA=
+github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250806153219-2dc63a642d9d/go.mod h1:pv9+Hl60/Vkj20g/8YhaWWLDbeq8+SHZc8Cu5f2Klb4=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

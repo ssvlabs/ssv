@@ -27,10 +27,10 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NetworkName         string                   `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
-	CustomNetwork       *networkconfig.SSVConfig `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
-	CustomDomainType    string                   `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
-	NetworkConfig       *networkconfig.NetworkConfig
+	NetworkName         string             `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
+	CustomNetwork       *networkconfig.SSV `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
+	CustomDomainType    string             `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
+	NetworkConfig       *networkconfig.Network
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     executionclient.Provider
 	P2PNetwork          network.P2PNetwork
@@ -46,7 +46,7 @@ type Options struct {
 
 type Node struct {
 	logger           *zap.Logger
-	network          *networkconfig.NetworkConfig
+	network          *networkconfig.Network
 	context          context.Context
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions
@@ -70,7 +70,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 	feeRecipientCtrl := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
 		Ctx:                opts.Context,
 		BeaconClient:       opts.BeaconNode,
-		BeaconConfig:       opts.NetworkConfig.BeaconConfig,
+		BeaconConfig:       opts.NetworkConfig.Beacon,
 		ValidatorProvider:  selfValidatorStore,
 		RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
 		OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
@@ -90,18 +90,19 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(logger, &duties.SchedulerOptions{
-			Ctx:                 opts.Context,
-			BeaconNode:          opts.BeaconNode,
-			ExecutionClient:     opts.ExecutionClient,
-			BeaconConfig:        opts.NetworkConfig,
-			ValidatorProvider:   selfValidatorStore,
-			ValidatorController: opts.ValidatorController,
-			DutyExecutor:        opts.ValidatorController,
-			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
-			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
-			DutyStore:           opts.DutyStore,
-			SlotTickerProvider:  slotTickerProvider,
-			P2PNetwork:          opts.P2PNetwork,
+			Ctx:                     opts.Context,
+			BeaconNode:              opts.BeaconNode,
+			ExecutionClient:         opts.ExecutionClient,
+			BeaconConfig:            opts.NetworkConfig.Beacon,
+			ValidatorProvider:       selfValidatorStore,
+			ValidatorController:     opts.ValidatorController,
+			DutyExecutor:            opts.ValidatorController,
+			IndicesChg:              opts.ValidatorController.IndicesChangeChan(),
+			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
+			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
+			DutyStore:               opts.DutyStore,
+			SlotTickerProvider:      slotTickerProvider,
+			P2PNetwork:              opts.P2PNetwork,
 		}),
 		feeRecipientCtrl: feeRecipientCtrl,
 
@@ -150,10 +151,16 @@ func (n *Node) Start() error {
 	}
 	go n.net.UpdateSubnets()
 	go n.net.UpdateScoreParams()
-	n.validatorsCtrl.StartValidators(ctx)
+
+	err := n.validatorsCtrl.StartValidators(ctx)
+	if err != nil {
+		return fmt.Errorf("start validators: %w", err)
+	}
+
 	go n.reportOperators()
 
 	go n.feeRecipientCtrl.Start(ctx)
+
 	go n.validatorsCtrl.HandleMetadataUpdates(ctx)
 	go n.validatorsCtrl.ReportValidatorStatuses(ctx)
 

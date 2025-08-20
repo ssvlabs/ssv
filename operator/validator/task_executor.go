@@ -77,7 +77,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	return errs
 }
 
-func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
+func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
 	logger := c.taskLogger("UpdateFeeRecipient",
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
@@ -88,6 +88,26 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 			v.Share.FeeRecipientAddress = recipient
 			updated = true
 			logger.Debug("updated recipient address")
+
+			pk := phase0.BLSPubKey{}
+			copy(pk[:], v.Share.ValidatorPubKey[:])
+			regDesc := duties.RegistrationDescriptor{
+				ValidatorIndex:  v.Share.ValidatorIndex,
+				ValidatorPubkey: pk,
+				FeeRecipient:    v.Share.FeeRecipientAddress[:],
+				BlockNumber:     blockNumber,
+			}
+
+			go func() {
+				select {
+				case <-c.ctx.Done():
+					logger.Debug("context is done - not gonna schedule validator registration")
+				case c.validatorRegistrationCh <- regDesc:
+					logger.Debug("added validator registration task to pipeline")
+				case <-time.After(2 * c.networkConfig.SlotDuration):
+					logger.Error("failed to schedule validator registration duty!")
+				}
+			}()
 		}
 		return true
 	})
@@ -121,8 +141,8 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		select {
 		case c.validatorExitCh <- exitDesc:
 			logger.Debug("added voluntary exit task to pipeline")
-		case <-time.After(2 * c.networkConfig.GetSlotDuration()):
-			logger.Error("failed to schedule ExitValidator duty!")
+		case <-time.After(2 * c.networkConfig.SlotDuration):
+			logger.Error("failed to schedule voluntary exit duty!")
 		}
 	}()
 

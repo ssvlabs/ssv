@@ -41,7 +41,7 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 	localKeyManager, err := ekm.NewLocalKeyManager(
 		logger,
 		localDB,
-		env.mockBeacon,
+		env.beaconConfig,
 		env.operatorKey,
 	)
 	if err != nil {
@@ -68,7 +68,7 @@ func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
 	remoteKeyManager, err := ekm.NewRemoteKeyManager(
 		env.ctx,
 		logger,
-		env.mockBeacon,
+		env.beaconConfig,
 		env, // TestEnvironment implements signerClient interface by delegating to ssvSignerClient
 		env.remoteDB,
 		func() spectypes.OperatorID { return 1 }, // operator ID getter

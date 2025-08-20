@@ -35,7 +35,7 @@ type CommitteeObserver struct {
 	msgID             spectypes.MessageID
 	logger            *zap.Logger
 	Storage           *storage.ParticipantStores
-	beaconConfig      networkconfig.Beacon
+	beaconConfig      *networkconfig.Beacon
 	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
@@ -59,7 +59,7 @@ type BeaconVoteCacheKey struct {
 type CommitteeObserverOptions struct {
 	FullNode          bool
 	Logger            *zap.Logger
-	BeaconConfig      networkconfig.Beacon
+	BeaconConfig      *networkconfig.Beacon
 	Network           specqbft.Network
 	Storage           *storage.ParticipantStores
 	OperatorSigner    ssvtypes.OperatorSigner
@@ -95,7 +95,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	role := msg.MsgID.GetRoleType()
 
-	logger := ncv.logger.With(fields.Role(role))
+	logger := ncv.logger.With(fields.RunnerRole(role))
 	if role == spectypes.RoleCommittee {
 		cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 		logger = logger.With(fields.CommitteeID(cid))
@@ -156,7 +156,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		for _, beaconRole := range beaconRoles {
 			roleStorage := ncv.Storage.Get(beaconRole)
 			if roleStorage == nil {
-				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
+				return fmt.Errorf("storage doesn't exist for beacon role: %v", beaconRole)
 			}
 
 			updated, err := roleStorage.SaveParticipants(validator.ValidatorPubKey, slot, quorum)
@@ -169,7 +169,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			}
 
 			logger.Info("✅ saved participants",
-				zap.String("role", beaconRole.String()),
+				fields.BeaconRole(beaconRole),
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),
@@ -451,7 +451,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 
 func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
 	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
-	return int(ncv.beaconConfig.GetSlotsPerEpoch()) + validation.LateSlotAllowance
+	return int(ncv.beaconConfig.SlotsPerEpoch) + validation.LateSlotAllowance
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {

@@ -16,6 +16,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
@@ -52,7 +53,7 @@ func TestExecuteTask(t *testing.T) {
 	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, nil, ops[0], true)
+	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], true)
 	require.NoError(t, err)
 
 	valPk := "b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"
@@ -93,8 +94,8 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
-		validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"), 1)
+		validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 		require.NoError(t, task.Execute())
 	})
@@ -110,7 +111,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}

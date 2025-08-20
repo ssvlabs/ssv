@@ -4,19 +4,20 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -34,14 +35,15 @@ type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex
 
 type Committee struct {
 	logger *zap.Logger
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	beaconConfig networkconfig.Beacon
+	networkConfig *networkconfig.Network
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
-	Queues  map[phase0.Slot]queueContainer
+	Queues  map[phase0.Slot]QueueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
 	Shares  map[phase0.ValidatorIndex]*spectypes.Share
 
@@ -56,8 +58,8 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	beaconConfig networkconfig.Beacon,
-	committeeMember *spectypes.CommitteeMember,
+	networkConfig *networkconfig.Network,
+	operator *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	dutyGuard *CommitteeDutyGuard,
@@ -65,15 +67,20 @@ func NewCommittee(
 	if shares == nil {
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
 	}
+
+	logger = logger.Named(log.NameCommittee).
+		With(fields.Committee(types.OperatorIDsFromOperators(operator.Committee))).
+		With(fields.CommitteeID(operator.CommitteeID))
+
 	return &Committee{
 		logger:          logger,
-		beaconConfig:    beaconConfig,
+		networkConfig:   networkConfig,
 		ctx:             ctx,
 		cancel:          cancel,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]QueueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		Shares:          shares,
-		CommitteeMember: committeeMember,
+		CommitteeMember: operator,
 		CreateRunnerFn:  createRunnerFn,
 		dutyGuard:       dutyGuard,
 	}
@@ -101,8 +108,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)),
-	)
+			observability.BeaconSlotAttribute(duty.Slot)))
 	defer span.End()
 
 	span.AddEvent("prepare duty and runner")
@@ -126,16 +132,16 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	runnableDuty *spectypes.CommitteeDuty,
 	err error,
 ) {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)),
-	)
+			observability.BeaconSlotAttribute(duty.Slot)))
 	defer span.End()
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return nil, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
@@ -156,7 +162,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	c.Runners[duty.Slot] = r
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
-		c.Queues[duty.Slot] = queueContainer{
+		c.Queues[duty.Slot] = QueueContainer{
 			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
@@ -168,10 +174,10 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	}
 
 	// Prunes all expired committee runners, when new runner is created
-	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
-	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+	logger = logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
+	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
 		span.RecordError(err)
-		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
+		logger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -220,36 +226,52 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	traceContext, dutyID := c.buildTraceContext(ctx, msg)
-	ctx, span := tracer.Start(traceContext,
-		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
-		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
-			observability.DutyIDAttribute(dutyID),
-		))
-	defer span.End()
-
+func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
-	span.SetAttributes(observability.ValidatorMsgTypeAttribute(msgType))
+	msgID := msg.GetID()
 
-	// Validate message
+	// Validate message (+ verify SignedSSVMessage's signature)
 	if msgType != message.SSVEventMsgType {
-		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return traces.Errorf(span, "invalid SignedSSVMessage: %w", err)
+			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
 		}
-
-		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return traces.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
+			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
 		}
-
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return traces.Errorf(span, "Message invalid: %w", err)
+			// TODO - we should improve this error message as is suggested by the commented-out code here
+			// (and also remove nolint annotation), currently we cannot do it due to spec-tests expecting
+			// this exact format we are stuck with.
+			//return fmt.Errorf("SSVMessage invalid: %w", err)
+			return fmt.Errorf("Message invalid: %w", err) //nolint:staticcheck
 		}
 	}
+
+	slot, err := msg.Slot()
+	if err != nil {
+		return fmt.Errorf("couldn't get message slot: %w", err)
+	}
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+
+	logger := c.logger.
+		With(fields.MessageType(msgType)).
+		With(fields.MessageID(msgID)).
+		With(fields.RunnerRole(msgID.GetRoleType())).
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID))
+
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
+			observability.BeaconSlotAttribute(slot),
+			observability.DutyIDAttribute(dutyID),
+		),
+		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
+	defer span.End()
 
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
@@ -261,7 +283,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 		c.mtx.RLock()
-		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
+		r, exists := c.Runners[slot]
 		c.mtx.RUnlock()
 		if !exists {
 			return traces.Errorf(span, "no runner found for message's slot")
@@ -309,17 +331,6 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	return nil
 }
 
-func (c *Committee) buildTraceContext(ctx context.Context, msg *queue.SSVMessage) (context.Context, string) {
-	slot, err := msg.Slot()
-	if err != nil {
-		c.logger.Warn("could not get slot from message while building Trace context", zap.Error(err))
-		return ctx, "unknown"
-	}
-
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
-	return traces.Context(ctx, dutyID), dutyID
-}
-
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
 	if runnerExpirySlots > currentSlot {
 		return nil
@@ -330,8 +341,8 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.beaconConfig.EstimatedEpochAtSlot(slot)
-			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
+			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
+			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)

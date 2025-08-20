@@ -12,10 +12,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -55,7 +54,7 @@ type taskExecutor interface {
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
+	UpdateFeeRecipient(owner, recipient ethcommon.Address, blockNumber uint64) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
@@ -67,7 +66,7 @@ type EventHandler struct {
 	nodeStorage         nodestorage.Storage
 	taskExecutor        taskExecutor
 	eventParser         eventparser.Parser
-	networkConfig       networkconfig.Network
+	networkConfig       *networkconfig.Network
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorDecrypter   keys.OperatorDecrypter
 	keyManager          ekm.KeyManager
@@ -81,7 +80,7 @@ func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
@@ -400,7 +399,12 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
+		task := NewUpdateFeeRecipientTask(
+			eh.taskExecutor,
+			feeRecipientAddressUpdatedEvent.Owner,
+			feeRecipientAddressUpdatedEvent.RecipientAddress,
+			feeRecipientAddressUpdatedEvent.Raw.BlockNumber,
+		)
 		return task, nil
 
 	case ValidatorExited:

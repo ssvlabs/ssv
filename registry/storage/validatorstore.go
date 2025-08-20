@@ -50,15 +50,15 @@ type SelfValidatorStore interface {
 }
 
 type Committee struct {
-	ID         spectypes.CommitteeID
-	Operators  []spectypes.OperatorID
-	Validators []*types.SSVShare
-	Indices    []phase0.ValidatorIndex
+	ID        spectypes.CommitteeID
+	Operators []spectypes.OperatorID
+	Shares    []*types.SSVShare
+	Indices   []phase0.ValidatorIndex
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
-func (c *Committee) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
-	for _, validator := range c.Validators {
+func (c *Committee) IsParticipating(beaconCfg *networkconfig.Beacon, epoch phase0.Epoch) bool {
+	for _, validator := range c.Shares {
 		if validator.IsParticipating(beaconCfg, epoch) {
 			return true
 		}
@@ -81,7 +81,7 @@ type validatorStore struct {
 	byCommitteeID     map[spectypes.CommitteeID]*Committee
 	byOperatorID      map[spectypes.OperatorID]*sharesAndCommittees
 
-	beaconCfg networkconfig.Beacon
+	beaconCfg *networkconfig.Beacon
 
 	mu sync.RWMutex
 }
@@ -90,7 +90,7 @@ func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
 	pubkeyIndexMapping map[spectypes.ValidatorPK]phase0.ValidatorIndex,
-	beaconCfg networkconfig.Beacon,
+	beaconCfg *networkconfig.Beacon,
 ) *validatorStore {
 	return &validatorStore{
 		shares:            shares,
@@ -265,14 +265,14 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 		committee, exists := c.byCommitteeID[committeeID]
 		if exists {
 			// Verify share does not already exist in committee.
-			if containsShare(committee.Validators, share) {
+			if containsShare(committee.Shares, share) {
 				// Corrupt state.
 				return fmt.Errorf("share already exists in committee. validator_pubkey=%s committee_id=%s",
 					hex.EncodeToString(share.ValidatorPubKey[:]), hex.EncodeToString(committeeID[:]))
 			}
 
 			// Rebuild committee.
-			committee = buildCommittee(append(committee.Validators, share))
+			committee = buildCommittee(append(committee.Shares, share))
 		} else {
 			// Build new committee.
 			committee = buildCommittee([]*types.SSVShare{share})
@@ -351,7 +351,7 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 		return fmt.Errorf("failed to remove share from committee. %w", err)
 	}
 
-	committeeRemoved := len(newCommittee.Validators) == 0
+	committeeRemoved := len(newCommittee.Shares) == 0
 	if committeeRemoved {
 		delete(c.byCommitteeID, newCommittee.ID)
 	} else {
@@ -481,10 +481,10 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 }
 
 func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShare) (*Committee, error) {
-	shares := make([]*types.SSVShare, 0, len(committee.Validators))
+	shares := make([]*types.SSVShare, 0, len(committee.Shares))
 	removed := false
 
-	for i, share := range committee.Validators {
+	for i, share := range committee.Shares {
 		if share.ValidatorPubKey == shareToRemove.ValidatorPubKey {
 			if share.ValidatorIndex != committee.Indices[i] {
 				// Corrupt state.
@@ -514,8 +514,8 @@ func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShar
 }
 
 func updateCommitteeWithShare(committee *Committee, shareToUpdate *types.SSVShare) (*Committee, error) {
-	shares := make([]*types.SSVShare, len(committee.Validators))
-	copy(shares, committee.Validators)
+	shares := make([]*types.SSVShare, len(committee.Shares))
+	copy(shares, committee.Shares)
 
 	updated := false
 	for i, share := range shares {
@@ -545,10 +545,10 @@ func removeShareFromOperator(data *sharesAndCommittees, share *types.SSVShare) (
 
 func buildCommittee(shares []*types.SSVShare) *Committee {
 	committee := &Committee{
-		ID:         shares[0].CommitteeID(),
-		Operators:  make([]spectypes.OperatorID, 0, len(shares)),
-		Validators: shares,
-		Indices:    make([]phase0.ValidatorIndex, 0, len(shares)),
+		ID:        shares[0].CommitteeID(),
+		Operators: make([]spectypes.OperatorID, 0, len(shares)),
+		Shares:    shares,
+		Indices:   make([]phase0.ValidatorIndex, 0, len(shares)),
 	}
 
 	// Set operator IDs.

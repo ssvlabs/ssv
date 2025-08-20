@@ -33,7 +33,7 @@ type RecipientController interface {
 type ControllerOptions struct {
 	Ctx                context.Context
 	BeaconClient       beaconprotocol.BeaconNode
-	BeaconConfig       *networkconfig.BeaconConfig
+	BeaconConfig       *networkconfig.Beacon
 	ValidatorProvider  ValidatorProvider
 	RecipientStorage   storage.Recipients
 	SlotTickerProvider slotticker.Provider
@@ -45,7 +45,7 @@ type recipientController struct {
 	logger               *zap.Logger
 	ctx                  context.Context
 	beaconClient         beaconprotocol.BeaconNode
-	beaconConfig         *networkconfig.BeaconConfig
+	beaconConfig         *networkconfig.Beacon
 	validatorProvider    ValidatorProvider
 	recipientStorage     storage.Recipients
 	slotTickerProvider   slotticker.Provider
