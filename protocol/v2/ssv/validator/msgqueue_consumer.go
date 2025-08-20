@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -207,66 +208,62 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
-			logMsg := "❗ could not handle message"
+			logger := loggerWithMessageFields(v.logger, msg).
+				With(zap.String("message_identifier", string(messageID(msg)))).
+				With(zap.Int("attempt", msgRetryCnt+1))
 
+			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
 			switch {
 			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrFuturePartialSigMsg) ||
 				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureConsensusMsg) ||
 				errors.Is(err, runner.ErrNoProposalForRound) || errors.Is(err, runner.ErrWrongMsgRound)) &&
 				msgRetryCnt < retryCount:
-
-				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
+				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
-						v.logger.Warn(
-							"❗ not gonna replay message because the queue is full",
+						logger.Warn("❗ not gonna replay message because the queue is full",
 							zap.String("message_identifier", string(messageID(msg))),
 							fields.MessageType(msg.MsgType),
 						)
 					}
 				}(msg)
 			default:
-				logMsg += ", dropping message"
+				logger.Error(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 			}
-
-			v.logMsg(
-				msg,
-				logMsg,
-				zap.String("message_identifier", string(messageID(msg))),
-				fields.MessageType(msg.MsgType),
-				zap.Error(err),
-				zap.Int("attempt", msgRetryCnt+1),
-			)
 		}
 	}
 
 	return nil
 }
 
-func (v *Validator) logMsg(msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
-	var baseFields []zap.Field
+func loggerWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logger {
+	logger = logger.With(fields.MessageType(msg.MsgType))
+
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
-		baseFields = []zap.Field{
+		logger = logger.With(
+			fields.Slot(phase0.Slot(qbftMsg.Height)),
 			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
 			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
 			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
-		}
+		)
 	}
+
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
+		// signer must be the same for all messages, at least 1 message must be present (this is validated prior)
 		signer := psm.Messages[0].Signer
-		baseFields = []zap.Field{
+		logger = logger.With(
 			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
 			zap.Uint64("signer", signer),
 			fields.Slot(psm.Slot),
-		}
+		)
 	}
-	v.logger.Debug(logMsg, append(baseFields, withFields...)...)
+
+	return logger
 }
 
 // GetLastHeight returns the last height for the given identifier

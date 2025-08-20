@@ -216,41 +216,32 @@ func (c *Committee) ConsumeQueue(
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
-			logMsg := "❗ could not handle message"
+			logger = loggerWithMessageFields(logger, msg).
+				With(zap.String("message_identifier", string(messageID(msg)))).
+				With(zap.Int("attempt", msgRetryCnt+1))
 
+			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
-				logMsg += ", dropping message and terminating committee-runner"
+				logger.Error(couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
 			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrFuturePartialSigMsg) ||
 				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureConsensusMsg) ||
 				errors.Is(err, runner.ErrNoProposalForRound) || errors.Is(err, runner.ErrWrongMsgRound)) &&
 				msgRetryCnt < retryCount:
-
-				logMsg += fmt.Sprintf(", retrying message in ~%dms", retryDelay.Milliseconds())
+				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
-						logger.Warn(
-							"❗ not gonna replay message because the queue is full",
+						logger.Warn("❗ not gonna replay message because the queue is full",
 							zap.String("message_identifier", string(messageID(msg))),
 							fields.MessageType(msg.MsgType),
 						)
 					}
 				}(msg)
 			default:
-				logMsg += ", dropping message"
+				logger.Error(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 			}
-
-			c.logMsg(
-				logger,
-				msg,
-				logMsg,
-				zap.String("message_identifier", string(messageID(msg))),
-				fields.MessageType(msg.MsgType),
-				zap.Error(err),
-				zap.Int("attempt", msgRetryCnt+1),
-			)
 
 			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
 				// Optimization: stop queue consumer if the runner no longer has any valid duties to execute.
@@ -258,28 +249,4 @@ func (c *Committee) ConsumeQueue(
 			}
 		}
 	}
-}
-
-func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
-	baseFields := []zap.Field{}
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		sm := msg.Body.(*specqbft.Message)
-		baseFields = []zap.Field{
-			zap.Uint64("msg_height", uint64(sm.Height)),
-			zap.Uint64("msg_round", uint64(sm.Round)),
-			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
-			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
-		}
-	}
-	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		// signer must be the same for all messages, at least 1 message must be present (this is validated prior)
-		signer := psm.Messages[0].Signer
-		baseFields = []zap.Field{
-			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
-			zap.Uint64("signer", signer),
-			fields.Slot(psm.Slot),
-		}
-	}
-	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
