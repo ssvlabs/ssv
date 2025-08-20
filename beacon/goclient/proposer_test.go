@@ -127,7 +127,7 @@ func createProposalResponse(slot phase0.Slot, feeRecipient bellatrix.ExecutionAd
 	// Use mutex to prevent concurrent modification of shared test data
 	testDataMutex.Lock()
 	defer testDataMutex.Unlock()
-	
+
 	if blinded {
 		// Get a blinded block from ssv-spec testing utilities
 		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
