@@ -95,7 +95,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	role := msg.MsgID.GetRoleType()
 
-	logger := ncv.logger.With(fields.Role(role))
+	logger := ncv.logger.With(fields.RunnerRole(role))
 	if role == spectypes.RoleCommittee {
 		cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 		logger = logger.With(fields.CommitteeID(cid))
@@ -156,7 +156,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		for _, beaconRole := range beaconRoles {
 			roleStorage := ncv.Storage.Get(beaconRole)
 			if roleStorage == nil {
-				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
+				return fmt.Errorf("storage doesn't exist for beacon role: %v", beaconRole)
 			}
 
 			updated, err := roleStorage.SaveParticipants(validator.ValidatorPubKey, slot, quorum)
@@ -169,7 +169,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			}
 
 			logger.Info("✅ saved participants",
-				zap.String("role", beaconRole.String()),
+				fields.BeaconRole(beaconRole),
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
 				fields.Validator(validator.ValidatorPubKey[:]),
 				zap.String("signers", strings.Join(operatorIDs, ", ")),

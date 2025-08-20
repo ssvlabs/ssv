@@ -44,7 +44,7 @@ type LocalNet struct {
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := p2pcommons.GenNetworkKey()
+	bnSk, err := testing.GenNetworkKey()
 	if err != nil {
 		return err
 	}

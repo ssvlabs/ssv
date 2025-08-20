@@ -148,21 +148,18 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		observability.ValidatorIndexAttribute(duty.ValidatorIndex),
 	)
 
-	const eventMsg = "🧩 got partial signature quorum"
-	span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorSignerAttribute(signedMsg.Messages[0].Signer)))
-	logger.Debug(eventMsg,
-		zap.Any("signer", signer),
-		fields.Slot(duty.Slot),
-	)
+	const gotPartialSigQuorumEvent = "🧩 got partial signature quorum"
+	span.AddEvent(gotPartialSigQuorumEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
+	logger.Debug(gotPartialSigQuorumEvent, zap.Any("signer", signer))
 
 	// this is the earliest in aggregator runner flow where we get to know whether we are meant
 	// to perform this aggregation duty or not
 	ok := r.IsAggregator(r.BaseRunner.NetworkConfig.TargetAggregatorsPerCommittee, duty.CommitteeLength, fullSig)
 	if !ok {
-		logger.Debug("aggregation duty won't be needed from this validator for this slot",
-			zap.Any("signer", signer),
-			fields.Slot(duty.Slot),
-		)
+		const aggDutyWontBeNeededEvent = "aggregation duty won't be needed from this validator for this slot"
+		span.AddEvent(aggDutyWontBeNeededEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
+		logger.Debug(aggDutyWontBeNeededEvent, zap.Any("signer", signer))
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 

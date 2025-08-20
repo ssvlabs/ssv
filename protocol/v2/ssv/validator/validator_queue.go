@@ -17,6 +17,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -33,22 +34,40 @@ type QueueContainer struct {
 	queueState *queue.State
 }
 
-// HandleMessage handles a spectypes.SSVMessage.
+// EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
-// TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	traceCtx, dutyID := v.fetchTraceContext(ctx, msg.GetID())
-	ctx, span := tracer.Start(traceCtx,
-		observability.InstrumentName(observabilityNamespace, "handle_message"),
+func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
+	msgType := msg.GetType()
+	msgID := msg.GetID()
+
+	logger := v.logger.
+		With(fields.MessageType(msgType)).
+		With(fields.MessageID(msgID)).
+		With(fields.RunnerRole(msgID.GetRoleType()))
+
+	slot, err := msg.Slot()
+	if err != nil {
+		logger.Error("❌ couldn't get message slot", zap.Error(err))
+		return
+	}
+	dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
+
+	logger = logger.
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID))
+
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "enqueue_validator_message"),
 		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.GetType()),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
-			observability.DutyIDAttribute(dutyID),
-		))
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.BeaconSlotAttribute(slot),
+			observability.DutyIDAttribute(dutyID)))
 	defer span.End()
 
 	msg.TraceContext = ctx
+
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
@@ -62,11 +81,12 @@ func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 			span.AddEvent(eventMsg)
 		}
 		span.SetStatus(codes.Ok, "")
-	} else {
-		const errMsg = "❌ missing queue for role type"
-		logger.Error(errMsg, fields.Role(msg.MsgID.GetRoleType()))
-		span.SetStatus(codes.Error, errMsg)
+		return
 	}
+
+	const errMsg = "❌ missing queue for role type"
+	logger.Error(errMsg, fields.RunnerRole(msg.MsgID.GetRoleType()))
+	span.SetStatus(codes.Error, errMsg)
 }
 
 // StartQueueConsumer start ConsumeQueue with handler

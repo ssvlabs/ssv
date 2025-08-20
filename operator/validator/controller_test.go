@@ -37,7 +37,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -153,7 +152,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: message.SSVSyncMsgType, // this message will be skipped
+			MsgType: 12345, // this message will be skipped
 			MsgID:   identifier,
 			Data:    []byte("data"),
 		},
