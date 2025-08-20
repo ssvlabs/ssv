@@ -201,7 +201,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 				Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index}},
 			}, committeeID1)
 			dd, err := collector.GetCommitteeDecideds(slot, validatorPK)
-			require.Empty(t, err)
+			require.NoError(t, err)
 			require.NotNil(t, dd)
 			require.Len(t, dd, 1)
 			require.Equal(t, []spectypes.OperatorID{1}, dd[0].Signers)
@@ -236,7 +236,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 		for _, slot := range []phase0.Slot{slot4, slot7} {
 			dd, err := collector.GetCommitteeDecideds(slot, validatorPK)
-			require.Empty(t, err)
+			require.NoError(t, err)
 			require.NotNil(t, dd)
 			require.Len(t, dd, 1)
 			require.Equal(t, []spectypes.OperatorID{1}, dd[0].Signers)
@@ -282,7 +282,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &model.SignerData{Signer: 2})
 		dutyTrace5.Attester = append(dutyTrace5.Attester, &model.SignerData{Signer: 3})
 		dd, err := collector.GetCommitteeDecideds(slot7, validatorPK)
-		require.Empty(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
 		require.Equal(t, []spectypes.OperatorID{1, 2, 3}, dd[0].Signers)
@@ -291,8 +291,8 @@ func TestCommitteeDutyStore(t *testing.T) {
 	err = dutyStore.SaveCommitteeDutyLink(slot7, index, committeeID1)
 	require.NoError(t, err)
 
-	dd, errs := collector.GetAllCommitteeDecideds(slot7)
-	require.Empty(t, errs)
+	dd, err := collector.GetAllCommitteeDecideds(slot7)
+	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 2)
 
@@ -338,8 +338,8 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 
 	// Fetch trace from memory cache and check
 	{
-		dd, errs := collector.GetAllCommitteeDecideds(slot4)
-		require.Empty(t, errs)
+		dd, err := collector.GetAllCommitteeDecideds(slot4)
+		require.NoError(t, err)
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
 		require.Equal(t, validatorPK7, dd[0].PubKey)
@@ -351,8 +351,8 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 
 	// Fetch trace from disk and check
 	{
-		dd, errs := collector.GetAllCommitteeDecideds(slot4)
-		require.Empty(t, errs)
+		dd, err := collector.GetAllCommitteeDecideds(slot4)
+		require.NoError(t, err)
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
 		require.Equal(t, validatorPK7, dd[0].PubKey)
@@ -424,14 +424,14 @@ func TestValidatorDutyStore(t *testing.T) {
 	roleDutyTrace.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
 
-	dd, errs := collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
-	require.Empty(t, errs)
+	dd, err := collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
+	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{1}, dd[0].Signers)
 
-	dd, errs = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK1})
-	require.Empty(t, errs)
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK1})
+	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{5}, dd[0].Signers)
@@ -443,8 +443,8 @@ func TestValidatorDutyStore(t *testing.T) {
 	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
 		Signers: []spectypes.OperatorID{100},
 	})
-	dd, errs = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK2})
-	require.Empty(t, errs)
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK2})
+	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{99, 100}, dd[0].Signers)
@@ -467,14 +467,14 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.True(t, found)
 
 	// assert that decideds are available after eviction
-	dd, errs = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
-	require.Empty(t, errs)
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
+	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{1}, dd[0].Signers)
 
-	dd, errs = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK1})
-	require.Empty(t, errs)
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK1})
+	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{5}, dd[0].Signers)
@@ -501,8 +501,8 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Nil(t, storedDuty7_2)
 
-	_, errs = collector.GetAllValidatorDecideds(spectypes.BNRoleProposer, slot4)
-	require.Empty(t, errs)
+	_, err = collector.GetAllValidatorDecideds(spectypes.BNRoleProposer, slot4)
+	require.NoError(t, err)
 }
 
 // --- helpers -------------------------------------------

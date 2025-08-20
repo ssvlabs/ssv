@@ -117,8 +117,8 @@ func TestSaveCommitteeDuties(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, committeeDutiesAreEqual(traces[1], duty))
 
-	duties, errs := store.GetCommitteeDuties(phase0.Slot(1))
-	require.Empty(t, errs)
+	duties, err := store.GetCommitteeDuties(phase0.Slot(1))
+	require.NoError(t, err)
 	require.Len(t, duties, 2)
 	require.True(t, committeeDutiesAreEqual(traces[0], duties[0]))
 	require.True(t, committeeDutiesAreEqual(traces[1], duties[1]))
@@ -148,13 +148,13 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 	_, err = store.GetValidatorDuty(phase0.Slot(3), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
-	traces, terrs := store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
-	require.Empty(t, terrs)
+	traces, err := store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
+	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace1, traces[0]))
 
-	traces, terrs = store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
-	require.Empty(t, terrs)
+	traces, err = store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
+	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace2, traces[0]))
 }
@@ -182,13 +182,13 @@ func TestSaveValidatorDuties(t *testing.T) {
 	_, err = store.GetValidatorDuty(phase0.Slot(3), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
-	traces, terrs := store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
-	require.Empty(t, terrs)
+	traces, err := store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
+	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace1, traces[0]))
 
-	traces, terrs = store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
-	require.Empty(t, terrs)
+	traces, err = store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
+	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace2, traces[0]))
 }

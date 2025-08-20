@@ -13,8 +13,7 @@ import (
 )
 
 type validatorTraceResponse struct {
-	Data   []validatorTrace `json:"data"`
-	Errors []string         `json:"errors"`
+	Data []validatorTrace `json:"data"`
 }
 
 type validatorTrace struct {
@@ -158,8 +157,7 @@ func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
 
 // committee
 type committeeTraceResponse struct {
-	Data   []committeeTrace `json:"data"`
-	Errors []string         `json:"errors"`
+	Data []committeeTrace `json:"data"`
 }
 
 type committeeTrace struct {

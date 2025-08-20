@@ -418,8 +418,8 @@ func TestValidatorDuties(t *testing.T) {
 		err := collector.Collect(t.Context(), partSigMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duties, errs := collector.GetValidatorDuties(bnRole, slot)
-		require.Empty(t, errs)
+		duties, err := collector.GetValidatorDuties(bnRole, slot)
+		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
 
@@ -753,7 +753,7 @@ func TestCommitteeDuty(t *testing.T) {
 	}
 
 	duties, err := tracer.GetCommitteeDuties(slot, spectypes.BNRoleAttester)
-	require.Empty(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, duties)
 	require.Len(t, duties, 1)
 	require.Equal(t, slot, duties[0].Slot)
@@ -1580,11 +1580,8 @@ func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spec
 	return m.committeeDutyTrace, m.err
 }
 
-func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, []error) {
-	if m.err != nil {
-		return nil, []error{m.err}
-	}
-	return nil, nil
+func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
+	return nil, m.err
 }
 
 func (m *mockDutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace) error {
@@ -1599,11 +1596,8 @@ func (m *mockDutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.B
 	return nil, m.err
 }
 
-func (m *mockDutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, []error) {
-	if m.err != nil {
-		return nil, []error{m.err}
-	}
-	return nil, nil
+func (m *mockDutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error) {
+	return nil, m.err
 }
 
 func (m *mockDutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
