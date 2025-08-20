@@ -304,10 +304,7 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 	// Combine validators up to batchSize, prioritizing the new ones.
 	shares := newShares
 	if remainder := batchSize - len(shares); remainder > 0 {
-		end := remainder
-		if end > len(staleShares) {
-			end = len(staleShares)
-		}
+		end := min(remainder, len(staleShares))
 		shares = append(shares, staleShares[:end]...)
 	}
 

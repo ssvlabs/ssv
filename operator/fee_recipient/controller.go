@@ -96,10 +96,7 @@ func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.
 	const batchSize = 500
 	var submitted int
 	for start := 0; start < len(shares); start += batchSize {
-		end := start + batchSize
-		if end > len(shares) {
-			end = len(shares)
-		}
+		end := min(start+batchSize, len(shares))
 		batch := shares[start:end]
 
 		count, err := rc.submit(logger, batch)
