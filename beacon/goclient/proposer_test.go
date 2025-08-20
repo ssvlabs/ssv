@@ -2,265 +2,718 @@ package goclient
 
 import (
 	"context"
-	"math/big"
-	"sync"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-type testProposal struct {
-	id           uint64
-	feeRecipient bool
-	delay        time.Duration
+const (
+	// proposalPreparationEndpoint is the beacon API endpoint for submitting proposal preparations
+	proposalPreparationEndpoint = "/eth/v1/validator/prepare_beacon_proposer"
+)
+
+// Mock beacon server response options for proposal endpoints
+type beaconProposalServerOptions struct {
+	// Delay for proposal response
+	ProposalResponseDuration time.Duration
+	// Return error for proposal endpoint
+	WithProposalEndpointError bool
+	// Custom proposal response
+	ProposalResponse []byte
+	// Fee recipient to use in response
+	FeeRecipient bellatrix.ExecutionAddress
+	// Use blinded proposal
+	BlindedProposal bool
 }
 
-func TestGoClient_selectBestProposal(t *testing.T) {
-	tt := []struct {
-		name           string
-		ctxTimeout     time.Duration
-		proposals      []testProposal
-		extraDelay     time.Duration
-		wantProposalID uint64
-		wantDelay      time.Duration
-		wantErr        string
-	}{
-		{
-			name:       "got both immediately",
-			ctxTimeout: 2 * time.Second,
-			proposals: []testProposal{
-				{
-					id:           1,
-					feeRecipient: true,
-					delay:        0,
-				},
-				{
-					id:           2,
-					feeRecipient: false,
-					delay:        0,
-				},
-			},
-			wantProposalID: 1,
-			wantDelay:      0,
-			wantErr:        "",
-		},
-		{
-			name:       "got fee recipient later",
-			ctxTimeout: 2 * time.Second,
-			proposals: []testProposal{
-				{
-					id:           1,
-					feeRecipient: true,
-					delay:        100 * time.Millisecond,
-				},
-				{
-					id:           2,
-					feeRecipient: false,
-					delay:        0,
-				},
-			},
-			wantProposalID: 1,
-			wantDelay:      100 * time.Millisecond,
-			wantErr:        "",
-		},
-		{
-			name:       "got proposal later",
-			ctxTimeout: 2 * time.Second,
-			proposals: []testProposal{
-				{
-					id:           1,
-					feeRecipient: true,
-					delay:        0,
-				},
-				{
-					id:           2,
-					feeRecipient: false,
-					delay:        100 * time.Millisecond,
-				},
-			},
-			wantProposalID: 1,
-			wantDelay:      0,
-			wantErr:        "",
-		},
-		{
-			name:       "got fee recipient too late",
-			ctxTimeout: 2 * time.Second,
-			proposals: []testProposal{
-				{
-					id:           1,
-					feeRecipient: true,
-					delay:        1500 * time.Millisecond,
-				},
-				{
-					id:           2,
-					feeRecipient: false,
-					delay:        1300 * time.Millisecond,
-				},
-			},
-			wantProposalID: 2,
-			wantDelay:      1300 * time.Millisecond,
-			wantErr:        "",
-		},
-		{
-			name:           "immediate errors",
-			ctxTimeout:     2 * time.Second,
-			proposals:      []testProposal{},
-			wantProposalID: 0,
-			wantDelay:      0,
-			wantErr:        "none of proposal-fetch requests succeeded",
-		},
-		{
-			name:           "late errors",
-			ctxTimeout:     2 * time.Second,
-			extraDelay:     1400 * time.Millisecond,
-			proposals:      []testProposal{},
-			wantProposalID: 0,
-			wantDelay:      1400 * time.Millisecond,
-			wantErr:        "none of proposal-fetch requests succeeded",
-		},
-		{
-			name:       "parent ctx timeout, no proposals at all",
-			ctxTimeout: 100 * time.Millisecond,
-			proposals: []testProposal{
-				{
-					id:           1,
-					feeRecipient: true,
-					delay:        200 * time.Millisecond,
-				},
-				{
-					id:           2,
-					feeRecipient: false,
-					delay:        200 * time.Millisecond,
-				},
-			},
-			wantProposalID: 1,
-			wantDelay:      100 * time.Millisecond,
-			wantErr:        "context deadline exceeded",
-		},
-		{
-			name:       "parent ctx timeout, no fee recipients, but has proposal",
-			ctxTimeout: 100 * time.Millisecond,
-			proposals: []testProposal{
-				{
-					id:           1,
-					feeRecipient: true,
-					delay:        200 * time.Millisecond,
-				},
-				{
-					id:           2,
-					feeRecipient: false,
-					delay:        0,
-				},
-			},
-			wantProposalID: 2,
-			wantDelay:      100 * time.Millisecond,
-			wantErr:        "",
-		},
-		{
-			name:       "never got fee recipient",
-			ctxTimeout: 2 * time.Second,
-			proposals: []testProposal{
-				{
-					id:           2,
-					feeRecipient: false,
-					delay:        0,
-				},
-			},
-			wantProposalID: 2,
-			wantDelay:      0,
-			wantErr:        "",
-		},
-		{
-			name:       "never got proposal",
-			ctxTimeout: 2 * time.Second,
-			proposals: []testProposal{
-				{
-					id:           1,
-					feeRecipient: true,
-					delay:        0,
-				},
-			},
-			wantProposalID: 1,
-			wantDelay:      0,
-			wantErr:        "",
-		},
+// Creates a mock beacon server for proposal testing
+func createProposalBeaconServer(t *testing.T, options beaconProposalServerOptions) (*httptest.Server, *hashmap.Map[phase0.Slot, int]) {
+	serverGotRequests := hashmap.New[phase0.Slot, int]()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Handle standard beacon endpoints
+		if resp, ok := beaconEndpointResponses[r.URL.Path]; ok {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := w.Write(resp); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			return
+		}
+
+		// Handle proposal endpoint
+		if strings.HasPrefix(r.URL.Path, "/eth/v3/validator/blocks/") {
+			require.Equal(t, http.MethodGet, r.Method)
+
+			if options.WithProposalEndpointError {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			// Extract slot from path
+			parts := strings.Split(r.URL.Path, "/")
+			slotStr := parts[len(parts)-1]
+			slot, err := strconv.ParseUint(slotStr, 10, 64)
+			require.NoError(t, err)
+			require.NotZero(t, slot)
+
+			// Add delay if specified
+			time.Sleep(options.ProposalResponseDuration)
+
+			// Return custom response if provided
+			if len(options.ProposalResponse) > 0 {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Eth-Consensus-Version", "electra")
+				if options.BlindedProposal {
+					w.Header().Set("Eth-Execution-Payload-Blinded", "true")
+				}
+				if _, err := w.Write(options.ProposalResponse); err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+				return
+			}
+
+			// Create default proposal response
+			proposalResp := createProposalResponse(phase0.Slot(slot), options.FeeRecipient, options.BlindedProposal)
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Eth-Consensus-Version", "electra")
+			if options.BlindedProposal {
+				w.Header().Set("Eth-Execution-Payload-Blinded", "true")
+			}
+			if _, err := w.Write(proposalResp); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			return
+		}
+
+		// Handle proposal preparations endpoint
+		if r.URL.Path == proposalPreparationEndpoint {
+			require.Equal(t, http.MethodPost, r.Method)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Unknown endpoint
+		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	return server, serverGotRequests
+}
+
+// Create a proposal response with the given fee recipient using ssv-spec testing utilities
+func createProposalResponse(slot phase0.Slot, feeRecipient bellatrix.ExecutionAddress, blinded bool) []byte {
+	if blinded {
+		// Get a blinded block from ssv-spec testing utilities
+		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
+		block := versionedBlinded.Electra
+
+		// Modify the fields we need for our test
+		block.Slot = slot
+		block.Body.ExecutionPayloadHeader.FeeRecipient = feeRecipient
+
+		// Wrap in response structure
+		response := map[string]interface{}{
+			"data": block,
+		}
+		data, _ := json.Marshal(response)
+		return data
 	}
 
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	// Get a regular block from ssv-spec testing utilities
+	versioned := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+	blockContents := versioned.Electra
 
-			beaconCfg := *networkconfig.TestNetwork.BeaconConfig
-			beaconCfg.GenesisTime = time.Now()
+	// Modify the fields we need for our test
+	blockContents.Block.Slot = slot
+	blockContents.Block.Body.ExecutionPayload.FeeRecipient = feeRecipient
 
-			gc := &GoClient{
-				log:          log.TestLogger(t),
-				beaconConfig: &beaconCfg,
-			}
+	// Wrap in response structure
+	response := map[string]interface{}{
+		"data": blockContents,
+	}
+	data, _ := json.Marshal(response)
+	return data
+}
 
-			proposals := make(chan *api.VersionedProposal)
+func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
+	ctx := context.Background()
 
-			var wg sync.WaitGroup
-			for _, tp := range tc.proposals {
-				wg.Add(1)
-				go func(p testProposal) {
-					defer wg.Done()
-					time.Sleep(p.delay)
-
-					vp := &api.VersionedProposal{
-						Version:        spec.DataVersionElectra,
-						Blinded:        true,
-						ConsensusValue: new(big.Int).SetUint64(p.id),
-					}
-
-					if p.feeRecipient {
-						vp.ElectraBlinded = &apiv1electra.BlindedBeaconBlock{
-							Body: &apiv1electra.BlindedBeaconBlockBody{
-								ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{
-									FeeRecipient: bellatrix.ExecutionAddress{1, 2, 3, 4},
-								},
-							},
-						}
-
-						hasFR, err := hasFeeRecipient(vp)
-						require.NoError(t, err)
-						require.True(t, hasFR)
-					}
-
-					proposals <- vp
-				}(tp)
-			}
-			go func() {
-				wg.Wait()
-				time.Sleep(tc.extraDelay)
-				close(proposals)
-			}()
-
-			ctx, cancel := context.WithTimeout(context.Background(), tc.ctxTimeout)
-			defer cancel()
-
-			proposal, err := gc.selectBestProposal(
-				ctx,
-				beaconCfg.EstimatedCurrentSlot(),
-				proposals,
-			)
-
-			if tc.wantErr != "" {
-				require.ErrorContains(t, err, tc.wantErr)
-			} else {
-				require.NoError(t, err)
-				require.EqualValues(t, tc.wantProposalID, proposal.ConsensusValue.Uint64())
-			}
-			require.GreaterOrEqual(t, time.Since(beaconCfg.GenesisTime), tc.wantDelay)
+	t.Run("zero fee recipient is logged", func(t *testing.T) {
+		// Create server with zero fee recipient
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			FeeRecipient: bellatrix.ExecutionAddress{}, // Zero address
 		})
+		defer server.Close()
+
+		client, err := createClient(ctx, server.URL, false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		// Should get block successfully but fee recipient should be zero
+		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		require.NoError(t, err)
+		require.NotNil(t, block)
+		require.Equal(t, spec.DataVersionElectra, version)
+
+		// Verify fee recipient is zero by checking the block
+		versionedProposal := &api.VersionedProposal{
+			Version: version,
+			Electra: block.(*apiv1electra.BlockContents),
+		}
+		feeRecipient, err := versionedProposal.FeeRecipient()
+		require.NoError(t, err)
+		require.True(t, feeRecipient.IsZero(), "fee recipient should be zero")
+	})
+
+	t.Run("non-zero fee recipient works correctly", func(t *testing.T) {
+		// Create server with valid fee recipient
+		nonZeroFeeRecipient := bellatrix.ExecutionAddress{0x12, 0x34, 0x56, 0x78}
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			FeeRecipient: nonZeroFeeRecipient,
+		})
+		defer server.Close()
+
+		client, err := createClient(ctx, server.URL, false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		require.NoError(t, err)
+		require.NotNil(t, block)
+		require.Equal(t, spec.DataVersionElectra, version)
+
+		// Verify fee recipient is non-zero
+		versionedProposal := &api.VersionedProposal{
+			Version: version,
+			Electra: block.(*apiv1electra.BlockContents),
+		}
+		feeRecipient, err := versionedProposal.FeeRecipient()
+		require.NoError(t, err)
+		require.False(t, feeRecipient.IsZero(), "fee recipient should not be zero")
+
+		// Check the actual value
+		require.Equal(t, nonZeroFeeRecipient, feeRecipient)
+	})
+
+	t.Run("blinded block with zero fee recipient", func(t *testing.T) {
+		// Create server with blinded block and zero fee recipient
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			FeeRecipient:    bellatrix.ExecutionAddress{}, // Zero address
+			BlindedProposal: true,
+		})
+		defer server.Close()
+
+		client, err := createClient(ctx, server.URL, false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		require.NoError(t, err)
+		require.NotNil(t, block)
+		require.Equal(t, spec.DataVersionElectra, version)
+
+		// Verify it's actually a blinded block
+		blindedBlock, ok := block.(*apiv1electra.BlindedBeaconBlock)
+		require.True(t, ok, "should return a blinded block")
+		require.NotNil(t, blindedBlock.Body.ExecutionPayloadHeader, "blinded block should have execution payload header")
+
+		// Verify fee recipient is zero in the blinded block
+		require.True(t, blindedBlock.Body.ExecutionPayloadHeader.FeeRecipient.IsZero(), "fee recipient should be zero")
+	})
+
+	t.Run("blinded block with non-zero fee recipient", func(t *testing.T) {
+		// Create server with blinded block and valid fee recipient
+		nonZeroFeeRecipient := bellatrix.ExecutionAddress{0xaa, 0xbb, 0xcc, 0xdd}
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			FeeRecipient:    nonZeroFeeRecipient,
+			BlindedProposal: true,
+		})
+		defer server.Close()
+
+		client, err := createClient(ctx, server.URL, false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		require.NoError(t, err)
+		require.NotNil(t, block)
+		require.Equal(t, spec.DataVersionElectra, version)
+
+		// Verify it's actually a blinded block
+		blindedBlock, ok := block.(*apiv1electra.BlindedBeaconBlock)
+		require.True(t, ok, "should return a blinded block")
+		require.NotNil(t, blindedBlock.Body.ExecutionPayloadHeader, "blinded block should have execution payload header")
+
+		// Verify fee recipient matches expected value
+		require.Equal(t, nonZeroFeeRecipient, blindedBlock.Body.ExecutionPayloadHeader.FeeRecipient)
+	})
+
+	t.Run("handles proposal endpoint error", func(t *testing.T) {
+		// Create server that returns error
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			WithProposalEndpointError: true,
+		})
+		defer server.Close()
+
+		client, err := createClient(ctx, server.URL, false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		require.Error(t, err)
+		require.Nil(t, block)
+		require.Equal(t, DataVersionNil, version)
+	})
+}
+
+func TestSubmitProposalPreparationBatches(t *testing.T) {
+	gc := &GoClient{
+		log: log.TestLogger(t),
 	}
+
+	t.Run("batches are split correctly", func(t *testing.T) {
+		// Create 1500 preparations (should be 3 batches of 500)
+		preparations := make([]*eth2apiv1.ProposalPreparation, 1500)
+		for i := range preparations {
+			preparations[i] = &eth2apiv1.ProposalPreparation{
+				ValidatorIndex: phase0.ValidatorIndex(i),
+				FeeRecipient:   bellatrix.ExecutionAddress{byte(i % 256)},
+			}
+		}
+
+		var batchSizes []int
+		err := gc.submitProposalPreparationBatches(preparations, func(batch []*eth2apiv1.ProposalPreparation) error {
+			batchSizes = append(batchSizes, len(batch))
+			return nil
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, []int{500, 500, 500}, batchSizes, "should split into 3 batches of 500")
+	})
+
+	t.Run("continues processing after batch failure", func(t *testing.T) {
+		preparations := make([]*eth2apiv1.ProposalPreparation, 1500)
+		for i := range preparations {
+			preparations[i] = &eth2apiv1.ProposalPreparation{
+				ValidatorIndex: phase0.ValidatorIndex(i),
+			}
+		}
+
+		var processedBatches []int
+		err := gc.submitProposalPreparationBatches(preparations, func(batch []*eth2apiv1.ProposalPreparation) error {
+			batchIndex := int(batch[0].ValidatorIndex) / 500
+			processedBatches = append(processedBatches, batchIndex)
+
+			if batchIndex == 1 {
+				// Second batch fails
+				return fmt.Errorf("batch %d failed", batchIndex)
+			}
+			return nil
+		})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "partially submitted preparations: 1000/1500")
+		require.Equal(t, []int{0, 1, 2}, processedBatches, "all batches should be attempted")
+	})
+
+	t.Run("handles complete failure", func(t *testing.T) {
+		preparations := make([]*eth2apiv1.ProposalPreparation, 100)
+		for i := range preparations {
+			preparations[i] = &eth2apiv1.ProposalPreparation{
+				ValidatorIndex: phase0.ValidatorIndex(i),
+			}
+		}
+
+		attemptCount := 0
+		err := gc.submitProposalPreparationBatches(preparations, func(batch []*eth2apiv1.ProposalPreparation) error {
+			attemptCount++
+			return fmt.Errorf("batch submission failed")
+		})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to submit any preparations")
+		require.Equal(t, 1, attemptCount, "should attempt once")
+	})
+
+	t.Run("handles empty preparations", func(t *testing.T) {
+		callCount := 0
+		err := gc.submitProposalPreparationBatches([]*eth2apiv1.ProposalPreparation{}, func(batch []*eth2apiv1.ProposalPreparation) error {
+			callCount++
+			return nil
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, 0, callCount, "should not call submit function for empty preparations")
+	})
+}
+
+func TestGetProposalParallel_MultiClient(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("races multiple clients for fastest response", func(t *testing.T) {
+		// Create 3 servers with different response times
+		feeRecipient1 := bellatrix.ExecutionAddress{0x11}
+		feeRecipient2 := bellatrix.ExecutionAddress{0x22}
+		feeRecipient3 := bellatrix.ExecutionAddress{0x33}
+
+		server1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			ProposalResponseDuration: 100 * time.Millisecond,
+			FeeRecipient:             feeRecipient1,
+		})
+		defer server1.Close()
+
+		server2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			ProposalResponseDuration: 50 * time.Millisecond, // Fastest
+			FeeRecipient:             feeRecipient2,
+		})
+		defer server2.Close()
+
+		server3, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			ProposalResponseDuration: 200 * time.Millisecond,
+			FeeRecipient:             feeRecipient3,
+		})
+		defer server3.Close()
+
+		// Create multi-client
+		client, err := createClient(ctx, strings.Join([]string{server1.URL, server2.URL, server3.URL}, ";"), false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		startTime := time.Now()
+		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		elapsed := time.Since(startTime)
+
+		require.NoError(t, err)
+		require.NotNil(t, block)
+		require.Equal(t, spec.DataVersionElectra, version)
+
+		// Should get response from fastest server (server2)
+		require.Less(t, elapsed, 100*time.Millisecond, "should get response from fastest server")
+
+		// Verify we got the fee recipient from server2
+		versionedProposal := &api.VersionedProposal{
+			Version: version,
+			Electra: block.(*apiv1electra.BlockContents),
+		}
+		feeRecipient, err := versionedProposal.FeeRecipient()
+		require.NoError(t, err)
+
+		require.Equal(t, feeRecipient2, feeRecipient, "should get response from server2")
+	})
+
+	t.Run("handles context cancellation", func(t *testing.T) {
+		// Create slow server
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			ProposalResponseDuration: 5 * time.Second,
+		})
+		defer server.Close()
+
+		client, err := createClient(ctx, server.URL, false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		// Create context with immediate cancellation
+		cancelCtx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		block, version, err := client.GetBeaconBlock(cancelCtx, slot, graffiti, randao)
+		require.Error(t, err)
+		require.Nil(t, block)
+		require.Equal(t, DataVersionNil, version)
+	})
+
+	t.Run("handles all clients failing", func(t *testing.T) {
+		// Create servers that all return errors
+		server1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			WithProposalEndpointError: true,
+		})
+		defer server1.Close()
+
+		server2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+			WithProposalEndpointError: true,
+		})
+		defer server2.Close()
+
+		client, err := createClient(ctx, strings.Join([]string{server1.URL, server2.URL}, ";"), false)
+		require.NoError(t, err)
+
+		slot := phase0.Slot(100)
+		graffiti := []byte("test graffiti")
+		// Use the same RANDAO as the test blocks from ssv-spec
+		testBlock := spectestingutils.TestingBeaconBlockV(spec.DataVersionElectra)
+		randao := testBlock.Electra.Block.Body.RANDAOReveal[:]
+
+		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "all 2 clients failed")
+		require.Nil(t, block)
+		require.Equal(t, DataVersionNil, version)
+	})
+}
+
+func TestProposalPreparationReconnectLogic(t *testing.T) {
+	t.Run("skips when provider is nil", func(t *testing.T) {
+		requestCounter := 0
+		// Create a test server that should NOT receive any requests
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "proposer/prepare_beacon_proposer") {
+				requestCounter++
+			}
+			// Return standard beacon endpoint responses
+			if resp, ok := beaconEndpointResponses[r.URL.Path]; ok {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write(resp)
+				return
+			}
+		}))
+		defer server.Close()
+
+		// Create a client from the test server
+		client, err := New(t.Context(), log.TestLogger(t), Options{
+			BeaconNodeAddr: server.URL,
+			CommonTimeout:  time.Second * 2,
+			LongTimeout:    time.Second * 5,
+		})
+		require.NoError(t, err)
+
+		gc := &GoClient{
+			log:                          log.TestLogger(t),
+			proposalPreparationsProvider: nil,
+		}
+
+		// Should return early without calling the client
+		// We use the first client from the GoClient
+		if len(client.clients) > 0 {
+			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+		}
+		require.Equal(t, 0, requestCounter, "should not have made any requests")
+	})
+
+	t.Run("handles provider error gracefully", func(t *testing.T) {
+		requestCounter := 0
+		// Create a test server that should NOT receive any requests
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{})
+		defer server.Close()
+
+		// Override handler to count requests
+		origHandler := server.Config.Handler
+		server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "proposer/prepare_beacon_proposer") {
+				requestCounter++
+			}
+			origHandler.ServeHTTP(w, r)
+		})
+
+		client, err := New(t.Context(), log.TestLogger(t), Options{
+			BeaconNodeAddr: server.URL,
+			CommonTimeout:  time.Second * 2,
+			LongTimeout:    time.Second * 5,
+		})
+		require.NoError(t, err)
+
+		providerCalled := false
+		gc := &GoClient{
+			log: log.TestLogger(t),
+			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
+				providerCalled = true
+				return nil, fmt.Errorf("provider error")
+			},
+		}
+
+		// Should handle error without calling the client
+		if len(client.clients) > 0 {
+			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+		}
+		require.True(t, providerCalled, "provider should be called")
+		require.Equal(t, 0, requestCounter, "should not have made any requests")
+	})
+
+	t.Run("skips when no preparations", func(t *testing.T) {
+		requestCounter := 0
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{})
+		defer server.Close()
+
+		// Override handler to count requests
+		origHandler := server.Config.Handler
+		server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "proposer/prepare_beacon_proposer") {
+				requestCounter++
+			}
+			origHandler.ServeHTTP(w, r)
+		})
+
+		client, err := New(t.Context(), log.TestLogger(t), Options{
+			BeaconNodeAddr: server.URL,
+			CommonTimeout:  time.Second * 2,
+			LongTimeout:    time.Second * 5,
+		})
+		require.NoError(t, err)
+
+		providerCalled := false
+		gc := &GoClient{
+			log: log.TestLogger(t),
+			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
+				providerCalled = true
+				return []*eth2apiv1.ProposalPreparation{}, nil
+			},
+		}
+
+		// Should return early for empty preparations
+		if len(client.clients) > 0 {
+			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+		}
+		require.True(t, providerCalled, "provider should be called")
+		require.Equal(t, 0, requestCounter, "should not have made any requests")
+	})
+
+	t.Run("submits preparations successfully", func(t *testing.T) {
+		expectedPreparations := []*eth2apiv1.ProposalPreparation{
+			{
+				ValidatorIndex: 1,
+				FeeRecipient:   bellatrix.ExecutionAddress{1, 2, 3},
+			},
+			{
+				ValidatorIndex: 2,
+				FeeRecipient:   bellatrix.ExecutionAddress{4, 5, 6},
+			},
+		}
+
+		var submittedPreparations []*eth2apiv1.ProposalPreparation
+		submissionCalled := false
+
+		// Create a test server that captures the submitted preparations
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{})
+		defer server.Close()
+
+		// Override handler to capture submissions
+		origHandler := server.Config.Handler
+		server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == proposalPreparationEndpoint {
+				submissionCalled = true
+				var preps []*eth2apiv1.ProposalPreparation
+				err := json.NewDecoder(r.Body).Decode(&preps)
+				require.NoError(t, err)
+				submittedPreparations = append(submittedPreparations, preps...)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			origHandler.ServeHTTP(w, r)
+		})
+
+		client, err := New(t.Context(), log.TestLogger(t), Options{
+			BeaconNodeAddr: server.URL,
+			CommonTimeout:  time.Second * 2,
+			LongTimeout:    time.Second * 5,
+		})
+		require.NoError(t, err)
+
+		gc := &GoClient{
+			log: log.TestLogger(t),
+			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
+				return expectedPreparations, nil
+			},
+		}
+
+		// Call the reconnect handler
+		if len(client.clients) > 0 {
+			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+		}
+
+		// Verify submission was called and all preparations were submitted
+		require.True(t, submissionCalled, "submission endpoint should be called")
+		require.Equal(t, expectedPreparations, submittedPreparations)
+	})
+
+	t.Run("handles submission error", func(t *testing.T) {
+		submissionAttempts := 0
+
+		// Create a test server that returns an error
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{})
+		defer server.Close()
+
+		// Override handler to return error
+		origHandler := server.Config.Handler
+		server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == proposalPreparationEndpoint {
+				submissionAttempts++
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":"submission failed"}`))
+				return
+			}
+			origHandler.ServeHTTP(w, r)
+		})
+
+		client, err := New(t.Context(), log.TestLogger(t), Options{
+			BeaconNodeAddr: server.URL,
+			CommonTimeout:  time.Second * 2,
+			LongTimeout:    time.Second * 5,
+		})
+		require.NoError(t, err)
+
+		gc := &GoClient{
+			log: log.TestLogger(t),
+			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
+				return []*eth2apiv1.ProposalPreparation{
+					{ValidatorIndex: 1, FeeRecipient: bellatrix.ExecutionAddress{1}},
+				}, nil
+			},
+		}
+
+		// Should handle submission error gracefully
+		if len(client.clients) > 0 {
+			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+		}
+		require.Equal(t, 1, submissionAttempts, "should attempt submission once")
+	})
 }

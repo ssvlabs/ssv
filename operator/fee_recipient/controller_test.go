@@ -9,7 +9,6 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
@@ -29,6 +28,27 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// mockValidatorProvider is a test implementation of ValidatorProvider
+type mockValidatorProvider struct {
+	shareStorage registrystorage.Shares
+	operatorID   spectypes.OperatorID
+}
+
+func (m *mockValidatorProvider) SelfValidators() []*types.SSVShare {
+	// Return all shares for the operator
+	var shares []*types.SSVShare
+	m.shareStorage.Range(nil, func(share *types.SSVShare) bool {
+		for _, op := range share.Committee {
+			if op.Signer == m.operatorID {
+				shares = append(shares, share)
+				break
+			}
+		}
+		return true
+	})
+	return shares
+}
+
 func TestSubmitProposal(t *testing.T) {
 	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
@@ -46,10 +66,13 @@ func TestSubmitProposal(t *testing.T) {
 	beaconConfig := networkconfig.TestNetwork.BeaconConfig
 	populateStorage(t, shareStorage, operatorData)
 
+	// Create a mock validator provider
+	mockValidatorProvider := &mockValidatorProvider{shareStorage: shareStorage, operatorID: operatorData.ID}
+
 	frCtrl := NewController(logger, &ControllerOptions{
 		Ctx:               context.TODO(),
 		BeaconConfig:      beaconConfig,
-		ShareStorage:      shareStorage,
+		ValidatorProvider: mockValidatorProvider,
 		RecipientStorage:  recipientStorage,
 		OperatorDataStore: operatorDataStore,
 	})
@@ -60,7 +83,7 @@ func TestSubmitProposal(t *testing.T) {
 		wg.Add(numberOfRequests) // Set up the wait group before starting goroutines
 
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparations(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, preparations []*eth2apiv1.ProposalPreparation) error {
 			wg.Done()
 			return nil
 		}).Times(numberOfRequests)
@@ -103,7 +126,7 @@ func TestSubmitProposal(t *testing.T) {
 	t.Run("error handling", func(t *testing.T) {
 		var wg sync.WaitGroup
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparations(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, preparations []*eth2apiv1.ProposalPreparation) error {
 			wg.Done()
 			return errors.New("failed to submit")
 		}).Times(1)

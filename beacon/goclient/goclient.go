@@ -12,11 +12,10 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	eth2clientmulti "github.com/attestantio/go-eth2-client/multi"
 	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/rs/zerolog"
@@ -39,6 +38,9 @@ const (
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
 	BlockRootToSlotCacheCapacityEpochs = 64
+
+	// ProposalPreparationBatchSize is the maximum number of preparations to submit in a single request
+	ProposalPreparationBatchSize = 500
 
 	clResponseErrMsg            = "Consensus client returned an error"
 	clNilResponseErrMsg         = "Consensus client returned a nil response"
@@ -163,7 +165,7 @@ type GoClient struct {
 	withParallelSubmissions bool
 
 	subscribersLock      sync.RWMutex
-	headEventSubscribers []subscriber[*apiv1.HeadEvent]
+	headEventSubscribers []subscriber[*eth2apiv1.HeadEvent]
 	supportedTopics      []EventTopic
 
 	lastProcessedEventSlotLock sync.Mutex
@@ -173,8 +175,8 @@ type GoClient struct {
 	// since it doesn't change over time
 	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
 
-	// feeRecipientsCache is used to re-submit proposal preparations on Beacon node restart.
-	feeRecipientsCache atomic.Pointer[map[phase0.ValidatorIndex]bellatrix.ExecutionAddress]
+	// proposalPreparationsProvider is a callback to get current proposal preparations from the fee recipient controller
+	proposalPreparationsProvider func() ([]*eth2apiv1.ProposalPreparation, error)
 }
 
 // New init new client and go-client instance
@@ -280,6 +282,11 @@ func New(
 	return client, nil
 }
 
+// SetProposalPreparationsProvider sets the callback to get current proposal preparations
+func (gc *GoClient) SetProposalPreparationsProvider(provider func() ([]*eth2apiv1.ProposalPreparation, error)) {
+	gc.proposalPreparationsProvider = provider
+}
+
 // getBeaconConfig provides thread-safe access to the beacon configuration
 func (gc *GoClient) getBeaconConfig() *networkconfig.BeaconConfig {
 	gc.beaconConfigMu.RLock()
@@ -382,11 +389,8 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.Stringer("config", currentConfig),
 			)
 
-			if feeRecipients := gc.feeRecipientsCache.Load(); feeRecipients != nil {
-				if err := gc.SubmitProposalPreparation(ctx, *feeRecipients); err != nil {
-					logger.Error("failed to submit proposal preparations after client restart", zap.Error(err))
-				}
-			}
+			// Re-submit proposal preparations when beacon client reconnects
+			go gc.handleProposalPreparationsOnReconnect(ctx, s, logger)
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",

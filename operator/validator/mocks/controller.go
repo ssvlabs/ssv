@@ -201,6 +201,18 @@ func (mr *MockControllerMockRecorder) ReportValidatorStatuses(ctx any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportValidatorStatuses", reflect.TypeOf((*MockController)(nil).ReportValidatorStatuses), ctx)
 }
 
+// SetFeeRecipientChangeChan mocks base method.
+func (m *MockController) SetFeeRecipientChangeChan(ch chan struct{}) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetFeeRecipientChangeChan", ch)
+}
+
+// SetFeeRecipientChangeChan indicates an expected call of SetFeeRecipientChangeChan.
+func (mr *MockControllerMockRecorder) SetFeeRecipientChangeChan(ch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFeeRecipientChangeChan", reflect.TypeOf((*MockController)(nil).SetFeeRecipientChangeChan), ch)
+}
+
 // StartNetworkHandlers mocks base method.
 func (m *MockController) StartNetworkHandlers() {
 	m.ctrl.T.Helper()

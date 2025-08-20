@@ -13,8 +13,47 @@ import (
 	context "context"
 	reflect "reflect"
 
+	types "github.com/ssvlabs/ssv/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
 )
+
+// MockValidatorProvider is a mock of ValidatorProvider interface.
+type MockValidatorProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockValidatorProviderMockRecorder
+	isgomock struct{}
+}
+
+// MockValidatorProviderMockRecorder is the mock recorder for MockValidatorProvider.
+type MockValidatorProviderMockRecorder struct {
+	mock *MockValidatorProvider
+}
+
+// NewMockValidatorProvider creates a new mock instance.
+func NewMockValidatorProvider(ctrl *gomock.Controller) *MockValidatorProvider {
+	mock := &MockValidatorProvider{ctrl: ctrl}
+	mock.recorder = &MockValidatorProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
+	return m.recorder
+}
+
+// SelfValidators mocks base method.
+func (m *MockValidatorProvider) SelfValidators() []*types.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SelfValidators")
+	ret0, _ := ret[0].([]*types.SSVShare)
+	return ret0
+}
+
+// SelfValidators indicates an expected call of SelfValidators.
+func (mr *MockValidatorProviderMockRecorder) SelfValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfValidators))
+}
 
 // MockRecipientController is a mock of RecipientController interface.
 type MockRecipientController struct {
@@ -38,6 +77,20 @@ func NewMockRecipientController(ctrl *gomock.Controller) *MockRecipientControlle
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockRecipientController) EXPECT() *MockRecipientControllerMockRecorder {
 	return m.recorder
+}
+
+// FeeRecipientChangeChan mocks base method.
+func (m *MockRecipientController) FeeRecipientChangeChan() chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FeeRecipientChangeChan")
+	ret0, _ := ret[0].(chan struct{})
+	return ret0
+}
+
+// FeeRecipientChangeChan indicates an expected call of FeeRecipientChangeChan.
+func (mr *MockRecipientControllerMockRecorder) FeeRecipientChangeChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FeeRecipientChangeChan", reflect.TypeOf((*MockRecipientController)(nil).FeeRecipientChangeChan))
 }
 
 // Start mocks base method.

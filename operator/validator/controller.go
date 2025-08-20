@@ -116,6 +116,7 @@ type Controller interface {
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	IndicesChangeChan() chan struct{}
 	ValidatorExitChan() <-chan duties.ExitDescriptor
+	SetFeeRecipientChangeChan(ch chan struct{})
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
@@ -190,8 +191,9 @@ type controller struct {
 
 	domainCache *validator.DomainCache
 
-	indicesChangeCh chan struct{}
-	validatorExitCh chan duties.ExitDescriptor
+	indicesChangeCh      chan struct{}
+	validatorExitCh      chan duties.ExitDescriptor
+	feeRecipientChangeCh chan struct{}
 
 	traceCollector *dutytracer.Collector
 }
@@ -294,6 +296,10 @@ func (c *controller) IndicesChangeChan() chan struct{} {
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
 	return c.validatorExitCh
+}
+
+func (c *controller) SetFeeRecipientChangeChan(ch chan struct{}) {
+	c.feeRecipientChangeCh = ch
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
@@ -1020,9 +1026,12 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 		if startedValidators > 0 {
 			c.logger.Debug("started new eligible validators", zap.Int("started_validators", startedValidators))
 
-			// Refresh duties only if there are started validators.
+			// Refresh duties and fee recipients only if there are started validators.
 			if !c.reportIndicesChange(ctx) {
 				c.logger.Error("failed to notify indices change")
+			}
+			if !c.reportFeeRecipientChange(ctx) {
+				c.logger.Error("failed to notify fee recipient change")
 			}
 		} else {
 			c.logger.Warn("no eligible validators started despite metadata changes")
@@ -1040,6 +1049,23 @@ func (c *controller) reportIndicesChange(ctx context.Context) bool {
 	case <-timeoutCtx.Done():
 		return false
 	case c.indicesChangeCh <- struct{}{}:
+		return true
+	}
+}
+
+func (c *controller) reportFeeRecipientChange(ctx context.Context) bool {
+	if c.feeRecipientChangeCh == nil {
+		c.logger.Error("fee recipient change channel not configured")
+		return false
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.GetSlotDuration())
+	defer cancel()
+
+	select {
+	case <-timeoutCtx.Done():
+		return false
+	case c.feeRecipientChangeCh <- struct{}{}:
 		return true
 	}
 }

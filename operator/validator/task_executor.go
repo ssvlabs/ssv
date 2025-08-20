@@ -60,10 +60,13 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 		}
 	}
 	if startedValidators > 0 {
-		// Notify DutyScheduler about the changes in validator indices without blocking.
+		// Notify DutyScheduler and FeeRecipientController about the changes in validators without blocking.
 		go func() {
 			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
+			}
+			if !c.reportFeeRecipientChange(c.ctx) {
+				logger.Error("failed to notify fee recipient change")
 			}
 		}()
 	}
@@ -79,14 +82,23 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
+	var updated bool
 	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
 			v.Share.FeeRecipientAddress = recipient
-
+			updated = true
 			logger.Debug("updated recipient address")
 		}
 		return true
 	})
+
+	if updated {
+		go func() {
+			if !c.reportFeeRecipientChange(c.ctx) {
+				logger.Error("failed to notify fee recipient change")
+			}
+		}()
+	}
 
 	return nil
 }
