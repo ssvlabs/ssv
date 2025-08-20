@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
@@ -28,7 +27,7 @@ var mockState = &State{
 }
 
 func TestPriorityQueue_TryPop(t *testing.T) {
-	queue := New(zap.NewNop(), 32)
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
@@ -52,7 +51,7 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 }
 
 func TestPriorityQueue_Filter(t *testing.T) {
-	queue := New(zap.NewNop(), 32)
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
@@ -110,7 +109,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		pushDelay      = 50 * time.Millisecond
 		precision      = 50 * time.Millisecond
 	)
-	queue := New(zap.NewNop(), capacity)
+	queue := New(log.TestLogger(t), capacity)
 	require.True(t, queue.Empty())
 
 	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
@@ -162,7 +161,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 	for _, test := range messagePriorityTests {
 		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
 			// Create the PriorityQueue and populate it with messages.
-			q := New(zap.NewNop(), 32)
+			q := New(log.TestLogger(t), 32)
 
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
@@ -189,7 +188,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
-	queue := New(zap.NewNop(), 32)
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -225,7 +224,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
-	queue := New(zap.NewNop(), 32)
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -272,13 +271,13 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(zap.NewNop(), 32)
+		return New(log.BenchLogger(b), 32)
 	}, false)
 }
 
 func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(zap.NewNop(), 32)
+		return New(log.BenchLogger(b), 32)
 	}, true)
 }
 
