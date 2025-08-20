@@ -4,7 +4,9 @@ ifndef GOPATH
 endif
 
 ifndef HOST_ADDRESS
+    echo "detecting no HOST_ADDRESS - using dig to set HOST_ADDRESS"
     HOST_ADDRESS=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
+    echo "set HOST_ADDRESS=${HOST_ADDRESS} via Makefile"
     export HOST_ADDRESS
 endif
 
