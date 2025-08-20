@@ -192,9 +192,10 @@ type controller struct {
 
 	domainCache *validator.DomainCache
 
-	indicesChangeCh      chan struct{}
-	validatorRegistrationCh chan duties.RegistrationDescriptorvalidatorExitCh      chan duties.ExitDescriptor
-	feeRecipientChangeCh chan struct{}
+	indicesChangeCh         chan struct{}
+	validatorRegistrationCh chan duties.RegistrationDescriptor
+	validatorExitCh         chan duties.ExitDescriptor
+	feeRecipientChangeCh    chan struct{}
 
 	traceCollector *dutytracer.Collector
 }
@@ -1045,7 +1046,7 @@ func (c *controller) reportFeeRecipientChange(ctx context.Context) bool {
 		return false
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.GetSlotDuration())
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.SlotDuration)
 	defer cancel()
 
 	select {
