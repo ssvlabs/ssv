@@ -18,7 +18,7 @@ import (
 // Assumes commit message is valid!
 func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (bool, []byte, *spectypes.SignedSSVMessage, error) {
 	logger.Debug("📬 got commit message",
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
 		fields.Root(msg.QBFTMessage.Root))
 
@@ -45,7 +45,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 		}
 
 		logger.Debug("🎯 got commit quorum",
-			fields.Round(i.State.Round),
+			fields.QBFTRound(i.State.Round),
 			zap.Any("agg_signers", agg.OperatorIDs),
 			fields.Root(msg.QBFTMessage.Root))
 

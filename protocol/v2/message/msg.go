@@ -8,8 +8,6 @@ import (
 )
 
 const (
-	// SSVSyncMsgType extends spec msg type
-	SSVSyncMsgType spectypes.MsgType = 100
 	// SSVEventMsgType extends spec msg type
 	SSVEventMsgType spectypes.MsgType = 200
 )
@@ -21,8 +19,6 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "consensus"
 	case spectypes.SSVPartialSignatureMsgType:
 		return "partial_signature"
-	case SSVSyncMsgType:
-		return "sync"
 	case SSVEventMsgType:
 		return "event"
 	default:

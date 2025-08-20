@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -169,13 +170,15 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	slot := phase0.Slot(123)
 
 	committee := &Committee{
+		logger:          logger,
 		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
@@ -191,7 +194,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	}
 	testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
 
-	committee.HandleMessage(ctx, logger, testMsg)
+	committee.EnqueueMessage(ctx, testMsg)
 
 	q, ok := committee.Queues[slot]
 
@@ -222,11 +225,13 @@ func TestConsumeQueueBasic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
+		logger:        logger,
 		ctx:           ctx,
 		Queues:        make(map[phase0.Slot]QueueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
@@ -1163,7 +1168,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -1172,6 +1177,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	queueCapacity := 2
 	committee := &Committee{
+		logger:          logger,
 		ctx:             ctx,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
@@ -1197,7 +1203,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		msgID[3] = byte(i) // Unique ID
 		qbftMsg := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType}
 		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
-		committee.HandleMessage(ctx, logger, testMsg)
+		committee.EnqueueMessage(ctx, testMsg)
 	}
 
 	require.Equal(t, queueCapacity, qContainer.Q.Len())
@@ -1208,7 +1214,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	qbftMsgDrop := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.PrepareMsgType}
 	testMsgDrop := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, droppedMsgID, qbftMsgDrop)
 
-	committee.HandleMessage(ctx, logger, testMsgDrop)
+	committee.EnqueueMessage(ctx, testMsgDrop)
 
 	assert.Equal(t, queueCapacity, qContainer.Q.Len())
 
@@ -1549,13 +1555,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	mainLogger, _ := zap.NewDevelopment()
 
 	t.Run("drop when inbox strictly full", func(t *testing.T) {
-		logger := mainLogger.Named("DropWhenInboxStrictlyFull")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		slot := phase0.Slot(123)
 
 		committee := &Committee{
+			logger:          mainLogger.Named("DropWhenInboxStrictlyFull"),
 			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
@@ -1583,14 +1589,14 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			msgID := spectypes.MessageID{byte(i + 1)}
 			prepareMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareMsgBody)
-			committee.HandleMessage(ctx, logger, testMsg)
+			committee.EnqueueMessage(ctx, testMsg)
 		}
 		require.Equal(t, queueCapacity, qContainer.Q.Len())
 
 		// 2. Attempt to HandleMessage a new Prepare message for the *nextRound*.
 		poppableMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.PrepareMsgType}
 		poppableTestMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{0xAA}, poppableMsgBody)
-		committee.HandleMessage(ctx, logger, poppableTestMsg)
+		committee.EnqueueMessage(ctx, poppableTestMsg)
 
 		// 3. Verify the poppable message was dropped.
 		assert.Equal(t, queueCapacity, qContainer.Q.Len())
@@ -1624,13 +1630,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	})
 
 	t.Run("high priority messages dropped when queue full", func(t *testing.T) {
-		logger := mainLogger.Named("HighPriorityDropping")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		slot := phase0.Slot(789)
 
 		committee := &Committee{
+			logger:          mainLogger.Named("HighPriorityDropping"),
 			ctx:             ctx,
 			Queues:          make(map[phase0.Slot]QueueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
@@ -1661,7 +1667,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 				MsgType: specqbft.CommitMsgType, // Low priority consensus message
 			}
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, commitMsgBody)
-			committee.HandleMessage(ctx, logger, testMsg)
+			committee.EnqueueMessage(ctx, testMsg)
 		}
 		require.Equal(t, queueCapacity, qContainer.Q.Len(), "Queue should be at capacity")
 
@@ -1680,7 +1686,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		// Attempt to push using HandleMessage
 		// This should be dropped because the queue is full, even though it's a higher priority message
-		committee.HandleMessage(ctx, logger, highPriorityMsg)
+		committee.EnqueueMessage(ctx, highPriorityMsg)
 
 		// 3. Verify queue length still at capacity
 		assert.Equal(t, queueCapacity, qContainer.Q.Len())

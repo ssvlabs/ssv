@@ -343,9 +343,9 @@ func (c *controller) handleRouterMessages() {
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.HandleMessage(ctx, c.logger, m)
+					v.EnqueueMessage(ctx, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.HandleMessage(ctx, c.logger, m)
+					vc.EnqueueMessage(ctx, m)
 				} else if c.validatorCommonOpts.ExporterOptions.Enabled {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
@@ -648,7 +648,7 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 
 func (c *controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) {
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.FormatDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
+	dutyID := fields.BuildDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
@@ -665,7 +665,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorD
 	defer span.End()
 
 	logger := c.logger.
-		With(fields.Role(duty.RunnerRole())).
+		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.Epoch(dutyEpoch)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.ValidatorIndex(duty.ValidatorIndex)).
@@ -705,7 +705,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spect
 	}
 
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.FormatCommitteeDutyID(committee, dutyEpoch, duty.Slot)
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
@@ -719,7 +719,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spect
 	defer span.End()
 
 	logger := c.logger.
-		With(fields.Role(duty.RunnerRole())).
+		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.Epoch(dutyEpoch)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.CommitteeID(committeeID)).

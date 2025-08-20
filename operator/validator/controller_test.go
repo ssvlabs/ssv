@@ -21,6 +21,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -34,15 +37,12 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -152,7 +152,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: message.SSVSyncMsgType, // this message will be skipped
+			MsgType: 12345, // this message will be skipped
 			MsgID:   identifier,
 			Data:    []byte("data"),
 		},
