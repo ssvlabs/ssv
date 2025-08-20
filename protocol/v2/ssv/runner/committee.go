@@ -94,7 +94,11 @@ func NewCommitteeRunner(
 }
 
 func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.start_committee_duty"))
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.start_committee_duty"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
 	d, ok := duty.(*spectypes.CommitteeDuty)
