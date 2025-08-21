@@ -9,11 +9,45 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/api"
 	model "github.com/ssvlabs/ssv/exporter"
 )
 
+// === Decideds ======================================================================
+type ParticipantResponse struct {
+	Role      string `json:"role"`
+	Slot      uint64 `json:"slot"`
+	PublicKey string `json:"public_key"`
+	Message   struct {
+		// We're keeping "Signers" capitalized to avoid breaking existing clients that rely on the current structure
+		Signers []uint64 `json:"Signers"`
+	} `json:"message"`
+}
+
+type decidedResponse struct {
+	Data   []*ParticipantResponse `json:"data"`
+	Errors []string               `json:"errors,omitempty"`
+}
+
+type decidedRequest struct {
+	From    uint64        `json:"from"`
+	To      uint64        `json:"to"`
+	Roles   api.RoleSlice `json:"roles"`
+	PubKeys api.HexSlice  `json:"pubkeys"`
+}
+
+func (r *decidedRequest) parsePubkeys() []spectypes.ValidatorPK {
+	pubKeys := make([]spectypes.ValidatorPK, len(r.PubKeys))
+	for i, pk := range r.PubKeys {
+		copy(pubKeys[i][:], pk)
+	}
+	return pubKeys
+}
+
+// === ValidatorTrace ======================================================================
 type validatorTraceResponse struct {
-	Data []validatorTrace `json:"data"`
+	Data   []validatorTrace `json:"data"`
+	Errors []string         `json:"errors,omitempty"`
 }
 
 type validatorTrace struct {
@@ -155,9 +189,25 @@ func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
 	return
 }
 
-// committee
+// === CommiteeTrace ======================================================================
+
+type committeeRequest struct {
+	From         uint64       `json:"from"`
+	To           uint64       `json:"to"`
+	CommitteeIDs api.HexSlice `json:"committeeIDs"`
+}
+
+func (req *committeeRequest) ParseCommitteeIds() []spectypes.CommitteeID {
+	committeeIDs := make([]spectypes.CommitteeID, len(req.CommitteeIDs))
+	for i, cmt := range req.CommitteeIDs {
+		copy(committeeIDs[i][:], cmt)
+	}
+	return committeeIDs
+}
+
 type committeeTraceResponse struct {
-	Data []committeeTrace `json:"data"`
+	Data   []committeeTrace `json:"data"`
+	Errors []string         `json:"errors,omitempty"`
 }
 
 type committeeTrace struct {
@@ -216,7 +266,7 @@ func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 	return
 }
 
-// helpers
+// === Helpers ======================================================================
 
 func toUint64Slice(s []phase0.ValidatorIndex) []uint64 {
 	out := make([]uint64, len(s))

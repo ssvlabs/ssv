@@ -135,7 +135,7 @@ func TestTransformToParticipantResponse(t *testing.T) {
 		Signers: []uint64{1, 2, 3, 4},
 	}
 	role := spectypes.BNRoleAttester
-	resp := transformToParticipantResponse(role, entry)
+	resp := toParticipantResponse(role, entry)
 
 	assert.Equal(t, role.String(), resp.Role)
 	assert.Equal(t, uint64(123), resp.Slot)
@@ -174,9 +174,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 3)
@@ -218,9 +216,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				// expect only entries for the filtered pubkey.
@@ -289,9 +285,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2)
@@ -1484,9 +1478,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*validatorTrace `json:"data"`
-				}
+				var resp validatorTraceResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
@@ -1534,9 +1526,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*validatorTrace `json:"data"`
-				}
+				var resp validatorTraceResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2)
 				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
@@ -1583,7 +1573,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 					Message string `json:"error"`
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, "validator not found: 1", resp.Message)
+				assert.Equal(t, "validator not found, index: 1", resp.Message)
 			},
 		},
 		{
