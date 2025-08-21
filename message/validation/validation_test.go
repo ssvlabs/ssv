@@ -1586,28 +1586,26 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a message with Alan and network topology fork topics.
 	t.Run("network topology fork topic", func(t *testing.T) {
-		alanSSVCfg := *netCfg.SSVConfig
+		alanSSVCfg := *netCfg.SSV
 		alanSSVCfg.Forks.NetworkTopology = math.MaxUint64
 
-		alanNetCfg := &networkconfig.NetworkConfig{
-			Name:         netCfg.Name,
-			BeaconConfig: netCfg.BeaconConfig,
-			SSVConfig:    &alanSSVCfg,
+		alanNetCfg := &networkconfig.Network{
+			Beacon: netCfg.Beacon,
+			SSV:    &alanSSVCfg,
 		}
 
-		networkTopologySSVConfig := *netCfg.SSVConfig
+		networkTopologySSVConfig := *netCfg.SSV
 		networkTopologySSVConfig.Forks.NetworkTopology = 0
 
-		networkTopologyNetCfg := &networkconfig.NetworkConfig{
-			Name:         netCfg.Name,
-			BeaconConfig: netCfg.BeaconConfig,
-			SSVConfig:    &networkTopologySSVConfig,
+		networkTopologyNetCfg := &networkconfig.Network{
+			Beacon: netCfg.Beacon,
+			SSV:    &networkTopologySSVConfig,
 		}
 
 		tt := []struct {
 			name  string
 			topic string
-			cfg   *networkconfig.NetworkConfig
+			cfg   *networkconfig.Network
 			err   error
 		}{
 			{
@@ -1646,7 +1644,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
-				receivedAt := netCfg.GetSlotStartTime(slot)
+				receivedAt := netCfg.SlotStartTime(slot)
 
 				_, err = validator.handleSignedSSVMessage(signedSSVMessage, tc.topic, peerID, receivedAt)
 				if tc.err != nil {
