@@ -39,7 +39,7 @@ func TestEviction(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, nil)
 
 	collector := New(t.Context(), zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon)
 

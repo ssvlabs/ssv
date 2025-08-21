@@ -1,19 +1,19 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cespare/xxhash/v2"
-	"github.com/ethereum/go-ethereum/common"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -31,8 +31,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 const (
@@ -48,9 +46,7 @@ type ValidatorRegistrationRunner struct {
 	signer                         ekm.BeaconSigner
 	operatorSigner                 ssvtypes.OperatorSigner
 	valCheck                       specqbft.ProposedValueCheckF
-	recipientsStorage              recipientsStorage
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
-	validatorOwnerAddress          common.Address
 
 	gasLimit uint64
 }
@@ -58,12 +54,10 @@ type ValidatorRegistrationRunner struct {
 func NewValidatorRegistrationRunner(
 	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
-	validatorOwnerAddress common.Address,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	recipientsStorage recipientsStorage,
 	ValidatorRegistrationSubmitter ValidatorRegistrationSubmitter,
 	gasLimit uint64,
 ) (Runner, error) {
@@ -82,9 +76,7 @@ func NewValidatorRegistrationRunner(
 		network:                        network,
 		signer:                         signer,
 		operatorSigner:                 operatorSigner,
-		recipientsStorage:              recipientsStorage,
 		validatorRegistrationSubmitter: ValidatorRegistrationSubmitter,
-		validatorOwnerAddress:          validatorOwnerAddress,
 
 		gasLimit: gasLimit,
 	}, nil
@@ -260,17 +252,18 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 }
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0.Slot) (*v1.ValidatorRegistration, error) {
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], r.GetShare().ValidatorPubKey[:])
-
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
-
-	rData, found, err := r.recipientsStorage.GetRecipientData(nil, r.validatorOwnerAddress)
-	if err != nil {
-		return nil, fmt.Errorf("get recipient data from storage: %w", err)
+	share := r.GetShare()
+	if share == nil {
+		return nil, errors.New("no share to get validator public key")
 	}
-	if !found {
-		return nil, fmt.Errorf("recipient data not found for owner %s", r.validatorOwnerAddress.Hex())
+
+	pk := phase0.BLSPubKey{}
+	copy(pk[:], share.ValidatorPubKey[:])
+
+	// Check for zero fee recipient address
+	zeroAddress := bellatrix.ExecutionAddress{}
+	if bytes.Equal(share.FeeRecipientAddress[:], zeroAddress[:]) {
+		return nil, errors.New("fee recipient address is zero, validator rewards would be lost")
 	}
 
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
@@ -284,8 +277,9 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 		gasLimit = defaultGasLimit
 	}
 
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
 	return &v1.ValidatorRegistration{
-		FeeRecipient: rData.FeeRecipient,
+		FeeRecipient: share.FeeRecipientAddress,
 		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.NetworkConfig.EpochStartTime(epoch),
 		Pubkey:       pk,
@@ -344,10 +338,6 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
-}
-
-type recipientsStorage interface {
-	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
 }
 
 type ValidatorRegistrationSubmitter interface {

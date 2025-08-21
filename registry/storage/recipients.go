@@ -17,6 +17,20 @@ var (
 	recipientsPrefix = []byte("recipients")
 )
 
+// SharesUpdater is an interface for updating shares when fee recipient changes
+type SharesUpdater interface {
+	UpdateFeeRecipientForOwner(owner common.Address, feeRecipient bellatrix.ExecutionAddress)
+}
+
+// SetSharesUpdaterFunc is a function type for setting the shares updater after initialization
+type SetSharesUpdaterFunc func(SharesUpdater)
+
+// RecipientReader is a read-only interface for querying recipient data
+type RecipientReader interface {
+	GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error)
+	GetRecipientDataMany(r basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
+}
+
 type Nonce uint16
 
 // RecipientData the public data of a recipient
@@ -60,8 +74,7 @@ type recipientDataJSON struct {
 
 // Recipients is the interface for managing recipients data
 type Recipients interface {
-	GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error)
-	GetRecipientDataMany(r basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
+	RecipientReader // Embed read-only interface
 	GetNextNonce(r basedb.Reader, owner common.Address) (Nonce, error)
 	BumpNonce(rw basedb.ReadWriter, owner common.Address) error
 	SaveRecipientData(rw basedb.ReadWriter, recipientData *RecipientData) (*RecipientData, error)
@@ -71,27 +84,38 @@ type Recipients interface {
 }
 
 type recipientsStorage struct {
-	logger *zap.Logger
-	db     basedb.Database
-	lock   sync.RWMutex
-	prefix []byte
+	logger        *zap.Logger
+	db            basedb.Database
+	lock          sync.RWMutex
+	prefix        []byte
+	sharesUpdater SharesUpdater // For notifying shares storage of updates
 }
 
-// NewRecipientsStorage creates a new instance of Storage
-func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) Recipients {
-	return &recipientsStorage{
+// NewRecipientsStorage creates a new instance of Storage and returns a setter for wiring
+func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Recipients, SetSharesUpdaterFunc) {
+	rs := &recipientsStorage{
 		logger: logger,
 		db:     db,
 		prefix: prefix,
 	}
+
+	// Return both the interface and a setter function for clean wiring
+	setter := func(updater SharesUpdater) {
+		rs.sharesUpdater = updater
+	}
+
+	return rs, setter
 }
+
+// SetSharesUpdater is no longer needed - wiring is done via the setter function returned by NewRecipientsStorage
 
 // GetRecipientsPrefix returns DB prefix
 func (s *recipientsStorage) GetRecipientsPrefix() []byte {
 	return recipientsPrefix
 }
 
-// GetRecipientData returns data of the given recipient by owner address, if not found returns owner address as a default fee recipient
+// GetRecipientData returns data of the given recipient by owner address, returns nil if not found.
+// Note: When enriching shares, if no recipient data is found, the owner address is used as default fee recipient
 func (s *recipientsStorage) GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -217,7 +241,15 @@ func (s *recipientsStorage) SaveRecipientData(rw basedb.ReadWriter, recipientDat
 		return nil, errors.Wrap(err, "could not marshal recipient data")
 	}
 
-	return recipientData, s.db.Using(rw).Set(s.prefix, buildRecipientKey(recipientData.Owner), raw)
+	err = s.db.Using(rw).Set(s.prefix, buildRecipientKey(recipientData.Owner), raw)
+	if err != nil {
+		return nil, err
+	}
+
+	// Notify shares storage of the fee recipient update
+	s.sharesUpdater.UpdateFeeRecipientForOwner(recipientData.Owner, recipientData.FeeRecipient)
+
+	return recipientData, nil
 }
 
 func (s *recipientsStorage) DeleteRecipientData(rw basedb.ReadWriter, owner common.Address) error {

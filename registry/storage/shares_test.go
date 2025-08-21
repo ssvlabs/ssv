@@ -17,6 +17,7 @@ import (
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -208,7 +209,7 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	t.Run("KV_reuse_works", func(t *testing.T) {
-		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, storage.db, []byte("test"))
+		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, storage.db, &noOpRecipientReader{}, []byte("test"))
 		require.NoError(t, err)
 		existingValidators := storageDuplicate.List(nil)
 
@@ -596,18 +597,17 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 	})
 
 	return &Share{
-		ValidatorIndex:      3,
-		ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
-		SharePubKey:         sk2.GetPublicKey().Serialize(),
-		Committee:           ibftCommittee,
-		DomainType:          networkconfig.TestNetwork.DomainType,
-		FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-		Graffiti:            bytes.Repeat([]byte{0x01}, 32),
-		Status:              2,
-		ActivationEpoch:     4,
-		ExitEpoch:           5,
-		OwnerAddress:        common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-		Liquidated:          true,
+		ValidatorIndex:  3,
+		ValidatorPubKey: sk1.GetPublicKey().Serialize(),
+		SharePubKey:     sk2.GetPublicKey().Serialize(),
+		Committee:       ibftCommittee,
+		DomainType:      networkconfig.TestNetwork.DomainType,
+		Graffiti:        bytes.Repeat([]byte{0x01}, 32),
+		Status:          2,
+		ActivationEpoch: 4,
+		ExitEpoch:       5,
+		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+		Liquidated:      true,
 	}
 }
 
@@ -631,13 +631,12 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey, state v1.Validator
 
 	return &ssvtypes.SSVShare{
 		Share: spectypes.Share{
-			ValidatorIndex:      phase0.ValidatorIndex(rand.Uint64()),
-			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
-			SharePubKey:         sk2.GetPublicKey().Serialize(),
-			Committee:           ibftCommittee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
-			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
+			ValidatorIndex:  phase0.ValidatorIndex(rand.Uint64()),
+			ValidatorPubKey: spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
+			SharePubKey:     sk2.GetPublicKey().Serialize(),
+			Committee:       ibftCommittee,
+			DomainType:      networkconfig.TestNetwork.DomainType,
+			Graffiti:        bytes.Repeat([]byte{0x01}, 32),
 		},
 		Status:                    state,
 		ActivationEpoch:           phase0.Epoch(rand.Uint64()),
@@ -667,20 +666,22 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 		}
 	}
 
+	// Use a unique owner address for each validator to avoid conflicts in tests
+	ownerAddr := common.HexToAddress(fmt.Sprintf("0x%040x", index))
+
 	return &ssvtypes.SSVShare{
 		Share: spectypes.Share{
-			ValidatorPubKey:     pk,
-			ValidatorIndex:      index,
-			SharePubKey:         committee[0].SharePubKey,
-			Committee:           committee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
-			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
+			ValidatorPubKey: pk,
+			ValidatorIndex:  index,
+			SharePubKey:     committee[0].SharePubKey,
+			Committee:       committee,
+			DomainType:      networkconfig.TestNetwork.DomainType,
+			Graffiti:        bytes.Repeat([]byte{0x01}, 32),
 		},
 		Status:          v1.ValidatorStateActiveOngoing,
 		ActivationEpoch: 4,
 		ExitEpoch:       goclient.FarFutureEpoch,
-		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+		OwnerAddress:    ownerAddr,
 		Liquidated:      false,
 	}
 }
@@ -700,11 +701,24 @@ func generateMaxPossibleShare() (*Share, error) {
 	return validatorShare, nil
 }
 
+// noOpRecipientReader is a no-op implementation of RecipientReader for tests
+// that don't need fee recipient functionality
+type noOpRecipientReader struct{}
+
+func (n *noOpRecipientReader) GetRecipientData(_ basedb.Reader, _ common.Address) (*RecipientData, bool, error) {
+	return nil, false, nil
+}
+
+func (n *noOpRecipientReader) GetRecipientDataMany(_ basedb.Reader, _ []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+	return make(map[common.Address]bellatrix.ExecutionAddress), nil
+}
+
 type testStorage struct {
 	db             *kv.DB
 	Operators      Operators
 	Shares         Shares
 	ValidatorStore ValidatorStore
+	Recipients     Recipients
 }
 
 func newTestStorage(logger *zap.Logger) (*testStorage, error) {
@@ -721,10 +735,14 @@ func newTestStorage(logger *zap.Logger) (*testStorage, error) {
 
 func (t *testStorage) open(logger *zap.Logger) error {
 	var err error
-	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork.Beacon, t.db, []byte("test"))
+	// Create recipient storage and wire it up with shares storage
+	var setSharesUpdater func(SharesUpdater)
+	t.Recipients, setSharesUpdater = NewRecipientsStorage(logger, t.db, []byte("test"))
+	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork.Beacon, t.db, t.Recipients, []byte("test"))
 	if err != nil {
 		return err
 	}
+	setSharesUpdater(t.Shares)
 	t.Operators = NewOperatorsStorage(logger, t.db, []byte("test"))
 	return nil
 }
@@ -747,4 +765,293 @@ func (t *testStorage) Recreate(logger *zap.Logger) error {
 
 func (t *testStorage) Close() error {
 	return t.db.Close()
+}
+
+// TestFeeRecipientEnrichment tests that fee recipients are properly enriched from recipients storage
+func TestFeeRecipientEnrichment(t *testing.T) {
+	logger := log.TestLogger(t)
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	owner1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	owner2 := common.HexToAddress("0x2345678901234567890123456789012345678901")
+	feeRecipient1 := common.HexToAddress("0xAAAA567890123456789012345678901234567890")
+	feeRecipient2 := common.HexToAddress("0xBBBB678901234567890123456789012345678901")
+
+	// Create shares with different owners
+	share1 := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: generateRandomPubKey(),
+			ValidatorIndex:  1,
+			Committee:       []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key1")}},
+			DomainType:      networkconfig.TestNetwork.DomainType,
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner1,
+	}
+
+	share2 := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: generateRandomPubKey(),
+			ValidatorIndex:  2,
+			Committee:       []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key2")}},
+			DomainType:      networkconfig.TestNetwork.DomainType,
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner2,
+	}
+
+	// Save shares - fee recipients should not be persisted
+	require.NoError(t, storage.Shares.Save(nil, share1, share2))
+
+	// Set custom fee recipients
+	var feeRecipientAddr1, feeRecipientAddr2 bellatrix.ExecutionAddress
+	copy(feeRecipientAddr1[:], feeRecipient1.Bytes())
+	copy(feeRecipientAddr2[:], feeRecipient2.Bytes())
+
+	_, err = storage.Recipients.SaveRecipientData(nil, &RecipientData{
+		Owner:        owner1,
+		FeeRecipient: feeRecipientAddr1,
+	})
+	require.NoError(t, err)
+
+	_, err = storage.Recipients.SaveRecipientData(nil, &RecipientData{
+		Owner:        owner2,
+		FeeRecipient: feeRecipientAddr2,
+	})
+	require.NoError(t, err)
+
+	// Reopen storage to trigger enrichment on load
+	require.NoError(t, storage.Reopen(logger))
+
+	// Verify shares are enriched with correct fee recipients
+	loadedShare1, found := storage.Shares.Get(nil, share1.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(feeRecipientAddr1), loadedShare1.FeeRecipientAddress)
+
+	loadedShare2, found := storage.Shares.Get(nil, share2.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(feeRecipientAddr2), loadedShare2.FeeRecipientAddress)
+}
+
+// TestFeeRecipientDefaultsToOwner tests that fee recipient defaults to owner when no custom recipient exists
+func TestFeeRecipientDefaultsToOwner(t *testing.T) {
+	logger := log.TestLogger(t)
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	owner := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	share := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: generateRandomPubKey(),
+			ValidatorIndex:  1,
+			Committee:       []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key1")}},
+			DomainType:      networkconfig.TestNetwork.DomainType,
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner,
+	}
+
+	// Save share without setting custom fee recipient
+	require.NoError(t, storage.Shares.Save(nil, share))
+
+	// Reopen storage to trigger enrichment
+	require.NoError(t, storage.Reopen(logger))
+
+	// Verify fee recipient defaults to owner address
+	loadedShare, found := storage.Shares.Get(nil, share.ValidatorPubKey[:])
+	require.True(t, found)
+	var expectedFeeRecipient [20]byte
+	copy(expectedFeeRecipient[:], owner.Bytes())
+	require.Equal(t, expectedFeeRecipient, loadedShare.FeeRecipientAddress)
+}
+
+// TestUpdateFeeRecipientForOwner tests updating fee recipients for all shares of an owner
+func TestUpdateFeeRecipientForOwner(t *testing.T) {
+	logger := log.TestLogger(t)
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	owner := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	newFeeRecipient := common.HexToAddress("0xAAAA567890123456789012345678901234567890")
+
+	// Create multiple shares for the same owner
+	share1 := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: generateRandomPubKey(),
+			ValidatorIndex:  1,
+			Committee:       []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key1")}},
+			DomainType:      networkconfig.TestNetwork.DomainType,
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner,
+	}
+
+	share2 := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: generateRandomPubKey(),
+			ValidatorIndex:  2,
+			Committee:       []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key2")}},
+			DomainType:      networkconfig.TestNetwork.DomainType,
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner,
+	}
+
+	// Save shares
+	require.NoError(t, storage.Shares.Save(nil, share1, share2))
+
+	// Update fee recipient for owner
+	var newFeeRecipientAddr bellatrix.ExecutionAddress
+	copy(newFeeRecipientAddr[:], newFeeRecipient.Bytes())
+	storage.Shares.UpdateFeeRecipientForOwner(owner, newFeeRecipientAddr)
+
+	// Verify all shares for owner have updated fee recipient
+	loadedShare1, found := storage.Shares.Get(nil, share1.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(newFeeRecipientAddr), loadedShare1.FeeRecipientAddress)
+
+	loadedShare2, found := storage.Shares.Get(nil, share2.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(newFeeRecipientAddr), loadedShare2.FeeRecipientAddress)
+}
+
+// TestOwnerIndexCleanupOnDelete tests that the owner index is properly maintained when shares are deleted
+func TestOwnerIndexCleanupOnDelete(t *testing.T) {
+	logger := log.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	recipientStorage, setSharesUpdater := NewRecipientsStorage(logger, db, []byte("test-recipient"))
+	sharesStorage, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, db, recipientStorage, []byte("test"))
+	require.NoError(t, err)
+	setSharesUpdater(sharesStorage)
+
+	owner := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	customFeeRecipient := bellatrix.ExecutionAddress{0x11, 0x22, 0x33}
+
+	// Create 3 shares for the same owner
+	share1 := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+	share1.OwnerAddress = owner
+	share2 := fakeParticipatingShare(2, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+	share2.OwnerAddress = owner
+	share3 := fakeParticipatingShare(3, generateRandomPubKey(), []uint64{1, 2, 3, 4})
+	share3.OwnerAddress = owner
+
+	// Save all shares
+	require.NoError(t, sharesStorage.Save(nil, share1))
+	require.NoError(t, sharesStorage.Save(nil, share2))
+	require.NoError(t, sharesStorage.Save(nil, share3))
+
+	// Set custom fee recipient for owner
+	_, err = recipientStorage.SaveRecipientData(nil, &RecipientData{
+		Owner:        owner,
+		FeeRecipient: customFeeRecipient,
+	})
+	require.NoError(t, err)
+
+	// Verify all 3 shares have the custom fee recipient
+	loaded1, found := sharesStorage.Get(nil, share1.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(customFeeRecipient), loaded1.FeeRecipientAddress)
+
+	loaded2, found := sharesStorage.Get(nil, share2.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(customFeeRecipient), loaded2.FeeRecipientAddress)
+
+	loaded3, found := sharesStorage.Get(nil, share3.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(customFeeRecipient), loaded3.FeeRecipientAddress)
+
+	// Delete share2
+	require.NoError(t, sharesStorage.Delete(nil, share2.ValidatorPubKey[:]))
+
+	// Verify share2 is deleted
+	_, found = sharesStorage.Get(nil, share2.ValidatorPubKey[:])
+	require.False(t, found)
+
+	// Update fee recipient again
+	newFeeRecipient := bellatrix.ExecutionAddress{0x44, 0x55, 0x66}
+	_, err = recipientStorage.SaveRecipientData(nil, &RecipientData{
+		Owner:        owner,
+		FeeRecipient: newFeeRecipient,
+	})
+	require.NoError(t, err)
+
+	// Verify only share1 and share3 are updated (share2 should not be in the index anymore)
+	loaded1, found = sharesStorage.Get(nil, share1.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(newFeeRecipient), loaded1.FeeRecipientAddress, "Share1 should have new fee recipient")
+
+	loaded3, found = sharesStorage.Get(nil, share3.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(newFeeRecipient), loaded3.FeeRecipientAddress, "Share3 should have new fee recipient")
+
+	// Delete all remaining shares
+	require.NoError(t, sharesStorage.Delete(nil, share1.ValidatorPubKey[:]))
+	require.NoError(t, sharesStorage.Delete(nil, share3.ValidatorPubKey[:]))
+
+	// Update fee recipient one more time
+	finalFeeRecipient := bellatrix.ExecutionAddress{0x77, 0x88, 0x99}
+	_, err = recipientStorage.SaveRecipientData(nil, &RecipientData{
+		Owner:        owner,
+		FeeRecipient: finalFeeRecipient,
+	})
+	require.NoError(t, err)
+
+	// No shares should be updated since all were deleted
+	// This verifies the owner index was properly cleaned up
+	// (If the index wasn't cleaned, it would try to update deleted shares and potentially panic)
+}
+
+// TestFeeRecipientsNotPersisted tests that fee recipients are not persisted in shares storage
+func TestFeeRecipientsNotPersisted(t *testing.T) {
+	logger := log.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Create shares storage
+	recipients, setSharesUpdater := NewRecipientsStorage(logger, db, []byte("test"))
+	shares, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, db, recipients, []byte("test"))
+	require.NoError(t, err)
+	setSharesUpdater(shares)
+
+	owner := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	feeRecipient := common.HexToAddress("0xAAAA567890123456789012345678901234567890")
+
+	share := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey:     generateRandomPubKey(),
+			ValidatorIndex:      1,
+			Committee:           []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key1")}},
+			DomainType:          networkconfig.TestNetwork.DomainType,
+			FeeRecipientAddress: feeRecipient, // Set fee recipient
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner,
+	}
+
+	// Save share
+	require.NoError(t, shares.Save(nil, share))
+
+	// Read raw storage data
+	// Build the prefix and key
+	prefix := SharesDBPrefix([]byte("test"))
+
+	obj, found, err := db.Get(prefix, share.ValidatorPubKey[:])
+	require.NoError(t, err)
+	require.True(t, found)
+
+	// Decode storage share
+	var storageShare Share
+	require.NoError(t, storageShare.Decode(obj.Value))
+
+	// Verify fee recipient is NOT persisted (should be zeros)
+	require.Equal(t, [20]byte{}, storageShare.FeeRecipientAddress)
 }
