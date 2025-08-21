@@ -27,6 +27,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		MaxF:                 4,
 		Forks: SSVForks{
 			Alan:       0,
 			GasLimit36: 0,
@@ -57,18 +58,21 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
 	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
+	assert.Equal(t, originalConfig.MaxF, unmarshaledConfig.MaxF)
 	assert.Equal(t, originalConfig.Forks, unmarshaledConfig.Forks)
 }
 
 func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	// Create a sample SSV config
 	originalConfig := SSV{
-		Name:                 "testnet",
-		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-		RegistrySyncOffset:   big.NewInt(123456),
-		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-		Bootnodes:            []string{"bootnode1", "bootnode2"},
-		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		Name:                    "testnet",
+		DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		RegistrySyncOffset:      big.NewInt(123456),
+		RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+		Bootnodes:               []string{"bootnode1", "bootnode2"},
+		DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		MaxF:                    4,
+		TotalEthereumValidators: 1000,
 		Forks: SSVForks{
 			Alan:       0,
 			GasLimit36: 0,
@@ -96,6 +100,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
 	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
+	assert.Equal(t, originalConfig.MaxF, unmarshaledConfig.MaxF)
 	assert.Equal(t, originalConfig.Forks, unmarshaledConfig.Forks)
 
 	// Compare the original and remarshaled YAML bytes
@@ -159,12 +164,14 @@ func TestFieldPreservation(t *testing.T) {
 	t.Run("hash comparison JSON", func(t *testing.T) {
 		// Create a sample config
 		config := SSV{
-			Name:                 "testnet",
-			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-			RegistrySyncOffset:   big.NewInt(123456),
-			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-			Bootnodes:            []string{"bootnode1", "bootnode2"},
-			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			Name:                    "testnet",
+			DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+			RegistrySyncOffset:      big.NewInt(123456),
+			RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+			Bootnodes:               []string{"bootnode1", "bootnode2"},
+			DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			MaxF:                    4,
+			TotalEthereumValidators: 1000,
 			Forks: SSVForks{
 				Alan:       0,
 				GasLimit36: 0,
@@ -190,7 +197,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "407e3b49376168be772a54bb921d99703ae5acc294c6b4260f51553c2c86f875"
+		expectedJSONHash := "b3f4ccb5942388c87c1da5a216e7f9ea367d12f82e3f09d4249f7ed1034d2391"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -198,12 +205,14 @@ func TestFieldPreservation(t *testing.T) {
 	t.Run("hash comparison YAML", func(t *testing.T) {
 		// Create a sample config
 		config := SSV{
-			Name:                 "testnet",
-			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-			RegistrySyncOffset:   big.NewInt(123456),
-			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-			Bootnodes:            []string{"bootnode1", "bootnode2"},
-			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			Name:                    "testnet",
+			DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+			RegistrySyncOffset:      big.NewInt(123456),
+			RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+			Bootnodes:               []string{"bootnode1", "bootnode2"},
+			DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			MaxF:                    4,
+			TotalEthereumValidators: 1000,
 			Forks: SSVForks{
 				Alan:       0,
 				GasLimit36: 0,

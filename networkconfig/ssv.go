@@ -40,6 +40,12 @@ type SSV struct {
 	RegistryContractAddr ethcommon.Address
 	Bootnodes            []string
 	DiscoveryProtocolID  [6]byte
+	// MaxF defines max amount of failed operators with which SSV node will continue working.
+	// The max amount of operators is inherited from this value using the 3F+1 formula.
+	// We currently support only MaxF=4, it should be changed only for experimental testing.
+	// IMPORTANT: While it's possible to change it, the codebase is not adapted to the change yet,
+	// so it doesn't work out of the box. The support will be added gradually.
+	MaxF uint8
 	// TotalEthereumValidators value needs to be maintained — consider getting it from external API
 	// with default or per-network value(s) as fallback
 	TotalEthereumValidators int
@@ -69,6 +75,7 @@ type marshaledConfig struct {
 	RegistryContractAddr    ethcommon.Address `json:"registry_contract_addr,omitempty" yaml:"RegistryContractAddr,omitempty"`
 	Bootnodes               []string          `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"discovery_protocol_id,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	MaxF                    uint8             `json:"MaxF,omitempty" yaml:"MaxF,omitempty"`
 	TotalEthereumValidators int               `json:"total_ethereum_validators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 	Forks                   SSVForks          `json:"forks,omitempty" yaml:"Forks,omitempty"`
 }
@@ -82,6 +89,7 @@ func (s *SSV) marshal() *marshaledConfig {
 		RegistryContractAddr:    s.RegistryContractAddr,
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
+		MaxF:                    s.MaxF,
 		TotalEthereumValidators: s.TotalEthereumValidators,
 		Forks:                   s.Forks,
 	}
@@ -112,6 +120,7 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 		RegistryContractAddr:    aux.RegistryContractAddr,
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
+		MaxF:                    aux.MaxF,
 		TotalEthereumValidators: aux.TotalEthereumValidators,
 		Forks:                   aux.Forks,
 	}
@@ -135,4 +144,22 @@ func (s *SSV) UnmarshalJSON(data []byte) error {
 	}
 
 	return s.unmarshalFromConfig(aux)
+}
+
+func (s *SSV) MaxOperators() int {
+	const defaultMaxF = 4
+
+	maxF := s.MaxF
+	if maxF == 0 {
+		maxF = defaultMaxF
+	}
+
+	return int(s.calcOperatorCount(maxF))
+}
+
+func (s *SSV) calcOperatorCount(f uint8) uint8 {
+	// We heavily rely on this formula in the codebase, however, this function is made flexible intentionally
+	// to allow experiments on local testnet as there might exist better formulas theoretically
+	// (e.g. https://www.anza.xyz/blog/alpenglow-a-new-consensus-for-solana)
+	return 3*f + 1
 }
