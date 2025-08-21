@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/binary"
 	"fmt"
 	"slices"
 	"sync"
@@ -273,6 +274,15 @@ func TestEncodeDecodeOperators(t *testing.T) {
 			require.Equal(t, tc.input, decoded)
 		})
 	}
+}
+
+func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+	encoded := make([]byte, len(operators)*8)
+	for i, v := range operators {
+		binary.BigEndian.PutUint64(encoded[i*8:], v)
+	}
+
+	return encoded, nil
 }
 
 func Test_mergeParticipantsBitMask(t *testing.T) {

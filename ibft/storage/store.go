@@ -552,16 +552,6 @@ func byteSliceToUInt16(b []byte) uint16 {
 	return binary.LittleEndian.Uint16(b)
 }
 
-// DEPRECATED, left for compatibility with old data format (tests only)
-func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
-	encoded := make([]byte, len(operators)*8)
-	for i, v := range operators {
-		binary.BigEndian.PutUint64(encoded[i*8:], v)
-	}
-
-	return encoded, nil
-}
-
 // DEPRECATED, left for compatibility with old data format
 func decodeOperators(encoded []byte) []spectypes.OperatorID {
 	if len(encoded)%8 != 0 {
