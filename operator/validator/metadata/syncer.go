@@ -45,7 +45,7 @@ const (
 
 type Syncer struct {
 	logger            *zap.Logger
-	netCfg            *networkconfig.NetworkConfig
+	netCfg            *networkconfig.Network
 	shareStorage      shareStorage
 	validatorStore    selfValidatorStore
 	beaconNode        beacon.BeaconNode
@@ -67,7 +67,7 @@ type selfValidatorStore interface {
 
 func NewSyncer(
 	logger *zap.Logger,
-	netCfg *networkconfig.NetworkConfig,
+	netCfg *networkconfig.Network,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
 	beaconNode beacon.BeaconNode,

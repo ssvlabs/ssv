@@ -50,10 +50,10 @@ type SelfValidatorStore interface {
 }
 
 type Committee struct {
-	ID        spectypes.CommitteeID
-	Operators []spectypes.OperatorID
-	Shares    []*types.SSVShare
-	Indices   []phase0.ValidatorIndex
+	ID         spectypes.CommitteeID
+	Operators  []spectypes.OperatorID
+	Shares     []*types.SSVShare
+	Indices    []phase0.ValidatorIndex
 	Subnet     uint64
 	SubnetAlan uint64
 }

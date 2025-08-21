@@ -216,7 +216,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 }
 
 // Returns a new committee list with only the committees that belong to the given topic
-func filterCommitteesForTopic(netCfg *networkconfig.NetworkConfig, topic string, committees []*storage.Committee) []*storage.Committee {
+func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, committees []*storage.Committee) []*storage.Committee {
 	topicCommittees := make([]*storage.Committee, 0)
 
 	for _, committee := range committees {
