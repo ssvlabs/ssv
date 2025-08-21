@@ -257,14 +257,14 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 		return nil, errors.New("no share to get validator public key")
 	}
 
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], share.ValidatorPubKey[:])
-
 	// Check for zero fee recipient address
 	zeroAddress := bellatrix.ExecutionAddress{}
 	if bytes.Equal(share.FeeRecipientAddress[:], zeroAddress[:]) {
 		return nil, errors.New("fee recipient address is zero, validator rewards would be lost")
 	}
+
+	pk := phase0.BLSPubKey{}
+	copy(pk[:], share.ValidatorPubKey[:])
 
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
 	// on the current epoch as compared to when this transition is supposed to happen.
