@@ -24,8 +24,14 @@ var mockState = &State{
 	Quorum:             4,
 }
 
+// newDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
+// with a capacity of 32 and a PusherDropping.
+func newDefault() Queue {
+	return New(32)
+}
+
 func TestPriorityQueue_TryPop(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
@@ -49,7 +55,7 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 }
 
 func TestPriorityQueue_Filter(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
@@ -159,7 +165,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 	for _, test := range messagePriorityTests {
 		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
 			// Create the PriorityQueue and populate it with messages.
-			q := NewDefault()
+			q := newDefault()
 
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
@@ -186,7 +192,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -222,7 +228,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -274,7 +280,7 @@ func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 }
 
 func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
-	benchmarkPriorityQueueParallel(b, NewDefault, true)
+	benchmarkPriorityQueueParallel(b, newDefault, true)
 }
 
 func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bool) {
@@ -408,7 +414,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
-	queue := NewDefault()
+	queue := newDefault()
 
 	messageCount := 10_000
 	types := []qbft.MessageType{qbft.PrepareMsgType, qbft.CommitMsgType, qbft.RoundChangeMsgType}

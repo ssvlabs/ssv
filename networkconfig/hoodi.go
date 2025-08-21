@@ -8,9 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-const HoodiName = "hoodi"
-
-var HoodiSSV = &SSVConfig{
+var HoodiSSV = &SSV{
+	Name:                 "hoodi",
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},
 	RegistrySyncOffset:   new(big.Int).SetInt64(1065),
 	RegistryContractAddr: ethcommon.HexToAddress("0x58410Bef803ECd7E63B23664C586A6DB72DAf59c"),
@@ -21,5 +20,8 @@ var HoodiSSV = &SSVConfig{
 	},
 	MaxF:                    4,
 	TotalEthereumValidators: 1107955, // active_validators from https://hoodi.beaconcha.in/index/data on Apr 18, 2025
-	GasLimit36Epoch:         29000,   // Jul-24-2025 09:30:00 AM UTC
+	Forks: SSVForks{
+		Alan:       0,
+		GasLimit36: 29000, // Jul-24-2025 09:30:00 AM UTC
+	},
 }

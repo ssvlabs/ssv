@@ -84,7 +84,7 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 		With(zap.Bool("metrics_enabled", config.metrics.enabled)).
 		Info("fetching Metrics provider")
 
-	meterProvider, shutdownFnc, err := metrics.InitializeProvider(ctx, resources, config.traces.enabled)
+	meterProvider, shutdownFnc, err := metrics.InitializeProvider(ctx, resources, config.metrics.enabled)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate Meter provider: %w", err)
 	}

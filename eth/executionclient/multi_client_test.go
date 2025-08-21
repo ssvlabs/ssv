@@ -80,9 +80,9 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		WithReconnectionInitialIntervalMulti(customReconnectionInterval),
 		WithReconnectionMaxIntervalMulti(customReconnectionMaxInterval),
 		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
-		WithLogBatchSizeMulti(customLogBatchSize),
 		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
 	)
+	mc.logBatchSize = customLogBatchSize
 	require.NoError(t, err)
 	require.NotNil(t, mc)
 	require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)

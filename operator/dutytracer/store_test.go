@@ -30,9 +30,9 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -137,9 +137,9 @@ func TestCommitteeDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -315,7 +315,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	dutyStore := store.New(db)
 	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
 	require.NoError(t, err)
-	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 	shares.Save(db, &types.SSVShare{
 		Status: eth2apiv1.ValidatorStateActiveOngoing,
 		Share: spectypes.Share{
@@ -323,7 +323,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 			ValidatorPubKey: validatorPK7,
 		},
 	})
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	// Create a new trace
 	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
@@ -384,9 +384,9 @@ func TestValidatorDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK1[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	slot4 := phase0.Slot(4)
 

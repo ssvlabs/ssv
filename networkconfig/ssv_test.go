@@ -19,16 +19,19 @@ import (
 )
 
 func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
-	// Create a sample SSVConfig
-	originalConfig := SSVConfig{
-		DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-		RegistrySyncOffset:      big.NewInt(123456),
-		RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-		Bootnodes:               []string{"bootnode1", "bootnode2"},
-		DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		MaxF:                    4,
-		TotalEthereumValidators: 1000,
-		GasLimit36Epoch:         0,
+	// Create a sample SSV config
+	originalConfig := SSV{
+		Name:                 "testnet",
+		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		RegistrySyncOffset:   big.NewInt(123456),
+		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+		Bootnodes:            []string{"bootnode1", "bootnode2"},
+		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		MaxF:                 4,
+		Forks: SSVForks{
+			Alan:       0,
+			GasLimit36: 0,
+		},
 	}
 
 	// Marshal to JSON
@@ -36,7 +39,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// Unmarshal from JSON
-	var unmarshaledConfig SSVConfig
+	var unmarshaledConfig SSV
 	err = json.Unmarshal(jsonBytes, &unmarshaledConfig)
 	require.NoError(t, err)
 
@@ -48,6 +51,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	assert.JSONEq(t, string(jsonBytes), string(remarshaledBytes))
 
 	// Compare the original and unmarshaled structs
+	assert.Equal(t, originalConfig.Name, unmarshaledConfig.Name)
 	assert.Equal(t, originalConfig.DomainType, unmarshaledConfig.DomainType)
 	assert.Equal(t, originalConfig.RegistrySyncOffset.Int64(), unmarshaledConfig.RegistrySyncOffset.Int64())
 	assert.Equal(t, originalConfig.RegistryContractAddr, unmarshaledConfig.RegistryContractAddr)
@@ -55,11 +59,13 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
 	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
 	assert.Equal(t, originalConfig.MaxF, unmarshaledConfig.MaxF)
+	assert.Equal(t, originalConfig.Forks, unmarshaledConfig.Forks)
 }
 
 func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
-	// Create a sample SSVConfig
-	originalConfig := SSVConfig{
+	// Create a sample SSV config
+	originalConfig := SSV{
+		Name:                    "testnet",
 		DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 		RegistrySyncOffset:      big.NewInt(123456),
 		RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -67,7 +73,10 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		MaxF:                    4,
 		TotalEthereumValidators: 1000,
-		GasLimit36Epoch:         0,
+		Forks: SSVForks{
+			Alan:       0,
+			GasLimit36: 0,
+		},
 	}
 
 	// Marshal to YAML
@@ -75,7 +84,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	// Unmarshal from YAML
-	var unmarshaledConfig SSVConfig
+	var unmarshaledConfig SSV
 	err = yaml.Unmarshal(yamlBytes, &unmarshaledConfig)
 	require.NoError(t, err)
 
@@ -84,6 +93,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	// Compare the original and unmarshaled structs
+	assert.Equal(t, originalConfig.Name, unmarshaledConfig.Name)
 	assert.Equal(t, originalConfig.DomainType, unmarshaledConfig.DomainType)
 	assert.Equal(t, originalConfig.RegistrySyncOffset.Int64(), unmarshaledConfig.RegistrySyncOffset.Int64())
 	assert.Equal(t, originalConfig.RegistryContractAddr, unmarshaledConfig.RegistryContractAddr)
@@ -91,6 +101,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
 	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
 	assert.Equal(t, originalConfig.MaxF, unmarshaledConfig.MaxF)
+	assert.Equal(t, originalConfig.Forks, unmarshaledConfig.Forks)
 
 	// Compare the original and remarshaled YAML bytes
 	// YAML doesn't preserve order by default, so we need to compare the unmarshaled content
@@ -128,8 +139,8 @@ func hashStructJSON(v interface{}) (string, error) {
 // marshal/unmarshal operations and that we can detect changes to the struct
 func TestFieldPreservation(t *testing.T) {
 	t.Run("test all fields are present after marshaling", func(t *testing.T) {
-		// Get all field names from SSVConfig
-		configType := reflect.TypeOf(SSVConfig{})
+		// Get all field names from SSV config
+		configType := reflect.TypeOf(SSV{})
 		marshaledType := reflect.TypeOf(marshaledConfig{})
 
 		var configFields, marshaledFields []string
@@ -147,12 +158,13 @@ func TestFieldPreservation(t *testing.T) {
 		sort.Strings(marshaledFields)
 
 		// Ensure the same fields exist in both structs
-		assert.Equal(t, configFields, marshaledFields, "SSVConfig and marshaledConfig should have the same fields")
+		assert.Equal(t, configFields, marshaledFields, "SSV and marshaledConfig should have the same fields")
 	})
 
 	t.Run("hash comparison JSON", func(t *testing.T) {
 		// Create a sample config
-		config := SSVConfig{
+		config := SSV{
+			Name:                    "testnet",
 			DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:      big.NewInt(123456),
 			RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -160,14 +172,17 @@ func TestFieldPreservation(t *testing.T) {
 			DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			MaxF:                    4,
 			TotalEthereumValidators: 1000,
-			GasLimit36Epoch:         0,
+			Forks: SSVForks{
+				Alan:       0,
+				GasLimit36: 0,
+			},
 		}
 
 		// Marshal and unmarshal to test preservation
 		jsonBytes, err := json.Marshal(&config)
 		require.NoError(t, err)
 
-		var unmarshaled SSVConfig
+		var unmarshaled SSV
 		err = json.Unmarshal(jsonBytes, &unmarshaled)
 		require.NoError(t, err)
 
@@ -182,14 +197,15 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "a7a62e8d329b5dfc2688cbabd6310f43697c93b2fe5026829e9aa28c9ce67897"
+		expectedJSONHash := "407e3b49376168be772a54bb921d99703ae5acc294c6b4260f51553c2c86f875"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
 
 	t.Run("hash comparison YAML", func(t *testing.T) {
 		// Create a sample config
-		config := SSVConfig{
+		config := SSV{
+			Name:                    "testnet",
 			DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:      big.NewInt(123456),
 			RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -197,14 +213,17 @@ func TestFieldPreservation(t *testing.T) {
 			DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			MaxF:                    4,
 			TotalEthereumValidators: 1000,
-			GasLimit36Epoch:         0,
+			Forks: SSVForks{
+				Alan:       0,
+				GasLimit36: 0,
+			},
 		}
 
 		// Marshal and unmarshal to test preservation
 		yamlBytes, err := yaml.Marshal(&config)
 		require.NoError(t, err)
 
-		var unmarshaled SSVConfig
+		var unmarshaled SSV
 		err = yaml.Unmarshal(yamlBytes, &unmarshaled)
 		require.NoError(t, err)
 
@@ -229,7 +248,7 @@ func TestExistingNetworkConfigs(t *testing.T) {
 			jsonBytes, err := json.Marshal(config)
 			require.NoError(t, err)
 
-			var jsonUnmarshaled SSVConfig
+			var jsonUnmarshaled SSV
 			err = json.Unmarshal(jsonBytes, &jsonUnmarshaled)
 			require.NoError(t, err)
 
@@ -239,7 +258,7 @@ func TestExistingNetworkConfigs(t *testing.T) {
 			yamlBytes, err := yaml.Marshal(config)
 			require.NoError(t, err)
 
-			var yamlUnmarshaled SSVConfig
+			var yamlUnmarshaled SSV
 			err = yaml.Unmarshal(yamlBytes, &yamlUnmarshaled)
 			require.NoError(t, err)
 
