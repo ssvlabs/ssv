@@ -196,7 +196,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		// Log
 		validatorsInTopic := 0
 		for _, committee := range topicCommittees {
-			validatorsInTopic += len(committee.Validators)
+			validatorsInTopic += len(committee.Shares)
 		}
 		committeesInTopic := len(topicCommittees)
 		logger = logger.With(zap.Int("committees in topic", committeesInTopic), zap.Int("validators in topic", validatorsInTopic))

@@ -34,7 +34,7 @@ func (s *BlockSlashingTestSuite) TestBlockDoubleProposal() {
 
 	s.T().Logf("✍️ Phase 1: Signing first valid block proposal")
 	testEpoch := testCurrentEpoch + 1
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
@@ -83,8 +83,8 @@ func (s *BlockSlashingTestSuite) TestBlockLowerSlotProposal() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing block at higher slot")
-	testEpoch := testCurrentEpoch + 10
-	higherSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 15
+	testEpoch := testCurrentEpoch + 1
+	higherSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 15
 	initialBlock := common.NewTestBlock(higherSlot, 0)
 
 	s.RequireValidSigning(
@@ -133,8 +133,8 @@ func (s *BlockSlashingTestSuite) TestBlockValidProgression() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Creating sequence of valid progressive block proposals")
-	startEpoch := testCurrentEpoch + 10
-	startSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(startEpoch) + 1
+	startEpoch := testCurrentEpoch + 1
+	startSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(startEpoch) + 1
 
 	// Define a series of valid sequential block proposals with increasing slots
 	blocks := make([]*electra.BeaconBlock, 5)
@@ -179,8 +179,8 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 
 	validatorKeyPair := s.AddValidator(ctx)
 
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	block := common.NewTestBlock(testSlot, 0)
 	block.ParentRoot = phase0.Root{0x42} // Distinguish this concurrent test block
 
@@ -247,8 +247,8 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial block before restart")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
@@ -300,8 +300,8 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerPostgreSQLRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial block to populate database")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
@@ -365,8 +365,8 @@ func (s *BlockSlashingTestSuite) TestSSVSignerRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial block before restart")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(

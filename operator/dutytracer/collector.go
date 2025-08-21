@@ -51,7 +51,7 @@ type Collector struct {
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 	syncCommitteeRootsSf    singleflight.Group
 
-	beacon *networkconfig.BeaconConfig
+	beacon *networkconfig.Beacon
 
 	store      DutyTraceStore
 	client     DomainDataProvider
@@ -74,7 +74,7 @@ func New(
 	validators registrystorage.ValidatorStore,
 	client DomainDataProvider,
 	store DutyTraceStore,
-	beaconNetwork *networkconfig.BeaconConfig,
+	beaconNetwork *networkconfig.Beacon,
 	decidedListenerFunc func(msg DecidedInfo),
 ) *Collector {
 	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration
@@ -151,7 +151,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 			return nil, false, errInFlight
 		}
 
-		trace, err := c.getValidatorDutiesFromDisk(role, slot, vPubKey)
+		trace, err := c.getValidatorDutyFromDisk(role, slot, vPubKey)
 		if errors.Is(err, store.ErrNotFound) {
 			roleDutyTrace := &model.ValidatorDutyTrace{
 				Slot: slot,

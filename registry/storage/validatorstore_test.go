@@ -945,8 +945,8 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 		require.NotNil(t, committee, "committee should not be nil")
 
 		// Ensure no duplicates in committee validators
-		require.Len(t, committee.Validators, 1, "committee.Validators should not contain duplicate entries")
-		require.Contains(t, committee.Validators, duplicateShare, "committee.Validators should contain the added share")
+		require.Len(t, committee.Shares, 1, "committee.Validators should not contain duplicate entries")
+		require.Contains(t, committee.Shares, duplicateShare, "committee.Validators should contain the added share")
 	})
 }
 
@@ -1018,7 +1018,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	for cmtID, shares := range byCommittee {
 		cmt, exists := store.Committee(cmtID)
 		require.True(t, exists)
-		requireEqualShares(t, shares, cmt.Validators)
+		requireEqualShares(t, shares, cmt.Shares)
 
 		operatorIDs := slices.Collect(maps.Keys(committeeOperators[cmtID]))
 		slices.Sort(operatorIDs)
@@ -1057,7 +1057,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 
 			// Compare shares.
 			storeOperatorCommittee := storeOperatorCommittees[storeIndex]
-			requireEqualShares(t, byCommittee[committee], storeOperatorCommittee.Validators, "committee %v doesn't have expected shares", storeOperatorCommittee.Operators)
+			requireEqualShares(t, byCommittee[committee], storeOperatorCommittee.Shares, "committee %v doesn't have expected shares", storeOperatorCommittee.Operators)
 
 			// Compare operator IDs.
 			operatorIDs := slices.Collect(maps.Keys(committeeOperators[committee]))
@@ -1065,12 +1065,12 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 			require.Equal(t, operatorIDs, storeOperatorCommittee.Operators)
 
 			// Compare indices.
-			expectedIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))
-			for i, validator := range storeOperatorCommittee.Validators {
+			expectedIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Shares))
+			for i, validator := range storeOperatorCommittee.Shares {
 				expectedIndices[i] = validator.ValidatorIndex
 			}
 			slices.Sort(expectedIndices)
-			storeIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))
+			storeIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Shares))
 			copy(storeIndices, storeOperatorCommittee.Indices)
 			slices.Sort(storeIndices)
 			require.Equal(t, expectedIndices, storeIndices)
@@ -1082,7 +1082,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	var participatingValidators []*ssvtypes.SSVShare
 	var participatingCommittees = make(map[spectypes.CommitteeID]struct{})
 	for _, share := range shares {
-		if share.IsParticipating(networkConfig, epoch) {
+		if share.IsParticipating(networkConfig.Beacon, epoch) {
 			participatingValidators = append(participatingValidators, share)
 			participatingCommittees[share.CommitteeID()] = struct{}{}
 		}
@@ -1110,6 +1110,6 @@ func createValidatorStore(shares map[spectypes.ValidatorPK]*ssvtypes.SSVShare) *
 			return share, true
 		},
 		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
-		networkConfig,
+		networkConfig.Beacon,
 	)
 }

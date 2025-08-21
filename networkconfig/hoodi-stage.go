@@ -7,9 +7,8 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
-const HoodiStageName = "hoodi-stage"
-
-var HoodiStageSSV = &SSVConfig{
+var HoodiStageSSV = &SSV{
+	Name:                 "hoodi-stage",
 	DomainType:           [4]byte{0x00, 0x00, 0x31, 0x14},
 	RegistrySyncOffset:   new(big.Int).SetInt64(1004),
 	RegistryContractAddr: ethcommon.HexToAddress("0x0aaace4e8affc47c6834171c88d342a4abd8f105"),

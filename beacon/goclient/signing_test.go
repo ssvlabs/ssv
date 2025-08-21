@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -19,14 +18,14 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(nil)
+		mockServer := mocks.NewServer(nil)
 		defer mockServer.Close()
 
 		client, err := New(
 			ctx,
 			zap.NewNop(),
 			Options{
-				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.Beacon,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,

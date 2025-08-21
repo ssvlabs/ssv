@@ -5,11 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cespare/xxhash/v2"
+	"github.com/ethereum/go-ethereum/common"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -24,8 +28,11 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 const (
@@ -36,22 +43,28 @@ const (
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         beacon.BeaconNode
-	network        specqbft.Network
-	signer         ekm.BeaconSigner
-	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
+	beacon                         beacon.BeaconNode
+	network                        specqbft.Network
+	signer                         ekm.BeaconSigner
+	operatorSigner                 ssvtypes.OperatorSigner
+	valCheck                       specqbft.ProposedValueCheckF
+	recipientsStorage              recipientsStorage
+	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
+	validatorOwnerAddress          common.Address
 
 	gasLimit uint64
 }
 
 func NewValidatorRegistrationRunner(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
+	validatorOwnerAddress common.Address,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
+	recipientsStorage recipientsStorage,
+	ValidatorRegistrationSubmitter ValidatorRegistrationSubmitter,
 	gasLimit uint64,
 ) (Runner, error) {
 	if len(share) != 1 {
@@ -65,11 +78,15 @@ func NewValidatorRegistrationRunner(
 			Share:          share,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		operatorSigner: operatorSigner,
-		gasLimit:       gasLimit,
+		beacon:                         beacon,
+		network:                        network,
+		signer:                         signer,
+		operatorSigner:                 operatorSigner,
+		recipientsStorage:              recipientsStorage,
+		validatorRegistrationSubmitter: ValidatorRegistrationSubmitter,
+		validatorOwnerAddress:          validatorOwnerAddress,
+
+		gasLimit: gasLimit,
 	}, nil
 }
 
@@ -97,7 +114,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		return traces.Errorf(span, "failed processing validator registration message: %w", err)
 	}
 
-	// TODO: (Alan) revert
 	logger.Debug("got partial sig",
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
 		zap.Bool("quorum", hasQuorum))
@@ -122,11 +138,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	share := r.GetShare()
-	if share == nil {
-		return traces.Errorf(span, "no share to get validator public key: %w", err)
-	}
-
 	registration, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
 		return traces.Errorf(span, "could not calculate validator registration: %w", err)
@@ -141,14 +152,14 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	}
 
 	span.AddEvent("submitting validator registration")
-	if err := r.beacon.SubmitValidatorRegistration(signedRegistration); err != nil {
+	if err := r.validatorRegistrationSubmitter.Enqueue(signedRegistration); err != nil {
 		return traces.Errorf(span, "could not submit validator registration: %w", err)
 	}
 
 	const eventMsg = "validator registration submitted successfully"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
-		fields.FeeRecipient(share.FeeRecipientAddress[:]),
+		fields.FeeRecipient(registration.FeeRecipient[:]),
 		zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	r.GetState().Finished = true
@@ -214,7 +225,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return traces.Errorf(span, "could not encode validator registration partial sig message: %w", err)
@@ -238,11 +249,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		SSVMessage:  ssvMsg,
 	}
 
-	logger.Debug(
-		"broadcasting validator registration partial sig",
-		fields.Slot(duty.DutySlot()),
-		zap.Any("validator_registration", vr),
-	)
+	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial randao sig: %w", err)
@@ -253,15 +260,18 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 }
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0.Slot) (*v1.ValidatorRegistration, error) {
-	share := r.GetShare()
-	if share == nil {
-		return nil, errors.New("no share to get validator public key")
-	}
-
 	pk := phase0.BLSPubKey{}
-	copy(pk[:], share.ValidatorPubKey[:])
+	copy(pk[:], r.GetShare().ValidatorPubKey[:])
 
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
+
+	rData, found, err := r.recipientsStorage.GetRecipientData(nil, r.validatorOwnerAddress)
+	if err != nil {
+		return nil, fmt.Errorf("get recipient data from storage: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("recipient data not found for owner %s", r.validatorOwnerAddress.Hex())
+	}
 
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
 	// on the current epoch as compared to when this transition is supposed to happen.
@@ -275,7 +285,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 	}
 
 	return &v1.ValidatorRegistration{
-		FeeRecipient: share.FeeRecipientAddress,
+		FeeRecipient: rData.FeeRecipient,
 		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.NetworkConfig.EpochStartTime(epoch),
 		Pubkey:       pk,
@@ -334,4 +344,157 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+type recipientsStorage interface {
+	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
+}
+
+type ValidatorRegistrationSubmitter interface {
+	Enqueue(registration *api.VersionedSignedValidatorRegistration) error
+}
+
+type VRSubmitter struct {
+	logger *zap.Logger
+
+	beaconConfig   *networkconfig.Beacon
+	beacon         beacon.BeaconNode
+	validatorStore validatorStore
+
+	// registrationMu synchronizes access to registrations
+	registrationMu sync.Mutex
+	// registrations is a set of validator-registrations (their latest versions) to be sent to
+	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
+	// participating validators and their chosen preferences (gas limit, fee recipient, etc.)
+	registrations map[phase0.BLSPubKey]*validatorRegistration
+}
+
+func NewVRSubmitter(
+	ctx context.Context,
+	logger *zap.Logger,
+	beaconConfig *networkconfig.Beacon,
+	beacon beacon.BeaconNode,
+	validatorStore validatorStore,
+) *VRSubmitter {
+	submitter := &VRSubmitter{
+		logger:         logger,
+		beaconConfig:   beaconConfig,
+		beacon:         beacon,
+		validatorStore: validatorStore,
+		registrations:  map[phase0.BLSPubKey]*validatorRegistration{},
+	}
+
+	slotTicker := slotticker.New(logger, slotticker.Config{
+		SlotDuration: beaconConfig.SlotDuration,
+		GenesisTime:  beaconConfig.GenesisTime,
+	})
+	go submitter.start(ctx, slotTicker)
+
+	return submitter
+}
+
+// start periodically submits validator registrations of 2 types (in batches, 1 batch per slot):
+// - new validator registrations
+// - validator registrations that are relevant for the near future (targeting 10th epoch from now)
+// This allows us to keep the amount of registration submissions small and not having to worry
+// about pruning gc.registrations "cache" (since it might contain registrations for validators that
+// are no longer operating) while still submitting all validator-registrations that matter asap.
+func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.Next():
+			config := s.beaconConfig
+
+			currentSlot := ticker.Slot()
+			currentEpoch := config.EstimatedEpochAtSlot(currentSlot)
+			slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch
+
+			// Select registrations to submit.
+			targetRegs := make(map[phase0.BLSPubKey]*validatorRegistration, 0)
+			s.registrationMu.Lock()
+			// 1. find and add validators attesting in the 10th epoch from now
+			shares := s.validatorStore.SelfValidators()
+			for _, share := range shares {
+				if !share.IsAttesting(currentEpoch + 10) {
+					continue
+				}
+				pk := phase0.BLSPubKey{}
+				copy(pk[:], share.ValidatorPubKey[:])
+				r, ok := s.registrations[pk]
+				if !ok {
+					// we haven't constructed the corresponding validator registration for submission yet,
+					// so skip it for now
+					continue
+				}
+				targetRegs[pk] = r
+			}
+			// 2. find and add newly created validator registrations
+			for pk, r := range s.registrations {
+				if r.new {
+					targetRegs[pk] = r
+				}
+			}
+			s.registrationMu.Unlock()
+
+			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
+			for _, r := range targetRegs {
+				validatorPk, err := r.PubKey()
+				if err != nil {
+					s.logger.Error("Failed to get validator pubkey", fields.Slot(currentSlot), zap.Error(err))
+					continue
+				}
+
+				// Distribute the registrations evenly across the epoch based on the pubkeys.
+				validatorDescriptor := xxhash.Sum64(validatorPk[:])
+				shouldSubmit := validatorDescriptor%config.SlotsPerEpoch == slotInEpoch
+
+				if r.new || shouldSubmit {
+					r.new = false
+					registrations = append(registrations, r.VersionedSignedValidatorRegistration)
+				}
+			}
+
+			err := s.beacon.SubmitValidatorRegistrations(ctx, registrations)
+			if err != nil {
+				s.logger.Error("Failed to submit validator registrations",
+					zap.Int("registrations", len(registrations)),
+					fields.Slot(currentSlot),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+}
+
+// Enqueue enqueues new validator registration for submission, the submission happens asynchronously
+// in a batch with other validator registrations. If validator registration already exists it is
+// replaced by this new one.
+func (s *VRSubmitter) Enqueue(registration *api.VersionedSignedValidatorRegistration) error {
+	pk, err := registration.PubKey()
+	if err != nil {
+		return err
+	}
+
+	s.registrationMu.Lock()
+	defer s.registrationMu.Unlock()
+
+	s.registrations[pk] = &validatorRegistration{
+		VersionedSignedValidatorRegistration: registration,
+		new:                                  true,
+	}
+
+	return nil
+}
+
+type validatorRegistration struct {
+	*api.VersionedSignedValidatorRegistration
+
+	// new signifies whether this validator registration has already been submitted previously.
+	new bool
+}
+
+type validatorStore interface {
+	SelfValidators() []*ssvtypes.SSVShare
 }

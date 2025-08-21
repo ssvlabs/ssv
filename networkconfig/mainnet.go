@@ -9,9 +9,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-const MainnetName = "mainnet"
-
-var MainnetSSV = &SSVConfig{
+var MainnetSSV = &SSV{
+	Name:                 "mainnet",
 	DomainType:           spectypes.AlanMainnet,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
