@@ -84,7 +84,7 @@ func NewNodeStorage(beaconCfg *networkconfig.Beacon, logger *zap.Logger, db base
 		return nil, err
 	}
 
-	// Wire back for updates: recipients -> shares (clean and simple!)
+	// Wire back for updates: recipients notify shares of fee recipient changes
 	setSharesUpdater(stg.shareStore)
 
 	return stg, nil
