@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -61,18 +62,28 @@ type ParticipantResponse struct {
 	} `json:"message"`
 }
 
-func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
-	var request struct {
-		From    uint64        `json:"from"`
-		To      uint64        `json:"to"`
-		Roles   api.RoleSlice `json:"roles"`
-		PubKeys api.HexSlice  `json:"pubkeys"`
-	}
-	var response struct {
-		Data []*ParticipantResponse `json:"data"`
-	}
+type decidedResponse struct {
+	Data   []*ParticipantResponse `json:"data"`
+	Errors []string               `json:"errors,omitempty"`
+}
 
-	if err := api.Bind(r, &request); err != nil {
+type decidedRequest struct {
+	From    uint64        `json:"from"`
+	To      uint64        `json:"to"`
+	Roles   api.RoleSlice `json:"roles"`
+	PubKeys api.HexSlice  `json:"pubkeys"`
+}
+
+func (r *decidedRequest) parsePubkeys() []spectypes.ValidatorPK {
+	pubKeys := make([]spectypes.ValidatorPK, len(r.PubKeys))
+	for i, pk := range r.PubKeys {
+		copy(pubKeys[i][:], pk)
+	}
+	return pubKeys
+}
+
+func parseAndValidate(r *http.Request, request *decidedRequest) error {
+	if err := api.Bind(r, request); err != nil {
 		return api.BadRequestError(err)
 	}
 
@@ -84,19 +95,30 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
-	response.Data = []*ParticipantResponse{}
-	from := phase0.Slot(request.From)
-	to := phase0.Slot(request.To)
-
-	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.PubKeys))
-	for i, req := range request.PubKeys {
+	for _, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		if len(req) != len(pubkey) {
-			return api.BadRequestError(fmt.Errorf("invalid pubkey length at index %d", i))
+			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req)))
 		}
-		copy(pubkey[:], req)
-		pubkeys = append(pubkeys, pubkey)
 	}
+	return nil
+}
+
+func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
+	var request decidedRequest
+
+	if err := parseAndValidate(r, &request); err != nil {
+		return err
+	}
+
+	pubkeys := request.parsePubkeys()
+
+	// Initialize with empty slice to ensure we always return [] instead of null
+	var response decidedResponse
+	response.Data = make([]*ParticipantResponse, 0)
+
+	from := phase0.Slot(request.From)
+	to := phase0.Slot(request.To)
 
 	for _, r := range request.Roles {
 		role := spectypes.BeaconRole(r)
@@ -112,8 +134,8 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		for _, pubKey := range pubkeys {
-			participantsByPK, err := store.GetParticipantsInRange(pubKey, from, to)
+		for _, pubkey := range pubkeys {
+			participantsByPK, err := store.GetParticipantsInRange(pubkey, from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
@@ -129,127 +151,105 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, response)
 }
 
-func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
-	var request struct {
-		From    uint64        `json:"from"`
-		To      uint64        `json:"to"`
-		Roles   api.RoleSlice `json:"roles"`
-		PubKeys api.HexSlice  `json:"pubkeys"`
-	}
-	var response struct {
-		Data []*ParticipantResponse `json:"data"`
-	}
+func noSignersError(pubkey spectypes.ValidatorPK, slot phase0.Slot, role spectypes.BeaconRole) error {
+	return fmt.Errorf("omitting entry with no signers for pubkey %x, slot %d, role %s", pubkey, slot, role.String())
+}
 
-	if err := api.Bind(r, &request); err != nil {
-		return api.BadRequestError(err)
-	}
+func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, *multierror.Error) {
+	var errs *multierror.Error
 
-	if request.From > request.To {
-		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
-	}
-
-	if len(request.Roles) == 0 {
-		return api.BadRequestError(fmt.Errorf("at least one role is required"))
-	}
-
-	// Initialize with empty slice to ensure we always return [] instead of null
-	response.Data = make([]*ParticipantResponse, 0)
-
-	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.PubKeys))
-	for _, req := range request.PubKeys {
-		var pubkey spectypes.ValidatorPK
-		if len(req) != len(pubkey) {
-			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", req))
+	if len(pubkeys) == 0 {
+		participants, err := e.traceStore.GetAllCommitteeDecideds(slot, role)
+		if err != nil {
+			errs = multierror.Append(errs, err)
 		}
-		copy(pubkey[:], req)
-		pubkeys = append(pubkeys, pubkey)
+		return participants, errs
 	}
+
+	var participants []qbftstorage.ParticipantsRangeEntry
+
+	for _, pubkey := range pubkeys {
+		participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+			continue
+		}
+		participants = append(participants, participantsByPK...)
+	}
+	return participants, errs
+}
+
+func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, *multierror.Error) {
+	var errs *multierror.Error
+
+	if len(pubkeys) == 0 {
+		participants, err := e.traceStore.GetAllValidatorDecideds(role, slot)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+		}
+		return participants, errs
+	}
+
+	participants, err := e.traceStore.GetValidatorDecideds(role, slot, pubkeys)
+	if err != nil {
+		errs = multierror.Append(errs, err)
+	}
+	return participants, errs
+}
+
+func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
+	var request decidedRequest
+	if err := parseAndValidate(r, &request); err != nil {
+		return err
+	}
+	pubkeys := request.parsePubkeys()
+
+	var participants = make([]*ParticipantResponse, 0)
+	var errs *multierror.Error
 
 	for _, r := range request.Roles {
 		role := spectypes.BeaconRole(r)
-		switch role {
-		case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
-			for s := request.From; s <= request.To; s++ {
-				slot := phase0.Slot(s)
 
-				// if no pubkeys are provided, get all decideds for the role
-				if len(pubkeys) == 0 {
-					participantsByPK, err := e.traceStore.GetAllCommitteeDecideds(slot, role)
-					if err != nil {
-						return api.Error(fmt.Errorf("error getting all committee decideds for slot %d and role %s: %w", slot, role.String(), err))
-					}
-					for _, pr := range participantsByPK {
-						// duty syncer fails to parse messages with no signers so instead
-						// we skip adding the message to the response altogether
-						if len(pr.Signers) == 0 {
-							continue
-						}
-						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
-					}
-				}
+		for s := request.From; s <= request.To; s++ {
+			slot := phase0.Slot(s)
 
-				// otherwise iterate over the provided pubkeys
-				for _, pubkey := range pubkeys {
-					participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
-					if err != nil {
-						if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
-							e.logger.Debug("error getting committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
-							// we might not have a duty for this role, so we skip it
-							continue
-						}
-						return api.Error(fmt.Errorf("error getting committee duty for slot %d and pubkey %s and role %s: %w", slot, hex.EncodeToString(pubkey[:]), role.String(), err))
-					}
-					for _, pr := range participantsByPK {
-						// duty syncer fails to parse messages with no signers so instead
-						// we skip adding the message to the response altogether
-						if len(pr.Signers) == 0 {
-							continue
-						}
-						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
-					}
-				}
-			}
-		default:
-			if len(pubkeys) == 0 {
-				for s := request.From; s <= request.To; s++ {
-					slot := phase0.Slot(s)
-					participantsByPK, err := e.traceStore.GetAllValidatorDecideds(role, slot)
-					if err != nil {
-						e.logger.Debug("error getting all validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
-						continue
-					}
-					for _, pr := range participantsByPK {
-						// duty syncer fails to parse messages with no signers so instead
-						// we skip adding the message to the response altogether
-						if len(pr.Signers) == 0 {
-							continue
-						}
-						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
-					}
-				}
+			var roleParticipants []qbftstorage.ParticipantsRangeEntry
+			var roleErrs *multierror.Error
 
-				continue
+			switch role {
+			case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+				roleParticipants, roleErrs = e.getCommitteeDecidedsForRole(slot, pubkeys, role)
+			default:
+				roleParticipants, roleErrs = e.getValidatorDecidedsForRole(slot, pubkeys, role)
 			}
 
-			for s := request.From; s <= request.To; s++ {
-				slot := phase0.Slot(s)
-				participantsByPK, err := e.traceStore.GetValidatorDecideds(role, slot, pubkeys)
-				if err != nil {
-					e.logger.Debug("error getting validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+			errs = multierror.Append(errs, roleErrs)
+
+			for _, pr := range roleParticipants {
+				// duty syncer fails to parse messages with no signers so instead
+				// we skip adding the message to the response altogether
+				if len(pr.Signers) == 0 {
+					errs = multierror.Append(errs, noSignersError(pr.PubKey, slot, role))
 					continue
 				}
-				for _, pr := range participantsByPK {
-					// duty syncer fails to parse messages with no signers so instead
-					// we skip adding the message to the response altogether
-					if len(pr.Signers) == 0 {
-						continue
-					}
-					response.Data = append(response.Data, transformToParticipantResponse(role, pr))
-				}
+				participants = append(participants, transformToParticipantResponse(role, pr))
 			}
 		}
 	}
 
+	// if we don't have a single valid participant, return an error
+	if len(participants) == 0 && errs.ErrorOrNil() != nil {
+		// if we only have one error, unwrap it
+		if len(errs.Errors) == 1 {
+			return api.Error(errs.Errors[0])
+		}
+		return api.Error(errs)
+	}
+
+	// otherwise return a partial response with valid participants
+	var response decidedResponse
+	response.Data = participants
+	response.Errors = toStrings(errs.Errors)
 	return api.Render(w, r, response)
 }
 
@@ -262,6 +262,16 @@ func transformToParticipantResponse(role spectypes.BeaconRole, entry qbftstorage
 	response.Message.Signers = entry.Signers
 
 	return response
+}
+
+func toStrings(errs []error) []string {
+	result := make([]string, 0, len(errs))
+	for _, err := range errs {
+		if err != nil {
+			result = append(result, err.Error())
+		}
+	}
+	return result
 }
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
@@ -378,7 +388,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	for _, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		if len(req) != len(pubkey) {
-			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", req))
+			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req)))
 		}
 		copy(pubkey[:], req)
 		pubkeys = append(pubkeys, pubkey)
