@@ -107,8 +107,6 @@ func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte)
 	return rs, setter
 }
 
-// SetSharesUpdater is no longer needed - wiring is done via the setter function returned by NewRecipientsStorage
-
 // GetRecipientsPrefix returns DB prefix
 func (s *recipientsStorage) GetRecipientsPrefix() []byte {
 	return recipientsPrefix
