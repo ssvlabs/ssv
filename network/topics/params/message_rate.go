@@ -28,12 +28,12 @@ const (
 )
 
 type rateCalculator struct {
-	netCfg                                                           *networkconfig.NetworkConfig
+	netCfg                                                           *networkconfig.Network
 	generatedExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation []float64
 	generatedExpectedSingleSCCommitteeDutiesPerEpoch                 []float64
 }
 
-func newRateCalculator(netCfg *networkconfig.NetworkConfig) *rateCalculator {
+func newRateCalculator(netCfg *networkconfig.Network) *rateCalculator {
 	rc := &rateCalculator{
 		netCfg: netCfg,
 		generatedExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation: []float64{},
@@ -55,13 +55,13 @@ func (rc *rateCalculator) calculateMessageRateForTopic(committees []*storage.Com
 
 	for _, committee := range committees {
 		committeeSize := len(committee.Operators)
-		numValidators := len(committee.Validators)
+		numValidators := len(committee.Shares)
 
 		totalMsgRate += rc.expectedNumberOfCommitteeDutiesPerEpochDueToAttestationCached(numValidators) * float64(dutyWithoutPreConsensus(committeeSize))
 		totalMsgRate += rc.expectedSingleSCCommitteeDutiesPerEpochCached(numValidators) * float64(dutyWithoutPreConsensus(committeeSize))
 		totalMsgRate += float64(numValidators) * rc.AggregatorProbability() * float64(dutyWithPreConsensus(committeeSize))
-		totalMsgRate += float64(numValidators) * float64(rc.netCfg.GetSlotsPerEpoch()) * rc.ProposalProbability() * float64(dutyWithPreConsensus(committeeSize))
-		totalMsgRate += float64(numValidators) * float64(rc.netCfg.GetSlotsPerEpoch()) * rc.SyncCommitteeAggProb() * float64(dutyWithPreConsensus(committeeSize))
+		totalMsgRate += float64(numValidators) * float64(rc.netCfg.SlotsPerEpoch) * rc.ProposalProbability() * float64(dutyWithPreConsensus(committeeSize))
+		totalMsgRate += float64(numValidators) * float64(rc.netCfg.SlotsPerEpoch) * rc.SyncCommitteeAggProb() * float64(dutyWithPreConsensus(committeeSize))
 	}
 
 	// Convert rate to seconds
@@ -74,7 +74,7 @@ func (rc *rateCalculator) calculateMessageRateForTopic(committees []*storage.Com
 // Expected number of committee duties per epoch due to attestations
 func (rc *rateCalculator) calcExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation(numValidators int) float64 {
 	k := float64(numValidators)
-	n := float64(rc.netCfg.GetSlotsPerEpoch())
+	n := float64(rc.netCfg.SlotsPerEpoch)
 
 	// Probability that all validators are not assigned to slot i
 	probabilityAllNotOnSlotI := math.Pow((n-1)/n, k)
@@ -146,15 +146,15 @@ func (rc *rateCalculator) ProposalProbability() float64 {
 }
 
 func (rc *rateCalculator) SyncCommitteeProbability() float64 {
-	return float64(rc.netCfg.GetSyncCommitteeSize()) / float64(rc.netCfg.TotalEthereumValidators)
+	return float64(rc.netCfg.SyncCommitteeSize) / float64(rc.netCfg.TotalEthereumValidators)
 }
 
 func (rc *rateCalculator) SyncCommitteeAggProb() float64 {
-	return rc.SyncCommitteeProbability() * 16.0 / (float64(rc.netCfg.GetSyncCommitteeSize()) / 4.0)
+	return rc.SyncCommitteeProbability() * 16.0 / (float64(rc.netCfg.SyncCommitteeSize) / 4.0)
 }
 
 func (rc *rateCalculator) MaxAttestationDutiesPerEpochForCommittee() uint64 {
-	return rc.netCfg.GetSlotsPerEpoch()
+	return rc.netCfg.SlotsPerEpoch
 }
 
 func (rc *rateCalculator) EstimatedAttestationCommitteeSize() float64 {

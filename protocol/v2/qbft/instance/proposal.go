@@ -26,7 +26,7 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	}
 
 	logger.Debug("📬 got proposal message",
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
 
 	newRound := msg.QBFTMessage.Round
@@ -52,7 +52,7 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	}
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs),
 		zap.Any("prepare_signers", prepare.OperatorIDs))
 

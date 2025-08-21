@@ -33,15 +33,6 @@ type migration_6_OldStorageShare struct {
 	Liquidated      bool
 }
 
-// Encode encodes Share using ssz.
-func (s *migration_6_OldStorageShare) Encode() ([]byte, error) {
-	result, err := s.MarshalSSZ()
-	if err != nil {
-		return nil, fmt.Errorf("marshal ssz: %w", err)
-	}
-	return result, nil
-}
-
 // Decode decodes Share using ssz.
 func (s *migration_6_OldStorageShare) Decode(data []byte) error {
 	if len(data) > types.MaxAllowedShareSize {

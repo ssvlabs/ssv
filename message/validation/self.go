@@ -21,20 +21,6 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 		return pubsub.ValidationReject
 	}
 
-	// TODO: (Alan) remove this log when not needed
-	// var identity zap.Field
-	// if signedSSVMessage.SSVMessage.GetID().GetRoleType() == spectypes.RoleCommittee {
-	// 	identity = zap.String("committee_id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))
-	// } else {
-	// 	identity = zap.String("pubkey", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()))
-	// }
-	// mv.logger.Debug("got p2p message",
-	// 	append([]zap.Field{
-	// 		zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
-	// 		zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
-	// 	}, identity)...,
-	// )
-
 	pMsg.ValidatorData = d
 	return pubsub.ValidationAccept
 }

@@ -26,7 +26,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// VoluntaryExitRunner runner for validator voluntary exit duty
+// VoluntaryExitRunner implements validator voluntary exit duty - this duty doesn't
+// need consensus nor post-consensus, it just performs pre-consensus with VoluntaryExitPartialSig
+// over a VoluntaryExit object to create a SignedVoluntaryExit
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
@@ -39,7 +41,7 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
@@ -160,10 +162,6 @@ func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Contex
 	return nil, [4]byte{}, errors.New("no post consensus roots for voluntary exit")
 }
 
-// Validator voluntary exit duty doesn't need consensus nor post-consensus.
-// It just performs pre-consensus with VoluntaryExitPartialSig over
-// a VoluntaryExit object to create a SignedVoluntaryExit
-
 func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
@@ -197,7 +195,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return traces.Errorf(span, "could not encode PartialSignatureMessages: %w", err)

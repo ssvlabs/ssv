@@ -104,7 +104,7 @@ func (v *voteChecker) checkValue(value []byte) (*spectypes.BeaconVote, error) {
 
 type proposerChecker struct {
 	signer         ekm.BeaconSigner
-	beaconConfig   networkconfig.Beacon
+	beaconConfig   *networkconfig.Beacon
 	validatorPK    spectypes.ValidatorPK
 	validatorIndex phase0.ValidatorIndex
 	sharePublicKey phase0.BLSPubKey
@@ -112,7 +112,7 @@ type proposerChecker struct {
 
 func NewProposerChecker(
 	signer ekm.BeaconSigner,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 	sharePublicKey phase0.BLSPubKey,
@@ -153,13 +153,13 @@ func (v *proposerChecker) CheckValue(value []byte) error {
 }
 
 type aggregatorChecker struct {
-	beaconConfig   networkconfig.Beacon
+	beaconConfig   *networkconfig.Beacon
 	validatorPK    spectypes.ValidatorPK
 	validatorIndex phase0.ValidatorIndex
 }
 
 func NewAggregatorChecker(
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) ValueChecker {
@@ -176,13 +176,13 @@ func (v *aggregatorChecker) CheckValue(value []byte) error {
 }
 
 type syncCommitteeContributionChecker struct {
-	beaconConfig   networkconfig.Beacon
+	beaconConfig   *networkconfig.Beacon
 	validatorPK    spectypes.ValidatorPK
 	validatorIndex phase0.ValidatorIndex
 }
 
 func NewSyncCommitteeContributionChecker(
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) ValueChecker {
@@ -200,7 +200,7 @@ func (v *syncCommitteeContributionChecker) CheckValue(value []byte) error {
 
 func checkValidatorConsensusData(
 	value []byte,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
