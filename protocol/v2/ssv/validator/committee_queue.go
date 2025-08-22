@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -131,28 +130,6 @@ func (c *Committee) ConsumeQueue(
 
 	state := *q.queueState
 
-	type msgIDType string
-	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
-	// with different signers, slots, types, rounds, etc. - so we can't use just msg.ID as a unique identifier)
-	messageID := func(msg *queue.SSVMessage) msgIDType {
-		const idUndefined = "undefined"
-		msgSlot, err := msg.Slot()
-		if err != nil {
-			logger.Error("couldn't get message slot", zap.Error(err))
-			return idUndefined
-		}
-		if msg.MsgType == spectypes.SSVConsensusMsgType {
-			sm := msg.Body.(*specqbft.Message)
-			signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
-			return msgIDType(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
-		}
-		if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-			psm := msg.Body.(*spectypes.PartialSignatureMessages)
-			signer := fmt.Sprintf("%d", psm.Messages[0].Signer) // same signer for all messages
-			return msgIDType(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
-		}
-		return idUndefined
-	}
 	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
@@ -220,15 +197,15 @@ func (c *Committee) ConsumeQueue(
 				retryDelay = 25 * time.Millisecond
 				retryCount = 40
 			)
-			msgRetryItem := msgRetries.Get(messageID(msg))
+			msgRetryItem := msgRetries.Get(c.messageID(msg))
 			if msgRetryItem == nil {
-				msgRetries.Set(messageID(msg), 0, ttlcache.DefaultTTL)
-				msgRetryItem = msgRetries.Get(messageID(msg))
+				msgRetries.Set(c.messageID(msg), 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(c.messageID(msg))
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
 			logger = loggerWithMessageFields(logger, msg).
-				With(zap.String("message_identifier", string(messageID(msg)))).
+				With(zap.String("message_identifier", string(c.messageID(msg)))).
 				With(zap.Int("attempt", msgRetryCnt+1))
 
 			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
@@ -237,12 +214,12 @@ func (c *Committee) ConsumeQueue(
 				logger.Error(couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
 			case isRetryable(err) && msgRetryCnt < retryCount:
 				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
-				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
 						logger.Warn("❗ not gonna replay message because the queue is full",
-							zap.String("message_identifier", string(messageID(msg))),
+							zap.String("message_identifier", string(c.messageID(msg))),
 							fields.MessageType(msg.MsgType),
 						)
 					}
@@ -257,4 +234,9 @@ func (c *Committee) ConsumeQueue(
 			}
 		}
 	}
+}
+
+// messageID is a wrapper that provides a logger to report errors (if any).
+func (c *Committee) messageID(msg *queue.SSVMessage) msgIDType {
+	return messageID(msg, c.logger)
 }

@@ -3,11 +3,8 @@ package validator
 import (
 	"context"
 	"fmt"
-	"slices"
-	"strings"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -22,18 +19,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
-
-// MessageHandler process the msg. return error if exist
-type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
-
-// QueueContainer wraps a queue with its corresponding state
-type QueueContainer struct {
-	Q          queue.Queue
-	queueState *queue.State
-}
 
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
@@ -123,28 +110,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	v.logger.Debug("📬 queue consumer is running")
 	defer v.logger.Debug("📪 queue consumer is closed")
 
-	type msgIDType string
-	// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
-	// with different signers, slots, types, rounds, etc. - so we can't use just msg.ID as a unique identifier)
-	messageID := func(msg *queue.SSVMessage) msgIDType {
-		const idUndefined = "undefined"
-		msgSlot, err := msg.Slot()
-		if err != nil {
-			v.logger.Error("couldn't get message slot", zap.Error(err))
-			return idUndefined
-		}
-		if msg.MsgType == spectypes.SSVConsensusMsgType {
-			sm := msg.Body.(*specqbft.Message)
-			signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
-			return msgIDType(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
-		}
-		if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-			psm := msg.Body.(*spectypes.PartialSignatureMessages)
-			signer := fmt.Sprintf("%d", psm.Messages[0].Signer) // same signer for all messages
-			return msgIDType(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
-		}
-		return idUndefined
-	}
 	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
 	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
@@ -222,27 +187,27 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				retryDelay = 25 * time.Millisecond
 				retryCount = 40
 			)
-			msgRetryItem := msgRetries.Get(messageID(msg))
+			msgRetryItem := msgRetries.Get(v.messageID(msg))
 			if msgRetryItem == nil {
-				msgRetries.Set(messageID(msg), 0, ttlcache.DefaultTTL)
-				msgRetryItem = msgRetries.Get(messageID(msg))
+				msgRetries.Set(v.messageID(msg), 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(v.messageID(msg))
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
 			logger := loggerWithMessageFields(v.logger, msg).
-				With(zap.String("message_identifier", string(messageID(msg)))).
+				With(zap.String("message_identifier", string(v.messageID(msg)))).
 				With(zap.Int("attempt", msgRetryCnt+1))
 
 			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
 			switch {
 			case isRetryable(err) && msgRetryCnt < retryCount:
 				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
-				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+				msgRetries.Set(v.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
 						logger.Warn("❗ not gonna replay message because the queue is full",
-							zap.String("message_identifier", string(messageID(msg))),
+							zap.String("message_identifier", string(v.messageID(msg))),
 							fields.MessageType(msg.MsgType),
 						)
 					}
@@ -281,44 +246,7 @@ func (v *Validator) getLastRound(identifier spectypes.MessageID) specqbft.Round 
 	return specqbft.Round(1)
 }
 
-func loggerWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logger {
-	logger = logger.With(fields.MessageType(msg.MsgType))
-
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		qbftMsg := msg.Body.(*specqbft.Message)
-		logger = logger.With(
-			fields.Slot(phase0.Slot(qbftMsg.Height)),
-			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
-			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
-			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
-			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
-		)
-	}
-
-	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		// signer must be the same for all messages, at least 1 message must be present (this is validated prior)
-		signer := psm.Messages[0].Signer
-		logger = logger.With(
-			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
-			zap.Uint64("signer", signer),
-			fields.Slot(psm.Slot),
-		)
-	}
-
-	return logger
-}
-
-func isRetryable(err error) bool {
-	retryableErrors := []error{
-		runner.ErrNoRunningDuty,
-		runner.ErrFuturePartialSigMsg,
-		runner.ErrInstanceNotFound,
-		runner.ErrFutureConsensusMsg,
-		runner.ErrNoProposalForRound,
-		runner.ErrWrongMsgRound,
-	}
-	return slices.ContainsFunc(retryableErrors, func(retryableErr error) bool {
-		return errors.Is(err, retryableErr)
-	})
+// messageID is a wrapper that provides a logger to report errors (if any).
+func (v *Validator) messageID(msg *queue.SSVMessage) msgIDType {
+	return messageID(msg, v.logger)
 }
