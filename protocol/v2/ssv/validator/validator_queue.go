@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -168,8 +169,8 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				state.HasRunningInstance = !decided
 			}
 		}
-		state.Height = v.GetLastHeight(msgID)
-		state.Round = v.GetLastRound(msgID)
+		state.Height = v.getLastHeight(msgID)
+		state.Round = v.getLastRound(msgID)
 		state.Quorum = v.Operator.GetQuorum()
 
 		filter := queue.FilterAny
@@ -234,10 +235,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
 			switch {
-			case (errors.Is(err, runner.ErrNoRunningDuty) || errors.Is(err, runner.ErrFuturePartialSigMsg) ||
-				errors.Is(err, runner.ErrInstanceNotFound) || errors.Is(err, runner.ErrFutureConsensusMsg) ||
-				errors.Is(err, runner.ErrNoProposalForRound) || errors.Is(err, runner.ErrWrongMsgRound)) &&
-				msgRetryCnt < retryCount:
+			case isRetryable(err) && msgRetryCnt < retryCount:
 				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 				msgRetries.Set(messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
@@ -256,6 +254,31 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	}
 
 	return nil
+}
+
+func (v *Validator) getLastHeight(identifier spectypes.MessageID) specqbft.Height {
+	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	if r == nil {
+		return specqbft.Height(0)
+	}
+	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
+		return ctrl.Height
+	}
+	return specqbft.Height(0)
+}
+
+func (v *Validator) getLastRound(identifier spectypes.MessageID) specqbft.Round {
+	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	if r == nil {
+		return specqbft.Round(1)
+	}
+	if r.HasRunningDuty() {
+		inst := r.GetBaseRunner().State.RunningInstance
+		if inst != nil {
+			return inst.State.Round
+		}
+	}
+	return specqbft.Round(1)
 }
 
 func loggerWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logger {
@@ -286,29 +309,16 @@ func loggerWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) *zap.Log
 	return logger
 }
 
-// GetLastHeight returns the last height for the given identifier
-func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Height(0)
+func isRetryable(err error) bool {
+	retryableErrors := []error{
+		runner.ErrNoRunningDuty,
+		runner.ErrFuturePartialSigMsg,
+		runner.ErrInstanceNotFound,
+		runner.ErrFutureConsensusMsg,
+		runner.ErrNoProposalForRound,
+		runner.ErrWrongMsgRound,
 	}
-	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-		return ctrl.Height
-	}
-	return specqbft.Height(0)
-}
-
-// GetLastRound returns the last height for the given identifier
-func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Round(1)
-	}
-	if r.HasRunningDuty() {
-		inst := r.GetBaseRunner().State.RunningInstance
-		if inst != nil {
-			return inst.State.Round
-		}
-	}
-	return specqbft.Round(1)
+	return slices.ContainsFunc(retryableErrors, func(retryableErr error) bool {
+		return errors.Is(err, retryableErr)
+	})
 }
