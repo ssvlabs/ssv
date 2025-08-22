@@ -19,14 +19,18 @@ var (
 	// ErrInstanceNotFound means we might not have started the QBFT instance yet, while another operator already did
 	// + sent this message to us.
 	ErrInstanceNotFound = fmt.Errorf("instance not found")
-	// ErrFutureConsensusMsg means the message we've got is "from the future"; it can happen if we haven't started
-	// QBFT instance for the slot the message is targeting yet, while another operator already did + sent this
-	// message to us.
-	ErrFutureConsensusMsg = fmt.Errorf("future consensus msg")
-	// ErrNoProposalForRound means we might not have received a proposal-message yet, while another operator already
-	// did and started preparing it.
-	ErrNoProposalForRound = fmt.Errorf("no proposal for round")
-	// ErrWrongMsgRound means we might not have changed the round to the next one yet, while another operator already
-	// did + sent this message to us.
-	ErrWrongMsgRound = fmt.Errorf("wrong msg round")
 )
+
+type RetryableError struct {
+	originalErr error
+}
+
+func NewRetryableError(originalErr error) *RetryableError {
+	return &RetryableError{
+		originalErr: originalErr,
+	}
+}
+
+func (e *RetryableError) Error() string {
+	return e.originalErr.Error()
+}

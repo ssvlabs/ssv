@@ -183,7 +183,7 @@ func (i *Instance) validateCommit(msg *specqbft.ProcessingMessage) error {
 	}
 
 	if msg.QBFTMessage.Round != i.State.Round {
-		return ErrWrongMsgRound
+		return NewRetryableError(ErrWrongMsgRound)
 	}
 
 	if !bytes.Equal(i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -126,7 +125,7 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 
 	isFutureMsg := c.isFutureMessage(msg)
 	if isFutureMsg {
-		return nil, ErrFutureMsg
+		return nil, NewRetryableError(ErrFutureConsensusMsg)
 	}
 
 	return c.UponExistingInstanceMsg(ctx, logger, msg)
@@ -135,7 +134,7 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
-		return nil, ErrInstanceNotFound
+		return nil, NewRetryableError(ErrInstanceNotFound)
 	}
 
 	prevDecided, _ := inst.IsDecided()
@@ -146,11 +145,8 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	}
 
 	decided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
-	if errors.Is(err, instance.ErrNoProposalForRound) {
-		return nil, fmt.Errorf("%w: %v", ErrNoProposalForRound, err)
-	}
-	if errors.Is(err, instance.ErrWrongMsgRound) {
-		return nil, fmt.Errorf("%w: %v", ErrWrongMsgRound, err)
+	if errors.Is(err, &instance.RetryableError{}) {
+		return nil, NewRetryableError(err)
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")

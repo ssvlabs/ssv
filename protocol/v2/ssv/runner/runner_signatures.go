@@ -64,7 +64,7 @@ func (b *BaseRunner) validatePartialSigMsg(psigMsgs *spectypes.PartialSignatureM
 	}
 
 	if psigMsgs.Slot > expectedSlot {
-		return fmt.Errorf("%w, message slot: %d, want slot: %d", ErrFuturePartialSigMsg, psigMsgs.Slot, expectedSlot)
+		return NewRetryableError(fmt.Errorf("%w, message slot: %d, want slot: %d", ErrFuturePartialSigMsg, psigMsgs.Slot, expectedSlot))
 	}
 
 	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate()).

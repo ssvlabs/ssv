@@ -212,7 +212,7 @@ func (c *Committee) ConsumeQueue(
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
 				logger.Error(couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
-			case isRetryable(err) && msgRetryCnt < retryCount:
+			case errors.Is(err, &runner.RetryableError{}) && msgRetryCnt < retryCount:
 				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {

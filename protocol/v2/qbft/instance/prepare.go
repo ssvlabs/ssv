@@ -111,7 +111,7 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return ErrWrongMsgHeight
 	}
 	if msg.QBFTMessage.Round != round {
-		return ErrWrongMsgRound
+		return NewRetryableError(ErrWrongMsgRound)
 	}
 
 	if err := msg.Validate(); err != nil {

@@ -2,9 +2,7 @@ package validator
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,26 +12,11 @@ import (
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
 // MessageHandler process the provided message. Message processing can fail with retryable or
-// non-retryable error (can be checked via isRetryable func)
+// non-retryable error (can be checked via `errors.Is(err, &runner.RetryableError{})`).
 type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
-
-func isRetryable(err error) bool {
-	retryableErrors := []error{
-		runner.ErrNoRunningDuty,
-		runner.ErrFuturePartialSigMsg,
-		runner.ErrInstanceNotFound,
-		runner.ErrFutureConsensusMsg,
-		runner.ErrNoProposalForRound,
-		runner.ErrWrongMsgRound,
-	}
-	return slices.ContainsFunc(retryableErrors, func(retryableErr error) bool {
-		return errors.Is(err, retryableErr)
-	})
-}
 
 // QueueContainer wraps a queue with its corresponding state.
 type QueueContainer struct {

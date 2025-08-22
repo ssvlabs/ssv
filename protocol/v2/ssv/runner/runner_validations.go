@@ -21,7 +21,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	signedMsg *spectypes.PartialSignatureMessages,
 ) error {
 	if !b.hasRunningDuty() {
-		return ErrNoRunningDuty
+		return NewRetryableError(ErrNoRunningDuty)
 	}
 
 	if err := b.validatePartialSigMsg(signedMsg, b.State.StartingDuty.DutySlot()); err != nil {
@@ -50,7 +50,7 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
-		return ErrNoRunningDuty
+		return NewRetryableError(ErrNoRunningDuty)
 	}
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
@@ -59,7 +59,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 
 	if b.State.RunningInstance == nil {
-		return ErrInstanceNotFound
+		return NewRetryableError(ErrInstanceNotFound)
 	}
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
 	if !decided {

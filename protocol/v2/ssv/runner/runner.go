@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -190,17 +189,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
-	if errors.Is(err, controller.ErrInstanceNotFound) {
-		return false, nil, fmt.Errorf("%w: %v", ErrInstanceNotFound, err)
-	}
-	if errors.Is(err, controller.ErrFutureMsg) {
-		return false, nil, fmt.Errorf("%w: %v", ErrFutureConsensusMsg, err)
-	}
-	if errors.Is(err, controller.ErrNoProposalForRound) {
-		return false, nil, fmt.Errorf("%w: %v", ErrNoProposalForRound, err)
-	}
-	if errors.Is(err, controller.ErrWrongMsgRound) {
-		return false, nil, fmt.Errorf("%w: %v", ErrWrongMsgRound, err)
+	if errors.Is(err, &controller.RetryableError{}) {
+		return false, nil, NewRetryableError(err)
 	}
 	if err != nil {
 		return false, nil, err
