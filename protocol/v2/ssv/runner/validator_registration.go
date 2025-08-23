@@ -172,6 +172,10 @@ func (r *ValidatorRegistrationRunner) ProcessConsensus(ctx context.Context, logg
 	return errors.New("no consensus phase for validator registration")
 }
 
+func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
+}
+
 func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	return errors.New("no post consensus phase for validator registration")
 }
@@ -207,7 +211,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
-	msg, err := r.BaseRunner.signBeaconObject(
+	msg, err := signBeaconObject(
 		ctx,
 		r,
 		duty.(*spectypes.ValidatorDuty),
@@ -292,12 +296,44 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 	}, nil
 }
 
-func (r *ValidatorRegistrationRunner) GetBaseRunner() *BaseRunner {
-	return r.BaseRunner
+func (r *ValidatorRegistrationRunner) HasRunningQBFTInstance() bool {
+	return r.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (r *ValidatorRegistrationRunner) HasAcceptedProposalForCurrentRound() bool {
+	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (r *ValidatorRegistrationRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return r.BaseRunner.GetShares()
+}
+
+func (r *ValidatorRegistrationRunner) GetRole() spectypes.RunnerRole {
+	return r.BaseRunner.GetRole()
+}
+
+func (r *ValidatorRegistrationRunner) GetLastHeight() specqbft.Height {
+	return r.BaseRunner.GetLastHeight()
+}
+
+func (r *ValidatorRegistrationRunner) GetLastRound() specqbft.Round {
+	return r.BaseRunner.GetLastRound()
+}
+
+func (r *ValidatorRegistrationRunner) GetStateRoot() ([32]byte, error) {
+	return r.BaseRunner.GetStateRoot()
+}
+
+func (r *ValidatorRegistrationRunner) SetTimeoutFunc(fn TimeoutF) {
+	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *ValidatorRegistrationRunner) GetNetwork() specqbft.Network {
 	return r.network
+}
+
+func (r *ValidatorRegistrationRunner) GetNetworkConfig() *networkconfig.Network {
+	return r.BaseRunner.NetworkConfig
 }
 
 func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {

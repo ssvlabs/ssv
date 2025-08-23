@@ -798,10 +798,8 @@ func setupTestValidator(validatorPk spectypes.ValidatorPK, ownerAddressBytes, fe
 			OwnerAddress: common.BytesToAddress(ownerAddressBytes),
 		},
 
-		Queues: map[spectypes.RunnerRole]validator.QueueContainer{
-			spectypes.RoleValidatorRegistration: {
-				Q: queue.New(1000),
-			},
+		Queues: map[spectypes.RunnerRole]queue.Queue{
+			spectypes.RoleValidatorRegistration: queue.New(1000),
 		},
 	}
 }
