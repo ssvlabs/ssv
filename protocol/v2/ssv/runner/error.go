@@ -1,14 +1,14 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 )
 
 var (
-	ErrNoValidDutiesToExecute = fmt.Errorf("no valid duties to execute")
-
-	// Below is a list of retryable errors a runner might encounter.
-
+	// ErrNoValidDutiesToExecute means committee runner has no duties to execute (even though the committee runner
+	// had to do some work to arrive at that conclusion)
+	ErrNoValidDutiesToExecute = fmt.Errorf("committee has no valid duties to execute")
 	// ErrNoRunningDuty means we might not have started the duty yet, while another operator already did + sent this
 	// message to us.
 	ErrNoRunningDuty = fmt.Errorf("no running duty")
@@ -21,6 +21,7 @@ var (
 	ErrInstanceNotFound = fmt.Errorf("instance not found")
 )
 
+// RetryableError is an error-wrapper to indicate that wrapped error is retryable.
 type RetryableError struct {
 	originalErr error
 }
@@ -31,6 +32,12 @@ func NewRetryableError(originalErr error) *RetryableError {
 	}
 }
 
-func (e *RetryableError) Error() string {
+func (e RetryableError) Error() string {
 	return e.originalErr.Error()
+}
+
+func (e RetryableError) Is(target error) bool {
+	var retryableErr *RetryableError
+	ok := errors.As(target, &retryableErr)
+	return ok
 }

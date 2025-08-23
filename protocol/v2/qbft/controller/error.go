@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -14,6 +15,7 @@ var (
 	ErrInstanceNotFound = fmt.Errorf("instance not found")
 )
 
+// RetryableError is an error-wrapper to indicate that wrapped error is retryable.
 type RetryableError struct {
 	originalErr error
 }
@@ -24,6 +26,12 @@ func NewRetryableError(originalErr error) *RetryableError {
 	}
 }
 
-func (e *RetryableError) Error() string {
+func (e RetryableError) Error() string {
 	return e.originalErr.Error()
+}
+
+func (e RetryableError) Is(target error) bool {
+	var retryableErr *RetryableError
+	ok := errors.As(target, &retryableErr)
+	return ok
 }

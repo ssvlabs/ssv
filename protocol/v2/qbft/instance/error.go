@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -17,6 +18,7 @@ var (
 	ErrWrongMsgHeight = fmt.Errorf("wrong msg height")
 )
 
+// RetryableError is an error-wrapper to indicate that wrapped error is retryable.
 type RetryableError struct {
 	originalErr error
 }
@@ -29,4 +31,10 @@ func NewRetryableError(originalErr error) *RetryableError {
 
 func (e RetryableError) Error() string {
 	return e.originalErr.Error()
+}
+
+func (e RetryableError) Is(target error) bool {
+	var retryableErr *RetryableError
+	ok := errors.As(target, &retryableErr)
+	return ok
 }
