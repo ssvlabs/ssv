@@ -62,9 +62,12 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	if startedValidators > 0 {
 		// Notify DutyScheduler and FeeRecipientController about the changes in validators without blocking.
 		go func() {
+			// Notify duty scheduler about validator indices changes so the scheduler can update its duties
 			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
 			}
+			// Notify about fee recipient changes so the fee recipient controller can submit
+			// new proposal preparations for the reactivated validators
 			if !c.reportFeeRecipientChange(c.ctx) {
 				logger.Error("failed to notify fee recipient change")
 			}
@@ -114,6 +117,8 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 
 	if updated {
 		go func() {
+			// Notify the fee recipient controller about the fee recipient address change
+			// so it can submit updated proposal preparations with the new fee recipient
 			if !c.reportFeeRecipientChange(c.ctx) {
 				logger.Error("failed to notify fee recipient change")
 			}

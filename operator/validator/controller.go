@@ -1013,10 +1013,12 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 		if startedValidators > 0 {
 			c.logger.Debug("started new eligible validators", zap.Int("started_validators", startedValidators))
 
-			// Refresh duties and fee recipients only if there are started validators.
+			// Notify duty scheduler about validator indices changes so the scheduler can update its duties
 			if !c.reportIndicesChange(ctx) {
 				c.logger.Error("failed to notify indices change")
 			}
+			// Notify fee recipient controller about validator changes due to metadata updates
+			// so it can submit proposal preparations for the newly started validators
 			if !c.reportFeeRecipientChange(ctx) {
 				c.logger.Error("failed to notify fee recipient change")
 			}
