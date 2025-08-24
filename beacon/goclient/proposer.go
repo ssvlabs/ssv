@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -265,7 +266,7 @@ func (gc *GoClient) getProposalParallel(
 		}
 	}
 
-	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d", len(gc.clients), slot)
+	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d: %w", len(gc.clients), slot, lastErr)
 }
 
 func (gc *GoClient) SubmitBlindedBeaconBlock(
@@ -440,27 +441,22 @@ func (gc *GoClient) submitProposalPreparationBatches(
 	preparations []*eth2apiv1.ProposalPreparation,
 	submitFunc func(batch []*eth2apiv1.ProposalPreparation) error,
 ) error {
-	submitted := 0
+	var submitted, batchStart int
 	var lastErr error
 
-	for start := 0; start < len(preparations); start += ProposalPreparationBatchSize {
-		end := start + ProposalPreparationBatchSize
-		if end > len(preparations) {
-			end = len(preparations)
-		}
-		batch := preparations[start:end]
-
+	for batch := range slices.Chunk(preparations, ProposalPreparationBatchSize) {
 		if err := submitFunc(batch); err != nil {
 			gc.log.Error(clResponseErrMsg,
 				zap.String("api", "SubmitProposalPreparations"),
-				zap.Int("batch_start", start),
+				zap.Int("batch_start", batchStart),
 				zap.Int("batch_size", len(batch)),
 				zap.Error(err),
 			)
 			lastErr = err
-			continue
+		} else {
+			submitted += len(batch)
 		}
-		submitted += len(batch)
+		batchStart += len(batch)
 	}
 
 	switch {
@@ -473,7 +469,7 @@ func (gc *GoClient) submitProposalPreparationBatches(
 	case submitted > 0:
 		gc.log.Error("partially submitted proposal preparations",
 			zap.Int("submitted", submitted),
-			zap.Int("errored", len(preparations)-submitted),
+			zap.Int("failed", len(preparations)-submitted),
 			zap.Int("total", len(preparations)),
 			zap.Error(lastErr),
 		)
