@@ -202,11 +202,13 @@ func (gc *GoClient) GetBeaconBlock(
 	}
 }
 
-// getProposalParallel fetches proposals from all beacon nodes in parallel
-// and returns the first successful response. This approach minimizes latency
-// by racing multiple clients, which is important for block proposals where
-// timing is critical. The function cancels remaining requests as soon as
-// the first successful response is received to avoid unnecessary load.
+// getProposalParallel races all beacon nodes and returns the first successful response.
+// This minimizes latency for time-critical block proposals. Remaining requests are
+// canceled immediately to reduce load.
+//
+// Note: We prioritize speed over fee recipient validation - returning the first response
+// rather than waiting to compare fee recipients, as missing a proposal slot is worse
+// than a nil fee recipient.
 func (gc *GoClient) getProposalParallel(
 	ctx context.Context,
 	slot phase0.Slot,
