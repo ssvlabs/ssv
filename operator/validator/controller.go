@@ -1043,11 +1043,6 @@ func (c *controller) reportIndicesChange(ctx context.Context) bool {
 }
 
 func (c *controller) reportFeeRecipientChange(ctx context.Context) bool {
-	if c.feeRecipientChangeCh == nil {
-		c.logger.Error("fee recipient change channel not configured")
-		return false
-	}
-
 	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.SlotDuration)
 	defer cancel()
 
