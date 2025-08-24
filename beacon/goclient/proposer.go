@@ -265,10 +265,6 @@ func (gc *GoClient) getProposalParallel(
 		}
 	}
 
-	// All clients failed
-	if lastErr != nil {
-		return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d: %w", len(gc.clients), slot, lastErr)
-	}
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d", len(gc.clients), slot)
 }
 
@@ -479,12 +475,14 @@ func (gc *GoClient) submitProposalPreparationBatches(
 			zap.Int("submitted", submitted),
 			zap.Int("errored", len(preparations)-submitted),
 			zap.Int("total", len(preparations)),
+			zap.Error(lastErr),
 		)
 		return fmt.Errorf("partially submitted preparations: %d/%d, last error: %w", submitted, len(preparations), lastErr)
 
 	default:
 		gc.log.Error("couldn't submit any proposal preparations",
 			zap.Int("total", len(preparations)),
+			zap.Error(lastErr),
 		)
 		return fmt.Errorf("failed to submit any preparations: %w", lastErr)
 	}
