@@ -27,6 +27,8 @@ import (
 const (
 	// proposalPreparationEndpoint is the beacon API endpoint for submitting proposal preparations
 	proposalPreparationEndpoint = "/eth/v1/validator/prepare_beacon_proposer"
+	// proposalEndpointPrefix is the beacon API endpoint prefix for block proposals
+	proposalEndpointPrefix = "/eth/v3/validator/blocks/"
 
 	// Common test values
 	testSlot     = phase0.Slot(100)
@@ -68,7 +70,7 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 		}
 
 		// Handle proposal endpoint
-		if strings.HasPrefix(r.URL.Path, "/eth/v3/validator/blocks/") {
+		if strings.HasPrefix(r.URL.Path, proposalEndpointPrefix) {
 			require.Equal(t, http.MethodGet, r.Method)
 
 			if options.WithProposalEndpointError {

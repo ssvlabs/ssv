@@ -230,18 +230,9 @@ func (gc *GoClient) getProposalParallel(
 	for _, client := range gc.clients {
 		go func(c Client) {
 			proposal, err := gc.fetchProposal(parallelCtx, c, slot, sig, graffiti)
-			if err != nil {
-				// Error already logged in fetchProposal at Error level
-				select {
-				case resultCh <- result{err: err, address: c.Address()}:
-				case <-parallelCtx.Done():
-					// Context canceled, exit without blocking
-				}
-				return
-			}
-
+			// Errors are already logged in fetchProposal
 			select {
-			case resultCh <- result{proposal: proposal, address: c.Address()}:
+			case resultCh <- result{proposal: proposal, err: err, address: c.Address()}:
 			case <-parallelCtx.Done():
 				// Context canceled, exit without blocking
 			}
