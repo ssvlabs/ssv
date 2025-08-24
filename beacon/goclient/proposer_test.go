@@ -501,43 +501,6 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 }
 
 func TestProposalPreparationReconnectLogic(t *testing.T) {
-	t.Run("skips when provider is nil", func(t *testing.T) {
-		requestCounter := 0
-		// Create a test server that should NOT receive any requests
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.Contains(r.URL.Path, "proposer/prepare_beacon_proposer") {
-				requestCounter++
-			}
-			// Return standard beacon endpoint responses
-			if resp, ok := beaconEndpointResponses[r.URL.Path]; ok {
-				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write(resp)
-				return
-			}
-		}))
-		defer server.Close()
-
-		// Create a client from the test server
-		client, err := New(t.Context(), log.TestLogger(t), Options{
-			BeaconNodeAddr: server.URL,
-			CommonTimeout:  time.Second * 2,
-			LongTimeout:    time.Second * 5,
-		})
-		require.NoError(t, err)
-
-		gc := &GoClient{
-			log:                          log.TestLogger(t),
-			proposalPreparationsProvider: nil,
-		}
-
-		// Should return early without calling the client
-		// We use the first client from the GoClient
-		if len(client.clients) > 0 {
-			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
-		}
-		require.Equal(t, 0, requestCounter, "should not have made any requests")
-	})
-
 	t.Run("handles provider error gracefully", func(t *testing.T) {
 		requestCounter := 0
 		// Create a test server that should NOT receive any requests
@@ -561,17 +524,15 @@ func TestProposalPreparationReconnectLogic(t *testing.T) {
 		require.NoError(t, err)
 
 		providerCalled := false
-		gc := &GoClient{
-			log: log.TestLogger(t),
-			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
-				providerCalled = true
-				return nil, fmt.Errorf("provider error")
-			},
-		}
+		// Set the provider on the actual client to return an error
+		client.SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error) {
+			providerCalled = true
+			return nil, fmt.Errorf("provider error")
+		})
 
-		// Should handle error without calling the client
+		// Should handle error without calling the beacon node
 		if len(client.clients) > 0 {
-			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+			client.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], client.log)
 		}
 		require.True(t, providerCalled, "provider should be called")
 		require.Equal(t, 0, requestCounter, "should not have made any requests")
@@ -599,17 +560,15 @@ func TestProposalPreparationReconnectLogic(t *testing.T) {
 		require.NoError(t, err)
 
 		providerCalled := false
-		gc := &GoClient{
-			log: log.TestLogger(t),
-			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
-				providerCalled = true
-				return []*eth2apiv1.ProposalPreparation{}, nil
-			},
-		}
+		// Set the provider to return empty preparations
+		client.SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error) {
+			providerCalled = true
+			return []*eth2apiv1.ProposalPreparation{}, nil
+		})
 
 		// Should return early for empty preparations
 		if len(client.clients) > 0 {
-			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+			client.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], client.log)
 		}
 		require.True(t, providerCalled, "provider should be called")
 		require.Equal(t, 0, requestCounter, "should not have made any requests")
@@ -656,16 +615,14 @@ func TestProposalPreparationReconnectLogic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		gc := &GoClient{
-			log: log.TestLogger(t),
-			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
-				return expectedPreparations, nil
-			},
-		}
+		// Set the provider to return expected preparations
+		client.SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error) {
+			return expectedPreparations, nil
+		})
 
 		// Call the reconnect handler
 		if len(client.clients) > 0 {
-			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+			client.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], client.log)
 		}
 
 		// Verify submission was called and all preparations were submitted
@@ -699,19 +656,47 @@ func TestProposalPreparationReconnectLogic(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		gc := &GoClient{
-			log: log.TestLogger(t),
-			proposalPreparationsProvider: func() ([]*eth2apiv1.ProposalPreparation, error) {
-				return []*eth2apiv1.ProposalPreparation{
-					{ValidatorIndex: 1, FeeRecipient: bellatrix.ExecutionAddress{1}},
-				}, nil
-			},
-		}
+		// Set the provider to return a preparation
+		client.SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error) {
+			return []*eth2apiv1.ProposalPreparation{
+				{ValidatorIndex: 1, FeeRecipient: bellatrix.ExecutionAddress{1}},
+			}, nil
+		})
 
 		// Should handle submission error gracefully
 		if len(client.clients) > 0 {
-			gc.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], gc.log)
+			client.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], client.log)
 		}
 		require.Equal(t, 1, submissionAttempts, "should attempt submission once")
+	})
+
+	t.Run("skips when provider is nil", func(t *testing.T) {
+		requestCounter := 0
+		server, _ := createProposalBeaconServer(t, beaconProposalServerOptions{})
+		defer server.Close()
+
+		// Override handler to count requests
+		origHandler := server.Config.Handler
+		server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "proposer/prepare_beacon_proposer") {
+				requestCounter++
+			}
+			origHandler.ServeHTTP(w, r)
+		})
+
+		client, err := New(t.Context(), log.TestLogger(t), Options{
+			BeaconNodeAddr: server.URL,
+			CommonTimeout:  time.Second * 2,
+			LongTimeout:    time.Second * 5,
+		})
+		require.NoError(t, err)
+
+		// Don't set the provider - it should remain nil
+
+		// Should skip without calling the provider or beacon node
+		if len(client.clients) > 0 {
+			client.handleProposalPreparationsOnReconnect(t.Context(), client.clients[0], client.log)
+		}
+		require.Equal(t, 0, requestCounter, "should not have made any requests when provider is nil")
 	})
 }

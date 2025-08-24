@@ -372,7 +372,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.Stringer("config", currentConfig),
 			)
 
-			// Re-submit proposal preparations when beacon client reconnects
+			// Handle proposal preparations re-submission (only applies to reconnections)
 			go gc.handleProposalPreparationsOnReconnect(ctx, s, logger)
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {

@@ -411,11 +411,14 @@ func (gc *GoClient) SubmitProposalPreparations(
 	})
 }
 
-// handleProposalPreparationsOnReconnect re-submits proposal preparations when a beacon client reconnects
-// This helps beacon nodes that lost preparations on restart
+// handleProposalPreparationsOnReconnect re-submits proposal preparations when a beacon client reconnects.
+// This helps beacon nodes that lost preparations on restart.
+// Note: Since OnActive hook fires for both initial connections and reconnections, we use the provider's
+// presence to distinguish: nil provider = initial connection (skip), set provider = reconnection (re-submit).
 func (gc *GoClient) handleProposalPreparationsOnReconnect(ctx context.Context, client Client, logger *zap.Logger) {
 	if gc.proposalPreparationsProvider == nil {
-		logger.Debug("proposal preparations provider not set, skipping re-submission")
+		// Skip on initial connection - provider is set later via SetProposalPreparationsProvider
+		logger.Debug("skipping proposal preparations re-submission on initial connection")
 		return
 	}
 
