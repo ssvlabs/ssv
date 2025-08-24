@@ -25,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/operator/fee_recipient"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -171,7 +170,7 @@ type GoClient struct {
 
 	// Provider for proposal preparations from fee recipient controller
 	proposalPreparationsProviderMu sync.RWMutex
-	proposalPreparationsProvider   fee_recipient.ProposalPreparationsProvider
+	proposalPreparationsProvider   func() ([]*eth2apiv1.ProposalPreparation, error)
 
 	// Tracks which clients have been seen before (for reconnection detection)
 	seenClients *hashmap.Map[string, struct{}]
@@ -273,7 +272,7 @@ func New(
 }
 
 // SetProposalPreparationsProvider sets the callback to get current proposal preparations
-func (gc *GoClient) SetProposalPreparationsProvider(provider fee_recipient.ProposalPreparationsProvider) {
+func (gc *GoClient) SetProposalPreparationsProvider(provider func() ([]*eth2apiv1.ProposalPreparation, error)) {
 	gc.proposalPreparationsProviderMu.Lock()
 	defer gc.proposalPreparationsProviderMu.Unlock()
 	gc.proposalPreparationsProvider = provider

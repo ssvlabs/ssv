@@ -23,9 +23,6 @@ type ValidatorProvider interface {
 	SelfValidators() []*types.SSVShare
 }
 
-// ProposalPreparationsProvider is a function that returns current proposal preparations
-type ProposalPreparationsProvider func() ([]*eth2apiv1.ProposalPreparation, error)
-
 // RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
 	Start(ctx context.Context)
