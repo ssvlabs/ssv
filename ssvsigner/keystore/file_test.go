@@ -66,13 +66,33 @@ func TestEncryptKeystore(t *testing.T) {
 
 		privkey := []byte("privateKey")
 
-		data, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
+		data, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword, false)
 		require.NoError(t, err)
 
 		var jsonData map[string]interface{}
 		err = json.Unmarshal(data, &jsonData)
 		require.NoError(t, err)
 		require.Equal(t, testPubKeyBase64, jsonData["pubkey"])
+		require.Nil(t, jsonData["pubKey"])
+
+		decrtypted, err := DecryptKeystore(data, testPassword)
+		require.NoError(t, err)
+		require.Equal(t, privkey, decrtypted)
+	})
+
+	t.Run("with valid data (legacy format)", func(t *testing.T) {
+		t.Parallel()
+
+		privkey := []byte("privateKey")
+
+		data, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword, true)
+		require.NoError(t, err)
+
+		var jsonData map[string]interface{}
+		err = json.Unmarshal(data, &jsonData)
+		require.NoError(t, err)
+		require.Equal(t, testPubKeyBase64, jsonData["pubKey"])
+		require.Nil(t, jsonData["pubkey"])
 
 		decrtypted, err := DecryptKeystore(data, testPassword)
 		require.NoError(t, err)
@@ -85,7 +105,7 @@ func TestEncryptKeystore(t *testing.T) {
 		password := ""
 		privkey := []byte("privateKey")
 
-		_, err := EncryptKeystore(privkey, testPubKeyBase64, password)
+		_, err := EncryptKeystore(privkey, testPubKeyBase64, password, false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "password required")
 	})
@@ -95,7 +115,7 @@ func TestEncryptKeystore(t *testing.T) {
 
 		var privkey []byte = nil
 
-		_, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
+		_, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword, false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "encrypt private key")
 	})
@@ -164,7 +184,7 @@ func TestLoadOperatorKeystore(t *testing.T) {
 
 		privkey := []byte("privateKey")
 
-		keystore, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
+		keystore, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword, false)
 		require.NoError(t, err)
 
 		tmpEncryptedFile := createTempFile(t, "bad-for-privkey-", ".json", keystore)
@@ -185,7 +205,7 @@ func TestLoadOperatorKeystore(t *testing.T) {
 		privKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		keystore, err := EncryptKeystore(privKey.Bytes(), testPubKeyBase64, testPassword)
+		keystore, err := EncryptKeystore(privKey.Bytes(), testPubKeyBase64, testPassword, false)
 		require.NoError(t, err)
 
 		tmpEncryptedFile := createTempFile(t, "valid-encrypted-", ".json", keystore)
