@@ -260,8 +260,6 @@ func (b *DB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(
 			trimmedResKey := bytes.TrimPrefix(k, prefix)
 			item, err := txn.Get(k)
 			if err != nil {
-				return fmt.Errorf("get value from db for key: %s: %w", string(trimmedResKey), err)
-
 			}
 			val, err := item.ValueCopy(nil)
 			if err != nil {
