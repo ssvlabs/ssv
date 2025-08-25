@@ -79,7 +79,7 @@ func TestEncryptKeystore(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, privkey, decrypted)
 		require.NoError(t, err)
-		require.Equal(t, privkey, decrtypted)
+		require.Equal(t, privkey, decrypted)
 	})
 
 	t.Run("with valid data (legacy format)", func(t *testing.T) {
@@ -100,7 +100,7 @@ func TestEncryptKeystore(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, privkey, decrypted)
 		require.NoError(t, err)
-		require.Equal(t, privkey, decrtypted)
+		require.Equal(t, privkey, decrypted)
 	})
 
 	t.Run("with empty password", func(t *testing.T) {
