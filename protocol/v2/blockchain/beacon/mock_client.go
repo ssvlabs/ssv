@@ -17,7 +17,6 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec"
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
-	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	gomock "go.uber.org/mock/gomock"
@@ -613,41 +612,54 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(ctx, validatorPubKey
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorData", reflect.TypeOf((*MockbeaconValidator)(nil).GetValidatorData), ctx, validatorPubKeys)
 }
 
-// Mockproposer is a mock of proposer interface.
-type Mockproposer struct {
+// MockproposalPreparations is a mock of proposalPreparations interface.
+type MockproposalPreparations struct {
 	ctrl     *gomock.Controller
-	recorder *MockproposerMockRecorder
+	recorder *MockproposalPreparationsMockRecorder
+	isgomock struct{}
 }
 
-// MockproposerMockRecorder is the mock recorder for Mockproposer.
-type MockproposerMockRecorder struct {
-	mock *Mockproposer
+// MockproposalPreparationsMockRecorder is the mock recorder for MockproposalPreparations.
+type MockproposalPreparationsMockRecorder struct {
+	mock *MockproposalPreparations
 }
 
-// NewMockproposer creates a new mock instance.
-func NewMockproposer(ctrl *gomock.Controller) *Mockproposer {
-	mock := &Mockproposer{ctrl: ctrl}
-	mock.recorder = &MockproposerMockRecorder{mock}
+// NewMockproposalPreparations creates a new mock instance.
+func NewMockproposalPreparations(ctrl *gomock.Controller) *MockproposalPreparations {
+	mock := &MockproposalPreparations{ctrl: ctrl}
+	mock.recorder = &MockproposalPreparationsMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *Mockproposer) EXPECT() *MockproposerMockRecorder {
+func (m *MockproposalPreparations) EXPECT() *MockproposalPreparationsMockRecorder {
 	return m.recorder
 }
 
-// SubmitProposalPreparation mocks base method.
-func (m *Mockproposer) SubmitProposalPreparation(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+// SetProposalPreparationsProvider mocks base method.
+func (m *MockproposalPreparations) SetProposalPreparationsProvider(provider func() ([]*v1.ProposalPreparation, error)) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitProposalPreparation", ctx, feeRecipients)
+	m.ctrl.Call(m, "SetProposalPreparationsProvider", provider)
+}
+
+// SetProposalPreparationsProvider indicates an expected call of SetProposalPreparationsProvider.
+func (mr *MockproposalPreparationsMockRecorder) SetProposalPreparationsProvider(provider any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetProposalPreparationsProvider", reflect.TypeOf((*MockproposalPreparations)(nil).SetProposalPreparationsProvider), provider)
+}
+
+// SubmitProposalPreparations mocks base method.
+func (m *MockproposalPreparations) SubmitProposalPreparations(ctx context.Context, preparations []*v1.ProposalPreparation) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitProposalPreparations", ctx, preparations)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SubmitProposalPreparation indicates an expected call of SubmitProposalPreparation.
-func (mr *MockproposerMockRecorder) SubmitProposalPreparation(ctx, feeRecipients any) *gomock.Call {
+// SubmitProposalPreparations indicates an expected call of SubmitProposalPreparations.
+func (mr *MockproposalPreparationsMockRecorder) SubmitProposalPreparations(ctx, preparations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposalPreparation", reflect.TypeOf((*Mockproposer)(nil).SubmitProposalPreparation), ctx, feeRecipients)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposalPreparations", reflect.TypeOf((*MockproposalPreparations)(nil).SubmitProposalPreparations), ctx, preparations)
 }
 
 // Mocksigner is a mock of signer interface.
@@ -864,6 +876,18 @@ func (mr *MockBeaconNodeMockRecorder) ProposerDuties(ctx, epoch, validatorIndice
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDuties), ctx, epoch, validatorIndices)
 }
 
+// SetProposalPreparationsProvider mocks base method.
+func (m *MockBeaconNode) SetProposalPreparationsProvider(provider func() ([]*v1.ProposalPreparation, error)) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetProposalPreparationsProvider", provider)
+}
+
+// SetProposalPreparationsProvider indicates an expected call of SetProposalPreparationsProvider.
+func (mr *MockBeaconNodeMockRecorder) SetProposalPreparationsProvider(provider any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetProposalPreparationsProvider", reflect.TypeOf((*MockBeaconNode)(nil).SetProposalPreparationsProvider), provider)
+}
+
 // SubmitAggregateSelectionProof mocks base method.
 func (m *MockBeaconNode) SubmitAggregateSelectionProof(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
@@ -936,18 +960,18 @@ func (mr *MockBeaconNodeMockRecorder) SubmitBlindedBeaconBlock(ctx, block, sig a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBlindedBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBlindedBeaconBlock), ctx, block, sig)
 }
 
-// SubmitProposalPreparation mocks base method.
-func (m *MockBeaconNode) SubmitProposalPreparation(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+// SubmitProposalPreparations mocks base method.
+func (m *MockBeaconNode) SubmitProposalPreparations(ctx context.Context, preparations []*v1.ProposalPreparation) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitProposalPreparation", ctx, feeRecipients)
+	ret := m.ctrl.Call(m, "SubmitProposalPreparations", ctx, preparations)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SubmitProposalPreparation indicates an expected call of SubmitProposalPreparation.
-func (mr *MockBeaconNodeMockRecorder) SubmitProposalPreparation(ctx, feeRecipients any) *gomock.Call {
+// SubmitProposalPreparations indicates an expected call of SubmitProposalPreparations.
+func (mr *MockBeaconNodeMockRecorder) SubmitProposalPreparations(ctx, preparations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposalPreparation", reflect.TypeOf((*MockBeaconNode)(nil).SubmitProposalPreparation), ctx, feeRecipients)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposalPreparations", reflect.TypeOf((*MockBeaconNode)(nil).SubmitProposalPreparations), ctx, preparations)
 }
 
 // SubmitSignedAggregateSelectionProof mocks base method.

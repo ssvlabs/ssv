@@ -115,6 +115,7 @@ type Controller interface {
 	IndicesChangeChan() chan struct{}
 	ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor
 	ValidatorExitChan() <-chan duties.ExitDescriptor
+	SetFeeRecipientChangeChan(ch chan struct{})
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
@@ -194,6 +195,7 @@ type controller struct {
 	indicesChangeCh         chan struct{}
 	validatorRegistrationCh chan duties.RegistrationDescriptor
 	validatorExitCh         chan duties.ExitDescriptor
+	feeRecipientChangeCh    chan struct{}
 
 	traceCollector *dutytracer.Collector
 }
@@ -302,6 +304,10 @@ func (c *controller) ValidatorRegistrationChan() <-chan duties.RegistrationDescr
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
 	return c.validatorExitCh
+}
+
+func (c *controller) SetFeeRecipientChangeChan(ch chan struct{}) {
+	c.feeRecipientChangeCh = ch
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
@@ -1007,9 +1013,14 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 		if startedValidators > 0 {
 			c.logger.Debug("started new eligible validators", zap.Int("started_validators", startedValidators))
 
-			// Refresh duties only if there are started validators.
+			// Notify duty scheduler about validator indices changes so the scheduler can update its duties
 			if !c.reportIndicesChange(ctx) {
 				c.logger.Error("failed to notify indices change")
+			}
+			// Notify fee recipient controller about validator changes due to metadata updates
+			// so it can submit proposal preparations for the newly started validators
+			if !c.reportFeeRecipientChange(ctx) {
+				c.logger.Error("failed to notify fee recipient change")
 			}
 		} else {
 			c.logger.Warn("no eligible validators started despite metadata changes")
@@ -1027,6 +1038,18 @@ func (c *controller) reportIndicesChange(ctx context.Context) bool {
 	case <-timeoutCtx.Done():
 		return false
 	case c.indicesChangeCh <- struct{}{}:
+		return true
+	}
+}
+
+func (c *controller) reportFeeRecipientChange(ctx context.Context) bool {
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.SlotDuration)
+	defer cancel()
+
+	select {
+	case <-timeoutCtx.Done():
+		return false
+	case c.feeRecipientChangeCh <- struct{}{}:
 		return true
 	}
 }

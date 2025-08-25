@@ -620,6 +620,47 @@ func TestGetValidatorStats(t *testing.T) {
 	})
 }
 
+func TestFeeRecipientChangeNotification(t *testing.T) {
+	logger := log.TestLogger(t)
+
+	t.Run("notifies on UpdateFeeRecipient", func(t *testing.T) {
+		ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "owner address")
+		feeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "fee recipient")
+		newFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "new fee recipient")
+
+		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, feeRecipientBytes)
+		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+			testValidator.Share.ValidatorPubKey: testValidator,
+		}
+		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
+
+		controllerOptions := MockControllerOptions{
+			validatorsMap: mockValidatorsMap,
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// Set up the fee recipient change channel
+		feeRecipientChangeCh := make(chan struct{}, 1)
+		ctr.SetFeeRecipientChangeChan(feeRecipientChangeCh)
+
+		// Also need to set up validator registration channel as UpdateFeeRecipient expects it
+		validatorRegistrationCh := make(chan duties.RegistrationDescriptor, 1)
+		ctr.validatorRegistrationCh = validatorRegistrationCh
+
+		// Update fee recipient
+		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(newFeeRecipientBytes), 1)
+		require.NoError(t, err)
+
+		// Verify notification was sent
+		select {
+		case <-feeRecipientChangeCh:
+			// Success - notification received
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("expected fee recipient change notification but didn't receive one")
+		}
+	})
+}
+
 func TestUpdateFeeRecipient(t *testing.T) {
 	// Setup logger for testing
 	logger := log.TestLogger(t)

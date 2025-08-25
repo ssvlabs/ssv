@@ -8,7 +8,6 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 )
@@ -100,9 +99,12 @@ type beaconValidator interface {
 	GetValidatorData(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error)
 }
 
-type proposer interface {
-	// SubmitProposalPreparation with fee recipients
-	SubmitProposalPreparation(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error
+type proposalPreparations interface {
+	// SubmitProposalPreparations submits proposal preparations
+	SubmitProposalPreparations(ctx context.Context, preparations []*eth2apiv1.ProposalPreparation) error
+	// SetProposalPreparationsProvider sets a callback to retrieve current proposal preparations
+	// This is used to re-submit preparations when beacon nodes reconnect
+	SetProposalPreparationsProvider(provider func() ([]*eth2apiv1.ProposalPreparation, error))
 }
 
 // TODO need to handle differently (by spec)
@@ -127,7 +129,7 @@ type BeaconNode interface {
 	beaconSubscriber
 	beaconValidator
 	signer // TODO need to handle differently
-	proposer
+	proposalPreparations
 }
 
 // Options for controller struct creation
