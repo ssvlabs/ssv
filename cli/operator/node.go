@@ -43,6 +43,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/eth/loganalyzer"
 	"github.com/ssvlabs/ssv/exporter"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
@@ -588,9 +589,10 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber.Wait()
 		logger.Info("ethereum node(s) are healthy")
 
-		eventSyncer := syncContractEvents(
+		eventSyncer, logAnalyzer := syncContractEvents(
 			cmd.Context(),
 			logger,
+			db,
 			executionClient,
 			validatorCtrl,
 			networkConfig,
@@ -654,6 +656,12 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if cfg.SSVAPIPort > 0 {
+			// Create log analyzer API handler if log analyzer is enabled
+			var logAnalyzerAPIHandler *loganalyzer.APIHandler
+			if logAnalyzer != nil {
+				logAnalyzerAPIHandler = loganalyzer.NewAPIHandler(logger, logAnalyzer.GetStore(), logAnalyzer)
+			}
+
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
@@ -669,6 +677,7 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				logAnalyzerAPIHandler,
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
@@ -1069,6 +1078,7 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
+	db basedb.Database,
 	executionClient executionclient.Provider,
 	validatorCtrl validator.Controller,
 	networkConfig *networkconfig.Network,
@@ -1077,7 +1087,7 @@ func syncContractEvents(
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler eventhandler.DoppelgangerProvider,
-) *eventsyncer.EventSyncer {
+) (*eventsyncer.EventSyncer, *loganalyzer.LogAnalyzer) {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
 		logger.Fatal("failed to set up event filterer", zap.Error(err))
@@ -1101,11 +1111,21 @@ func syncContractEvents(
 		logger.Fatal("failed to setup event data handler", zap.Error(err))
 	}
 
+	// Set up log analyzer if enabled (for debugging missing events)
+	var logAnalyzer *loganalyzer.LogAnalyzer
+	logAnalyzerConfig := loganalyzer.Config{
+		Storage: loganalyzer.StorageConfig{
+			RetainBlocks: 1000,
+		},
+	}
+	logAnalyzer = loganalyzer.New(ctx, logger, db, logAnalyzerConfig)
+
 	eventSyncer := eventsyncer.New(
 		nodeStorage,
 		executionClient,
 		eventHandler,
 		eventsyncer.WithLogger(logger),
+		eventsyncer.WithLogAnalyzer(logAnalyzer),
 	)
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
@@ -1184,7 +1204,7 @@ func syncContractEvents(
 		}()
 	}
 
-	return eventSyncer
+	return eventSyncer, logAnalyzer
 }
 
 func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
