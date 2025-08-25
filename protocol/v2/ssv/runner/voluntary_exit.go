@@ -9,12 +9,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
@@ -22,7 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // VoluntaryExitRunner implements validator voluntary exit duty - this duty doesn't
@@ -145,6 +145,10 @@ func (r *VoluntaryExitRunner) ProcessConsensus(ctx context.Context, logger *zap.
 	return errors.New("no consensus phase for voluntary exit")
 }
 
+func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
+}
+
 func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	return errors.New("no post consensus phase for voluntary exit")
 }
@@ -177,7 +181,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
 	span.AddEvent("signing beacon object")
-	msg, err := r.BaseRunner.signBeaconObject(
+	msg, err := signBeaconObject(
 		ctx,
 		r,
 		duty.(*spectypes.ValidatorDuty),
@@ -241,12 +245,44 @@ func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, e
 	}, nil
 }
 
-func (r *VoluntaryExitRunner) GetBaseRunner() *BaseRunner {
-	return r.BaseRunner
+func (r *VoluntaryExitRunner) HasRunningQBFTInstance() bool {
+	return r.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (r *VoluntaryExitRunner) HasAcceptedProposalForCurrentRound() bool {
+	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (r *VoluntaryExitRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return r.BaseRunner.GetShares()
+}
+
+func (r *VoluntaryExitRunner) GetRole() spectypes.RunnerRole {
+	return r.BaseRunner.GetRole()
+}
+
+func (r *VoluntaryExitRunner) GetLastHeight() specqbft.Height {
+	return r.BaseRunner.GetLastHeight()
+}
+
+func (r *VoluntaryExitRunner) GetLastRound() specqbft.Round {
+	return r.BaseRunner.GetLastRound()
+}
+
+func (r *VoluntaryExitRunner) GetStateRoot() ([32]byte, error) {
+	return r.BaseRunner.GetStateRoot()
+}
+
+func (r *VoluntaryExitRunner) SetTimeoutFunc(fn TimeoutF) {
+	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
 	return r.network
+}
+
+func (r *VoluntaryExitRunner) GetNetworkConfig() *networkconfig.Network {
+	return r.BaseRunner.NetworkConfig
 }
 
 func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {

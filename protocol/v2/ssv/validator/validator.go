@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -32,13 +33,10 @@ import (
 type Validator struct {
 	logger *zap.Logger
 
-	mtx *sync.RWMutex
-
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	NetworkConfig *networkconfig.Network
-	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 
 	Operator       *spectypes.CommitteeMember
@@ -46,9 +44,16 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Queues map[spectypes.RunnerRole]QueueContainer
+	// mtx protects access to Queues
+	mtx    *sync.RWMutex
+	Queues map[spectypes.RunnerRole]queue.Queue
 
-	state uint32
+	DutyRunners runner.ValidatorDutyRunners
+
+	// started reflects whether this validator has already been started
+	started atomic.Bool
+	// startedMtx makes sure validator will be started only once
+	startedMtx sync.Mutex
 
 	messageValidator validation.MessageValidator
 }
@@ -67,27 +72,14 @@ func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, optio
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
 		OperatorSigner:   options.OperatorSigner,
-		Queues:           make(map[spectypes.RunnerRole]QueueContainer),
-		state:            uint32(NotStarted),
+		Queues:           make(map[spectypes.RunnerRole]queue.Queue),
 		messageValidator: options.MessageValidator,
 	}
 
+	// some additional steps to prepare duty runners for handling duties
 	for _, dutyRunner := range options.DutyRunners {
-		// Set timeout function.
-		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
-
-		//Setup the queue.
-		role := dutyRunner.GetBaseRunner().RunnerRoleType
-
-		v.Queues[role] = QueueContainer{
-			Q: queue.New(options.QueueSize),
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             0,
-				Slot:               0,
-				//Quorum:             options.SSVShare.Share,// TODO
-			},
-		}
+		dutyRunner.SetTimeoutFunc(v.onTimeout)
+		v.Queues[dutyRunner.GetRole()] = queue.New(options.QueueSize)
 	}
 
 	return v

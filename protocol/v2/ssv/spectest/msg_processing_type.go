@@ -11,15 +11,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -30,6 +27,7 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type MsgProcessingSpecTest struct {
@@ -65,15 +63,15 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
 	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
-	if len(test.Runner.GetBaseRunner().Share) == 0 {
+	if len(test.Runner.GetShares()) == 0 {
 		panic("No share in base runner for tests")
 	}
-	for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for _, validatorShare := range test.Runner.GetShares() {
 		share = validatorShare
 		break
 	}
 
-	for valIdx, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for valIdx, validatorShare := range test.Runner.GetShares() {
 		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
@@ -122,14 +120,14 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
-				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+				for _, validatorShare := range test.Runner.GetShares() {
 					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}
 		}
 	default:
 		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
-		v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
+		v.DutyRunners[test.Runner.GetRole()] = test.Runner
 		v.Network = test.Runner.GetNetwork()
 
 		if !test.DontStartDuty {
@@ -240,7 +238,23 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
-	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
+	// override base-runner NetworkConfig now
+	switch test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		r.(*runner.CommitteeRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.AggregatorRunner:
+		r.(*runner.AggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.ProposerRunner:
+		r.(*runner.ProposerRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.SyncCommitteeAggregatorRunner:
+		r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.ValidatorRegistrationRunner:
+		r.(*runner.ValidatorRegistrationRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.VoluntaryExitRunner:
+		r.(*runner.VoluntaryExitRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	default:
+		t.Fatalf("unknown runner type")
+	}
 
 	// override
 	test.PostDutyRunnerState = r
@@ -297,7 +311,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().NetworkConfig,
+		runnerSample.BaseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
