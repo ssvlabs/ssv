@@ -8,10 +8,16 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type AttesterHandler struct {
@@ -74,14 +80,14 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			h.processExecution(ctx, currentEpoch, slot)
 			h.processFetching(ctx, currentEpoch, slot)
 
-			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
+			slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
@@ -95,7 +101,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
@@ -119,8 +125,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case <-h.indicesChange:
-			slot := h.network.Beacon.EstimatedCurrentSlot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			slot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
@@ -135,63 +141,118 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration/2)
 	defer cancel()
 
-	slot := h.network.Beacon.EstimatedCurrentSlot()
-	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	slot := h.beaconConfig.EstimatedCurrentSlot()
+	epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 	h.processFetching(ctx, epoch, slot)
 }
 
 func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
-	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "attester.fetch"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconSlotAttribute(slot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleAttester),
+		))
+	defer span.End()
+
+	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	if h.fetchCurrentEpoch {
+		span.AddEvent("fetching current epoch duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, slot); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.fetchCurrentEpoch = false
 	}
 
 	if h.fetchNextEpoch && h.shouldFetchNexEpoch(slot) {
+		span.AddEvent("fetching next epoch duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch+1, slot); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.fetchNextEpoch = false
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "attester.execute"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconSlotAttribute(slot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleAggregator),
+		))
+	defer span.End()
+
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
+		span.AddEvent("no duties available")
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
+	span.AddEvent("duties fetched", trace.WithAttributes(observability.DutyCountAttribute(len(duties))))
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
+			// For every attestation duty we also have to try to perform aggregation duty even if it
+			// isn't necessarily needed - we won't know if it's needed or not until we rebuild
+			// validator signature (done during pre-consensus step) and perform some computation on
+			// it - hence scheduling it for execution here.
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
+
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) error {
-	start := time.Now()
-	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "attester.fetch_and_store"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconSlotAttribute(slot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleAttester),
+		))
+	defer span.End()
 
-	if len(indices) == 0 {
-		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
+	start := time.Now()
+
+	var eligibleShares []*types.SSVShare
+	for _, share := range h.validatorProvider.SelfValidators() {
+		if share.IsAttesting(epoch) {
+			eligibleShares = append(eligibleShares, share)
+		}
+	}
+
+	eligibleIndices := indicesFromShares(eligibleShares)
+	if len(eligibleIndices) == 0 {
+		const eventMsg = "no active validators for epoch"
+		h.logger.Debug(eventMsg, fields.Epoch(epoch))
+		span.AddEvent(eventMsg)
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, indices)
+	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
+	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		return fmt.Errorf("failed to fetch attester duties: %w", err)
+		return traces.Errorf(span, "failed to fetch attester duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -204,8 +265,11 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 			Duty:           d,
 			InCommittee:    true,
 		})
+		span.AddEvent("will store duty", trace.WithAttributes(observability.ValidatorIndexAttribute(d.ValidatorIndex)))
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
+
+	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(epoch, storeDuties)
 
 	h.logger.Debug("🗂 got duties",
@@ -216,21 +280,34 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	// calculate subscriptions
 	subscriptions := calculateSubscriptionInfo(duties, slot)
-	if len(subscriptions) > 0 {
-		if deadline, ok := ctx.Deadline(); ok {
-			go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
-				// Create a new subscription context with a deadline from parent context.
-				subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
-				defer cancel()
-				if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-					h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
-				}
-			}(h, subscriptions)
-		} else {
-			h.logger.Warn("failed to get context deadline")
-		}
+	if len(subscriptions) == 0 {
+		span.AddEvent("no subscriptions available")
+		span.SetStatus(codes.Ok, "")
+		return nil
 	}
 
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		const eventMsg = "failed to get context deadline"
+		span.AddEvent(eventMsg)
+		h.logger.Warn(eventMsg)
+		span.SetStatus(codes.Ok, "")
+		return nil
+	}
+
+	span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
+		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
+	))
+	go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
+		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+		defer cancel()
+
+		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
+			h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
+		}
+	}(h, subscriptions)
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -248,8 +325,8 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 }
 
 func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {
@@ -267,8 +344,8 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
-	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
+	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
@@ -304,5 +381,6 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 }
 
 func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
-	return uint64(slot)%h.network.Beacon.SlotsPerEpoch() > h.network.Beacon.SlotsPerEpoch()/2-2
+	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	return uint64(slot)%slotsPerEpoch > slotsPerEpoch/2-2
 }

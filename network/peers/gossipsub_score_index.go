@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"github.com/ssvlabs/ssv/network/topics/params"
 )
 
@@ -16,7 +17,6 @@ type gossipScoreIndex struct {
 }
 
 func NewGossipScoreIndex() *gossipScoreIndex {
-
 	graylistThreshold := params.PeerScoreThresholds().GraylistThreshold
 
 	return &gossipScoreIndex{

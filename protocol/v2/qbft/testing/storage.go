@@ -4,11 +4,13 @@ import (
 	"context"
 	"sync"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var db basedb.Database
@@ -37,6 +39,14 @@ var allRoles = []spectypes.BeaconRole{
 	spectypes.BNRoleVoluntaryExit,
 }
 
+func newStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectypes.BeaconRole) *qbftstorage.ParticipantStores {
+	stores := qbftstorage.NewStores()
+	for _, role := range roles {
+		stores.Add(role, qbftstorage.New(logger, db, role))
+	}
+	return stores
+}
+
 func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return qbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
+	return newStoresFromRoles(logger, getDB(logger), allRoles...)
 }

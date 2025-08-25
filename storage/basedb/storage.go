@@ -7,7 +7,9 @@ import (
 
 // Options for creating all db type
 type Options struct {
-	Ctx        context.Context
+	Ctx context.Context
+	// TODO: support pebble for regular node operators after testing
+	//Engine     string        `yaml:"Engine" env:"DB_ENGINE" env-default:"badger" env-description:"Database engine (badger or pebble)"`
 	Path       string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Database storage directory path"`
 	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Enable database size reporting"`
 	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection runs (0 to disable)"`
@@ -56,6 +58,8 @@ type Database interface {
 	DropPrefix(prefix []byte) error
 	Update(fn func(Txn) error) error
 	Close() error
+
+	GarbageCollector
 }
 
 // GarbageCollector is an interface implemented by storage engines which demand garbage collection.

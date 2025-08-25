@@ -10,15 +10,17 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -46,7 +48,7 @@ func (test *CommitteeSpecTest) FullName() string {
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
 	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
@@ -86,11 +88,9 @@ func (test *CommitteeSpecTest) Run(t *testing.T) {
 }
 
 func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
-
 	var lastErr error
 
 	for _, input := range test.Input {
-
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
@@ -103,7 +103,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
-			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
+			err = test.Committee.ProcessMessage(context.TODO(), msg)
 			if err != nil {
 				lastErr = err
 			}
@@ -186,9 +186,9 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	//for _, r := range committee.Runners {
-	//	r.BaseRunner.BeaconNetwork = spectypes.BeaconTestNetwork
-	//}
+	for _, r := range committee.Runners {
+		r.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	}
 
 	root, err := committee.GetRoot()
 	require.NoError(t, err)

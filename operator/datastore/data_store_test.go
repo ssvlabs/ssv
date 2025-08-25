@@ -4,10 +4,9 @@ import (
 	"testing"
 	"time"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )

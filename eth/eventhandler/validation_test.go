@@ -1,6 +1,7 @@
 package eventhandler
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
@@ -8,10 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func Test_validateValidatorAddedEvent(t *testing.T) {
@@ -20,7 +22,7 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	require.NoError(t, err)
 
 	eh := &EventHandler{
@@ -116,12 +118,11 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.saved {
 				for _, operator := range tc.operators {
 					od := &storage.OperatorData{
-						PublicKey:    binary.LittleEndian.AppendUint64(nil, operator),
+						PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, operator)),
 						OwnerAddress: common.Address{},
 						ID:           operator,
 					}

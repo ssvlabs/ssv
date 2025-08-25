@@ -6,11 +6,11 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
-
-	"go.uber.org/zap"
 )
 
 var migration_2_encrypt_shares = Migration{
@@ -21,6 +21,7 @@ var migration_2_encrypt_shares = Migration{
 			if err != nil {
 				return err
 			}
+
 			obj, found, err := txn.Get([]byte("operator/"), []byte("private-key"))
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
@@ -28,7 +29,8 @@ var migration_2_encrypt_shares = Migration{
 			if !found {
 				return completed(txn)
 			}
-			operatorKey, err := rsaencryption.PemToPrivateKey(obj.Value)
+
+			operatorKey, err := rsaencryption.PEMToPrivateKey(obj.Value)
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}
@@ -38,23 +40,24 @@ var migration_2_encrypt_shares = Migration{
 			if err != nil {
 				return fmt.Errorf("failed to list accounts: %w", err)
 			}
+
 			keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 			hash := sha256.Sum256(keyBytes)
-			keyString := fmt.Sprintf("%x", hash)
-			err = signerStorage.SetEncryptionKey(keyString)
-			if err != nil {
-				return fmt.Errorf("failed to set encryption key: %w", err)
-			}
+			signerStorage.SetEncryptionKey(hash[:])
+
 			for _, account := range accounts {
+				// SaveAccountTxn performs the migration overwriting the account using the encryption key above.
 				err := signerStorage.SaveAccountTxn(txn, account)
 				if err != nil {
 					return fmt.Errorf("failed to save account %s: %w", account, err)
 				}
 			}
+
 			err = txn.Delete([]byte("operator/"), []byte("private-key"))
 			if err != nil {
 				return fmt.Errorf("failed to delete private key: %w", err)
 			}
+
 			return completed(txn)
 		})
 	},

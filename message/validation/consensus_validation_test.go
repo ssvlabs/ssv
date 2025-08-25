@@ -5,7 +5,6 @@ import (
 	"time"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -95,7 +94,6 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			mv := &messageValidator{}
 			got, err := mv.currentEstimatedRound(tc.sinceSlotStart)

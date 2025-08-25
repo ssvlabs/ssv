@@ -7,14 +7,20 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -55,24 +61,32 @@ func NewController(
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
 func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return errors.Wrap(err, "value invalid")
+		return traces.Errorf(span, "value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		return errors.New("attempting to start an instance with a past height")
+		return traces.Errorf(span, "attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return errors.New("instance already running")
+		return traces.Errorf(span, "instance already running")
 	}
 
 	c.Height = height
 
 	newInstance := c.addAndStoreNewInstance()
+
+	span.AddEvent("start new instance")
 	newInstance.Start(ctx, logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -102,19 +116,16 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	isDecided, err := IsDecidedMsg(c.CommitteeMember, msg)
+	isDecided, err := c.IsDecidedMsg(msg)
 	if err != nil {
 		return nil, err
 	}
 	if isDecided {
-		return c.UponDecided(logger, msg)
+		return c.UponDecided(msg)
 	}
 
-	isFuture, err := c.isFutureMessage(msg)
-	if err != nil {
-		return nil, err
-	}
-	if isFuture {
+	isFutureMsg := c.isFutureMessage(msg)
+	if isFutureMsg {
 		return nil, fmt.Errorf("future msg from height, could not process")
 	}
 
@@ -167,14 +178,17 @@ func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
 }
 
-// isFutureMessage returns true if message height is from a future instance.
-// It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
-func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) (bool, error) {
+// isFutureMessage tells whether the provided message height is from a future instance.
+// It takes into consideration a special case where FirstHeight instance didn't start yet
+// but c.Height == FirstHeight.
+func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
 	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
-		return true, nil
+		return true
 	}
-
-	return msg.QBFTMessage.Height > c.Height, nil
+	if msg.QBFTMessage.Height > c.Height {
+		return true
+	}
+	return false
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it

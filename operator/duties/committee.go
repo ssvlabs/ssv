@@ -6,14 +6,17 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-type validatorCommitteeDutyMap map[phase0.ValidatorIndex]*committeeDuty
 type committeeDutiesMap map[spectypes.CommitteeID]*committeeDuty
 
 type CommitteeHandler struct {
@@ -55,89 +58,112 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 			h.processExecution(ctx, period, epoch, slot)
 
 		case <-h.reorg:
-			// do nothing
+			h.logger.Debug("🛠 reorg event")
 
 		case <-h.indicesChange:
-			// do nothing
+			h.logger.Debug("🛠 indicesChange event")
 		}
 	}
 }
 
 func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "committee.execute"),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(slot),
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconPeriodAttribute(period),
+		))
+	defer span.End()
+
 	attDuties := h.attDuties.CommitteeSlotDuties(epoch, slot)
 	syncDuties := h.syncDuties.CommitteePeriodDuties(period)
 	if attDuties == nil && syncDuties == nil {
+		const eventMsg = "no attester or sync-committee duties to execute"
+		h.logger.Debug(eventMsg, fields.Epoch(epoch), fields.Slot(slot))
+		span.AddEvent(eventMsg)
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
 	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
-	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, h.logger, committeeMap)
+	if len(committeeMap) == 0 {
+		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
+	}
+
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
+
+	span.SetStatus(codes.Ok, "")
 }
 
-func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
+func (h *CommitteeHandler) buildCommitteeDuties(
+	attDuties []*eth2apiv1.AttesterDuty,
+	syncDuties []*eth2apiv1.SyncCommitteeDuty,
+	epoch phase0.Epoch,
+	slot phase0.Slot,
+) committeeDutiesMap {
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
-	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
-	validatorCommitteeMap := make(validatorCommitteeDutyMap)
-	committeeMap := make(committeeDutiesMap)
-	for _, v := range vs {
-		validatorCommitteeMap[v.ValidatorIndex] = &committeeDuty{
-			id:          v.CommitteeID(),
-			operatorIDs: v.OperatorIDs(),
+	selfValidators := h.validatorProvider.SelfParticipatingValidators(epoch)
+
+	validatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
+	for _, validatorShare := range selfValidators {
+		cd := committeeDuty{
+			id:          validatorShare.CommitteeID(),
+			operatorIDs: validatorShare.OperatorIDs(),
+		}
+		validatorCommittees[validatorShare.ValidatorIndex] = cd
+	}
+
+	resultCommitteeMap := make(committeeDutiesMap)
+	for _, duty := range attDuties {
+		if h.shouldExecuteAtt(duty, epoch) {
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
+		}
+	}
+	for _, duty := range syncDuties {
+		if h.shouldExecuteSync(duty, slot, epoch) {
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
 		}
 	}
 
-	for _, d := range attDuties {
-		if h.shouldExecuteAtt(d) {
-			specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
-			h.appendBeaconDuty(validatorCommitteeMap, committeeMap, specDuty)
-		}
-	}
-
-	for _, d := range syncDuties {
-		if h.shouldExecuteSync(d, slot) {
-			specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
-			h.appendBeaconDuty(validatorCommitteeMap, committeeMap, specDuty)
-		}
-	}
-
-	return committeeMap
+	return resultCommitteeMap
 }
 
-func (h *CommitteeHandler) appendBeaconDuty(vc validatorCommitteeDutyMap, c committeeDutiesMap, beaconDuty *spectypes.ValidatorDuty) {
-	if beaconDuty == nil {
-		h.logger.Error("received nil beaconDuty")
+func (h *CommitteeHandler) addToCommitteeMap(
+	committeeDutyMap committeeDutiesMap,
+	validatorCommittees map[phase0.ValidatorIndex]committeeDuty,
+	specDuty *spectypes.ValidatorDuty,
+) {
+	committee, ok := validatorCommittees[specDuty.ValidatorIndex]
+	if !ok {
+		h.logger.Error("failed to find committee for validator", zap.Uint64("validator_index", uint64(specDuty.ValidatorIndex)))
 		return
 	}
 
-	committee, ok := vc[beaconDuty.ValidatorIndex]
-	if !ok {
-		h.logger.Error("failed to find committee for validator", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
-		return
-	}
-
-	cd, ok := c[committee.id]
-	if !ok {
+	cd, exists := committeeDutyMap[committee.id]
+	if !exists {
 		cd = &committeeDuty{
 			id:          committee.id,
 			operatorIDs: committee.operatorIDs,
 			duty: &spectypes.CommitteeDuty{
-				Slot:            beaconDuty.Slot,
-				ValidatorDuties: make([]*spectypes.ValidatorDuty, 0),
+				Slot:            specDuty.Slot,
+				ValidatorDuties: []*spectypes.ValidatorDuty{},
 			},
 		}
-		c[committee.id] = cd
+
+		committeeDutyMap[committee.id] = cd
 	}
 
-	cd.duty.ValidatorDuties = append(c[committee.id].duty.ValidatorDuties, beaconDuty)
+	cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
@@ -167,29 +193,40 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 	}
 }
 
-func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch phase0.Epoch) bool {
+	share, found := h.validatorProvider.Validator(duty.PubKey[:])
+	if !found || !share.IsAttesting(epoch) {
+		return false
+	}
 
-	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
+	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+
+	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
-	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
+	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
 		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
+
 	return false
 }
 
-func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
+	share, found := h.validatorProvider.Validator(duty.PubKey[:])
+	if !found || !share.IsParticipating(h.beaconConfig, epoch) {
+		return false
+	}
 
-	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
+	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+
+	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
 	}
 
@@ -201,22 +238,17 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
+
 	return false
 }
 
-func (h *CommitteeHandler) canParticipate(pubKey []byte, currentSlot phase0.Slot) bool {
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+func (h *CommitteeHandler) canParticipate(share *types.SSVShare, currentSlot phase0.Slot) bool {
+	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
-	v, exists := h.validatorProvider.Validator(pubKey)
-	if !exists {
-		h.logger.Warn("validator not found", fields.Validator(pubKey))
-		return false
-	}
-
-	if v.MinParticipationEpoch() > currentEpoch {
+	if share.MinParticipationEpoch() > currentEpoch {
 		h.logger.Debug("validator not yet participating",
-			fields.Validator(pubKey),
-			zap.Uint64("min_participation_epoch", uint64(v.MinParticipationEpoch())),
+			fields.Validator(share.ValidatorPubKey[:]),
+			zap.Uint64("min_participation_epoch", uint64(share.MinParticipationEpoch())),
 			zap.Uint64("current_epoch", uint64(currentEpoch)),
 		)
 		return false

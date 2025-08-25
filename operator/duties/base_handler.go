@@ -9,7 +9,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
-//go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
 type dutyHandler interface {
 	Setup(
@@ -17,7 +17,7 @@ type dutyHandler interface {
 		logger *zap.Logger,
 		beaconNode BeaconNode,
 		executionClient ExecutionClient,
-		network networkconfig.NetworkConfig,
+		beaconConfig *networkconfig.Beacon,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
@@ -34,7 +34,7 @@ type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
+	beaconConfig        *networkconfig.Beacon
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	dutiesExecutor      DutiesExecutor
@@ -51,7 +51,7 @@ func (h *baseHandler) Setup(
 	logger *zap.Logger,
 	beaconNode BeaconNode,
 	executionClient ExecutionClient,
-	network networkconfig.NetworkConfig,
+	beaconConfig *networkconfig.Beacon,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,
@@ -62,7 +62,7 @@ func (h *baseHandler) Setup(
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient
-	h.network = network
+	h.beaconConfig = beaconConfig
 	h.validatorProvider = validatorProvider
 	h.validatorController = validatorController
 	h.dutiesExecutor = dutiesExecutor

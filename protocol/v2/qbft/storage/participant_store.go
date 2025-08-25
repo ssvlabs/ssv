@@ -2,13 +2,11 @@ package qbftstorage
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
@@ -23,16 +21,6 @@ type Participation struct {
 type StoredInstance struct {
 	State          *specqbft.State
 	DecidedMessage *spectypes.SignedSSVMessage
-}
-
-// Encode returns a StoredInstance encoded bytes or error.
-func (si *StoredInstance) Encode() ([]byte, error) {
-	return json.Marshal(si)
-}
-
-// Decode returns error if decoding failed.
-func (si *StoredInstance) Decode(data []byte) error {
-	return json.Unmarshal(data, &si)
 }
 
 type ParticipantsRangeEntry struct {
@@ -59,8 +47,8 @@ type ParticipantStore interface {
 	GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
 
 	// InitialSlotGC performs an initial cleanup (blocking) of slots bellow the retained threshold
-	Prune(ctx context.Context, logger *zap.Logger, below phase0.Slot)
+	Prune(ctx context.Context, below phase0.Slot)
 
 	// SlotGC continuously removes old slots
-	PruneContinously(ctx context.Context, logger *zap.Logger, slotTickerProvider slotticker.Provider, retain phase0.Slot)
+	PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot)
 }

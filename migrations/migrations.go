@@ -6,12 +6,15 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/ekm"
-	"github.com/ssvlabs/ssv/logging/fields"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var (
@@ -25,12 +28,15 @@ var (
 		migration_3_drop_registry_data,
 		migration_4_configlock_add_alan_fork_to_network_name,
 		migration_5_change_share_format_from_gob_to_ssz,
+		migration_6_share_exit_epoch,
+		migration_7_derive_signer_key_with_hkdf,
+		migration_8_populate_validator_index_mapping,
 	}
 )
 
 // Run executes the default migrations.
 func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
-	return defaultMigrations.Run(ctx, logger, opt)
+	return defaultMigrations.Run(ctx, logger.Named(log.NameMigrations), opt)
 }
 
 // CompletedFunc is a function that marks a migration as completed.
@@ -51,28 +57,26 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db          basedb.Database
-	NodeStorage operatorstorage.Storage
-	DbPath      string
-	Network     beacon.Network
+	Db              basedb.Database
+	DbPath          string
+	BeaconConfig    *networkconfig.Beacon
+	OperatorPrivKey keys.OperatorPrivateKey
 }
 
 // nolint
 func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
-	return operatorstorage.NewNodeStorage(logger, o.Db)
+	return operatorstorage.NewNodeStorage(o.BeaconConfig, logger, o.Db)
 }
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.Network, logger)
+	return ekm.NewSignerStorage(o.Db, o.BeaconConfig, logger)
 }
 
 // Run executes the migrations.
 func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
 	logger.Info("applying migrations", fields.Count(len(m)))
 	for _, migration := range m {
-		migration := migration
-
 		// Skip the migration if it's already completed.
 		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))
 		if err != nil {

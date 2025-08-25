@@ -11,9 +11,7 @@ package mocks
 
 import (
 	reflect "reflect"
-	time "time"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	qbft "github.com/ssvlabs/ssv-spec/qbft"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -22,6 +20,7 @@ import (
 type MockTimer struct {
 	ctrl     *gomock.Controller
 	recorder *MockTimerMockRecorder
+	isgomock struct{}
 }
 
 // MockTimerMockRecorder is the mock recorder for MockTimer.
@@ -51,55 +50,4 @@ func (m *MockTimer) TimeoutForRound(height qbft.Height, round qbft.Round) {
 func (mr *MockTimerMockRecorder) TimeoutForRound(height, round any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeoutForRound", reflect.TypeOf((*MockTimer)(nil).TimeoutForRound), height, round)
-}
-
-// MockBeaconNetwork is a mock of BeaconNetwork interface.
-type MockBeaconNetwork struct {
-	ctrl     *gomock.Controller
-	recorder *MockBeaconNetworkMockRecorder
-}
-
-// MockBeaconNetworkMockRecorder is the mock recorder for MockBeaconNetwork.
-type MockBeaconNetworkMockRecorder struct {
-	mock *MockBeaconNetwork
-}
-
-// NewMockBeaconNetwork creates a new mock instance.
-func NewMockBeaconNetwork(ctrl *gomock.Controller) *MockBeaconNetwork {
-	mock := &MockBeaconNetwork{ctrl: ctrl}
-	mock.recorder = &MockBeaconNetworkMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockBeaconNetwork) EXPECT() *MockBeaconNetworkMockRecorder {
-	return m.recorder
-}
-
-// GetSlotStartTime mocks base method.
-func (m *MockBeaconNetwork) GetSlotStartTime(slot phase0.Slot) time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSlotStartTime", slot)
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetSlotStartTime indicates an expected call of GetSlotStartTime.
-func (mr *MockBeaconNetworkMockRecorder) GetSlotStartTime(slot any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotStartTime", reflect.TypeOf((*MockBeaconNetwork)(nil).GetSlotStartTime), slot)
-}
-
-// SlotDurationSec mocks base method.
-func (m *MockBeaconNetwork) SlotDurationSec() time.Duration {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SlotDurationSec")
-	ret0, _ := ret[0].(time.Duration)
-	return ret0
-}
-
-// SlotDurationSec indicates an expected call of SlotDurationSec.
-func (mr *MockBeaconNetworkMockRecorder) SlotDurationSec() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotDurationSec", reflect.TypeOf((*MockBeaconNetwork)(nil).SlotDurationSec))
 }

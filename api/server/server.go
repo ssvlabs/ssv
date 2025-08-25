@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
+// Server represents the HTTP API server for SSV.
 type Server struct {
 	logger *zap.Logger
 	addr   string
@@ -21,24 +22,31 @@ type Server struct {
 	node       *handlers.Node
 	validators *handlers.Validators
 	exporter   *handlers.Exporter
+	httpServer *http.Server
+
+	fullExporter bool
 }
 
+// New creates a new Server instance.
 func New(
 	logger *zap.Logger,
 	addr string,
 	node *handlers.Node,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
+	fullExporter bool,
 ) *Server {
 	return &Server{
-		logger:     logger,
-		addr:       addr,
-		node:       node,
-		validators: validators,
-		exporter:   exporter,
+		logger:       logger,
+		addr:         addr,
+		node:         node,
+		validators:   validators,
+		exporter:     exporter,
+		fullExporter: fullExporter,
 	}
 }
 
+// Run starts the server and blocks until it's shut down.
 func (s *Server) Run() error {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
@@ -47,25 +55,122 @@ func (s *Server) Run() error {
 	router.Use(middlewareLogger(s.logger))
 	router.Use(middlewareNodeVersion)
 
+	// @Summary Get node identity information
+	// @Description Returns the identity information of the SSV node
+	// @Tags Node
+	// @Produce json
+	// @Success 200 {object} handlers.NodeIdentityResponse
+	// @Router /v1/node/identity [get]
 	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
+
+	// @Summary Get connected peers
+	// @Description Returns the list of peers connected to the SSV node
+	// @Tags Node
+	// @Produce json
+	// @Success 200 {object} handlers.PeersResponse
+	// @Router /v1/node/peers [get]
 	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
+
+	// @Summary Get subscribed topics
+	// @Description Returns the list of topics the SSV node is subscribed to
+	// @Tags Node
+	// @Produce json
+	// @Success 200 {object} handlers.TopicsResponse
+	// @Router /v1/node/topics [get]
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
+
+	// @Summary Get node health status
+	// @Description Returns the health status of the SSV node
+	// @Tags Node
+	// @Produce json
+	// @Success 200 {object} handlers.HealthResponse
+	// @Router /v1/node/health [get]
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
+
+	// @Summary Get validators
+	// @Description Returns the list of validators managed by the SSV node
+	// @Tags Validators
+	// @Produce json
+	// @Success 200 {object} handlers.ValidatorsResponse
+	// @Router /v1/validators [get]
 	router.Get("/v1/validators", api.Handler(s.validators.List))
+
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
-	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
-	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+	if s.fullExporter {
+		// @Summary Post validator traces
+		// @Description Returns traces for a specific validator
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.ValidatorTracesResponse
+		// @Router /v1/exporter/traces/validator [post]
+		router.Post("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
+		// @Summary Get validator traces
+		// @Description Returns traces for a specific validator
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.ValidatorTracesResponse
+		// @Router /v1/exporter/traces/validator [get]
+		router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
+
+		// @Summary Post committee traces
+		// @Description Returns traces for a specific committee
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.CommitteeTracesResponse
+		// @Router /v1/exporter/traces/committee [post]
+		router.Post("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
+
+		// @Summary Get committee traces
+		// @Description Returns traces for a specific committee
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.CommitteeTracesResponse
+		// @Router /v1/exporter/traces/committee [get]
+		router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
+
+		// @Summary Get decided messages traces
+		// @Description Returns traces of decided messages
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.TraceDecidedsResponse
+		// @Router /v1/exporter/decideds [get]
+		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+
+		// @Summary Get decided messages traces
+		// @Description Returns traces of decided messages
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.TraceDecidedsResponse
+		// @Router /v1/exporter/decideds [post]
+		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+	} else {
+		// @Summary Get decided messages
+		// @Description Returns decided messages
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.DecidedsResponse
+		// @Router /v1/exporter/decideds [get]
+		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+
+		// @Summary Get decided messages
+		// @Description Returns decided messages
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.DecidedsResponse
+		// @Router /v1/exporter/decideds [post]
+		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+	}
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
-	server := &http.Server{
+	s.httpServer = &http.Server{
 		Addr:              s.addr,
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       12 * time.Second,
 		WriteTimeout:      12 * time.Second,
 	}
-	return server.ListenAndServe()
+	return s.httpServer.ListenAndServe()
 }
 
 func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
@@ -90,6 +195,7 @@ func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 	}
 }
 
+// middlewareNodeVersion adds the SSV node version as a response header.
 func middlewareNodeVersion(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-SSV-Node-Version", commons.GetNodeVersion())

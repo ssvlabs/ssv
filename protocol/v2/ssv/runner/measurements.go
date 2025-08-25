@@ -29,8 +29,12 @@ func (cm *measurementsStore) ConsensusTime() time.Duration {
 func (cm *measurementsStore) PostConsensusTime() time.Duration {
 	return cm.postConsensusDuration
 }
-func (cm *measurementsStore) DutyDurationTime() time.Duration {
+func (cm *measurementsStore) TotalDutyTime() time.Duration {
 	return cm.dutyDuration
+}
+
+func (cm *measurementsStore) TotalConsensusTime() time.Duration {
+	return cm.preConsensusDuration + cm.consensusDuration + cm.postConsensusDuration
 }
 
 // StartPreConsensus stores pre-consensus start time.

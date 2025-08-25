@@ -13,11 +13,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 )
 
-//go:generate mockgen -package=eventsyncer -destination=./event_syncer_mock.go -source=./event_syncer.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=eventsyncer -destination=./event_syncer_mock.go -source=./event_syncer.go
 
 // TODO: check if something from these PRs need to be ported:
 // https://github.com/ssvlabs/ssv/pull/1053

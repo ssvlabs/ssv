@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -19,14 +20,15 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
+	"github.com/stretchr/testify/require"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 )
 
 // TestP2pNetwork_MessageValidation tests p2pNetwork would score peers according
@@ -43,7 +45,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	)
 	var vNet *VirtualNet
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Create 20 fake validator public keys.
@@ -58,7 +60,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	messageValidators := make([]*MockMessageValidator, nodeCount)
 	var mtx sync.Mutex
 	for i := 0; i < nodeCount; i++ {
-		i := i
 		messageValidators[i] = &MockMessageValidator{
 			Accepted: make([]int, nodeCount),
 			Ignored:  make([]int, nodeCount),
@@ -219,8 +220,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// - node 0, (node 1 OR 3), (node 1 OR 3), node 2
 	// (after excluding itself from this list)
 	for _, node := range vNet.Nodes {
-		node := node
-
 		// Prepare the valid orders, excluding the node itself.
 		validOrders := [][]NodeIndex{
 			{0, 1, 3, 2},

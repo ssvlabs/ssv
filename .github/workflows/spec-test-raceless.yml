@@ -1,9 +1,8 @@
 name: Spec tests (raceless)
 
 on:
-  push:
-    branches:
-      - "**"
+  pull_request:
+    types: [opened, synchronize]
 
   workflow_dispatch:
 
@@ -20,7 +19,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"
+          go-version: "1.24.x"
 
       - name: Run all spec tests
         run: make all-spec-test-raceless

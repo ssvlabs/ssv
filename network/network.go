@@ -5,9 +5,9 @@ import (
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"go.uber.org/zap"
 )
 
 // DecodedSSVMessage serves as a marker interface for any SSV message types.
@@ -34,24 +34,24 @@ type P2PNetwork interface {
 	protocolp2p.Network
 	MessageRouting
 	// Setup initialize the network layer and starts the libp2p host
-	Setup(logger *zap.Logger) error
+	Setup() error
 	// Start starts the network
-	Start(logger *zap.Logger) error
+	Start() error
 	// UpdateSubnets will update the registered subnets according to active validators
-	UpdateSubnets(logger *zap.Logger)
+	UpdateSubnets()
 	// SubscribeAll subscribes to all subnets
-	SubscribeAll(logger *zap.Logger) error
+	SubscribeAll() error
 	// SubscribeRandoms subscribes to random subnets
-	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeRandoms(numSubnets int) error
 	// UpdateScoreParams will update the scoring parameters of GossipSub
-	UpdateScoreParams(logger *zap.Logger)
+	UpdateScoreParams()
 	// ActiveSubnets returns active subnets
 	ActiveSubnets() commons.Subnets
 	// FixedSubnets returns fixed subnets
 	FixedSubnets() commons.Subnets
-
-	// used for tests and api
+	// PeersByTopic returns topic->peers mapping for all peers we are connected to
 	PeersByTopic() map[string][]peer.ID
+	// Peers returns all peers we are connected to
 	Peers() []peer.ID
 }
 

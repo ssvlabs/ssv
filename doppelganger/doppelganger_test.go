@@ -1,7 +1,6 @@
 package doppelganger
 
 import (
-	"context"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -9,18 +8,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 func newTestDoppelgangerHandler(t *testing.T) *handler {
 	ctrl := gomock.NewController(t)
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	return NewHandler(&Options{
-		Network:           networkconfig.TestNetwork,
+		BeaconConfig:      networkconfig.TestNetwork.Beacon,
 		BeaconNode:        mockBeaconNode,
 		ValidatorProvider: mockValidatorProvider,
 		Logger:            logger,
@@ -54,11 +53,11 @@ func TestUpdateDoppelgangerState(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
 
 	// Update state with validator indices
-	dg.updateDoppelgangerState([]phase0.ValidatorIndex{1, 2})
+	dg.updateDoppelgangerState(0, []phase0.ValidatorIndex{1, 2})
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(2))
 
-	dg.updateDoppelgangerState([]phase0.ValidatorIndex{1})
+	dg.updateDoppelgangerState(0, []phase0.ValidatorIndex{1})
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
 	require.NotContains(t, dg.validatorsState, phase0.ValidatorIndex(2))
 	require.NotContains(t, dg.validatorsState, phase0.ValidatorIndex(3))
@@ -78,7 +77,7 @@ func TestCheckLiveness(t *testing.T) {
 		}, nil,
 	)
 
-	dg.checkLiveness(context.Background(), 0, 0)
+	dg.checkLiveness(t.Context(), 0, 0)
 
 	require.Equal(t, initialRemainingDetectionEpochs, dg.validatorsState[1].remainingEpochs)
 	require.Equal(t, phase0.Epoch(0), dg.validatorsState[2].remainingEpochs)
