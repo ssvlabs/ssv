@@ -10,11 +10,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -48,7 +46,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
+	ctrl, logger, sharesStorage, network, _, bc := setupCommonTestComponents(t, operatorPrivateKey)
 	defer ctrl.Finish()
 	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 		spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()): firstValidator,
@@ -63,7 +61,6 @@ func TestController_LiquidateCluster(t *testing.T) {
 		network:             network,
 		operatorDataStore:   operatorDataStore,
 		sharesStorage:       sharesStorage,
-		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
 		validatorCommonOpts: &validator.CommonOptions{},
 	}
@@ -111,7 +108,7 @@ func TestController_StopValidator(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
+	ctrl, logger, sharesStorage, network, signer, bc := setupCommonTestComponents(t, operatorPrivateKey)
 
 	defer ctrl.Finish()
 
@@ -128,7 +125,6 @@ func TestController_StopValidator(t *testing.T) {
 		network:             network,
 		operatorDataStore:   operatorDataStore,
 		sharesStorage:       sharesStorage,
-		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
 		validatorCommonOpts: &validator.CommonOptions{},
 		signer:              signer,
@@ -188,7 +184,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	operatorPrivKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivKey)
+	ctrl, logger, sharesStorage, network, signer, bc := setupCommonTestComponents(t, operatorPrivKey)
 	defer ctrl.Finish()
 	mockValidatorsMap := validators.New(context.TODO())
 	validatorStartFunc := func(validator *validator.Validator) (bool, error) {
@@ -199,7 +195,6 @@ func TestController_ReactivateCluster(t *testing.T) {
 		network:           network,
 		operatorDataStore: operatorDataStore,
 		sharesStorage:     sharesStorage,
-		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
 		networkConfig:     networkconfig.TestNetwork,
 		validatorCommonOpts: &validator.CommonOptions{
@@ -257,8 +252,6 @@ func TestController_ReactivateCluster(t *testing.T) {
 			ActivationEpoch: 1,
 		},
 	}
-	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
-	recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).AnyTimes().Return(recipientData, true, nil)
 
 	indiciesUpdate := make(chan struct{})
 	go func() {

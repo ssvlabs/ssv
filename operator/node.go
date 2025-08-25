@@ -97,7 +97,6 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			BeaconClient:       opts.BeaconNode,
 			BeaconConfig:       opts.NetworkConfig.Beacon,
 			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
-			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
 			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
 			SlotTickerProvider: slotTickerProvider,
 		}),

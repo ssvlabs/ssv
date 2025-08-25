@@ -1,15 +1,20 @@
 package storage_test
 
 import (
+	"crypto/rand"
 	"fmt"
 	"testing"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -388,14 +393,104 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	})
 }
 
+// TestSharesUpdaterIntegration tests that when fee recipient is updated, shares are updated in memory
+func TestSharesUpdaterIntegration(t *testing.T) {
+	logger := log.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Create recipients and shares storage with proper wiring
+	recipientStorage, setSharesUpdater := storage.NewRecipientsStorage(logger, db, []byte("test"))
+	sharesStorage, _, err := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, recipientStorage, []byte("test"))
+	require.NoError(t, err)
+	setSharesUpdater(sharesStorage)
+
+	owner := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	initialFeeRecipient := common.HexToAddress("0xAAAA567890123456789012345678901234567890")
+	updatedFeeRecipient := common.HexToAddress("0xBBBB678901234567890123456789012345678901")
+
+	// Create and save shares with the owner
+	share1 := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: generateRandomPubKey(),
+			ValidatorIndex:  1,
+			Committee:       []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key1")}},
+			DomainType:      networkconfig.TestNetwork.DomainType,
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner,
+	}
+
+	share2 := &types.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: generateRandomPubKey(),
+			ValidatorIndex:  2,
+			Committee:       []*spectypes.ShareMember{{Signer: 1, SharePubKey: []byte("key2")}},
+			DomainType:      networkconfig.TestNetwork.DomainType,
+		},
+		Status:       v1.ValidatorStateActiveOngoing,
+		OwnerAddress: owner,
+	}
+
+	require.NoError(t, sharesStorage.Save(nil, share1, share2))
+
+	// Set initial fee recipient
+	var initialFeeRecipientAddr bellatrix.ExecutionAddress
+	copy(initialFeeRecipientAddr[:], initialFeeRecipient.Bytes())
+	_, err = recipientStorage.SaveRecipientData(nil, &storage.RecipientData{
+		Owner:        owner,
+		FeeRecipient: initialFeeRecipientAddr,
+	})
+	require.NoError(t, err)
+
+	// Verify shares have the initial fee recipient
+	loadedShare1, found := sharesStorage.Get(nil, share1.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(initialFeeRecipientAddr), loadedShare1.FeeRecipientAddress)
+
+	// Update fee recipient through recipients storage
+	var updatedFeeRecipientAddr bellatrix.ExecutionAddress
+	copy(updatedFeeRecipientAddr[:], updatedFeeRecipient.Bytes())
+	_, err = recipientStorage.SaveRecipientData(nil, &storage.RecipientData{
+		Owner:        owner,
+		FeeRecipient: updatedFeeRecipientAddr,
+	})
+	require.NoError(t, err)
+
+	// Verify shares are automatically updated with new fee recipient
+	loadedShare1, found = sharesStorage.Get(nil, share1.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(updatedFeeRecipientAddr), loadedShare1.FeeRecipientAddress)
+
+	loadedShare2, found := sharesStorage.Get(nil, share2.ValidatorPubKey[:])
+	require.True(t, found)
+	require.Equal(t, [20]byte(updatedFeeRecipientAddr), loadedShare2.FeeRecipientAddress)
+}
+
+func generateRandomPubKey() spectypes.ValidatorPK {
+	pk := make([]byte, 48)
+	_, _ = rand.Read(pk)
+	return spectypes.ValidatorPK(pk)
+}
+
 func newRecipientStorageForTest(logger *zap.Logger) (storage.Recipients, func()) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}
 
-	s := storage.NewRecipientsStorage(logger, db, []byte("test"))
+	s, setSharesUpdater := storage.NewRecipientsStorage(logger, db, []byte("test"))
+	// Set a no-op shares updater for tests that don't need share update functionality
+	setSharesUpdater(&noOpSharesUpdater{})
 	return s, func() {
 		db.Close()
 	}
+}
+
+// noOpSharesUpdater is a no-op implementation of SharesUpdater for tests
+type noOpSharesUpdater struct{}
+
+func (n *noOpSharesUpdater) UpdateFeeRecipientForOwner(owner common.Address, feeRecipient bellatrix.ExecutionAddress) {
+	// No-op - used in tests that don't need share updates
 }

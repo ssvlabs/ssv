@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -117,9 +116,6 @@ var ConstructBaseRunner = func(
 	shareMap[share.ValidatorIndex] = share
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
-	rStorage := mocks.NewMockrecipientsStorage()
-	rStorage.FeeRecipient = share.FeeRecipientAddress
-
 	var r runner.Runner
 	var err error
 
@@ -189,12 +185,10 @@ var ConstructBaseRunner = func(
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			common.Address{},
 			beaconNode,
 			net,
 			km,
 			opSigner,
-			rStorage,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			runner.DefaultGasLimitOld,
 		)
@@ -452,12 +446,10 @@ var ConstructBaseRunnerWithShareMap = func(
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			common.Address{},
 			beaconNode,
 			net,
 			km,
 			opSigner,
-			nil, // recipientStorage is unused in these tests
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			runner.DefaultGasLimitOld,
 		)

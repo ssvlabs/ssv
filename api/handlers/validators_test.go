@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
@@ -498,6 +499,10 @@ func (m *mockShares) Drop() error {
 
 func (m *mockShares) UpdateValidatorsMetadata(_ beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	return nil, nil
+}
+
+func (m *mockShares) UpdateFeeRecipientForOwner(owner common.Address, feeRecipient bellatrix.ExecutionAddress) {
+	// no-op
 }
 
 // TestValidatorsList tests the List method of the Validators handler.

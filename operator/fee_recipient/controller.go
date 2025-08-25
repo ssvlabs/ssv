@@ -5,7 +5,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -30,7 +29,6 @@ type ControllerOptions struct {
 	BeaconClient       beaconprotocol.BeaconNode
 	BeaconConfig       *networkconfig.Beacon
 	ShareStorage       storage.Shares
-	RecipientStorage   storage.Recipients
 	SlotTickerProvider slotticker.Provider
 	OperatorDataStore  operatordatastore.OperatorDataStore
 }
@@ -42,7 +40,6 @@ type recipientController struct {
 	beaconClient       beaconprotocol.BeaconNode
 	beaconConfig       *networkconfig.Beacon
 	shareStorage       storage.Shares
-	recipientStorage   storage.Recipients
 	slotTickerProvider slotticker.Provider
 	operatorDataStore  operatordatastore.OperatorDataStore
 }
@@ -54,7 +51,6 @@ func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientContro
 		beaconClient:       opts.BeaconClient,
 		beaconConfig:       opts.BeaconConfig,
 		shareStorage:       opts.ShareStorage,
-		recipientStorage:   opts.RecipientStorage,
 		slotTickerProvider: opts.SlotTickerProvider,
 		operatorDataStore:  opts.OperatorDataStore,
 	}
@@ -134,30 +130,11 @@ func (rc *recipientController) submit(ctx context.Context, shares []*types.SSVSh
 }
 
 func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {
-	// build unique owners
-	keys := make(map[common.Address]bool)
-	var uniq []common.Address
-	for _, entry := range shares {
-		if _, value := keys[entry.OwnerAddress]; !value {
-			keys[entry.OwnerAddress] = true
-			uniq = append(uniq, entry.OwnerAddress)
-		}
-	}
-
-	// get recipients
-	rds, err := rc.recipientStorage.GetRecipientDataMany(nil, uniq)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get recipients data")
-	}
-
-	// build proposal preparation
+	// Build proposal preparation directly from shares which already have fee recipients
 	m := make(map[phase0.ValidatorIndex]bellatrix.ExecutionAddress)
 	for _, share := range shares {
-		feeRecipient, found := rds[share.OwnerAddress]
-		if !found {
-			copy(feeRecipient[:], share.OwnerAddress.Bytes())
-		}
-		m[share.ValidatorIndex] = feeRecipient
+		// Use the fee recipient directly from the share (already enriched)
+		m[share.ValidatorIndex] = share.FeeRecipientAddress
 	}
 
 	return m, nil
