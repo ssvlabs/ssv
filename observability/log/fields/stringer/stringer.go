@@ -28,11 +28,3 @@ type Float64Stringer struct {
 func (h Float64Stringer) String() string {
 	return strconv.FormatFloat(h.Val, 'f', -1, 64)
 }
-
-type FuncStringer struct {
-	Fn func() string
-}
-
-func (s FuncStringer) String() string {
-	return s.Fn()
-}

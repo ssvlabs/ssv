@@ -249,11 +249,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		SSVMessage:  ssvMsg,
 	}
 
-	logger.Debug(
-		"broadcasting validator registration partial sig",
-		fields.Slot(duty.DutySlot()),
-		zap.Any("validator_registration", vr),
-	)
+	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial randao sig: %w", err)
@@ -446,7 +442,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 			for _, r := range targetRegs {
 				validatorPk, err := r.PubKey()
 				if err != nil {
-					s.logger.Error("Failed to get validator pubkey", zap.Error(err), fields.Slot(currentSlot))
+					s.logger.Error("Failed to get validator pubkey", fields.Slot(currentSlot), zap.Error(err))
 					continue
 				}
 
@@ -462,9 +458,9 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 
 			err := s.beacon.SubmitValidatorRegistrations(ctx, registrations)
 			if err != nil {
-				s.logger.Error(
-					"Failed to submit validator registrations",
+				s.logger.Error("Failed to submit validator registrations",
 					zap.Int("registrations", len(registrations)),
+					fields.Slot(currentSlot),
 					zap.Error(err),
 				)
 			}

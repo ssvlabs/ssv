@@ -21,28 +21,41 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// HandleMessage handles a spectypes.SSVMessage.
+// EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
-// TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
+	msgType := msg.GetType()
+	msgID := msg.GetID()
+
+	logger := c.logger.
+		With(fields.MessageType(msgType)).
+		With(fields.MessageID(msgID)).
+		With(fields.RunnerRole(msgID.GetRoleType()))
+
 	slot, err := msg.Slot()
 	if err != nil {
-		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+		logger.Error("❌ couldn't get message slot", zap.Error(err))
 		return
 	}
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+
+	logger = logger.
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID))
+
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
-		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
+		observability.InstrumentName(observabilityNamespace, "enqueue_committee_message"),
 		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.GetType()),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
-			observability.DutyIDAttribute(dutyID),
-		))
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
+			observability.BeaconSlotAttribute(slot),
+			observability.DutyIDAttribute(dutyID)))
 	defer span.End()
 
 	msg.TraceContext = ctx
-	span.SetAttributes(observability.BeaconSlotAttribute(slot))
+
 	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
 	q, ok := c.Queues[slot]
@@ -70,9 +83,10 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 			zap.String("msg_id", msg.MsgID.String()))
 		span.SetStatus(codes.Error, errMsg)
-	} else {
-		span.SetStatus(codes.Ok, "")
+		return
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
