@@ -35,10 +35,3 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
 
 	return val, nil
 }
-
-// isSubnet checks if the given string is a subnet string
-func isSubnet(ns string) bool {
-	r, done := regPool.Get()
-	defer done()
-	return r.MatchString(ns)
-}

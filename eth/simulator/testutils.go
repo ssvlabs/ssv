@@ -18,7 +18,6 @@ package simulator
 
 import (
 	"errors"
-	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -162,33 +161,6 @@ func (n *Backend) Close() error {
 // Commit seals a block and moves the chain forward to a new empty block.
 func (n *Backend) Commit() common.Hash {
 	return n.beacon.Commit()
-}
-
-// Rollback removes all pending transactions, reverting to the last committed state.
-func (n *Backend) Rollback() {
-	n.beacon.Rollback()
-}
-
-// Fork creates a side-chain that can be used to simulate reorgs.
-//
-// This function should be called with the ancestor block where the new side
-// chain should be started. Transactions (old and new) can then be applied on
-// top and Commit-ed.
-//
-// Note, the side-chain will only become canonical (and trigger the events) when
-// it becomes longer. Until then CallContract will still operate on the current
-// canonical chain.
-//
-// There is a % chance that the side chain becomes canonical at the same length
-// to simulate live network behavior.
-func (n *Backend) Fork(parentHash common.Hash) error {
-	return n.beacon.Fork(parentHash)
-}
-
-// AdjustTime changes the block timestamp and creates a new block.
-// It can only be called on empty blocks.
-func (n *Backend) AdjustTime(adjustment time.Duration) error {
-	return n.beacon.AdjustTime(adjustment)
 }
 
 // Client returns a client that accesses the simulated chain.

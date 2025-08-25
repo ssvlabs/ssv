@@ -25,7 +25,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-// VoluntaryExitRunner runner for validator voluntary exit duty
+// VoluntaryExitRunner implements validator voluntary exit duty - this duty doesn't
+// need consensus nor post-consensus, it just performs pre-consensus with VoluntaryExitPartialSig
+// over a VoluntaryExit object to create a SignedVoluntaryExit
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
@@ -159,10 +161,6 @@ func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRo
 func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, [4]byte{}, errors.New("no post consensus roots for voluntary exit")
 }
-
-// Validator voluntary exit duty doesn't need consensus nor post-consensus.
-// It just performs pre-consensus with VoluntaryExitPartialSig over
-// a VoluntaryExit object to create a SignedVoluntaryExit
 
 func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,

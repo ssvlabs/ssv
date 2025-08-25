@@ -1,6 +1,7 @@
 package log
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -12,7 +13,7 @@ func TestWithFromContext(t *testing.T) {
 		ctx := t.Context()
 		expected := TestLogger(t)
 		expected = expected.Named("test")
-		ctx = WithContext(ctx, expected)
+		ctx = context.WithValue(ctx, loggerKey, expected)
 
 		actual := FromContext(ctx)
 		if !reflect.DeepEqual(expected, actual) {

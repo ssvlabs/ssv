@@ -3,13 +3,10 @@ package validator
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
@@ -68,32 +65,33 @@ type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
-	Context                    context.Context
-	DB                         basedb.Database
-	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
-	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
-	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
-	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
-	Network                    P2PNetwork
-	Beacon                     beaconprotocol.BeaconNode
-	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
-	BeaconSigner               ekm.BeaconSigner
-	OperatorSigner             ssvtypes.OperatorSigner
-	OperatorDataStore          operatordatastore.OperatorDataStore
-	RegistryStorage            nodestorage.Storage
-	RecipientsStorage          Recipients
-	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	DutyRoles                  []spectypes.BeaconRole
-	DutyTraceCollector         *dutytracer.Collector
-	StorageMap                 *storage.ParticipantStores
-	ValidatorStore             registrystorage.ValidatorStore
-	MessageValidator           validation.MessageValidator
-	ValidatorsMap              *validators.ValidatorsMap
-	DoppelgangerHandler        doppelganger.Provider
-	NetworkConfig              *networkconfig.Network
-	ValidatorSyncer            *metadata.Syncer
-	Graffiti                   []byte
-	ProposerDelay              time.Duration
+	Context                        context.Context
+	DB                             basedb.Database
+	SignatureCollectionTimeout     time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
+	MetadataUpdateInterval         time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
+	HistorySyncBatchSize           int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
+	MinPeers                       int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
+	Network                        P2PNetwork
+	Beacon                         beaconprotocol.BeaconNode
+	FullNode                       bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
+	BeaconSigner                   ekm.BeaconSigner
+	OperatorSigner                 ssvtypes.OperatorSigner
+	OperatorDataStore              operatordatastore.OperatorDataStore
+	RegistryStorage                nodestorage.Storage
+	ValidatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+	RecipientsStorage              Recipients
+	NewDecidedHandler              qbftcontroller.NewDecidedHandler
+	DutyRoles                      []spectypes.BeaconRole
+	DutyTraceCollector             *dutytracer.Collector
+	StorageMap                     *storage.ParticipantStores
+	ValidatorStore                 registrystorage.ValidatorStore
+	MessageValidator               validation.MessageValidator
+	ValidatorsMap                  *validators.ValidatorsMap
+	DoppelgangerHandler            doppelganger.Provider
+	NetworkConfig                  *networkconfig.Network
+	ValidatorSyncer                *metadata.Syncer
+	Graffiti                       []byte
+	ProposerDelay                  time.Duration
 
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
@@ -115,12 +113,13 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	IndicesChangeChan() chan struct{}
+	ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient common.Address) error
+	UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
@@ -130,6 +129,7 @@ type Nonce uint16
 
 type Recipients interface {
 	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
+	SaveRecipientData(rw basedb.ReadWriter, recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error)
 }
 
 type SharesStorage interface {
@@ -152,11 +152,12 @@ type controller struct {
 
 	logger *zap.Logger
 
-	networkConfig     *networkconfig.Network
-	sharesStorage     SharesStorage
-	operatorsStorage  registrystorage.Operators
-	recipientsStorage Recipients
-	ibftStorageMap    *storage.ParticipantStores
+	networkConfig                  *networkconfig.Network
+	sharesStorage                  SharesStorage
+	operatorsStorage               registrystorage.Operators
+	recipientsStorage              Recipients
+	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+	ibftStorageMap                 *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   ekm.BeaconSigner
@@ -190,8 +191,9 @@ type controller struct {
 
 	domainCache *validator.DomainCache
 
-	indicesChangeCh chan struct{}
-	validatorExitCh chan duties.ExitDescriptor
+	indicesChangeCh         chan struct{}
+	validatorRegistrationCh chan duties.RegistrationDescriptor
+	validatorExitCh         chan duties.ExitDescriptor
 
 	traceCollector *dutytracer.Collector
 }
@@ -230,20 +232,21 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
 	ctrl := controller{
-		logger:            logger.Named(log.NameController),
-		networkConfig:     options.NetworkConfig,
-		sharesStorage:     options.RegistryStorage.Shares(),
-		operatorsStorage:  options.RegistryStorage,
-		recipientsStorage: options.RegistryStorage,
-		ibftStorageMap:    options.StorageMap,
-		validatorStore:    options.ValidatorStore,
-		ctx:               options.Context,
-		beacon:            options.Beacon,
-		operatorDataStore: options.OperatorDataStore,
-		beaconSigner:      options.BeaconSigner,
-		operatorSigner:    options.OperatorSigner,
-		network:           options.Network,
-		traceCollector:    options.DutyTraceCollector,
+		logger:                         logger.Named(log.NameController),
+		networkConfig:                  options.NetworkConfig,
+		sharesStorage:                  options.RegistryStorage.Shares(),
+		operatorsStorage:               options.RegistryStorage,
+		recipientsStorage:              options.RegistryStorage,
+		validatorRegistrationSubmitter: options.ValidatorRegistrationSubmitter,
+		ibftStorageMap:                 options.StorageMap,
+		validatorStore:                 options.ValidatorStore,
+		ctx:                            options.Context,
+		beacon:                         options.Beacon,
+		operatorDataStore:              options.OperatorDataStore,
+		beaconSigner:                   options.BeaconSigner,
+		operatorSigner:                 options.OperatorSigner,
+		network:                        options.Network,
+		traceCollector:                 options.DutyTraceCollector,
 
 		validatorsMap:       options.ValidatorsMap,
 		validatorCommonOpts: validatorCommonOpts,
@@ -270,6 +273,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
 		),
 		indicesChangeCh:         make(chan struct{}),
+		validatorRegistrationCh: make(chan duties.RegistrationDescriptor),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
@@ -290,6 +294,10 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 
 func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChangeCh
+}
+
+func (c *controller) ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor {
+	return c.validatorRegistrationCh
 }
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
@@ -335,9 +343,9 @@ func (c *controller) handleRouterMessages() {
 				copy(cid[:], dutyExecutorID[16:])
 
 				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.HandleMessage(ctx, c.logger, m)
+					v.EnqueueMessage(ctx, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.HandleMessage(ctx, c.logger, m)
+					vc.EnqueueMessage(ctx, m)
 				} else if c.validatorCommonOpts.ExporterOptions.Enabled {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
@@ -638,15 +646,17 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
-	dutyID := fields.FormatDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
+func (c *controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) {
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
+	dutyID := fields.BuildDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
-			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
-			observability.BeaconSlotAttribute(duty.Slot),
-			observability.BeaconRoleAttribute(duty.Type),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconRoleAttribute(duty.Type),
+			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
+			observability.BeaconEpochAttribute(dutyEpoch),
+			observability.BeaconSlotAttribute(duty.Slot),
 			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
 			observability.DutyIDAttribute(dutyID),
@@ -654,45 +664,38 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
-	// so we need to copy the pubkey val to avoid pointer
-	pk := make([]byte, 48)
-	copy(pk, duty.PubKey[:])
+	logger := c.logger.
+		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.Slot(duty.Slot)).
+		With(fields.ValidatorIndex(duty.ValidatorIndex)).
+		With(fields.Validator(duty.PubKey[:])).
+		With(fields.DutyID(dutyID))
 
-	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.DomainType)
-		if err != nil {
-			logger.Error("could not create duty execute msg", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
-		dec, err := queue.DecodeSSVMessage(ssvMsg)
-		if err != nil {
-			logger.Error("could not decode duty execute msg", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
-		dec.TraceContext = ctx
-		span.AddEvent("pushing message to the queue")
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-			const eventMsg = "dropping ExecuteDuty message because the queue is full"
-			logger.Warn(eventMsg)
-			span.AddEvent(eventMsg)
-		}
-	} else {
-		const eventMsg = "could not find validator"
+	v, ok := c.GetValidator(spectypes.ValidatorPK(duty.PubKey))
+	if !ok {
+		eventMsg := fmt.Sprintf("could not find validator: %s", duty.PubKey.String())
 		logger.Warn(eventMsg)
 		span.AddEvent(eventMsg)
+		span.SetStatus(codes.Ok, "")
+		return
+	}
+
+	span.AddEvent("executing validator duty")
+	if err := v.ExecuteDuty(ctx, duty); err != nil {
+		logger.Error("could not execute validator duty", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
 	}
 
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+func (c *controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 	cm, ok := c.validatorsMap.GetCommittee(committeeID)
 	if !ok {
 		const eventMsg = "could not find committee"
-		logger.Warn(eventMsg, fields.CommitteeID(committeeID))
+		c.logger.Warn(eventMsg, fields.CommitteeID(committeeID))
 		return
 	}
 
@@ -701,80 +704,35 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		committee = append(committee, operator.OperatorID)
 	}
 
-	dutyID := fields.FormatCommitteeDutyID(committee, c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot)
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconEpochAttribute(dutyEpoch),
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.CommitteeIDAttribute(committeeID),
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyIDAttribute(dutyID),
 		),
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
-	if err != nil {
-		logger.Error("could not create duty execute msg", zap.Error(err))
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-	dec, err := queue.DecodeSSVMessage(ssvMsg)
-	if err != nil {
-		logger.Error("could not decode duty execute msg", zap.Error(err))
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-	if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
+	logger := c.logger.
+		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.Slot(duty.Slot)).
+		With(fields.CommitteeID(committeeID)).
+		With(fields.DutyID(dutyID))
+
+	span.AddEvent("executing committee duty")
+	if err := cm.ExecuteDuty(ctx, duty); err != nil {
 		logger.Error("could not execute committee duty", zap.Error(err))
-		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return
 	}
 
 	span.SetStatus(codes.Ok, "")
-}
-
-// CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
-func CreateDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeDutyData := ssvtypes.ExecuteDutyData{Duty: duty}
-	data, err := json.Marshal(executeDutyData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
-	}
-
-	return dutyDataToSSVMsg(domain, pubKey, duty.RunnerRole(), data)
-}
-
-// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
-func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeCommitteeDutyData := ssvtypes.ExecuteCommitteeDutyData{Duty: duty}
-	data, err := json.Marshal(executeCommitteeDutyData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
-	}
-
-	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
-}
-
-func dutyDataToSSVMsg(
-	domain spectypes.DomainType,
-	msgIdentifier []byte,
-	runnerRole spectypes.RunnerRole,
-	data []byte,
-) (*spectypes.SSVMessage, error) {
-	msg := ssvtypes.EventMsg{
-		Type: ssvtypes.ExecuteDuty,
-		Data: data,
-	}
-	msgData, err := msg.Encode()
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode event msg: %w", err)
-	}
-
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, msgIdentifier, runnerRole),
-		Data:    msgData,
-	}, nil
 }
 
 func (c *controller) FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
@@ -827,7 +785,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		return nil, nil, nil
 	}
 
-	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
+	if err := c.setShareFeeRecipient(share); err != nil {
 		return nil, nil, fmt.Errorf("could not set share fee recipient: %w", err)
 	}
 
@@ -843,14 +801,14 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.recipientsStorage, c.validatorRegistrationSubmitter, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
 		}
 		opts := c.validatorCommonOpts.NewOptions(share, operator, dutyRunners)
 
-		v = validator.NewValidator(validatorCtx, validatorCancel, opts)
+		v = validator.NewValidator(validatorCtx, validatorCancel, c.logger, opts)
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
@@ -867,20 +825,13 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
 
-		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
-
-		logger := c.logger.With([]zap.Field{
-			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
-			zap.String("committee_id", hex.EncodeToString(operator.CommitteeID[:])),
-		}...)
-
 		committeeRunnerFunc := SetupCommitteeRunners(ctx, opts)
 
 		vc = validator.NewCommittee(
 			ctx,
 			cancel,
-			logger,
-			c.networkConfig.Beacon,
+			c.logger,
+			c.networkConfig,
 			operator,
 			committeeRunnerFunc,
 			nil,
@@ -964,30 +915,43 @@ func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	)
 }
 
-func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
-	data, found, err := getRecipientData(nil, share.OwnerAddress)
+func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare) error {
+	data, found, err := c.recipientsStorage.GetRecipientData(nil, share.OwnerAddress)
 	if err != nil {
 		return fmt.Errorf("could not get recipient data: %w", err)
 	}
 
-	var feeRecipient bellatrix.ExecutionAddress
-	if !found {
-		c.logger.Debug("setting fee recipient to owner address",
-			fields.Validator(share.ValidatorPubKey[:]), fields.FeeRecipient(share.OwnerAddress.Bytes()))
-		copy(feeRecipient[:], share.OwnerAddress.Bytes())
-	} else {
-		c.logger.Debug("setting fee recipient to storage data",
-			fields.Validator(share.ValidatorPubKey[:]), fields.FeeRecipient(data.FeeRecipient[:]))
-		feeRecipient = data.FeeRecipient
+	if found {
+		c.logger.Debug(
+			"setting fee recipient to the value from recipient storage",
+			fields.Validator(share.ValidatorPubKey[:]),
+			fields.FeeRecipient(data.FeeRecipient[:]),
+		)
+		share.FeeRecipientAddress = data.FeeRecipient
+		return nil
 	}
-	share.SetFeeRecipient(feeRecipient)
+
+	c.logger.Debug(
+		"setting fee recipient to owner address",
+		fields.Validator(share.ValidatorPubKey[:]),
+		fields.FeeRecipient(share.OwnerAddress.Bytes()),
+	)
+	copy(share.FeeRecipientAddress[:], share.OwnerAddress.Bytes())
+	recipientData := &registrystorage.RecipientData{
+		Owner: share.OwnerAddress,
+	}
+	copy(recipientData.FeeRecipient[:], share.OwnerAddress.Bytes())
+	_, err = c.recipientsStorage.SaveRecipientData(nil, recipientData)
+	if err != nil {
+		return fmt.Errorf("save recipient data: %w", err)
+	}
 
 	return nil
 }
 
 func (c *controller) validatorStart(validator *validator.Validator) (bool, error) {
 	if c.validatorStartFunc == nil {
-		return validator.Start(c.logger)
+		return validator.Start()
 	}
 	return c.validatorStartFunc(validator)
 }
@@ -1175,6 +1139,8 @@ func SetupRunners(
 	logger *zap.Logger,
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
+	recipientsStorage Recipients,
+	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
@@ -1225,7 +1191,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, share.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, validatorRegistrationSubmitter, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		default:

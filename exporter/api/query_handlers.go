@@ -90,7 +90,7 @@ func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *
 	}
 	roleStorage := store.Get(role)
 	if roleStorage == nil {
-		h.logger.Warn("role storage doesn't exist", fields.ExporterRole(role))
+		h.logger.Warn("role storage doesn't exist", fields.BeaconRole(role))
 		res.Data = []string{"internal error - role storage doesn't exist", role.String()}
 		nm.Msg = res
 		return

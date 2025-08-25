@@ -10,9 +10,9 @@ import (
 type EventType int
 
 const (
-	// Timeout in order to run timeoutData process
+	// Timeout for processing QBFT timeouts.
 	Timeout EventType = iota
-	// ExecuteDuty for when to start duty runner
+	// ExecuteDuty for starting duty execution.
 	ExecuteDuty
 )
 

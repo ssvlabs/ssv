@@ -28,7 +28,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 
 	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
 	logger.Debug("📬 got prepare message",
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		zap.Any("prepare_signers", msg.SignedMessage.OperatorIDs),
 		fields.Root(proposedRoot))
 
@@ -46,7 +46,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 	i.metrics.EndStage(ctx, i.State.Round, stagePrepare)
 
 	logger.Debug("🎯 got prepare quorum",
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		zap.Any("prepare_signers", allSigners(i.State.PrepareContainer.MessagesForRound(i.State.Round))))
 
 	commitMsg, err := i.CreateCommit(proposedRoot)
@@ -55,7 +55,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 	}
 
 	logger.Debug("📢 broadcasting commit message",
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		zap.Any("commit_signers", commitMsg.OperatorIDs),
 		fields.Root(proposedRoot))
 

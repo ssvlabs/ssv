@@ -112,8 +112,6 @@ func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
 		return attribute.String(attrKey, "SSVConsensusMsgType")
 	case types.SSVPartialSignatureMsgType:
 		return attribute.String(attrKey, "SSVPartialSignatureMsgType")
-	case message.SSVSyncMsgType:
-		return attribute.String(attrKey, "SSVSyncMsgType")
 	case message.SSVEventMsgType:
 		return attribute.String(attrKey, "SSVEventMsgType")
 	default:

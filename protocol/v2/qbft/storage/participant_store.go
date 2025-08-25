@@ -2,7 +2,6 @@ package qbftstorage
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -22,16 +21,6 @@ type Participation struct {
 type StoredInstance struct {
 	State          *specqbft.State
 	DecidedMessage *spectypes.SignedSSVMessage
-}
-
-// Encode returns a StoredInstance encoded bytes or error.
-func (si *StoredInstance) Encode() ([]byte, error) {
-	return json.Marshal(si)
-}
-
-// Decode returns error if decoding failed.
-func (si *StoredInstance) Decode(data []byte) error {
-	return json.Unmarshal(data, &si)
 }
 
 type ParticipantsRangeEntry struct {

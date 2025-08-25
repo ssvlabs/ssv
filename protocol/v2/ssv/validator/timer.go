@@ -30,7 +30,7 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		dr := v.DutyRunners[identifier.GetRoleType()]
 		if dr == nil {
 			// runner can be nil: expired committee runners are removed, but timeout event can still be. in this case we should just skip it
-			logger.Warn("❗no duty runner found for role", fields.Role(identifier.GetRoleType()))
+			logger.Warn("❗no duty runner found for role", fields.RunnerRole(identifier.GetRoleType()))
 			return
 		}
 		hasDuty := dr.HasRunningDuty()
@@ -52,7 +52,7 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 
 		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.Role(identifier.GetRoleType()))
+				fields.RunnerRole(identifier.GetRoleType()))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}
@@ -117,7 +117,7 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 
 		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.Role(identifier.GetRoleType()))
+				fields.RunnerRole(identifier.GetRoleType()))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}

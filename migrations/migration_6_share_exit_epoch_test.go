@@ -136,7 +136,7 @@ func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*mig
 
 		seededShares = append(seededShares, share)
 
-		shareBytes, err := share.Encode()
+		shareBytes, err := share.MarshalSSZ()
 		if err != nil {
 			return nil, err
 		}

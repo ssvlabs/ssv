@@ -32,13 +32,20 @@ RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
-lint:
-	GOWORK=off $(RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -v ./...
-	@$(MAKE) ssvsigner-lint
+lint: golangci-lint deadcode-lint
 
-.PHONY: ssvsigner-lint
-ssvsigner-lint:
+.PHONY: golangci-lint
+golangci-lint:
+	GOWORK=off $(RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -v ./...
+	@$(MAKE) ssvsigner-golangci-lint
+
+.PHONY: ssvsigner-golangci-lint
+ssvsigner-golangci-lint:
 	cd ssvsigner && GOWORK=off $(SSVSIGNER_RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -c ../.golangci.yaml -v ./...
+
+.PHONY: deadcode-lint
+deadcode-lint:
+	./scripts/deadcode.sh
 
 .PHONY: full-test
 full-test:
@@ -107,6 +114,7 @@ docker-benchmark:
 	@docker run --rm ssv_tests make benchmark
 
 .PHONY: build
+.DEFAULT_GOAL := build # this makes `make` default to `make build`
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
 
@@ -177,6 +185,7 @@ tools:
 	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
 	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	$(GET_TOOL) golang.org/x/tools/cmd/deadcode
 	$(RUN_TOOL)
 
 .PHONY: format

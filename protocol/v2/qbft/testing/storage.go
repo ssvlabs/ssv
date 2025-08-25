@@ -39,6 +39,14 @@ var allRoles = []spectypes.BeaconRole{
 	spectypes.BNRoleVoluntaryExit,
 }
 
+func newStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectypes.BeaconRole) *qbftstorage.ParticipantStores {
+	stores := qbftstorage.NewStores()
+	for _, role := range roles {
+		stores.Add(role, qbftstorage.New(logger, db, role))
+	}
+	return stores
+}
+
 func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return qbftstorage.NewStoresFromRoles(logger, getDB(logger), allRoles...)
+	return newStoresFromRoles(logger, getDB(logger), allRoles...)
 }

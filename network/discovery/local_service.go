@@ -113,6 +113,9 @@ type discoveryNotifee struct {
 	handler HandleNewPeer
 }
 
+// discoveryNotifee implements mdnsDiscover.Notifee
+var _ mdnsDiscover.Notifee = &discoveryNotifee{}
+
 // HandlePeerFound connects to peers discovered via mDNS. Once they're connected,
 // the PubSub system will automatically start interacting with them if they also
 // support PubSub.
