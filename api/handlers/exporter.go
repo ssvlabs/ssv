@@ -306,7 +306,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	var errs *multierror.Error
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
-		duties, err := e.getCommitteeDutiesForSlot(slot, request.ParseCommitteeIds())
+		duties, err := e.getCommitteeDutiesForSlot(slot, request.parseCommitteeIds())
 		all = append(all, duties...)
 		errs = multierror.Append(errs, err)
 	}

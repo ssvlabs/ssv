@@ -197,7 +197,7 @@ type committeeRequest struct {
 	CommitteeIDs api.HexSlice `json:"committeeIDs"`
 }
 
-func (req *committeeRequest) ParseCommitteeIds() []spectypes.CommitteeID {
+func (req *committeeRequest) parseCommitteeIds() []spectypes.CommitteeID {
 	committeeIDs := make([]spectypes.CommitteeID, len(req.CommitteeIDs))
 	for i, cmt := range req.CommitteeIDs {
 		copy(committeeIDs[i][:], cmt)
