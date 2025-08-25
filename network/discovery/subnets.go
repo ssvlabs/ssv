@@ -35,20 +35,3 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
 
 	return val, nil
 }
-
-// isSubnet checks if the given string is a subnet string
-func isSubnet(ns string) bool {
-	r, done := regPool.Get()
-	defer done()
-	return r.MatchString(ns)
-}
-
-// HasActiveSubnets checks if there is at least one active subnet in the provided byte slice.
-func HasActiveSubnets(subnets []byte) bool {
-	for _, val := range subnets {
-		if val > 0 {
-			return true
-		}
-	}
-	return false
-}

@@ -12,7 +12,7 @@ import (
 )
 
 func TestProber(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	node := &node{}
 	node.healthy.Store(nil)
@@ -20,28 +20,25 @@ func TestProber(t *testing.T) {
 	prober := NewProber(zap.L(), nil, map[string]Node{"test node": node})
 	prober.interval = 10 * time.Millisecond
 
-	healthy, err := prober.Healthy(ctx)
-	require.NoError(t, err)
+	healthy := prober.healthy.Load()
 	require.False(t, healthy)
 
 	prober.Start(ctx)
 	prober.Wait()
 
-	healthy, err = prober.Healthy(ctx)
-	require.NoError(t, err)
+	healthy = prober.healthy.Load()
 	require.True(t, healthy)
 
 	notHealthy := fmt.Errorf("not healthy")
 	node.healthy.Store(&notHealthy)
 	time.Sleep(prober.interval * 2)
 
-	healthy, err = prober.Healthy(ctx)
-	require.NoError(t, err)
+	healthy = prober.healthy.Load()
 	require.False(t, healthy)
 }
 
 func TestProber_UnhealthyHandler(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	node := &node{}
 	node.healthy.Store(nil)
@@ -55,8 +52,7 @@ func TestProber_UnhealthyHandler(t *testing.T) {
 	prober.Start(ctx)
 	prober.Wait()
 
-	healthy, err := prober.Healthy(ctx)
-	require.NoError(t, err)
+	healthy := prober.healthy.Load()
 	require.True(t, healthy)
 
 	notHealthy := fmt.Errorf("not healthy")
@@ -65,8 +61,7 @@ func TestProber_UnhealthyHandler(t *testing.T) {
 	time.Sleep(prober.interval * 2)
 	require.True(t, unhealthyHandlerCalled.Load())
 
-	healthy, err = prober.Healthy(ctx)
-	require.NoError(t, err)
+	healthy = prober.healthy.Load()
 	require.False(t, healthy)
 }
 

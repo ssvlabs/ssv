@@ -16,18 +16,18 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -54,7 +54,7 @@ type taskExecutor interface {
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
+	UpdateFeeRecipient(owner, recipient ethcommon.Address, blockNumber uint64) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
@@ -66,11 +66,10 @@ type EventHandler struct {
 	nodeStorage         nodestorage.Storage
 	taskExecutor        taskExecutor
 	eventParser         eventparser.Parser
-	networkConfig       networkconfig.NetworkConfig
+	networkConfig       *networkconfig.Network
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorDecrypter   keys.OperatorDecrypter
 	keyManager          ekm.KeyManager
-	beacon              beaconprotocol.BeaconNode
 	doppelgangerHandler DoppelgangerProvider
 
 	fullNode bool
@@ -81,11 +80,10 @@ func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig *networkconfig.Network,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
-	beacon beaconprotocol.BeaconNode,
 	doppelgangerHandler DoppelgangerProvider,
 	opts ...Option,
 ) (*EventHandler, error) {
@@ -97,7 +95,6 @@ func New(
 		operatorDataStore:   operatorDataStore,
 		operatorDecrypter:   operatorDecrypter,
 		keyManager:          keyManager,
-		beacon:              beacon,
 		doppelgangerHandler: doppelgangerHandler,
 		logger:              zap.NewNop(),
 	}
@@ -125,7 +122,7 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		}
 		lastProcessedBlock = blockLogs.BlockNumber
 
-		observability.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
+		metrics.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
 
 		if !executeTasks || len(tasks) == 0 {
 			continue
@@ -145,7 +142,7 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		}
 	}
 
-	return
+	return lastProcessedBlock, nil
 }
 
 func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {
@@ -261,7 +258,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		share, err := eh.handleValidatorAdded(txn, validatorAddedEvent)
+		share, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 
@@ -291,7 +288,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		validatorPubKey, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
+		validatorPubKey, err := eh.handleValidatorRemoved(ctx, txn, validatorRemovedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 
@@ -402,7 +399,12 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
+		task := NewUpdateFeeRecipientTask(
+			eh.taskExecutor,
+			feeRecipientAddressUpdatedEvent.Owner,
+			feeRecipientAddressUpdatedEvent.RecipientAddress,
+			feeRecipientAddressUpdatedEvent.Raw.BlockNumber,
+		)
 		return task, nil
 
 	case ValidatorExited:
@@ -448,12 +450,12 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 	}
 }
 
-func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error {
+func (eh *EventHandler) HandleLocalEvents(ctx context.Context, localEvents []localevents.Event) error {
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	for _, event := range localEvents {
-		if err := eh.processLocalEvent(txn, event); err != nil {
+		if err := eh.processLocalEvent(ctx, txn, event); err != nil {
 			return fmt.Errorf("process local event: %w", err)
 		}
 	}
@@ -465,7 +467,7 @@ func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error
 	return nil
 }
 
-func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
+func (eh *EventHandler) processLocalEvent(ctx context.Context, txn basedb.Txn, event localevents.Event) error {
 	switch event.Name {
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)
@@ -481,13 +483,13 @@ func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Even
 		return nil
 	case ValidatorAdded:
 		data := event.Data.(contract.ContractValidatorAdded)
-		if _, err := eh.handleValidatorAdded(txn, &data); err != nil {
+		if _, err := eh.handleValidatorAdded(ctx, txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 		return nil
 	case ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
-		if _, err := eh.handleValidatorRemoved(txn, &data); err != nil {
+		if _, err := eh.handleValidatorRemoved(ctx, txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 		return nil

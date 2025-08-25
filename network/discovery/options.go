@@ -4,13 +4,14 @@ import (
 	"crypto/ecdsa"
 	"net"
 
-	"github.com/ethereum/go-ethereum/log"
+	ethlogger "github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/logging"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}
@@ -32,22 +33,10 @@ type DiscV5Options struct {
 	NetworkKey *ecdsa.PrivateKey
 	// Bootnodes is a list of bootstrapper nodes
 	Bootnodes []string
-	// Subnets is a bool slice represents all the subnets the node is interested in
-	Subnets []byte
+	// Subnets is a bitmask that represents all the subnets the node is interested in
+	Subnets commons.Subnets
 	// EnableLogging when true enables logs to be emitted
 	EnableLogging bool
-}
-
-// DefaultOptions returns the default options
-func DefaultOptions(privateKey *ecdsa.PrivateKey) DiscV5Options {
-	return DiscV5Options{
-		NetworkKey: privateKey,
-		Bootnodes:  make([]string, 0),
-		Port:       commons.DefaultUDP,
-		TCPPort:    commons.DefaultTCP,
-		IP:         commons.DefaultIP,
-		BindIP:     net.IPv4zero.String(),
-	}
 }
 
 // Validate validates the options
@@ -113,10 +102,10 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger, funcOpts ...func(config
 	}
 
 	if opts.EnableLogging {
-		zapLogger := logger.Named(logging.NameDiscoveryV5Logger)
+		zapLogger := logger.Named(log.NameDiscoveryV5Logger)
 		//TODO: this is a workaround for using slog without upgrade go to 1.21
 		zapHandler := compatible_logger.Option{Logger: zapLogger}.NewZapHandler()
-		newLogger := log.New(zapHandler)
+		newLogger := ethlogger.New(zapHandler)
 		dv5Cfg.Log = newLogger
 	}
 

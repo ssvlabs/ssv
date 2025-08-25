@@ -3,10 +3,11 @@ package localevents_test
 import (
 	"testing"
 
-	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/eth/localevents"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/localevents"
 )
 
 func TestLocalEventsUnmarshalYAML(t *testing.T) {

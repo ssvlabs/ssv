@@ -1,12 +1,9 @@
 name: Unit tests
 
+
 on:
-  push:
-    branches:
-      - "**"
-#  pull_request:
-#    branches:
-#      - "**"
+  pull_request:
+    types: [opened, synchronize]
 
   workflow_dispatch:
 
@@ -23,12 +20,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"
+          go-version: "1.24.x"
 
       - name: Run unit tests
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out,./ssvsigner/coverage.out
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

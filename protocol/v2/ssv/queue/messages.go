@@ -1,10 +1,10 @@
 package queue
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -14,10 +14,14 @@ import (
 
 var (
 	ErrUnknownMessageType = fmt.Errorf("unknown message type")
+	ErrUnknownEventType   = fmt.Errorf("unknown event type")
 )
 
-// DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
+// SSVMessage is a bundle of spectypes.SSVMessage and it's decoding.
 type SSVMessage struct {
+	// TraceContext is used to track message flow through the internal queue system,
+	// linking message producers and consumers to help with debugging and monitoring.
+	TraceContext     context.Context
 	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
@@ -29,19 +33,27 @@ func (d *SSVMessage) DecodedSSVMessage() {}
 
 func (d *SSVMessage) Slot() (phase0.Slot, error) {
 	switch m := d.Body.(type) {
-	case *specqbft.Message: // TODO: Or message.SSVDecidedMsgType?
+	case *specqbft.Message:
 		return phase0.Slot(m.Height), nil
 	case *spectypes.PartialSignatureMessages:
 		return m.Slot, nil
-	case *ssvtypes.EventMsg: // TODO: do we need slot in events?
-		if m.Type == ssvtypes.Timeout {
+	case *ssvtypes.EventMsg:
+		switch m.Type {
+		case ssvtypes.Timeout:
 			data, err := m.GetTimeoutData()
 			if err != nil {
-				return 0, ErrUnknownMessageType // TODO alan: other error
+				return 0, fmt.Errorf("get Timeout data: %w", err)
 			}
 			return phase0.Slot(data.Height), nil
+		case ssvtypes.ExecuteDuty:
+			data, err := m.GetExecuteDutyData()
+			if err != nil {
+				return 0, fmt.Errorf("get ExecuteDuty data: %w", err)
+			}
+			return data.Duty.Slot, nil
+		default:
+			return 0, ErrUnknownEventType
 		}
-		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
 	default:
 		return 0, ErrUnknownMessageType
 	}
@@ -73,7 +85,7 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*SSVMessage, error) {
 func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 	var body interface{}
 	switch m.MsgType {
-	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
+	case spectypes.SSVConsensusMsgType:
 		sm := &specqbft.Message{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, fmt.Errorf("failed to decode SignedMessage: %w", err)

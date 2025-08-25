@@ -23,6 +23,7 @@ import (
 type MockProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockProviderMockRecorder
+	isgomock struct{}
 }
 
 // MockProviderMockRecorder is the mock recorder for MockProvider.
@@ -56,18 +57,6 @@ func (mr *MockProviderMockRecorder) CanSign(validatorIndex any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CanSign", reflect.TypeOf((*MockProvider)(nil).CanSign), validatorIndex)
 }
 
-// ReportQuorum mocks base method.
-func (m *MockProvider) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReportQuorum", validatorIndex)
-}
-
-// ReportQuorum indicates an expected call of ReportQuorum.
-func (mr *MockProviderMockRecorder) ReportQuorum(validatorIndex any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportQuorum", reflect.TypeOf((*MockProvider)(nil).ReportQuorum), validatorIndex)
-}
-
 // RemoveValidatorState mocks base method.
 func (m *MockProvider) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	m.ctrl.T.Helper()
@@ -78,6 +67,18 @@ func (m *MockProvider) RemoveValidatorState(validatorIndex phase0.ValidatorIndex
 func (mr *MockProviderMockRecorder) RemoveValidatorState(validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveValidatorState", reflect.TypeOf((*MockProvider)(nil).RemoveValidatorState), validatorIndex)
+}
+
+// ReportQuorum mocks base method.
+func (m *MockProvider) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReportQuorum", validatorIndex)
+}
+
+// ReportQuorum indicates an expected call of ReportQuorum.
+func (mr *MockProviderMockRecorder) ReportQuorum(validatorIndex any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportQuorum", reflect.TypeOf((*MockProvider)(nil).ReportQuorum), validatorIndex)
 }
 
 // Start mocks base method.
@@ -98,6 +99,7 @@ func (mr *MockProviderMockRecorder) Start(ctx any) *gomock.Call {
 type MockValidatorProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorProviderMockRecorder
+	isgomock struct{}
 }
 
 // MockValidatorProviderMockRecorder is the mock recorder for MockValidatorProvider.
@@ -135,6 +137,7 @@ func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch a
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.

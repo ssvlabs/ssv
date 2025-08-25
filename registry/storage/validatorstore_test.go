@@ -4,6 +4,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"os"
@@ -16,10 +17,13 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/maps"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var share1 = &ssvtypes.SSVShare{
@@ -32,6 +36,7 @@ var share1 = &ssvtypes.SSVShare{
 		Graffiti:            []byte("example"),
 	},
 	ActivationEpoch: 100,
+	ExitEpoch:       goclient.FarFutureEpoch,
 	Status:          eth2apiv1.ValidatorStatePendingQueued,
 	OwnerAddress:    common.HexToAddress("0x12345"),
 	Liquidated:      false,
@@ -47,6 +52,7 @@ var share2 = &ssvtypes.SSVShare{
 		Graffiti:            []byte("test"),
 	},
 	ActivationEpoch: 200,
+	ExitEpoch:       goclient.FarFutureEpoch,
 	Status:          eth2apiv1.ValidatorStatePendingQueued,
 	OwnerAddress:    common.HexToAddress("0x67890"),
 	Liquidated:      false,
@@ -62,24 +68,17 @@ var updatedShare2 = &ssvtypes.SSVShare{
 		Graffiti:            []byte("test"),
 	},
 	ActivationEpoch: 200,
+	ExitEpoch:       goclient.FarFutureEpoch,
 	Status:          eth2apiv1.ValidatorStatePendingQueued,
 	OwnerAddress:    common.HexToAddress("0x67890"),
 	Liquidated:      true,
 }
 
+var networkConfig = networkconfig.TestNetwork
+
 func TestValidatorStore(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	selfStore := store.WithOperatorID(func() spectypes.OperatorID {
 		return share2.Committee[0].Signer
@@ -126,6 +125,18 @@ func TestValidatorStore(t *testing.T) {
 		s2, e = store.ValidatorByIndex(share2.ValidatorIndex)
 		require.True(t, e)
 		require.Equal(t, share2, s2)
+
+		validatorIndex, e := store.ValidatorIndex(share1.ValidatorPubKey)
+		require.True(t, e)
+		require.Equal(t, share1.ValidatorIndex, validatorIndex)
+
+		validatorIndex, e = store.ValidatorIndex(share2.ValidatorPubKey)
+		require.True(t, e)
+		require.Equal(t, share2.ValidatorIndex, validatorIndex)
+
+		var invalidPK spectypes.ValidatorPK
+		_, e = store.ValidatorIndex(invalidPK)
+		require.False(t, e)
 
 		require.Empty(t, store.ParticipatingValidators(99))
 		require.Len(t, store.ParticipatingValidators(101), 1)
@@ -288,7 +299,9 @@ func TestValidatorStore(t *testing.T) {
 	})
 
 	store.handleDrop()
-	shareMap = map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+	for key := range shareMap {
+		delete(shareMap, key)
+	}
 
 	t.Run("check drop", func(t *testing.T) {
 		require.Len(t, store.Validators(), 0)
@@ -301,17 +314,7 @@ func TestValidatorStore(t *testing.T) {
 // Additional test to ensure full state drop functionality is correct
 func TestValidatorStore_DropState(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
@@ -324,7 +327,9 @@ func TestValidatorStore_DropState(t *testing.T) {
 
 	// Perform drop
 	store.handleDrop()
-	shareMap = map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+	for key := range shareMap {
+		delete(shareMap, key)
+	}
 
 	t.Run("state after drop", func(t *testing.T) {
 		require.Len(t, store.Validators(), 0)
@@ -337,23 +342,12 @@ func TestValidatorStore_DropState(t *testing.T) {
 		s, e = store.Validator(share2.ValidatorPubKey[:])
 		require.False(t, e)
 		require.Nil(t, s)
-
 	})
 }
 
 func TestValidatorStore_Concurrency(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
@@ -392,17 +386,7 @@ func TestValidatorStore_Concurrency(t *testing.T) {
 
 func TestSelfValidatorStore_NilOperatorID(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	shareMap[share1.ValidatorPubKey] = share1
 	shareMap[share2.ValidatorPubKey] = share2
@@ -488,19 +472,10 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		store := newValidatorStore(
-			func() []*ssvtypes.SSVShare { return maps.Values(shares) },
-			func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-				share := shares[spectypes.ValidatorPK(pubKey)]
-				if share == nil {
-					return nil, false
-				}
-				return share, true
-			},
-		)
+		store := createValidatorStore(shares)
 		b.StartTimer()
 
-		keys := maps.Keys(shares)
+		keys := slices.Collect(maps.Keys(shares))
 		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
@@ -583,19 +558,10 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 
 	b.Logf("Total committees: %d", len(committees))
 
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shares) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shares[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
-	require.NoError(b, store.handleSharesAdded(maps.Values(shares)...))
+	store := createValidatorStore(shares)
+	require.NoError(b, store.handleSharesAdded(slices.Collect(maps.Values(shares))...))
 
-	pubKeys := maps.Keys(shares)
+	pubKeys := slices.Collect(maps.Keys(shares))
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -613,16 +579,7 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	// Attempt to remove a non-existing share
 	t.Run("remove non-existing share", func(t *testing.T) {
@@ -661,17 +618,7 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 
 func TestValidatorStore_EmptyStoreOperations(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	// Correctly sized pubKey array for testing
 	var pubKey spectypes.ValidatorPK
@@ -693,17 +640,7 @@ func TestValidatorStore_EmptyStoreOperations(t *testing.T) {
 
 func TestValidatorStore_AddDuplicateShares(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	shareMap[share1.ValidatorPubKey] = share1
 	require.NoError(t, store.handleSharesAdded(share1))
@@ -718,17 +655,7 @@ func TestValidatorStore_AddDuplicateShares(t *testing.T) {
 
 func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	t.Run("update non-existing share", func(t *testing.T) {
 		require.NotPanics(t, func() {
@@ -740,23 +667,12 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 		s, e := store.Validator(share1.ValidatorPubKey[:])
 		require.False(t, e)
 		require.Nil(t, s)
-
 	})
 }
 
 func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	t.Run("remove non-existing share", func(t *testing.T) {
 		require.NoError(t, store.handleSharesAdded(share1)) // Remove without adding
@@ -765,7 +681,6 @@ func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 		s, e := store.Validator(share1.ValidatorPubKey[:])
 		require.False(t, e)
 		require.Nil(t, s)
-
 	})
 }
 
@@ -782,21 +697,13 @@ func TestValidatorStore_HandlingDifferentStatuses(t *testing.T) {
 			Graffiti:            []byte("status_test"),
 		},
 		ActivationEpoch: 300,
+		ExitEpoch:       goclient.FarFutureEpoch,
 		Status:          eth2apiv1.ValidatorStateActiveOngoing,
 		OwnerAddress:    common.HexToAddress("0xabcde"),
 		Liquidated:      false,
 	}
 
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	shareMap[share3.ValidatorPubKey] = share3
 	require.NoError(t, store.handleSharesAdded(share3))
@@ -812,16 +719,7 @@ func TestValidatorStore_HandlingDifferentStatuses(t *testing.T) {
 
 func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	// Create a large number of shares
 	var bulkShares []*ssvtypes.SSVShare
@@ -836,6 +734,7 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 				Graffiti:            []byte("bulk_add"),
 			},
 			ActivationEpoch: phase0.Epoch(i),
+			ExitEpoch:       goclient.FarFutureEpoch,
 			Status:          eth2apiv1.ValidatorStatePendingQueued,
 			OwnerAddress:    common.HexToAddress(fmt.Sprintf("0x%x", i)),
 			Liquidated:      false,
@@ -867,16 +766,7 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 
 func TestValidatorStore_MixedOperations(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	// Initial adds
 	shareMap[share1.ValidatorPubKey] = share1
@@ -900,16 +790,7 @@ func TestValidatorStore_MixedOperations(t *testing.T) {
 
 func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	invalidCommitteeShare := &ssvtypes.SSVShare{
 		Share: spectypes.Share{
@@ -923,6 +804,7 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 			Graffiti:            []byte("invalid_committee"),
 		},
 		ActivationEpoch: 500,
+		ExitEpoch:       goclient.FarFutureEpoch,
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
 		OwnerAddress:    common.HexToAddress("0xdeadbeef"),
 		Liquidated:      false,
@@ -935,17 +817,7 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 
 func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	// Initial shares to add
 	shareMap[share1.ValidatorPubKey] = share1
@@ -976,16 +848,7 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
 
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(shareMap)
 
 	// Share without metadata
 	noMetadataShare := &ssvtypes.SSVShare{
@@ -1039,18 +902,7 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 }
 
 func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
-	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
-
-	store := newValidatorStore(
-		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			share := shareMap[spectypes.ValidatorPK(pubKey)]
-			if share == nil {
-				return nil, false
-			}
-			return share, true
-		},
-	)
+	store := createValidatorStore(map[spectypes.ValidatorPK]*ssvtypes.SSVShare{})
 
 	// Create a share
 	duplicateShare := &ssvtypes.SSVShare{
@@ -1063,6 +915,7 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 			Graffiti:            []byte("duplicate_test"),
 		},
 		ActivationEpoch: 100,
+		ExitEpoch:       goclient.FarFutureEpoch,
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
 		OwnerAddress:    common.HexToAddress("0x12345"),
 		Liquidated:      false,
@@ -1092,8 +945,8 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 		require.NotNil(t, committee, "committee should not be nil")
 
 		// Ensure no duplicates in committee validators
-		require.Len(t, committee.Validators, 1, "committee.Validators should not contain duplicate entries")
-		require.Contains(t, committee.Validators, duplicateShare, "committee.Validators should contain the added share")
+		require.Len(t, committee.Shares, 1, "committee.Validators should not contain duplicate entries")
+		require.Contains(t, committee.Shares, duplicateShare, "committee.Validators should contain the added share")
 	})
 }
 
@@ -1165,9 +1018,9 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	for cmtID, shares := range byCommittee {
 		cmt, exists := store.Committee(cmtID)
 		require.True(t, exists)
-		requireEqualShares(t, shares, cmt.Validators)
+		requireEqualShares(t, shares, cmt.Shares)
 
-		operatorIDs := maps.Keys(committeeOperators[cmtID])
+		operatorIDs := slices.Collect(maps.Keys(committeeOperators[cmtID]))
 		slices.Sort(operatorIDs)
 		require.Equal(t, operatorIDs, cmt.Operators, "committee %s has %d operators, but %d in store", cmtID, len(operatorIDs), len(cmt.Operators))
 	}
@@ -1204,20 +1057,20 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 
 			// Compare shares.
 			storeOperatorCommittee := storeOperatorCommittees[storeIndex]
-			requireEqualShares(t, byCommittee[committee], storeOperatorCommittee.Validators, "committee %v doesn't have expected shares", storeOperatorCommittee.Operators)
+			requireEqualShares(t, byCommittee[committee], storeOperatorCommittee.Shares, "committee %v doesn't have expected shares", storeOperatorCommittee.Operators)
 
 			// Compare operator IDs.
-			operatorIDs := maps.Keys(committeeOperators[committee])
+			operatorIDs := slices.Collect(maps.Keys(committeeOperators[committee]))
 			slices.Sort(operatorIDs)
 			require.Equal(t, operatorIDs, storeOperatorCommittee.Operators)
 
 			// Compare indices.
-			expectedIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))
-			for i, validator := range storeOperatorCommittee.Validators {
+			expectedIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Shares))
+			for i, validator := range storeOperatorCommittee.Shares {
 				expectedIndices[i] = validator.ValidatorIndex
 			}
 			slices.Sort(expectedIndices)
-			storeIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Validators))
+			storeIndices := make([]phase0.ValidatorIndex, len(storeOperatorCommittee.Shares))
 			copy(storeIndices, storeOperatorCommittee.Indices)
 			slices.Sort(storeIndices)
 			require.Equal(t, expectedIndices, storeIndices)
@@ -1229,7 +1082,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	var participatingValidators []*ssvtypes.SSVShare
 	var participatingCommittees = make(map[spectypes.CommitteeID]struct{})
 	for _, share := range shares {
-		if share.IsParticipating(epoch) {
+		if share.IsParticipating(networkConfig.Beacon, epoch) {
 			participatingValidators = append(participatingValidators, share)
 			participatingCommittees[share.CommitteeID()] = struct{}{}
 		}
@@ -1244,4 +1097,19 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 		_, ok := participatingCommittees[cmt.ID]
 		require.True(t, ok)
 	}
+}
+
+func createValidatorStore(shares map[spectypes.ValidatorPK]*ssvtypes.SSVShare) *validatorStore {
+	return newValidatorStore(
+		func() []*ssvtypes.SSVShare { return slices.Collect(maps.Values(shares)) },
+		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+			share := shares[spectypes.ValidatorPK(pubKey)]
+			if share == nil {
+				return nil, false
+			}
+			return share, true
+		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
+		networkConfig.Beacon,
+	)
 }

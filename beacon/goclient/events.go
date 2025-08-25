@@ -6,10 +6,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 type event interface {
@@ -54,7 +57,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		return nil
 	}
 
-	var strTopics []string
+	strTopics := make([]string, 0, len(gc.supportedTopics))
 	for _, topic := range gc.supportedTopics {
 		strTopics = append(strTopics, string(topic))
 	}
@@ -80,15 +83,21 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		originate from the same Beacon Node that provided the attestation data.
 	*/
 	logger.Info("subscribing to events")
+
+	opts := &api.EventsOpts{
+		Topics:  strTopics,
+		Handler: gc.eventHandler,
+	}
+
 	if gc.withWeightedAttestationData {
 		for _, client := range gc.clients {
-			if err := client.Events(ctx, strTopics, gc.eventHandler); err != nil {
+			if err := client.Events(ctx, opts); err != nil {
 				logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
 				return err
 			}
 		}
 	} else {
-		if err := gc.multiClient.Events(ctx, strTopics, gc.eventHandler); err != nil {
+		if err := gc.multiClient.Events(ctx, opts); err != nil {
 			logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
 			return err
 		}
@@ -105,55 +114,61 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 		return
 	}
 
+	logger := gc.log.With(zap.String("topic", e.Topic))
+	logger.Debug("event received")
+
+	if e.Data == nil {
+		logger.Warn("event data is nil")
+		return
+	}
+
 	switch EventTopic(e.Topic) {
 	case EventTopicHead:
-		logger := gc.log.
-			With(zap.String("topic", e.Topic))
-		logger.Debug("event received")
-
-		if e.Data == nil {
-			logger.Warn("event data is nil")
-			return
-		}
-
-		headEventData, ok := e.Data.(*apiv1.HeadEvent)
+		eventData, ok := e.Data.(*apiv1.HeadEvent)
 		if !ok {
 			logger.Warn("could not type assert")
 			return
 		}
 
-		gc.lastProcessedHeadEventSlotLock.Lock()
-		if headEventData.Slot <= gc.lastProcessedHeadEventSlot {
+		gc.lastProcessedEventSlotLock.Lock()
+		if eventData.Slot <= gc.lastProcessedEventSlot {
 			logger.
-				With(zap.Uint64("event_slot", uint64(headEventData.Slot))).
-				With(zap.Uint64("last_processed_slot", uint64(gc.lastProcessedHeadEventSlot))).
+				With(zap.Uint64("event_slot", uint64(eventData.Slot))).
+				With(zap.Uint64("last_processed_slot", uint64(gc.lastProcessedEventSlot))).
 				Debug("event slot is lower or equal than last processed slot")
-			gc.lastProcessedHeadEventSlotLock.Unlock()
+			gc.lastProcessedEventSlotLock.Unlock()
 			return
 		}
 
-		gc.lastProcessedHeadEventSlot = headEventData.Slot
-		gc.lastProcessedHeadEventSlotLock.Unlock()
-
-		cacheItem := gc.blockRootToSlotCache.Set(headEventData.Block, headEventData.Slot, ttlcache.NoTTL)
-		logger.
-			With(zap.Int64("cache_item_version", cacheItem.Version())).
-			With(fields.Slot(headEventData.Slot)).
-			With(fields.BlockRoot(headEventData.Block)).
-			Info("block root to slot cache updated")
+		gc.lastProcessedEventSlot = eventData.Slot
+		gc.lastProcessedEventSlotLock.Unlock()
 
 		gc.subscribersLock.RLock()
 		defer gc.subscribersLock.RUnlock()
-
 		for _, sub := range gc.headEventSubscribers {
 			logger = logger.With(zap.String("subscriber_identifier", sub.Identifier))
 
 			select {
-			case sub.Channel <- headEventData:
+			case sub.Channel <- eventData:
 				logger.Info("event broadcasted")
 			default:
 				logger.Warn("subscriber channel full, dropping the message")
 			}
+		}
+	case EventTopicBlock:
+		eventData, ok := e.Data.(*apiv1.BlockEvent)
+		if !ok {
+			logger.Warn("could not type assert")
+			return
+		}
+
+		noTTLOpt := ttlcache.WithTTL[phase0.Root, phase0.Slot](ttlcache.NoTTL)
+		_, exists := gc.blockRootToSlotCache.GetOrSet(eventData.Block, eventData.Slot, noTTLOpt)
+		if !exists {
+			logger.
+				With(fields.Slot(eventData.Slot)).
+				With(fields.BlockRoot(eventData.Block)).
+				Info("block root to slot cache updated")
 		}
 	default:
 		gc.log.

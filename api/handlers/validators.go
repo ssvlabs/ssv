@@ -8,6 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -161,6 +162,7 @@ type validatorJSON struct {
 	Index           phase0.ValidatorIndex  `json:"index"`
 	Status          string                 `json:"status"`
 	ActivationEpoch phase0.Epoch           `json:"activation_epoch"`
+	ExitEpoch       phase0.Epoch           `json:"exit_epoch"`
 	Owner           api.Hex                `json:"owner"`
 	Committee       []spectypes.OperatorID `json:"committee"`
 	Quorum          uint64                 `json:"quorum"`
@@ -187,6 +189,7 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 		v.Index = share.ValidatorIndex
 		v.Status = share.Status.String()
 		v.ActivationEpoch = share.ActivationEpoch
+		v.ExitEpoch = share.ExitEpoch
 	}
 	return v
 }

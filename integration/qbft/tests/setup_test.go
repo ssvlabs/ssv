@@ -6,14 +6,15 @@ import (
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/logging"
+
 	"github.com/ssvlabs/ssv/network"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/observability/log"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 const (
@@ -27,15 +28,9 @@ type SharedData struct {
 	Nodes map[spectypes.OperatorID]network.P2PNetwork
 }
 
-func GetSharedData(t *testing.T) SharedData { //singleton B-)
-	require.NotNil(t, sharedData, "shared data hadn't set up, try to run test with -test.main flag")
-
-	return *sharedData
-}
-
 func TestMain(m *testing.M) {
-	ctx := context.Background()
-	if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
+	ctx := context.TODO()
+	if err := log.SetGlobal("debug", "capital", "console", nil); err != nil {
 		panic(err)
 	}
 

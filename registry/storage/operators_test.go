@@ -1,32 +1,31 @@
 package storage_test
 
 import (
-	"bytes"
+	"encoding/base64"
+	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/ssvlabs/ssv/utils/blskeygen"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 func TestStorage_SaveAndGetOperatorData(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
 
-	_, pk := blskeygen.GenBLSKeyPair()
-
 	operatorData := storage.OperatorData{
-		PublicKey:    pk.Serialize(),
+		PublicKey:    base64.StdEncoding.EncodeToString([]byte("samplePublicKey")),
 		OwnerAddress: common.Address{},
 		ID:           1,
 	}
@@ -39,7 +38,7 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 	})
 
 	t.Run("get non-existing operator by public key", func(t *testing.T) {
-		nonExistingOperator, found, err := storageCollection.GetOperatorDataByPubKey(nil, []byte("dummyPK"))
+		nonExistingOperator, found, err := storageCollection.GetOperatorDataByPubKey(nil, "dummyPK")
 		require.NoError(t, err)
 		require.Nil(t, nonExistingOperator)
 		require.False(t, found)
@@ -52,24 +51,24 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, operatorData.ID, operatorDataFromDB.ID)
-		require.True(t, bytes.Equal(operatorData.PublicKey, operatorDataFromDB.PublicKey))
+		require.Equal(t, operatorData.PublicKey, operatorDataFromDB.PublicKey)
 		operatorDataFromDBCmp, found, err := storageCollection.GetOperatorDataByPubKey(nil, operatorData.PublicKey)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, operatorDataFromDB.ID, operatorDataFromDBCmp.ID)
-		require.True(t, bytes.Equal(operatorDataFromDB.PublicKey, operatorDataFromDBCmp.PublicKey))
+		require.Equal(t, operatorDataFromDB.PublicKey, operatorDataFromDBCmp.PublicKey)
 	})
 
 	t.Run("create existing operator", func(t *testing.T) {
 		od := storage.OperatorData{
-			PublicKey:    []byte("010101010101"),
+			PublicKey:    base64.StdEncoding.EncodeToString([]byte("010101010101")),
 			OwnerAddress: common.Address{},
 			ID:           1,
 		}
 		_, err := storageCollection.SaveOperatorData(nil, &od)
 		require.NoError(t, err)
 		odDup := storage.OperatorData{
-			PublicKey:    []byte("010101010101"),
+			PublicKey:    base64.StdEncoding.EncodeToString([]byte("010101010101")),
 			OwnerAddress: common.Address{},
 			ID:           1,
 		}
@@ -89,15 +88,15 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 	t.Run("create and get multiple operators", func(t *testing.T) {
 		ods := []storage.OperatorData{
 			{
-				PublicKey:    []byte("01010101"),
+				PublicKey:    base64.StdEncoding.EncodeToString([]byte("01010101")),
 				OwnerAddress: common.Address{},
 				ID:           10,
 			}, {
-				PublicKey:    []byte("02020202"),
+				PublicKey:    base64.StdEncoding.EncodeToString([]byte("02020202")),
 				OwnerAddress: common.Address{},
 				ID:           11,
 			}, {
-				PublicKey:    []byte("03030303"),
+				PublicKey:    base64.StdEncoding.EncodeToString([]byte("03030303")),
 				OwnerAddress: common.Address{},
 				ID:           12,
 			},
@@ -119,20 +118,19 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 }
 
 func TestStorage_ListOperators(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
 
 	n := 5
 	for i := 0; i < n; i++ {
-		pk, _, err := rsaencryption.GenerateKeys()
-		require.NoError(t, err)
+		randNum := rand.Int()
 		operator := storage.OperatorData{
-			PublicKey: pk,
+			PublicKey: base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("samplePublicKey%d", randNum))),
 			ID:        spectypes.OperatorID(i),
 		}
-		_, err = storageCollection.SaveOperatorData(nil, &operator)
+		_, err := storageCollection.SaveOperatorData(nil, &operator)
 		require.NoError(t, err)
 	}
 
@@ -150,7 +148,7 @@ func TestStorage_ListOperators(t *testing.T) {
 }
 
 func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storageCollection, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storageCollection)
 	defer done()
@@ -158,13 +156,12 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 	// prepare storage test fixture
 	n := 5
 	for i := 0; i < n; i++ {
-		pk, _, err := rsaencryption.GenerateKeys()
-		require.NoError(t, err)
+		randNum := rand.Int()
 		operator := storage.OperatorData{
-			PublicKey: pk,
+			PublicKey: base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("samplePublicKey%d", randNum))),
 			ID:        spectypes.OperatorID(i),
 		}
-		_, err = storageCollection.SaveOperatorData(nil, &operator)
+		_, err := storageCollection.SaveOperatorData(nil, &operator)
 		require.NoError(t, err)
 	}
 
@@ -190,7 +187,6 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 	})
-
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {

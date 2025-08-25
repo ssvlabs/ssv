@@ -1,23 +1,24 @@
 package validator
 
 import (
-	"context"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
-	return c.logger.Named("TaskExecutor").
+	return c.logger.Named(log.NameControllerTaskExecutor).
 		With(zap.String("task", taskName)).
 		With(fields...)
 }
@@ -61,8 +62,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	if startedValidators > 0 {
 		// Notify DutyScheduler about the changes in validator indices without blocking.
 		go func() {
-			ctx := context.Background() // TODO: pass context
-			if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
+			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
 			}
 		}()
@@ -74,7 +74,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	return errs
 }
 
-func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
+func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
 	logger := c.taskLogger("UpdateFeeRecipient",
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
@@ -82,8 +82,27 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
 			v.Share.FeeRecipientAddress = recipient
-
 			logger.Debug("updated recipient address")
+
+			pk := phase0.BLSPubKey{}
+			copy(pk[:], v.Share.ValidatorPubKey[:])
+			regDesc := duties.RegistrationDescriptor{
+				ValidatorIndex:  v.Share.ValidatorIndex,
+				ValidatorPubkey: pk,
+				FeeRecipient:    v.Share.FeeRecipientAddress[:],
+				BlockNumber:     blockNumber,
+			}
+
+			go func() {
+				select {
+				case <-c.ctx.Done():
+					logger.Debug("context is done - not gonna schedule validator registration")
+				case c.validatorRegistrationCh <- regDesc:
+					logger.Debug("added validator registration task to pipeline")
+				case <-time.After(2 * c.networkConfig.SlotDuration):
+					logger.Error("failed to schedule validator registration duty!")
+				}
+			}()
 		}
 		return true
 	})
@@ -109,8 +128,8 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		select {
 		case c.validatorExitCh <- exitDesc:
 			logger.Debug("added voluntary exit task to pipeline")
-		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
-			logger.Error("failed to schedule ExitValidator duty!")
+		case <-time.After(2 * c.networkConfig.SlotDuration):
+			logger.Error("failed to schedule voluntary exit duty!")
 		}
 	}()
 

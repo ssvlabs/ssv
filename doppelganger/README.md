@@ -1,6 +1,33 @@
 
 # Doppelganger Protection in `ssv.network`
 
+## 0. Quickstart: Enabling Doppelganger Protection
+Doppelganger (DG) protection is **disabled by default**.  
+To enable it in your SSV node, set the following environment variable:
+```bash
+ENABLE_DOPPELGANGER_PROTECTION=true
+```
+
+or enable it in your `config.yaml` file: 
+```yaml
+EnableDoppelgangerProtection: true
+```
+⚠️ Teku Users:
+To make Doppelganger protection work with Teku, you must also run your beacon node with:
+```bash
+--beacon-liveness-tracking-enabled=true
+```
+This flag is required for the SSV node to detect validator liveness via the Beacon Node.
+
+### ✅ What to Expect After Enabling
+
+ - The node will **wait ~3 epochs** to ensure each validator is not already active on the Ethereum network.
+ - If **no activity is detected**, the validator is marked **safe to sign**.
+ - Validators can also be marked safe **immediately** if a **post-consensus quorum** is reached by the validator's operator committee.
+
+🔁 On **node restart**, Doppelganger protection is **reset**, and the safety check process starts again.
+
+
 ## 1. Introduction to Doppelganger Protection
 Doppelganger (DG) protection is a security mechanism designed to **prevent a validator from accidentally running in two places at the same time.** This is critical in **Proof-of-Stake (PoS) networks** like Ethereum, where **double signing** can lead to **slashing penalties**.
 

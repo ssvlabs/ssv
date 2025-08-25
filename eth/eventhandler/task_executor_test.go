@@ -2,19 +2,21 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
-	"go.uber.org/mock/gomock"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
@@ -44,14 +46,14 @@ const rawValidatorAdded = `{
 
 func TestExecuteTask(t *testing.T) {
 	logger, _ := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	// Create operators rsa keys
 
 	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, nil, ops[0], true)
+	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], true)
 	require.NoError(t, err)
 
 	valPk := "b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"
@@ -92,8 +94,8 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
-		validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"), 1)
+		validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 		require.NoError(t, task.Execute())
 	})
@@ -102,21 +104,21 @@ func TestExecuteTask(t *testing.T) {
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Create operators rsa keys
 	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 		od := &storage.OperatorData{
-			PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+			PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
 			OwnerAddress: ethcommon.Address{},
 			ID:           id,
 		}
@@ -144,8 +146,9 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 
-	var observedLogsFlow []string
-	for _, entry := range observedLogs.All() {
+	logs := observedLogs.All()
+	observedLogsFlow := make([]string, 0, len(logs))
+	for _, entry := range logs {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{

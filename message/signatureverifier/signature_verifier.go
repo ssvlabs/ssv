@@ -6,12 +6,12 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/operator/keys"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=signatureverifier -destination=./mock.go -source=./signature_verifier.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=signatureverifier -destination=./mock.go -source=./signature_verifier.go
 
 type SignatureVerifier interface {
 	VerifySignature(operatorID spectypes.OperatorID, message *spectypes.SSVMessage, signature []byte) error
@@ -51,7 +51,7 @@ func (sv *signatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 			return fmt.Errorf("operator not found")
 		}
 
-		operatorPubKey, err = keys.PublicKeyFromString(string(operator.PublicKey))
+		operatorPubKey, err = keys.PublicKeyFromString(operator.PublicKey)
 		if err != nil {
 			return err
 		}

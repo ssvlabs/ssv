@@ -21,25 +21,26 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
 	"github.com/ssvlabs/ssv/doppelganger"
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 var (
@@ -52,13 +53,8 @@ var (
 func TestEventSyncer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	const testTimeout = 5 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
-
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
-	done := make(chan struct{})
-	defer close(done)
 
 	// Create sim instance with a delay between block execution
 	sim := simTestBackend(testAddr)
@@ -94,11 +90,11 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate operator key
-	opPubKey, _, err := rsaencryption.GenerateKeys()
+	opPubKey, _, err := rsaencryption.GenerateKeyPairPEM()
 	require.NoError(t, err)
 
 	pkstr := base64.StdEncoding.EncodeToString(opPubKey)
-	pckd, err := eventparser.PackOperatorPublicKey([]byte(pkstr))
+	pckd, err := eventparser.PackOperatorPublicKey(pkstr)
 	require.NoError(t, err)
 
 	// Generate test chain after a connection to the server.
@@ -130,8 +126,8 @@ func TestEventSyncer(t *testing.T) {
 		client,
 		eh,
 		WithLogger(logger),
-		WithStalenessThreshold(time.Second*10),
 	)
+	eventSyncer.stalenessThreshold = time.Second * 10
 
 	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
 	err = eventSyncer.Healthy(ctx)
@@ -147,7 +143,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	db *kv.BadgerDB,
+	db *kv.DB,
 	nodeStorage operatorstorage.Storage,
 	operatorData *registrystorage.OperatorData,
 	privateKey keys.OperatorPrivateKey,
@@ -155,15 +151,11 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig.Beacon, privateKey)
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
 		NetworkConfig:     testNetworkConfig,
@@ -171,7 +163,7 @@ func setupEventHandler(
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
 		ValidatorsMap:     validators.New(ctx),
-	})
+	}, exporter.Options{})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
@@ -188,7 +180,6 @@ func setupEventHandler(
 		operatorDataStore,
 		privateKey,
 		keyManager,
-		bc,
 		dgHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger))
@@ -208,14 +199,9 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
-	}
-
-	privKeyHash, err := privKey.StorageHash()
-	if err != nil {
-		logger.Fatal("failed to hash operator private key", zap.Error(err))
 	}
 
 	encodedPubKey, err := privKey.Public().Base64()
@@ -223,7 +209,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
+	if err := nodeStorage.SavePrivateKeyHash(privKey.StorageHash()); err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
 
@@ -248,7 +234,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 func TestBlockBelowThreshold(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := NewMockExecutionClient(ctrl)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	s := New(nil, m, nil)
 

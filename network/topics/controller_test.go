@@ -18,29 +18,31 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 // TODO: fix this test to run post-fork
 func TestTopicManager(t *testing.T) {
 	// TODO: reduce running time of this test, use channels instead of long timeouts
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	// TODO: rework this test to use message validation
 	t.Run("happy flow", func(t *testing.T) {
@@ -55,7 +57,7 @@ func TestTopicManager(t *testing.T) {
 			"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 			"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		validator := &DummyMessageValidator{}
@@ -74,17 +76,23 @@ func TestTopicManager(t *testing.T) {
 			"a5abb232568fc869765da01688387738153f3ad6cc4e635ab282c5d5cfce2bba2351f03367103090804c5243dc8e229b",
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		ctrl := gomock.NewController(t)
 
 		dutyStore := dutystore.New()
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
+		operators := mocks.NewMockOperators(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
-		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier, phase0.Epoch(0))
-
+		validator := validation.New(
+			networkconfig.TestNetwork,
+			validatorStore,
+			operators,
+			dutyStore,
+			signatureVerifier,
+			phase0.Epoch(0))
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
 
@@ -112,14 +120,14 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 	// listen to topics
 	for _, cid := range cids {
 		for _, p := range peers {
-			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
+			require.NoError(t, p.tm.Subscribe(committeeTopic(cid)))
 			// simulate concurrency, by trying to subscribe multiple times
 			go func(tm topics.Controller, cid string) {
-				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
+				require.NoError(t, tm.Subscribe(committeeTopic(cid)))
 			}(p.tm, cid)
 			go func(tm topics.Controller, cid string) {
 				<-time.After(100 * time.Millisecond)
-				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
+				require.NoError(t, tm.Subscribe(committeeTopic(cid)))
 			}(p.tm, cid)
 		}
 	}
@@ -184,13 +192,13 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				topic := committeeTopic(cid)
 				topicFullName := commons.GetTopicFullName(topic)
 
-				err := p.tm.Unsubscribe(logger, topic, false)
+				err := p.tm.Unsubscribe(topic, false)
 				require.NoError(t, err)
 
 				go func(p *P) {
 					<-time.After(time.Millisecond)
 
-					err := p.tm.Unsubscribe(logger, topic, false)
+					err := p.tm.Unsubscribe(topic, false)
 					require.ErrorContains(t, err, fmt.Sprintf("failed to unsubscribe from topic %s: not subscribed", topicFullName))
 				}(p)
 
@@ -199,7 +207,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 					defer wg.Done()
 					<-time.After(time.Millisecond * 50)
 
-					err := p.tm.Unsubscribe(logger, topic, false)
+					err := p.tm.Unsubscribe(topic, false)
 					require.ErrorContains(t, err, fmt.Sprintf("failed to unsubscribe from topic %s: not subscribed", topicFullName))
 				}(p)
 			}(p, cids[i])
@@ -213,7 +221,7 @@ func banningTest(t *testing.T, logger *zap.Logger, peers []*P, cids []string, sc
 
 	for _, cid := range cids {
 		for _, p := range peers {
-			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
+			require.NoError(t, p.tm.Subscribe(committeeTopic(cid)))
 		}
 	}
 
@@ -378,7 +386,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler topics.MsgIDHandler
 	if msgID {
-		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = topics.NewMsgIDHandler(ctx, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &topics.PubSubConfig{
@@ -392,7 +400,6 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		Scoring: &topics.ScoringConfig{
 			IPWhitelist:        nil,
 			IPColocationWeight: 0,
-			OneEpochDuration:   time.Minute,
 		},
 		MsgValidator:           msgValidator,
 		ScoreInspector:         scoreInspector,
@@ -402,7 +409,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +429,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			atomic.AddUint64(&p.connsCount, 1)
 		},
 	})
-	require.NoError(t, ds.Bootstrap(logger, func(e discovery.PeerEvent) {
+	require.NoError(t, ds.Bootstrap(func(e discovery.PeerEvent) {
 		_ = h.Connect(ctx, e.AddrInfo)
 	}))
 

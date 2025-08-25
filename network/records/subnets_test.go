@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 func Test_SubnetsEntry(t *testing.T) {
-	SubnetsCount := 128
 	priv, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	require.NoError(t, err)
 	sk, err := commons.ECDSAPrivFromInterface(priv)
@@ -20,12 +20,12 @@ func Test_SubnetsEntry(t *testing.T) {
 	node, err := CreateLocalNode(sk, "", ip, commons.DefaultUDP, commons.DefaultTCP)
 	require.NoError(t, err)
 
-	subnets := make([]byte, SubnetsCount)
-	for i := 0; i < SubnetsCount; i++ {
+	subnets := commons.Subnets{}
+	for i := uint64(0); i < commons.SubnetsCount; i++ {
 		if i%4 == 0 {
-			subnets[i] = 1
+			subnets.Set(i)
 		} else {
-			subnets[i] = 0
+			subnets.Clear(i)
 		}
 	}
 	require.NoError(t, SetSubnetsEntry(node, subnets))
@@ -33,12 +33,12 @@ func Test_SubnetsEntry(t *testing.T) {
 
 	subnetsFromEnr, err := GetSubnetsEntry(node.Node().Record())
 	require.NoError(t, err)
-	require.Len(t, subnetsFromEnr, SubnetsCount)
-	for i := 0; i < SubnetsCount; i++ {
+
+	for i := uint64(0); i < commons.SubnetsCount; i++ {
 		if i%4 == 0 {
-			require.Equal(t, byte(1), subnetsFromEnr[i])
+			require.True(t, subnetsFromEnr.IsSet(i))
 		} else {
-			require.Equal(t, byte(0), subnetsFromEnr[i])
+			require.False(t, subnetsFromEnr.IsSet(i))
 		}
 	}
 }

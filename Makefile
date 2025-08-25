@@ -26,26 +26,32 @@ COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
 	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
-UNFORMATTED=$(shell gofmt -l .)
 
-#Lint
-.PHONY: lint-prepare
-lint-prepare:
-	@echo "Preparing Linter"
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
+GET_TOOL=go get -modfile=tool.mod -tool
+RUN_TOOL=go tool -modfile=tool.mod
+SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
-lint:
-	./bin/golangci-lint run -v ./...
-	@if [ ! -z "${UNFORMATTED}" ]; then \
-		echo "Some files requires formatting, please run 'go fmt ./...'"; \
-		exit 1; \
-	fi
+lint: golangci-lint deadcode-lint
+
+.PHONY: golangci-lint
+golangci-lint:
+	GOWORK=off $(RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -v ./...
+	@$(MAKE) ssvsigner-golangci-lint
+
+.PHONY: ssvsigner-golangci-lint
+ssvsigner-golangci-lint:
+	cd ssvsigner && GOWORK=off $(SSVSIGNER_RUN_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint run -c ../.golangci.yaml -v ./...
+
+.PHONY: deadcode-lint
+deadcode-lint:
+	./scripts/deadcode.sh
 
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
 
 .PHONY: integration-test
 integration-test:
@@ -56,6 +62,12 @@ integration-test:
 unit-test:
 	@echo "Running unit tests"
 	@go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+	@$(MAKE) ssvsigner-test
+
+.PHONY: ssvsigner-test
+ssvsigner-test:
+	@echo "Running ssv-signer unit tests"
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "ssvsigner/e2e"`
 
 .PHONY: spec-test
 spec-test:
@@ -72,14 +84,17 @@ spec-test-raceless:
 	@echo "Running spec tests without race flag"
 	@go test -tags blst_enabled -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
 
-#Test
+.PHONY: benchmark
+benchmark:
+	@echo "Running benchmark for specified directory"
+	@go test -run=^# -bench . -benchmem -v TARGET_DIR_PATH -count 3
+
 .PHONY: docker-spec-test
 docker-spec-test:
 	@echo "Running spec tests in docker"
 	@docker build -t ssv_tests -f tests.Dockerfile .
 	@docker run --rm ssv_tests make spec-test
 
-#Test
 .PHONY: docker-unit-test
 docker-unit-test:
 	@echo "Running unit tests in docker"
@@ -92,8 +107,14 @@ docker-integration-test:
 	@docker build -t ssv_tests -f tests.Dockerfile .
 	@docker run --rm ssv_tests make integration-test
 
-#Build
+.PHONY: docker-benchmark
+docker-benchmark:
+	@echo "Running benchmark in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make benchmark
+
 .PHONY: build
+.DEFAULT_GOAL := build # this makes `make` default to `make build`
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
 
@@ -157,15 +178,24 @@ mock:
 generate:
 	go generate ./...
 
-.PHONY: mockgen-install
-mockgen-install:
-	go install go.uber.org/mock/mockgen@v0.4.0
-	@which mockgen || echo "Error: ensure `go env GOPATH` is added to PATH"
+.PHONY: tools
+tools:
+	$(GET_TOOL) golang.org/x/tools/cmd/goimports
+	$(GET_TOOL) go.uber.org/mock/mockgen
+	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
+	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
+	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	$(GET_TOOL) golang.org/x/tools/cmd/deadcode
+	$(RUN_TOOL)
 
 .PHONY: format
 format:
-# both format commands must ignore generated files which are named *mock* or enr_fork_id_encoding.go
-# the argument to gopls format can be a list of files
-	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 1 sh -c 'gopls -v format -w $0'
-# the argument to gopls imports must be a single file so this entire command takes a few mintues to run
-	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 10 -I{} sh -c 'gopls -v imports -w "{}"'
+	# `goimports` doesn't support simplify option ("-s"), hence we run `gofmt` separately
+	# just for that - see https://github.com/golang/go/issues/21476 for details.
+	gofmt -s -w $$(find . -name '*.go' -not -path "*mock*")
+	# Formatters such as goimports do not deem necessary to "skip" generated code and
+	# rather want generators to generate code that complies with the desired formats
+	# (see https://github.com/golang/go/issues/71676 for details). In practice however
+	# it's not always possible to fix that on the generator side, so we have to use a
+	# work-around here to filter out generated files on our own.
+	$(RUN_TOOL) goimports -l -w -local github.com/ssvlabs/ssv/ $$(find . -name '*.go' -not -path "*mock*")

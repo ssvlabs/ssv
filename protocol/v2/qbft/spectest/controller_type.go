@@ -16,21 +16,22 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	//temporary to override state comparisons from file not inputted one
 	overrideStateComparisonForControllerSpecTest(t, test)
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	contr := generateController(logger)
 
 	if test.StartHeight != nil {
@@ -119,7 +120,6 @@ func testBroadcastedDecided(
 		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
 		found := false
 		for _, msg := range broadcastedSignedMsgs {
-
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
 			msgID := spectypes.MessageID{}
 			copy(msgID[:], identifier)

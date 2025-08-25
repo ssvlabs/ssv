@@ -2,8 +2,8 @@ package storage
 
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -16,14 +16,6 @@ func NewStores() *ParticipantStores {
 	return &ParticipantStores{
 		m: hashmap.New[spectypes.BeaconRole, qbftstorage.ParticipantStore](),
 	}
-}
-
-func NewStoresFromRoles(db basedb.Database, roles ...spectypes.BeaconRole) *ParticipantStores {
-	stores := NewStores()
-	for _, role := range roles {
-		stores.Add(role, New(db, role))
-	}
-	return stores
 }
 
 // Get store from sync map by role type

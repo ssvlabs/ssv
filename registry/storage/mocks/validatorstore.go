@@ -23,6 +23,7 @@ import (
 type MockBaseValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockBaseValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockBaseValidatorStoreMockRecorder is the mock recorder for MockBaseValidatorStore.
@@ -157,6 +158,21 @@ func (mr *MockBaseValidatorStoreMockRecorder) ValidatorByIndex(index any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorByIndex", reflect.TypeOf((*MockBaseValidatorStore)(nil).ValidatorByIndex), index)
 }
 
+// ValidatorIndex mocks base method.
+func (m *MockBaseValidatorStore) ValidatorIndex(pubKey types.ValidatorPK) (phase0.ValidatorIndex, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorIndex", pubKey)
+	ret0, _ := ret[0].(phase0.ValidatorIndex)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorIndex indicates an expected call of ValidatorIndex.
+func (mr *MockBaseValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockBaseValidatorStore)(nil).ValidatorIndex), pubKey)
+}
+
 // Validators mocks base method.
 func (m *MockBaseValidatorStore) Validators() []*types0.SSVShare {
 	m.ctrl.T.Helper()
@@ -175,6 +191,7 @@ func (mr *MockBaseValidatorStoreMockRecorder) Validators() *gomock.Call {
 type MockValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockValidatorStoreMockRecorder is the mock recorder for MockValidatorStore.
@@ -309,6 +326,21 @@ func (mr *MockValidatorStoreMockRecorder) ValidatorByIndex(index any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorByIndex", reflect.TypeOf((*MockValidatorStore)(nil).ValidatorByIndex), index)
 }
 
+// ValidatorIndex mocks base method.
+func (m *MockValidatorStore) ValidatorIndex(pubKey types.ValidatorPK) (phase0.ValidatorIndex, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorIndex", pubKey)
+	ret0, _ := ret[0].(phase0.ValidatorIndex)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorIndex indicates an expected call of ValidatorIndex.
+func (mr *MockValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockValidatorStore)(nil).ValidatorIndex), pubKey)
+}
+
 // Validators mocks base method.
 func (m *MockValidatorStore) Validators() []*types0.SSVShare {
 	m.ctrl.T.Helper()
@@ -341,6 +373,7 @@ func (mr *MockValidatorStoreMockRecorder) WithOperatorID(operatorID any) *gomock
 type MockSelfValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockSelfValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockSelfValidatorStoreMockRecorder is the mock recorder for MockSelfValidatorStore.
@@ -529,6 +562,21 @@ func (m *MockSelfValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (
 func (mr *MockSelfValidatorStoreMockRecorder) ValidatorByIndex(index any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorByIndex", reflect.TypeOf((*MockSelfValidatorStore)(nil).ValidatorByIndex), index)
+}
+
+// ValidatorIndex mocks base method.
+func (m *MockSelfValidatorStore) ValidatorIndex(pubKey types.ValidatorPK) (phase0.ValidatorIndex, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorIndex", pubKey)
+	ret0, _ := ret[0].(phase0.ValidatorIndex)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorIndex indicates an expected call of ValidatorIndex.
+func (mr *MockSelfValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockSelfValidatorStore)(nil).ValidatorIndex), pubKey)
 }
 
 // Validators mocks base method.

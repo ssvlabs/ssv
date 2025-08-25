@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
+
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var mockState = &State{
@@ -23,8 +24,14 @@ var mockState = &State{
 	Quorum:             4,
 }
 
+// newDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
+// with a capacity of 32 and a PusherDropping.
+func newDefault() Queue {
+	return New(32)
+}
+
 func TestPriorityQueue_TryPop(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
@@ -48,7 +55,7 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 }
 
 func TestPriorityQueue_Filter(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
@@ -97,7 +104,7 @@ func TestPriorityQueue_Filter(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 
 	const (
@@ -127,7 +134,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 
 	// Should pop nil after context cancellation.
 	{
-		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+		ctx, cancel := context.WithTimeout(t.Context(), contextTimeout)
 		defer cancel()
 		expectedEnd := time.Now().Add(contextTimeout)
 		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState), FilterAny)
@@ -158,7 +165,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 	for _, test := range messagePriorityTests {
 		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
 			// Create the PriorityQueue and populate it with messages.
-			q := NewDefault()
+			q := newDefault()
 
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
@@ -185,7 +192,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -210,7 +217,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 		matchHeight2 := func(msg *SSVMessage) bool {
 			return msg.Body.(*qbft.Message).Height == 2
 		}
-		popped := queue.Pop(context.Background(), NewMessagePrioritizer(state), matchHeight2)
+		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), matchHeight2)
 		require.Equal(t, expectedMsg, popped)
 	}()
 
@@ -221,7 +228,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
-	queue := NewDefault()
+	queue := newDefault()
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -238,7 +245,7 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 	// Pop in a separate goroutine. The first two pops should get the matching messages, and the third should return nil.
 	go func() {
 		defer wg.Done()
-		popped := queue.Pop(context.Background(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
+		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
 			_, ok := msg.Body.(*qbft.Message)
 			if !ok {
 				return true
@@ -246,7 +253,6 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 			return msg.Body.(*qbft.Message).MsgType != qbft.CommitMsgType
 		})
 		require.NotNil(t, popped)
-
 	}()
 
 	// Simulate delay before pushing messages.
@@ -274,7 +280,7 @@ func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 }
 
 func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
-	benchmarkPriorityQueueParallel(b, NewDefault, true)
+	benchmarkPriorityQueueParallel(b, newDefault, true)
 }
 
 func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bool) {
@@ -350,7 +356,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		// Pop all messages.
 		var poppersWg sync.WaitGroup
 		popped := make(chan *SSVMessage, messageCount*2)
-		poppingCtx, stopPopping := context.WithCancel(context.Background())
+		poppingCtx, stopPopping := context.WithCancel(b.Context())
 		for i := 0; i < poppers; i++ {
 			poppersWg.Add(1)
 			go func() {
@@ -408,7 +414,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
-	queue := NewDefault()
+	queue := newDefault()
 
 	messageCount := 10_000
 	types := []qbft.MessageType{qbft.PrepareMsgType, qbft.CommitMsgType, qbft.RoundChangeMsgType}
@@ -442,7 +448,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 		}()
 	}
 
-	pushersCtx, cancel := context.WithCancel(context.Background())
+	pushersCtx, cancel := context.WithCancel(b.Context())
 	go func() {
 		pushersWg.Wait()
 		cancel()

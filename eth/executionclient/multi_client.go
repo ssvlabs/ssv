@@ -2,13 +2,13 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 var _ Provider = &MultiClient{}
@@ -102,6 +103,8 @@ func NewMulti(
 		opt(multiClient)
 	}
 
+	multiClient.logger.Info("execution client: connecting (multi client)", fields.Addresses(nodeAddrs))
+
 	var connected bool
 
 	var multiErr error
@@ -160,6 +163,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
 	)
 	if err != nil {
+		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
 		return fmt.Errorf("create single client: %w", err)
 	}
 
@@ -168,6 +172,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		logger.Error("failed to get chain ID",
 			zap.String("address", mc.nodeAddrs[clientIndex]),
 			zap.Error(err))
+		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
 		return fmt.Errorf("get chain ID: %w", err)
 	}
 
@@ -178,9 +183,12 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 			zap.String("address", mc.nodeAddrs[clientIndex]),
 			zap.Error(err),
 		)
+		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
+		return err
 	}
 
 	mc.clients[clientIndex] = singleClient
+	recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], true)
 	return nil
 }
 
@@ -249,27 +257,30 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					mc.logger.Fatal("no healthy clients", zap.Error(err))
 				}
 
+				// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
 				f := func(client SingleClientProvider) (any, error) {
-					lastBlock, err := client.streamLogsToChan(ctx, logs, fromBlock)
-					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-						return lastBlock, err
-					}
-					if err != nil {
-						// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
-						fromBlock = max(fromBlock, lastBlock+1)
+					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
+					if isInterruptedError(err) {
 						return nil, err
 					}
 
-					return nil, nil
+					fromBlock = nextBlockToProcess
+					return nil, err
 				}
 
 				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
-				if err != nil && !errors.Is(err, ErrClosed) && !errors.Is(err, context.Canceled) {
-					// NOTE: There are unit tests that trigger Fatal and override its behavior.
-					// Therefore, the code must call `return` afterward.
-					mc.logger.Fatal("failed to stream registry events", zap.Error(err))
+				if err == nil {
+					return
 				}
-				return
+
+				if isInterruptedError(err) {
+					mc.logger.Debug("stream logs stopped", zap.Error(err))
+					return
+				}
+
+				// NOTE: There are unit tests that trigger Fatal and override its behavior.
+				// Therefore, the code must call `return` afterward.
+				mc.logger.Fatal("failed to stream logs", zap.Error(err))
 			}
 		}
 	}()
@@ -277,17 +288,17 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 	return logs
 }
 
-// Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
+// Healthy returns whether execution client is currently healthy: responds to requests and not in the syncing state.
 func (mc *MultiClient) Healthy(ctx context.Context) error {
 	if time.Since(time.Unix(mc.lastHealthy.Load(), 0)) < mc.healthInvalidationInterval {
 		return nil
 	}
 
 	healthyClients := atomic.Bool{}
+	healthyCount := atomic.Int64{}
 	p := pool.New().WithErrors().WithContext(ctx)
 
 	for i := range mc.clients {
-		i := i
 		p.Go(func(ctx context.Context) error {
 			client, err := mc.getClient(ctx, i)
 			if err != nil {
@@ -306,29 +317,22 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 				return err
 			}
 			healthyClients.Store(true)
+			healthyCount.Add(1)
 
 			return nil
 		})
 	}
 	err := p.Wait()
+
+	// Record the current count of healthy clients and all clients count.
+	recordHealthyClientsCount(ctx, healthyCount.Load())
+	recordAllClientsCount(ctx, int64(len(mc.clients)))
+
 	if healthyClients.Load() {
 		mc.lastHealthy.Store(time.Now().Unix())
 		return nil
 	}
 	return fmt.Errorf("no healthy clients: %w", err)
-}
-
-// BlockByNumber retrieves a block by its number.
-func (mc *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	f := func(client SingleClientProvider) (any, error) {
-		return client.BlockByNumber(ctx, blockNumber)
-	}
-	res, err := mc.call(contextWithMethod(ctx, "BlockByNumber"), f, len(mc.clients))
-	if err != nil {
-		return nil, err
-	}
-
-	return res.(*ethtypes.Block), nil
 }
 
 // HeaderByNumber retrieves a block header by its number.
@@ -407,8 +411,14 @@ func (mc *MultiClient) Close() error {
 // and it's possible that clients go up and down several times, therefore there should be no limit.
 // It must be called with maxTries != 0 from other methods to return an error if all nodes are down.
 func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error), maxTries int) (any, error) {
+	method := methodFromContext(ctx)
+	startTime := time.Now()
+
 	if len(mc.clients) == 1 {
-		return f(mc.clients[0]) // no need for mutex because one client is always non-nil
+		client := mc.clients[0] // no need for mutex because one client is always non-nil
+		result, err := f(client)
+		recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[0], time.Since(startTime), err)
+		return result, err
 	}
 
 	// Iterate over the clients in round-robin fashion,
@@ -426,14 +436,17 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.String("addr", mc.nodeAddrs[clientIndex]),
 				zap.Error(err))
 
-			allErrs = errors.Join(allErrs, err)
+			if maxTries != 0 {
+				allErrs = errors.Join(allErrs, err)
+			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
+			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
 			continue
 		}
 
 		logger := mc.logger.With(
 			zap.String("addr", mc.nodeAddrs[clientIndex]),
-			zap.String("method", methodFromContext(ctx)))
+			zap.String("method", method))
 
 		// Make sure this client is healthy. This shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
@@ -442,32 +455,42 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
-			allErrs = errors.Join(allErrs, err)
+			if maxTries != 0 {
+				allErrs = errors.Join(allErrs, err)
+			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
+			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
 			continue
 		}
 
 		v, err := f(client)
-		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-			logger.Debug("received graceful closure from client", zap.Error(err))
+		if isInterruptedError(err) {
+			logger.Debug("call was interrupted", zap.Error(err))
+			recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[clientIndex], time.Since(startTime), err)
 			return v, err
 		}
-
 		if err != nil {
 			logger.Error("call failed, switching to the next client",
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
-			allErrs = errors.Join(allErrs, err)
+			if maxTries != 0 {
+				allErrs = errors.Join(allErrs, err)
+			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
+			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
 			continue
 		}
 
 		// Update currentClientIndex to the successful client.
 		mc.currentClientIndex.Store(int64(clientIndex))
+		recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[clientIndex], time.Since(startTime), nil)
 		return v, nil
 	}
 
+	// Record the failure with the last attempted client
+	lastClientIndex := (startingIndex + maxTries - 1) % len(mc.clients)
+	recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[lastClientIndex], time.Since(startTime), allErrs)
 	return nil, fmt.Errorf("all clients failed: %w", allErrs)
 }
 

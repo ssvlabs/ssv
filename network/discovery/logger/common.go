@@ -1,11 +1,10 @@
 package compatible_logger
 
 import (
+	"log/slog"
 	"reflect"
 	"runtime"
 	"slices"
-
-	"golang.org/x/exp/slog"
 )
 
 func AppendRecordAttrsToAttrs(attrs []slog.Attr, groups []string, record *slog.Record) []slog.Attr {
@@ -57,7 +56,7 @@ func FormatError(err error) map[string]any {
 	return map[string]any{
 		"kind":  reflect.TypeOf(err).String(),
 		"error": err.Error(),
-		"stack": nil, // @TODO
+		"stack": nil,
 	}
 }
 

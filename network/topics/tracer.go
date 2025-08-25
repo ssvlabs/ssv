@@ -3,12 +3,12 @@ package topics
 import (
 	"encoding/hex"
 
-	"github.com/ssvlabs/ssv/logging"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // psTracer helps to trace pubsub events
@@ -19,7 +19,7 @@ type psTracer struct {
 
 // newTracer creates an instance of psTracer
 func newTracer(logger *zap.Logger) pubsub.EventTracer {
-	return &psTracer{logger: logger.Named(logging.NamePubsubTrace)}
+	return &psTracer{logger: logger.Named(log.NamePubsubTrace)}
 }
 
 // Trace handles events, implementation of pubsub.EventTracer

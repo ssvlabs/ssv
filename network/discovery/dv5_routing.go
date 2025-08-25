@@ -7,9 +7,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // implementing discovery.Discovery
@@ -17,7 +18,7 @@ import (
 // Advertise advertises a service
 // implementation of discovery.Advertiser
 func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...discovery.Option) (time.Duration, error) {
-	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
+	logger := log.FromContext(ctx).Named(log.NameDiscoveryService)
 	opts := discovery.Options{}
 	if err := opts.Apply(opt...); err != nil {
 		return 0, errors.Wrap(err, "could not apply options")
@@ -31,12 +32,12 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 		return opts.Ttl, nil
 	}
 
-	updated, err := dvs.RegisterSubnets(logger, subnet)
+	updated, err := dvs.RegisterSubnets(subnet)
 	if err != nil {
 		return 0, err
 	}
 	if updated {
-		go dvs.PublishENR(logger)
+		go dvs.PublishENR()
 	}
 
 	return opts.Ttl, nil
@@ -44,7 +45,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 
 // FindPeers discovers peers providing a service implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
-	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
+	logger := log.FromContext(ctx).Named(log.NameDiscoveryService)
 	subnet, err := dvs.nsToSubnet(ns)
 	if err != nil {
 		logger.Debug("not a subnet", fields.Topic(ns), zap.Error(err))
@@ -54,7 +55,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 
 	dvs.discover(ctx, func(e PeerEvent) {
 		cn <- e.AddrInfo
-	}, time.Millisecond, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger), dvs.subnetFilter(subnet), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
+	}, time.Millisecond, dvs.ssvNodeFilter(), dvs.badNodeFilter(), dvs.subnetFilter(subnet), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
 
 	return cn, nil
 }
