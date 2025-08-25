@@ -146,7 +146,7 @@ func baseCommitValidationIgnoreSignature(
 		return errors.New("commit msg type is wrong")
 	}
 	if msg.QBFTMessage.Height != height {
-		return errors.New("wrong msg height")
+		return ErrWrongMsgHeight
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(operators) {
@@ -183,7 +183,7 @@ func (i *Instance) validateCommit(msg *specqbft.ProcessingMessage) error {
 	}
 
 	if msg.QBFTMessage.Round != i.State.Round {
-		return errors.New("wrong msg round")
+		return NewRetryableError(ErrWrongMsgRound)
 	}
 
 	if !bytes.Equal(i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {

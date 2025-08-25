@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -14,7 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -54,6 +55,8 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 			observability.DutyIDAttribute(dutyID)))
 	defer span.End()
 
+	logger = logger.With(fields.Slot(slot), fields.DutyID(dutyID))
+
 	msg.TraceContext = ctx
 
 	// Retrieve or create the queue for the given slot.
@@ -61,7 +64,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	q, ok := c.Queues[slot]
 	if !ok {
 		q = QueueContainer{
-			Q: queue.New(1000), // TODO alan: get queue opts from options
+			Q: queue.New(logger, 1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             specqbft.Height(slot),
@@ -71,7 +74,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		}
 		c.Queues[slot] = q
 		const eventMsg = "missing queue for slot created"
-		logger.Debug(eventMsg, fields.Slot(slot))
+		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 	}
 	c.mtx.Unlock()
@@ -79,9 +82,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	span.AddEvent("pushing message to the queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
-		logger.Warn(errMsg,
-			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msg.MsgID.String()))
+		logger.Warn(errMsg)
 		span.SetStatus(codes.Error, errMsg)
 		return
 	}
@@ -104,14 +105,12 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 		return fmt.Errorf("no runner found for slot %d", duty.Slot)
 	}
 
-	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
-
+	// queueCtx enforces a deadline for queue consumer to terminate and clean up resources at some point
+	// in the future (when this queue becomes no longer relevant)
+	queueCtx, cancelF := context.WithDeadline(ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 	go func() {
 		defer cancelF()
-		if err := c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r); err != nil {
-			logger.Error("❗failed consuming committee queue", zap.Error(err))
-		}
+		c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r)
 	}()
 
 	return nil
@@ -125,11 +124,20 @@ func (c *Committee) ConsumeQueue(
 	logger *zap.Logger,
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,
-) error {
+) {
+	logger.Debug("📬 queue consumer is running")
+	defer logger.Debug("📪 queue consumer is closed")
+
 	state := *q.queueState
 
-	logger.Debug("📬 queue consumer is running")
-	lens := make([]int, 0, 10)
+	// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
+	// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
+	// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
+	msgRetries := ttlcache.New(
+		ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
+	)
+	go msgRetries.Start()
+	defer msgRetries.Stop()
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
@@ -169,55 +177,66 @@ func (c *Committee) ConsumeQueue(
 		// TODO: (Alan) bring back filter
 		msg := q.Q.Pop(ctx, queue.NewCommitteeQueuePrioritizer(&state), filter)
 		if ctx.Err() != nil {
-			break
+			// Optimization: terminate fast if we can.
+			return
 		}
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
-			break
-		}
-		lens = append(lens, q.Q.Len())
-		if len(lens) >= 10 {
-			logger.Debug("📬 [TEMPORARY] queue statistics",
-				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-				zap.Ints("past_10_lengths", lens))
-			lens = lens[:0]
+			return
 		}
 
-		// Handle the message.
-		if err := handler(ctx, msg); err != nil {
-			c.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.MsgType),
-				zap.Error(err))
-			if errors.Is(err, runner.ErrNoValidDuties) {
-				// Stop the queue consumer if the runner no longer has any valid duties.
-				break
+		// Handle the message, potentially scheduling a message-replay for later.
+		err := handler(ctx, msg)
+		if err != nil {
+			// We'll re-queue the message to be replayed later in case the error we got is retryable.
+			// We are aiming to cover most of the slot time (~12s), but we don't need to cover all 12s
+			// since most duties must finish well before that anyway, and will take additional time
+			// to execute as well.
+			// Retry delay should be small so we can proceed with the corresponding duty execution asap.
+			const (
+				retryDelay = 25 * time.Millisecond
+				retryCount = 40
+			)
+			msgRetryItem := msgRetries.Get(c.messageID(msg))
+			if msgRetryItem == nil {
+				msgRetries.Set(c.messageID(msg), 0, ttlcache.DefaultTTL)
+				msgRetryItem = msgRetries.Get(c.messageID(msg))
+			}
+			msgRetryCnt := msgRetryItem.Value()
+
+			logger = loggerWithMessageFields(logger, msg).
+				With(zap.String("message_identifier", string(c.messageID(msg)))).
+				With(zap.Int("attempt", msgRetryCnt+1))
+
+			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
+			switch {
+			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
+				logger.Error(couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
+			case errors.Is(err, &runner.RetryableError{}) && msgRetryCnt < retryCount:
+				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
+				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+				go func(msg *queue.SSVMessage) {
+					time.Sleep(retryDelay)
+					if pushed := q.Q.TryPush(msg); !pushed {
+						logger.Warn("❗ not gonna replay message because the queue is full",
+							zap.String("message_identifier", string(c.messageID(msg))),
+							fields.MessageType(msg.MsgType),
+						)
+					}
+				}(msg)
+			default:
+				logger.Error(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+			}
+
+			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
+				// Optimization: stop queue consumer if the runner no longer has any valid duties to execute.
+				return
 			}
 		}
 	}
-
-	logger.Debug("📪 queue consumer is closed")
-	return nil
 }
 
-func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
-	baseFields := []zap.Field{}
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		sm := msg.Body.(*specqbft.Message)
-		baseFields = []zap.Field{
-			zap.Uint64("msg_height", uint64(sm.Height)),
-			zap.Uint64("msg_round", uint64(sm.Round)),
-			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
-			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
-		}
-	}
-	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
-		signer := psm.Messages[0].Signer
-		baseFields = []zap.Field{
-			zap.Uint64("signer", signer),
-			fields.Slot(psm.Slot),
-		}
-	}
-	logger.Debug(logMsg, append(baseFields, withFields...)...)
+// messageID is a wrapper that provides a logger to report errors (if any).
+func (c *Committee) messageID(msg *queue.SSVMessage) msgIDType {
+	return messageID(msg, c.logger)
 }
