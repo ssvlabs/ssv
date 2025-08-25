@@ -75,7 +75,9 @@ func TestEncryptKeystore(t *testing.T) {
 		require.Equal(t, testPubKeyBase64, jsonData["pubkey"])
 		require.Nil(t, jsonData["pubKey"])
 
-		decrtypted, err := DecryptKeystore(data, testPassword)
+		decrypted, err := DecryptKeystore(data, testPassword)
+		require.NoError(t, err)
+		require.Equal(t, privkey, decrypted)
 		require.NoError(t, err)
 		require.Equal(t, privkey, decrtypted)
 	})
@@ -94,7 +96,9 @@ func TestEncryptKeystore(t *testing.T) {
 		require.Equal(t, testPubKeyBase64, jsonData["pubKey"])
 		require.Nil(t, jsonData["pubkey"])
 
-		decrtypted, err := DecryptKeystore(data, testPassword)
+		decrypted, err := DecryptKeystore(data, testPassword)
+		require.NoError(t, err)
+		require.Equal(t, privkey, decrypted)
 		require.NoError(t, err)
 		require.Equal(t, privkey, decrtypted)
 	})
