@@ -57,7 +57,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 
 			encryptedJSON, encryptedJSONErr := keystore.EncryptKeystore(privKey.Bytes(), pubKeyBase64, string(passwordBytes), legacyPubkey)
 			if encryptedJSONErr != nil {
-				logger.Fatal("Failed to encrypt private key", zap.Error(err))
+				logger.Fatal("Failed to encrypt private key", zap.Error(encryptedJSONErr))
 			}
 
 			err = writeFile("encrypted_private_key.json", encryptedJSON)
