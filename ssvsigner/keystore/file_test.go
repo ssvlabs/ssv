@@ -78,8 +78,6 @@ func TestEncryptKeystore(t *testing.T) {
 		decrypted, err := DecryptKeystore(data, testPassword)
 		require.NoError(t, err)
 		require.Equal(t, privkey, decrypted)
-		require.NoError(t, err)
-		require.Equal(t, privkey, decrypted)
 	})
 
 	t.Run("with valid data (legacy format)", func(t *testing.T) {
@@ -97,8 +95,6 @@ func TestEncryptKeystore(t *testing.T) {
 		require.Nil(t, jsonData["pubkey"])
 
 		decrypted, err := DecryptKeystore(data, testPassword)
-		require.NoError(t, err)
-		require.Equal(t, privkey, decrypted)
 		require.NoError(t, err)
 		require.Equal(t, privkey, decrypted)
 	})
