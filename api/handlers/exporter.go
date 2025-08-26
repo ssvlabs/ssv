@@ -212,11 +212,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 
 	// if we don't have a single valid participant, return an error
 	if len(participants) == 0 && errs.ErrorOrNil() != nil {
-		// if we only have one error, unwrap it
-		if len(errs.Errors) == 1 {
-			return api.Error(errs.Errors[0])
-		}
-		return api.Error(errs)
+		return toApiError(errs)
 	}
 
 	// otherwise return a partial response with valid participants
@@ -280,10 +276,10 @@ func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []sp
 	for _, cmtID := range committeeIDs {
 		duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID)
 		if err != nil {
-			e.logger.Debug("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
 			// if error is not found, nothing to report as we might not have a duty for this role
 			// otherwise report it:
 			if !isNotFoundError(err) {
+				e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
 				errs = multierror.Append(errs, err)
 			}
 			continue
@@ -391,8 +387,7 @@ func (e *Exporter) extractPubKeys(request *validatorRequest) ([]spectypes.Valida
 
 func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, validatorPks []spectypes.ValidatorPK) ([]*dutytracer.ValidatorDutyTrace, error) {
 	if len(validatorPks) == 0 {
-		duties, err := e.traceStore.GetValidatorDuties(role, slot)
-		return duties, err
+		return e.traceStore.GetValidatorDuties(role, slot)
 	}
 
 	duties := make([]*dutytracer.ValidatorDutyTrace, 0, len(validatorPks))
@@ -401,10 +396,10 @@ func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, s
 	for _, pubkey := range validatorPks {
 		duty, err := e.traceStore.GetValidatorDuty(role, slot, pubkey)
 		if err != nil {
-			e.logger.Debug("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
 			// if error is not found, nothing to report as we might not have a duty for this role
 			// otherwise report it:
 			if !isNotFoundError(err) {
+				e.logger.Error("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
 				errs = multierror.Append(errs, err)
 			}
 			continue
@@ -428,10 +423,10 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 
 		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
 		if err != nil {
-			e.logger.Debug("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.PubKey(pubkey[:]))
 			// if error is not found, nothing to report as we might not have a duty for this role
 			// otherwise report it:
 			if !isNotFoundError(err) {
+				e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.PubKey(pubkey[:]))
 				errs = multierror.Append(errs, err)
 			}
 			continue
@@ -487,10 +482,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	if len(results) == 0 && errs.ErrorOrNil() != nil {
-		if len(errs.Errors) == 1 {
-			return api.Error(errs.Errors[0])
-		}
-		return api.Error(errs)
+		return toApiError(errs)
 	}
 	return api.Render(w, r, toValidatorTraceResponse(results, errs))
 }
@@ -511,4 +503,11 @@ func toValidatorTraceResponse(duties []*dutytracer.ValidatorDutyTrace, errs *mul
 		r.Errors = toStrings(errs.Errors)
 	}
 	return r
+}
+
+func toApiError(errs *multierror.Error) *api.ErrorResponse {
+	if len(errs.Errors) == 1 {
+		return api.Error(errs.Errors[0])
+	}
+	return api.Error(errs)
 }
