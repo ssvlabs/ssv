@@ -53,15 +53,10 @@ full-test:
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
 	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
 
-.PHONY: integration-test
-integration-test:
-	@echo "Running integration tests"
-	@go test -tags blst_enabled -count=1 -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
-
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+	@go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
 	@$(MAKE) ssvsigner-test
 
 .PHONY: ssvsigner-test
@@ -100,12 +95,6 @@ docker-unit-test:
 	@echo "Running unit tests in docker"
 	@docker build -t ssv_tests -f tests.Dockerfile .
 	@docker run --rm ssv_tests make unit-test
-
-.PHONY: docker-integration-test
-docker-integration-test:
-	@echo "Running integration tests in docker"
-	@docker build -t ssv_tests -f tests.Dockerfile .
-	@docker run --rm ssv_tests make integration-test
 
 .PHONY: docker-benchmark
 docker-benchmark:
