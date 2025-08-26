@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/doppelganger"
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
@@ -20,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -129,7 +129,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -142,7 +142,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -162,7 +162,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -177,7 +177,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -185,7 +185,7 @@ var ConstructBaseRunner = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
-		beaconNode := tests.NewTestingBeaconNodeWrapped()
+		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -202,7 +202,7 @@ var ConstructBaseRunner = func(
 		r, err = runner.NewVoluntaryExitRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -212,7 +212,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -392,7 +392,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -405,7 +405,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -425,7 +425,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -440,7 +440,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -448,7 +448,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
-		beaconNode := tests.NewTestingBeaconNodeWrapped()
+		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -465,7 +465,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		r, err = runner.NewVoluntaryExitRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -475,7 +475,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,

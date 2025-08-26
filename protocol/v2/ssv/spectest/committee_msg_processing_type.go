@@ -18,7 +18,6 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -60,7 +59,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	broadcastedRoots := make([]phase0.Root, 0)
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
 		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
 	}
