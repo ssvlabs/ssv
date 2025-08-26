@@ -148,7 +148,7 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 
 	// Testing: adding an artificial delay to trigger the "past round" error.
 	if rand.Int()%10 == 0 {
-		time.Sleep(2 * time.Second)
+		time.Sleep(6 * time.Second)
 	}
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
