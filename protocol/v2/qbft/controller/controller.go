@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -153,6 +155,12 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	// save the highest Decided
 	if !decided {
 		return nil, nil
+	}
+
+	// Testing: adding an artificial delay to trigger the "past round" error.
+	// ~1% of messages will be delayed
+	if rand.Int()%100 == 0 {
+		time.Sleep(2 * time.Second)
 	}
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
