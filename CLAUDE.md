@@ -25,9 +25,6 @@ make full-test
 # Run unit tests only (fast, for development)
 make unit-test
 
-# Run integration tests
-make integration-test
-
 # Run spec tests (protocol compliance)
 make spec-test
 
@@ -124,7 +121,6 @@ make docker-debug
 
 ### Testing Approach
 - Unit tests for individual components
-- Integration tests for cross-component flows
 - Spec tests validate protocol compliance
 - Use mocks via `go.uber.org/mock`
 
