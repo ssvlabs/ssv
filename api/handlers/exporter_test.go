@@ -135,7 +135,7 @@ func TestTransformToParticipantResponse(t *testing.T) {
 		Signers: []uint64{1, 2, 3, 4},
 	}
 	role := spectypes.BNRoleAttester
-	resp := transformToParticipantResponse(role, entry)
+	resp := toParticipantResponse(role, entry)
 
 	assert.Equal(t, role.String(), resp.Role)
 	assert.Equal(t, uint64(123), resp.Slot)
@@ -174,9 +174,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 3)
@@ -218,9 +216,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				// expect only entries for the filtered pubkey.
@@ -289,9 +285,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2)
@@ -324,7 +318,7 @@ func TestExporterDecideds(t *testing.T) {
 				}
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				require.Contains(t, resp.Message, "invalid pubkey length at index 0")
+				require.Contains(t, resp.Message, "invalid pubkey length: 1234")
 			},
 		},
 	}
@@ -622,9 +616,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, "PROPOSER", resp.Data[0].Role)
@@ -658,9 +650,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, "ATTESTER", resp.Data[0].Role)
@@ -688,9 +679,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
 			},
@@ -715,9 +705,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
 			},
@@ -728,17 +717,18 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"from":    100,
 				"to":      200,
 				"roles":   []string{"PROPOSER"},
-				"pubkeys": api.HexSlice{api.Hex("0x123")}, // malformed hex - too short for a pubkey
+				"pubkeys": api.HexSlice{api.Hex(common.Hex2Bytes("0123"))}, // malformed hex - too short for a pubkey
 			},
 			setupMock:      func(store *mockTraceStore) {},
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
 				var resp struct {
 					Status  string `json:"status"`
 					Message string `json:"error"`
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Contains(t, resp.Message, "invalid pubkey length: 0x123")
+				assert.Contains(t, resp.Message, "invalid pubkey length: 0123")
 			},
 		}, {
 			name: "invalid request - invalid range",
@@ -746,7 +736,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"from":    100,
 				"to":      99,
 				"roles":   []string{"PROPOSER"},
-				"pubkeys": api.HexSlice{api.Hex("0x123")},
+				"pubkeys": api.HexSlice{api.Hex(common.Hex2Bytes("0123"))},
 			},
 			setupMock:      func(store *mockTraceStore) {},
 			expectedStatus: http.StatusBadRequest,
@@ -800,9 +790,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 6) // 2 validators * 2 roles + 1 committee * 2 roles
 
@@ -863,9 +852,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2) // 1 validator * 2 roles + 1 committee * 1 role
 
@@ -900,9 +888,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Should return empty array when error occurs
 			},
@@ -922,9 +909,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Should return empty array when error occurs
 			},
@@ -944,9 +930,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Should return empty array when error occurs
 			},
@@ -965,9 +950,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Should return empty array when error occurs
 			},
@@ -987,9 +971,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Should return empty array when error occurs
 			},
@@ -1074,9 +1057,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 			},
@@ -1105,9 +1087,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 			},
@@ -1135,9 +1116,8 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*ParticipantResponse `json:"data"`
-				}
+				var resp decidedResponse
+
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 			},
@@ -1318,7 +1298,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			request: map[string]any{
 				"from":         100,
 				"to":           200,
-				"committeeIDs": api.HexSlice{api.Hex("0x123")},
+				"committeeIDs": api.HexSlice{api.Hex(common.Hex2Bytes("0123"))},
 			},
 			expectedStatus: http.StatusBadRequest,
 			validateErrResp: func(t *testing.T, err error) {
@@ -1498,9 +1478,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*validatorTrace `json:"data"`
-				}
+				var resp validatorTraceResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
@@ -1548,9 +1526,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Data []*validatorTrace `json:"data"`
-				}
+				var resp validatorTraceResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2)
 				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
@@ -1597,7 +1573,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 					Message string `json:"error"`
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, "validator not found: 1", resp.Message)
+				assert.Equal(t, "validator not found, index: 1", resp.Message)
 			},
 		},
 		{

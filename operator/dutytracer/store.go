@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -45,12 +46,12 @@ type DutyTraceStore interface {
 func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
 	index, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
-		return spectypes.CommitteeID{}, 0, fmt.Errorf("validator not found")
+		return spectypes.CommitteeID{}, 0, fmt.Errorf("get committee ID (slot=%d pubkey=%x): validator not found", slot, pubkey)
 	}
 
 	committeeID, err := c.getCommitteeIDBySlotAndIndex(slot, index)
 	if err != nil {
-		return spectypes.CommitteeID{}, 0, fmt.Errorf("get committee ID: %w", err)
+		return spectypes.CommitteeID{}, 0, err
 	}
 
 	return committeeID, index, nil
@@ -58,6 +59,7 @@ func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 
 func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
 	duties := []*ValidatorDutyTrace{}
+	var errs *multierror.Error
 
 	// lookup in cache
 	c.validatorTraces.Range(func(pubkey spectypes.ValidatorPK, validatorSlots *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
@@ -81,34 +83,32 @@ func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Sl
 
 	// go to disk for the older ones
 	storeDuties, err := c.getValidatorDutiesFromDisk(role, slot)
-	if err != nil {
-		return nil, err
-	}
+	duties = append(duties, storeDuties...)
+	errs = multierror.Append(errs, err)
 
-	return append(duties, storeDuties...), nil
+	return duties, errs.ErrorOrNil()
 }
 
 func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*ValidatorDutyTrace, error) {
-	storeDuties, err := c.store.GetValidatorDuties(role, slot)
-	if err != nil {
-		return nil, fmt.Errorf("get validator duties from disk: %w", err)
-	}
-
 	duties := []*ValidatorDutyTrace{}
+	var errs *multierror.Error
+
+	storeDuties, err := c.store.GetValidatorDuties(role, slot)
+	errs = multierror.Append(errs, err)
 
 	for _, duty := range storeDuties {
 		share, found := c.validators.ValidatorByIndex(duty.Validator)
 		if !found {
 			c.logger.Error("validator not found by index", fields.ValidatorIndex(duty.Validator))
-			return nil, fmt.Errorf("error retrieving validator by index: %v", duty.Validator)
+			errs = multierror.Append(errs, fmt.Errorf("unable to retrieve validator by index: %d in validator store", duty.Validator))
+		} else {
+			duties = append(duties, &ValidatorDutyTrace{
+				ValidatorDutyTrace: *deepCopyValidatorDutyTrace(duty),
+				pubkey:             share.ValidatorPubKey,
+			})
 		}
-
-		duties = append(duties, &ValidatorDutyTrace{
-			ValidatorDutyTrace: *deepCopyValidatorDutyTrace(duty),
-			pubkey:             share.ValidatorPubKey,
-		})
 	}
-	return duties, nil
+	return duties, errs.ErrorOrNil()
 }
 
 func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
@@ -141,12 +141,12 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 func (c *Collector) getValidatorDutyFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	vIndex, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
-		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
+		return nil, fmt.Errorf("get validator duty from disk (role=%s slot=%d pubkey=%x): validator not found", role, slot, pubkey)
 	}
 
 	trace, err := c.store.GetValidatorDuty(slot, role, vIndex)
 	if err != nil {
-		return nil, fmt.Errorf("get validator duty from disk: %w", err)
+		return nil, fmt.Errorf("get validator duty from disk (role=%s slot=%d pubkey=%x index=%d): %w", role, slot, pubkey, vIndex, err)
 	}
 
 	return &ValidatorDutyTrace{
@@ -155,24 +155,21 @@ func (c *Collector) getValidatorDutyFromDisk(role spectypes.BeaconRole, slot pha
 	}, nil
 }
 
-func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.BeaconRole) (duties []*model.CommitteeDutyTrace, err error) {
+func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.BeaconRole) ([]*model.CommitteeDutyTrace, error) {
+	var duties []*model.CommitteeDutyTrace
+	var errs *multierror.Error
+
 	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		dt, found := committeeSlots.Get(wantSlot)
-		if !found {
-			return true
+		if found {
+			duties = append(duties, dt.trace())
 		}
-
-		duties = append(duties, dt.trace())
-
-		return true
+		return true // keep iterating
 	})
 
 	diskDuties, err := c.store.GetCommitteeDuties(wantSlot)
-	if err != nil {
-		return nil, fmt.Errorf("get committee duties from disk: %w", err)
-	}
-
 	duties = append(duties, diskDuties...)
+	errs = multierror.Append(errs, err)
 
 	var filteredDuties []*model.CommitteeDutyTrace
 	for _, duty := range duties {
@@ -181,7 +178,7 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 		}
 	}
 
-	return filteredDuties, nil
+	return filteredDuties, errs.ErrorOrNil()
 }
 
 func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, roles ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error) {
@@ -189,7 +186,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 	if !found {
 		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
 		if err != nil {
-			return nil, fmt.Errorf("get committee duty from disk: %w", err)
+			return nil, err
 		}
 
 		if hasSignersForRoles(trace, roles...) {
@@ -203,7 +200,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 	if !found {
 		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
 		if err != nil {
-			return nil, fmt.Errorf("get committee duty from disk: %w", err)
+			return nil, err
 		}
 
 		if hasSignersForRoles(trace, roles...) {
@@ -246,30 +243,35 @@ func hasSignersForRoles(duty *model.CommitteeDutyTrace, roles ...spectypes.Beaco
 }
 
 func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
+	ctx := fmt.Sprintf("slot=%d committeeID=%x", slot, committeeID)
 	trace, err := c.store.GetCommitteeDuty(slot, committeeID)
 	if err != nil {
-		return nil, fmt.Errorf("get committee duty from disk: %w", err)
+		return nil, fmt.Errorf("get committee duty from disk (%s): %w", ctx, err)
 	}
 
 	return trace, nil
 }
 
-func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	var errs *multierror.Error
+
 	duties, err := c.GetCommitteeDuties(slot, roles...)
-	if err != nil {
-		return nil, fmt.Errorf("get committee duties: %w", err)
+	errs = multierror.Append(errs, err)
+	if len(duties) == 0 {
+		return nil, errs.ErrorOrNil()
 	}
 
+	out := make([]qbftstorage.ParticipantsRangeEntry, 0, len(duties))
+
 	links, err := c.GetCommitteeDutyLinks(slot)
-	if err != nil {
-		return nil, fmt.Errorf("get committee duty links: %w", err)
-	}
+	errs = multierror.Append(errs, err)
 
 	mapping := make(map[spectypes.CommitteeID]spectypes.ValidatorPK)
 	for _, link := range links {
 		share, found := c.validators.ValidatorByIndex(link.ValidatorIndex)
 		if !found {
 			c.logger.Error("validator not found", fields.ValidatorIndex(link.ValidatorIndex))
+			errs = multierror.Append(errs, fmt.Errorf("validator not found by index: %d in validator store", link.ValidatorIndex))
 			continue
 		}
 		mapping[link.CommitteeID] = share.ValidatorPubKey
@@ -299,10 +301,13 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes
 		})
 	}
 
-	return out, nil
+	return out, errs.ErrorOrNil()
 }
 
-func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) (out []*model.CommitteeDutyLink, err error) {
+func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) ([]*model.CommitteeDutyLink, error) {
+	out := make([]*model.CommitteeDutyLink, 0)
+	var errs *multierror.Error
+
 	c.validatorIndexToCommitteeLinks.Range(func(vi phase0.ValidatorIndex, m *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
 		cid, found := m.Get(slot)
 		if found {
@@ -315,17 +320,16 @@ func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) (out []*model.Commit
 	})
 
 	links, err := c.store.GetCommitteeDutyLinks(slot)
-	if err != nil {
-		return nil, fmt.Errorf("get committee duty links: %w", err)
-	}
 	out = append(out, links...)
-	return out, nil
+	errs = multierror.Append(errs, err)
+
+	return out, errs.ErrorOrNil()
 }
 
 func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) (out []qbftstorage.ParticipantsRangeEntry, err error) {
 	index, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
-		return nil, fmt.Errorf("validator not found: %s", hex.EncodeToString(pubkey[:]))
+		return nil, fmt.Errorf("validator not found by pubkey: %s in validator store", hex.EncodeToString(pubkey[:]))
 	}
 
 	committeeID, err := c.getCommitteeIDBySlotAndIndex(slot, index)
@@ -364,11 +368,15 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.Vali
 	return out, nil
 }
 
-func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	out := make([]qbftstorage.ParticipantsRangeEntry, 0, len(pubkeys))
+	var errs *multierror.Error
+
 	for _, pubkey := range pubkeys {
 		duty, err := c.GetValidatorDuty(role, slot, pubkey)
 		if err != nil {
-			return nil, fmt.Errorf("get validator duty for decideds: %w", err)
+			errs = multierror.Append(errs, err)
+			continue
 		}
 
 		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
@@ -391,14 +399,16 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 		})
 	}
 
-	return
+	return out, errs.ErrorOrNil()
 }
 
-func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	var errs *multierror.Error
+
 	duties, err := c.store.GetValidatorDuties(role, slot)
-	if err != nil {
-		return nil, fmt.Errorf("get all validator duties: %w", err)
-	}
+	errs = multierror.Append(errs, err)
+
+	out := make([]qbftstorage.ParticipantsRangeEntry, 0, len(duties))
 
 	for _, duty := range duties {
 		signers := make([]spectypes.OperatorID, 0, len(duty.Decideds)+len(duty.Post))
@@ -417,6 +427,7 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 		share, found := c.validators.ValidatorByIndex(duty.Validator)
 		if !found {
 			c.logger.Error("validator not found", fields.ValidatorIndex(duty.Validator))
+			errs = multierror.Append(errs, fmt.Errorf("validator not found by index: %d in validator store", duty.Validator))
 			continue
 		}
 
@@ -427,7 +438,7 @@ func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phas
 		})
 	}
 
-	return out, nil
+	return out, errs.ErrorOrNil()
 }
 
 func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
@@ -445,9 +456,10 @@ func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.
 }
 
 func (c *Collector) getCommitteeIDFromDisk(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+	ctx := fmt.Sprintf("slot=%d index=%d", slot, index)
 	link, err := c.store.GetCommitteeDutyLink(slot, index)
 	if err != nil {
-		return spectypes.CommitteeID{}, fmt.Errorf("get from disk: %w", err)
+		return spectypes.CommitteeID{}, fmt.Errorf("get committee ID from disk (%s): %w", ctx, err)
 	}
 
 	return link, nil
