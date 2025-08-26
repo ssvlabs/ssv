@@ -14,7 +14,7 @@ import (
 )
 
 // === Decideds ======================================================================
-type ParticipantResponse struct {
+type participantResponse struct {
 	Role      string `json:"role"`
 	Slot      uint64 `json:"slot"`
 	PublicKey string `json:"public_key"`
@@ -25,7 +25,7 @@ type ParticipantResponse struct {
 }
 
 type decidedResponse struct {
-	Data   []*ParticipantResponse `json:"data"`
+	Data   []*participantResponse `json:"data"`
 	Errors []string               `json:"errors,omitempty"`
 }
 
@@ -45,6 +45,15 @@ func (r *decidedRequest) parsePubkeys() []spectypes.ValidatorPK {
 }
 
 // === ValidatorTrace ======================================================================
+
+type validatorRequest struct {
+	From    uint64          `json:"from"`
+	To      uint64          `json:"to"`
+	Roles   api.RoleSlice   `json:"roles"`
+	PubKeys api.HexSlice    `json:"pubkeys"`
+	Indices api.Uint64Slice `json:"indices"`
+}
+
 type validatorTraceResponse struct {
 	Data   []validatorTrace `json:"data"`
 	Errors []string         `json:"errors,omitempty"`

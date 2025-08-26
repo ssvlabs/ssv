@@ -54,23 +54,19 @@ type dutyTraceStore interface {
 
 // === Decideds ======================================================================================
 
-func parseAndValidateDecidedRequest(r *http.Request, request *decidedRequest) error {
-	if err := api.Bind(r, request); err != nil {
-		return api.BadRequestError(err)
-	}
-
+func validateDecidedRequest(request *decidedRequest) error {
 	if request.From > request.To {
-		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
+		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
 
 	if len(request.Roles) == 0 {
-		return api.BadRequestError(fmt.Errorf("at least one role is required"))
+		return fmt.Errorf("at least one role is required")
 	}
 
 	requiredLength := len(spectypes.ValidatorPK{})
 	for _, req := range request.PubKeys {
 		if len(req) != requiredLength {
-			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req)))
+			return fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req))
 		}
 	}
 	return nil
@@ -79,15 +75,19 @@ func parseAndValidateDecidedRequest(r *http.Request, request *decidedRequest) er
 func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	var request decidedRequest
 
-	if err := parseAndValidateDecidedRequest(r, &request); err != nil {
-		return err
+	if err := api.Bind(r, &request); err != nil {
+		return api.BadRequestError(err)
+	}
+
+	if err := validateDecidedRequest(&request); err != nil {
+		return api.BadRequestError(err)
 	}
 
 	pubkeys := request.parsePubkeys()
 
 	// Initialize with empty slice to ensure we always return [] instead of null
 	var response decidedResponse
-	response.Data = make([]*ParticipantResponse, 0)
+	response.Data = make([]*participantResponse, 0)
 
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
@@ -121,10 +121,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return api.Render(w, r, response)
-}
-
-func noSignersError(pubkey spectypes.ValidatorPK, slot phase0.Slot, role spectypes.BeaconRole) error {
-	return fmt.Errorf("omitting entry with no signers for pubkey %x, slot %d, role %s", pubkey, slot, role.String())
 }
 
 func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, *multierror.Error) {
@@ -171,12 +167,17 @@ func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, pubkeys []spect
 
 func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	var request decidedRequest
-	if err := parseAndValidateDecidedRequest(r, &request); err != nil {
-		return err
-	}
-	pubkeys := request.parsePubkeys()
 
-	var participants = make([]*ParticipantResponse, 0)
+	if err := api.Bind(r, &request); err != nil {
+		return api.BadRequestError(err)
+	}
+
+	if err := validateDecidedRequest(&request); err != nil {
+		return api.BadRequestError(err)
+	}
+
+	pubkeys := request.parsePubkeys()
+	var participants = make([]*participantResponse, 0)
 	var errs *multierror.Error
 
 	for _, r := range request.Roles {
@@ -201,7 +202,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				// duty syncer fails to parse messages with no signers so instead
 				// we skip adding the message to the response altogether
 				if len(pr.Signers) == 0 {
-					errs = multierror.Append(errs, noSignersError(pr.PubKey, slot, role))
+					errs = multierror.Append(errs, fmt.Errorf("omitting entry with no signers (pubkey=%x, slot=%d, role=%s)", pr.PubKey, slot, role.String()))
 					continue
 				}
 				participants = append(participants, toParticipantResponse(role, pr))
@@ -225,8 +226,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, response)
 }
 
-func toParticipantResponse(role spectypes.BeaconRole, entry qbftstorage.ParticipantsRangeEntry) *ParticipantResponse {
-	response := &ParticipantResponse{
+func toParticipantResponse(role spectypes.BeaconRole, entry qbftstorage.ParticipantsRangeEntry) *participantResponse {
+	response := &participantResponse{
 		Role:      role.String(),
 		Slot:      uint64(entry.Slot),
 		PublicKey: hex.EncodeToString(entry.PubKey[:]),
@@ -248,19 +249,15 @@ func toStrings(errs []error) []string {
 
 // === CommitteeTraces ======================================================================================
 
-func parseAndValidateCommitteeRequest(r *http.Request, request *committeeRequest) error {
-	if err := api.Bind(r, request); err != nil {
-		return api.BadRequestError(err)
-	}
-
+func validateCommitteeRequest(request *committeeRequest) error {
 	if request.From > request.To {
-		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
+		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
 
 	requiredLength := len(spectypes.CommitteeID{})
 	for _, cmt := range request.CommitteeIDs {
 		if len(cmt) != requiredLength {
-			return api.BadRequestError(fmt.Errorf("invalid committee ID length: %s", hex.EncodeToString(cmt)))
+			return fmt.Errorf("invalid committee ID length: %s", hex.EncodeToString(cmt))
 		}
 	}
 
@@ -298,8 +295,13 @@ func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []sp
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
 	var request committeeRequest
-	if err := parseAndValidateCommitteeRequest(r, &request); err != nil {
-		return err
+
+	if err := api.Bind(r, &request); err != nil {
+		return api.BadRequestError(err)
+	}
+
+	if err := validateCommitteeRequest(&request); err != nil {
+		return api.BadRequestError(err)
 	}
 
 	var all []*model.CommitteeDutyTrace
@@ -327,29 +329,17 @@ func toCommitteeTraceResponse(duties []*model.CommitteeDutyTrace, errs *multierr
 
 // === ValidatorTraces ======================================================================================
 
-type validatorRequest struct {
-	From    uint64          `json:"from"`
-	To      uint64          `json:"to"`
-	Roles   api.RoleSlice   `json:"roles"`
-	PubKeys api.HexSlice    `json:"pubkeys"`
-	Indices api.Uint64Slice `json:"indices"`
-}
-
 func isCommitteeDuty(role spectypes.BeaconRole) bool {
 	return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
 }
 
-func parseAndValidateValidatorRequest(r *http.Request, request *validatorRequest) error {
-	if err := api.Bind(r, request); err != nil {
-		return api.BadRequestError(err)
-	}
-
+func validateValidatorRequest(request *validatorRequest) error {
 	if request.From > request.To {
-		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
+		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
 
 	if len(request.Roles) == 0 {
-		return api.BadRequestError(fmt.Errorf("at least one role is required"))
+		return fmt.Errorf("at least one role is required")
 	}
 
 	// either PubKeys or Indices are required for committee duty roles
@@ -357,7 +347,7 @@ func parseAndValidateValidatorRequest(r *http.Request, request *validatorRequest
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
 			if isCommitteeDuty(role) {
-				return api.BadRequestError(fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for specific a validators subset or use the /committee endpoint to query all the corresponding duties", role.String()))
+				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for specific a validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
 			}
 		}
 	}
@@ -365,7 +355,7 @@ func parseAndValidateValidatorRequest(r *http.Request, request *validatorRequest
 	requiredLength := len(spectypes.ValidatorPK{})
 	for _, req := range request.PubKeys {
 		if len(req) != requiredLength {
-			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req)))
+			return fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req))
 		}
 	}
 
@@ -465,8 +455,13 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 
 func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error {
 	var request validatorRequest
-	if err := parseAndValidateValidatorRequest(r, &request); err != nil {
-		return err
+
+	if err := api.Bind(r, &request); err != nil {
+		return api.BadRequestError(err)
+	}
+
+	if err := validateValidatorRequest(&request); err != nil {
+		return api.BadRequestError(err)
 	}
 
 	var errs *multierror.Error
