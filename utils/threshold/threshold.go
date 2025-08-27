@@ -17,7 +17,7 @@ func Create(skBytes []byte, threshold uint64, count uint64) (map[uint64]*bls.Sec
 
 	// Validate that we have enough shares for the threshold
 	if count < threshold {
-		return nil, fmt.Errorf("insufficient count: need at least %d shares for threshold %d, got %d", threshold, threshold, count)
+		return nil, fmt.Errorf("insufficient shares: need at least %d shares for threshold %d, got %d", threshold, threshold, count)
 	}
 
 	// master key Polynomial
