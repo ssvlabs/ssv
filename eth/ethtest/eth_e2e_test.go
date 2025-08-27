@@ -324,7 +324,7 @@ func TestEthExecLayer(t *testing.T) {
 
 			feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
 			require.NoError(t, err)
-			require.Equal(t, testAddrBob.Bytes(), feeRecipient)
+			require.Equal(t, testAddrBob.Bytes(), feeRecipient[:])
 		}
 
 		stopChan <- struct{}{}

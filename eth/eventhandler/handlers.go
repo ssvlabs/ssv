@@ -461,7 +461,6 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 
 	logger.Debug("processing event")
 
-	// Convert event recipient address to bellatrix.ExecutionAddress
 	var feeRecipient bellatrix.ExecutionAddress
 	copy(feeRecipient[:], event.RecipientAddress.Bytes())
 
