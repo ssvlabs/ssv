@@ -81,7 +81,6 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 
 	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
-			v.Share.FeeRecipientAddress = recipient
 			logger.Debug("updated recipient address")
 
 			pk := phase0.BLSPubKey{}
@@ -89,7 +88,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 			regDesc := duties.RegistrationDescriptor{
 				ValidatorIndex:  v.Share.ValidatorIndex,
 				ValidatorPubkey: pk,
-				FeeRecipient:    v.Share.FeeRecipientAddress[:],
+				FeeRecipient:    recipient[:],
 				BlockNumber:     blockNumber,
 			}
 

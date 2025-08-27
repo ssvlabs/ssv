@@ -3,33 +3,21 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/recipients.go -source=./recipients.go
+
 var (
 	recipientsPrefix = []byte("recipients")
 )
-
-// SharesUpdater is an interface for updating shares when fee recipient changes
-type SharesUpdater interface {
-	UpdateFeeRecipientForOwner(owner common.Address, feeRecipient bellatrix.ExecutionAddress)
-}
-
-// SetSharesUpdaterFunc is a function type for setting the shares updater after initialization
-type SetSharesUpdaterFunc func(SharesUpdater)
-
-// RecipientReader is a read-only interface for querying recipient data
-type RecipientReader interface {
-	GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error)
-	GetRecipientDataMany(r basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
-}
 
 type Nonce uint16
 
@@ -58,7 +46,7 @@ func (r *RecipientData) MarshalJSON() ([]byte, error) {
 func (r *RecipientData) UnmarshalJSON(input []byte) error {
 	var data recipientDataJSON
 	if err := json.Unmarshal(input, &data); err != nil {
-		return errors.Wrap(err, "invalid JSON")
+		return fmt.Errorf("invalid JSON: %w", err)
 	}
 	r.Owner = data.Owner
 	r.FeeRecipient = data.FeeRecipient
@@ -74,51 +62,84 @@ type recipientDataJSON struct {
 
 // Recipients is the interface for managing recipients data
 type Recipients interface {
-	RecipientReader // Embed read-only interface
+	GetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error)
 	GetNextNonce(r basedb.Reader, owner common.Address) (Nonce, error)
 	BumpNonce(rw basedb.ReadWriter, owner common.Address) error
-	SaveRecipientData(rw basedb.ReadWriter, recipientData *RecipientData) (*RecipientData, error)
+	SaveRecipientData(rw basedb.ReadWriter, owner common.Address, feeRecipient bellatrix.ExecutionAddress) (*RecipientData, error)
 	DeleteRecipientData(rw basedb.ReadWriter, owner common.Address) error
 	DropRecipients() error
-	GetRecipientsPrefix() []byte
 }
 
+// recipientsStorage implements the Recipients interface for managing fee recipient data.
+// It maintains an in-memory cache of all fee recipients for fast access while
+// persisting data to the underlying database.
 type recipientsStorage struct {
-	logger        *zap.Logger
-	db            basedb.Database
-	lock          sync.RWMutex
-	prefix        []byte
-	sharesUpdater SharesUpdater // For notifying shares storage of updates
+	logger *zap.Logger
+	db     basedb.Database
+	lock   sync.RWMutex
+	prefix []byte
+
+	// In-memory map of all fee recipients for fast access
+	feeRecipients map[common.Address]bellatrix.ExecutionAddress
 }
 
-// NewRecipientsStorage creates a new instance of Storage and returns a setter for wiring
-func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Recipients, SetSharesUpdaterFunc) {
+// NewRecipientsStorage creates a new instance of Storage.
+// The returned *recipientsStorage implements the Recipients interface.
+func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (*recipientsStorage, error) {
 	rs := &recipientsStorage{
-		logger: logger,
-		db:     db,
-		prefix: prefix,
+		logger:        logger,
+		db:            db,
+		prefix:        prefix,
+		feeRecipients: make(map[common.Address]bellatrix.ExecutionAddress),
 	}
 
-	// Return both the interface and a setter function for clean wiring
-	setter := func(updater SharesUpdater) {
-		rs.sharesUpdater = updater
+	// Load all recipients into memory
+	if err := rs.loadFromDB(); err != nil {
+		return nil, err
 	}
 
-	return rs, setter
+	return rs, nil
+}
+
+// loadFromDB loads all recipients from database into memory map
+func (s *recipientsStorage) loadFromDB() error {
+	return s.db.GetAll(RecipientsDBPrefix(s.prefix), func(i int, obj basedb.Obj) error {
+		// Extract owner address from the key
+		// Key format after prefix: just the 20-byte owner address
+		if len(obj.Key) != bellatrix.ExecutionAddressLength {
+			return fmt.Errorf("invalid owner address length: %d", len(obj.Key))
+		}
+
+		var recipientData RecipientData
+		if err := json.Unmarshal(obj.Value, &recipientData); err != nil {
+			return fmt.Errorf("failed to decode recipient data: %w", err)
+		}
+
+		// Use the owner from the decoded data for consistency
+		s.feeRecipients[recipientData.Owner] = recipientData.FeeRecipient
+		return nil
+	})
+}
+
+// GetFeeRecipient returns the fee recipient for a specific owner.
+// IMPORTANT: This method returns an error if no fee recipient is configured.
+// It does NOT automatically fall back to the owner address.
+// The system design ensures that every active validator has a fee recipient configured
+// through BumpNonce or SaveRecipientData before this method is called.
+func (s *recipientsStorage) GetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	recipient, found := s.feeRecipients[owner]
+	if !found {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("fee recipient not found for owner %s", owner.Hex())
+	}
+	return recipient, nil
 }
 
 // GetRecipientsPrefix returns DB prefix
 func (s *recipientsStorage) GetRecipientsPrefix() []byte {
 	return recipientsPrefix
-}
-
-// GetRecipientData returns data of the given recipient by owner address, returns nil if not found.
-// Note: When enriching shares, if no recipient data is found, the owner address is used as default fee recipient
-func (s *recipientsStorage) GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	return s.getRecipientData(r, owner)
 }
 
 func (s *recipientsStorage) getRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error) {
@@ -135,41 +156,19 @@ func (s *recipientsStorage) getRecipientData(r basedb.Reader, owner common.Addre
 	return &recipientData, found, err
 }
 
-func (s *recipientsStorage) GetRecipientDataMany(r basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+func (s *recipientsStorage) GetNextNonce(r basedb.Reader, owner common.Address) (Nonce, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	keys := make([][]byte, 0, len(owners))
-	for _, owner := range owners {
-		keys = append(keys, buildRecipientKey(owner))
-	}
-	results := make(map[common.Address]bellatrix.ExecutionAddress)
-	err := s.db.UsingReader(r).GetMany(s.prefix, keys, func(obj basedb.Obj) error {
-		var recipient RecipientData
-		err := json.Unmarshal(obj.Value, &recipient)
-		if err != nil {
-			return errors.Wrap(err, "could not unmarshal recipient data")
-		}
-		results[recipient.Owner] = recipient.FeeRecipient
-		return nil
-	})
+	data, found, err := s.getRecipientData(r, owner)
 	if err != nil {
-		return nil, err
-	}
-
-	return results, nil
-}
-
-func (s *recipientsStorage) GetNextNonce(r basedb.Reader, owner common.Address) (Nonce, error) {
-	data, found, err := s.GetRecipientData(r, owner)
-	if err != nil {
-		return Nonce(0), errors.Wrap(err, "could not get recipient data")
+		return Nonce(0), fmt.Errorf("could not get recipient data: %w", err)
 	}
 	if !found {
 		return Nonce(0), nil
 	}
 	if data == nil {
-		return Nonce(0), errors.New("recipient data is nil")
+		return Nonce(0), fmt.Errorf("recipient data is nil")
 	}
 	if data.Nonce == nil {
 		return Nonce(0), nil
@@ -184,7 +183,7 @@ func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address
 
 	rData, found, err := s.getRecipientData(rw, owner)
 	if err != nil {
-		return errors.Wrap(err, "could not get recipient data")
+		return fmt.Errorf("could not get recipient data: %w", err)
 	}
 
 	if !found {
@@ -200,7 +199,7 @@ func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address
 	}
 
 	if rData == nil {
-		return errors.New("recipient data is nil")
+		return fmt.Errorf("recipient data is nil")
 	}
 
 	if rData.Nonce == nil {
@@ -213,39 +212,60 @@ func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address
 
 	raw, err := json.Marshal(rData)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal recipient data")
+		return fmt.Errorf("could not marshal recipient data: %w", err)
 	}
 
-	return s.db.Using(rw).Set(s.prefix, buildRecipientKey(rData.Owner), raw)
+	if err = s.db.Using(rw).Set(s.prefix, buildRecipientKey(rData.Owner), raw); err != nil {
+		return err
+	}
+
+	// Update in-memory map only if this is a new recipient
+	// This handles the case where a validator is added before fee recipient is set
+	if !found {
+		s.feeRecipients[owner] = rData.FeeRecipient
+	}
+
+	return nil
 }
 
-// SaveRecipientData saves recipient data and return it.
-// if the recipient already exists and the fee didn't change return nil
-func (s *recipientsStorage) SaveRecipientData(rw basedb.ReadWriter, recipientData *RecipientData) (*RecipientData, error) {
+// SaveRecipientData saves or updates fee recipient for an owner
+// Returns the saved data, or nil if the fee recipient didn't change
+func (s *recipientsStorage) SaveRecipientData(rw basedb.ReadWriter, owner common.Address, feeRecipient bellatrix.ExecutionAddress) (*RecipientData, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	r, found, err := s.getRecipientData(rw, recipientData.Owner)
+	// Check if recipient data exists
+	existingData, found, err := s.getRecipientData(rw, owner)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get recipient data")
+		return nil, fmt.Errorf("could not get recipient data: %w", err)
 	}
-	// same fee recipient
-	if found && r.FeeRecipient == recipientData.FeeRecipient {
+
+	// If fee recipient hasn't changed, return nil
+	if found && existingData.FeeRecipient == feeRecipient {
 		return nil, nil
 	}
 
+	// Prepare recipient data
+	recipientData := existingData
+	if !found {
+		recipientData = &RecipientData{
+			Owner: owner,
+		}
+	}
+	recipientData.FeeRecipient = feeRecipient
+
+	// Marshal and save
 	raw, err := json.Marshal(recipientData)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not marshal recipient data")
+		return nil, fmt.Errorf("could not marshal recipient data: %w", err)
 	}
 
-	err = s.db.Using(rw).Set(s.prefix, buildRecipientKey(recipientData.Owner), raw)
-	if err != nil {
+	if err = s.db.Using(rw).Set(s.prefix, buildRecipientKey(owner), raw); err != nil {
 		return nil, err
 	}
 
-	// Notify shares storage of the fee recipient update
-	s.sharesUpdater.UpdateFeeRecipientForOwner(recipientData.Owner, recipientData.FeeRecipient)
+	// Update in-memory map
+	s.feeRecipients[owner] = feeRecipient
 
 	return recipientData, nil
 }
@@ -254,17 +274,33 @@ func (s *recipientsStorage) DeleteRecipientData(rw basedb.ReadWriter, owner comm
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.Using(rw).Delete(s.prefix, buildRecipientKey(owner))
+	if err := s.db.Using(rw).Delete(s.prefix, buildRecipientKey(owner)); err != nil {
+		return err
+	}
+
+	// Remove from in-memory map
+	delete(s.feeRecipients, owner)
+
+	return nil
 }
 
 func (s *recipientsStorage) DropRecipients() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.DropPrefix(bytes.Join(
-		[][]byte{s.prefix, recipientsPrefix, []byte("/")},
-		nil,
-	))
+	if err := s.db.DropPrefix(RecipientsDBPrefix(s.prefix)); err != nil {
+		return err
+	}
+
+	// Clear in-memory map
+	s.feeRecipients = make(map[common.Address]bellatrix.ExecutionAddress)
+
+	return nil
+}
+
+// RecipientsDBPrefix builds a DB prefix all recipient keys are stored under.
+func RecipientsDBPrefix(storagePrefix []byte) []byte {
+	return bytes.Join([][]byte{storagePrefix, recipientsPrefix, []byte("/")}, nil)
 }
 
 // buildRecipientKey builds recipient key using recipientsPrefix & owner address, e.g. "recipients/0x00..01"

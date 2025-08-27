@@ -9,35 +9,28 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"go.uber.org/mock/gomock"
 
 	model "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// noOpRecipientReader is a no-op implementation for benchmarks
-type noOpRecipientReader struct{}
-
-func (n *noOpRecipientReader) GetRecipientData(_ basedb.Reader, _ common.Address) (*registrystorage.RecipientData, bool, error) {
-	return nil, false, nil
-}
-
-func (n *noOpRecipientReader) GetRecipientDataMany(_ basedb.Reader, _ []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
-	return make(map[common.Address]bellatrix.ExecutionAddress), nil
-}
-
 func BenchmarkTracer(b *testing.B) {
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
 	f, err := os.OpenFile("./benchdata/slot_3707881_3707882.ssz", os.O_RDONLY, 0644)
 	if err != nil {
 		b.Fatal(err)
@@ -56,7 +49,8 @@ func BenchmarkTracer(b *testing.B) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, nil)
+	mockRecipients := registrystoragemocks.NewMockRecipients(ctrl)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, mockRecipients, nil)
 
 	// Define different message counts to test
 	messageCounts := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 4000, 8000}

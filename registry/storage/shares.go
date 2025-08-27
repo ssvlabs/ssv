@@ -35,6 +35,12 @@ var sharesPrefix = []byte("shares_v2/")
 // since the churn of validators is low, we can use an append only mapping
 var pubkeyIndexMapping = []byte("val_pki")
 
+// FeeRecipientReader is a read-only interface for getting fee recipients.
+// This interface is consumed by shares storage to enrich shares with fee recipient data.
+type FeeRecipientReader interface {
+	GetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error)
+}
+
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
 
@@ -64,18 +70,14 @@ type Shares interface {
 
 	// UpdateValidatorsMetadata updates the metadata of the given validators
 	UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
-
-	// UpdateFeeRecipientForOwner updates the fee recipient for all shares belonging to the given owner
-	UpdateFeeRecipientForOwner(owner common.Address, feeRecipient bellatrix.ExecutionAddress)
 }
 
 type sharesStorage struct {
 	db              basedb.Database
 	storagePrefix   []byte
 	shares          map[string]*types.SSVShare
-	sharesByOwner   map[common.Address][]*types.SSVShare // Index for efficient owner lookups
 	validatorStore  *validatorStore
-	recipientReader RecipientReader // Read-only access for enriching shares with fee recipients
+	recipientReader FeeRecipientReader
 	// storageMtx serializes access to the database in order to avoid
 	// re-creation of a deleted share during update metadata
 	storageMtx sync.Mutex
@@ -135,10 +137,9 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, recipientReader RecipientReader, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, recipientReader FeeRecipientReader, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		shares:          make(map[string]*types.SSVShare),
-		sharesByOwner:   make(map[common.Address][]*types.SSVShare),
 		db:              db,
 		storagePrefix:   prefix,
 		recipientReader: recipientReader,
@@ -156,6 +157,9 @@ func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, recip
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
+		func(owner common.Address) (bellatrix.ExecutionAddress, error) {
+			return recipientReader.GetFeeRecipient(owner)
+		},
 		pubkeyIndexMapping,
 		beaconCfg,
 	)
@@ -183,70 +187,6 @@ func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]p
 	return m, err
 }
 
-// enrichSharesWithFeeRecipients batch-enriches shares with fee recipients for better performance
-func (s *sharesStorage) enrichSharesWithFeeRecipients(shares []*types.SSVShare) error {
-	// Collect unique owners while loading shares
-	uniqueOwners := make(map[common.Address]struct{})
-	var owners []common.Address
-
-	for _, share := range shares {
-		if _, exists := uniqueOwners[share.OwnerAddress]; !exists {
-			uniqueOwners[share.OwnerAddress] = struct{}{}
-			owners = append(owners, share.OwnerAddress)
-		}
-	}
-
-	recipients, err := s.recipientReader.GetRecipientDataMany(nil, owners)
-	if err != nil {
-		return fmt.Errorf("failed to get recipient data: %w", err)
-	}
-
-	// Enrich each share with its fee recipient
-	for _, share := range shares {
-		if feeRecipient, found := recipients[share.OwnerAddress]; found {
-			share.FeeRecipientAddress = feeRecipient
-		} else {
-			// Default to owner address if no custom recipient
-			copy(share.FeeRecipientAddress[:], share.OwnerAddress.Bytes())
-		}
-	}
-
-	return nil
-}
-
-// removeFromOwnerIndex removes a share from the owner's index
-func (s *sharesStorage) removeFromOwnerIndex(owner common.Address, share *types.SSVShare) {
-	shares := s.sharesByOwner[owner]
-	for i, sh := range shares {
-		if sh == share {
-			// Remove by swapping with last and truncating
-			shares[i] = shares[len(shares)-1]
-			s.sharesByOwner[owner] = shares[:len(shares)-1]
-			// Clean up empty entries
-			if len(s.sharesByOwner[owner]) == 0 {
-				delete(s.sharesByOwner, owner)
-			}
-			break
-		}
-	}
-}
-
-// UpdateFeeRecipientForOwner updates the fee recipient for all shares belonging to the given owner
-func (s *sharesStorage) UpdateFeeRecipientForOwner(owner common.Address, feeRecipient bellatrix.ExecutionAddress) {
-	s.memoryMtx.Lock()
-	defer s.memoryMtx.Unlock()
-
-	// Use the owner index for efficient lookup
-	shares, found := s.sharesByOwner[owner]
-	if !found {
-		return
-	}
-
-	for _, share := range shares {
-		share.FeeRecipientAddress = feeRecipient
-	}
-}
-
 func (s *sharesStorage) loadFromDB() error {
 	err := s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
 		val := &Share{}
@@ -260,17 +200,14 @@ func (s *sharesStorage) loadFromDB() error {
 		}
 
 		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = share
-		// Build owner index
-		s.sharesByOwner[share.OwnerAddress] = append(s.sharesByOwner[share.OwnerAddress], share)
+		// Owner index removed - not needed anymore
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	if err := s.enrichSharesWithFeeRecipients(slices.Collect(maps.Values(s.shares))); err != nil {
-		return fmt.Errorf("failed to enrich shares with fee recipients: %w", err)
-	}
+	// Fee recipients are now loaded by ValidatorStore during handleSharesAdded
 
 	return nil
 }
@@ -345,22 +282,11 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 			key := hex.EncodeToString(share.ValidatorPubKey[:])
 
 			// Update validatorStore indices.
-			if existingShare, ok := s.shares[key]; ok {
-				// Owner addresses are immutable, so we can update the sharesByOwner index in place
-				if ownerShares := s.sharesByOwner[share.OwnerAddress]; ownerShares != nil {
-					for i, sh := range ownerShares {
-						// Find the exact same object by pointer comparison (faster and more precise)
-						if sh == existingShare {
-							// Replace the pointer in the owner index
-							s.sharesByOwner[share.OwnerAddress][i] = share
-							break
-						}
-					}
-				}
+			if _, ok := s.shares[key]; ok {
+				// Existing share - update
 				updateShares = append(updateShares, share)
 			} else {
-				// New share - add to owner index
-				s.sharesByOwner[share.OwnerAddress] = append(s.sharesByOwner[share.OwnerAddress], share)
+				// New share
 				addShares = append(addShares, share)
 			}
 			// Update the main shares map
@@ -406,9 +332,7 @@ func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.Validator
 }
 
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
-	if err := s.enrichSharesWithFeeRecipients(shares); err != nil {
-		return fmt.Errorf("enrich shares with fee recipients: %w", err)
-	}
+	// Fee recipients are no longer stored in shares - ValidatorStore manages them
 
 	// save validator pubkey -> index mapping
 	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
@@ -513,8 +437,7 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 		// Remove the share from local storage map
 		delete(s.shares, hex.EncodeToString(pubKey))
 
-		// Remove from owner index
-		s.removeFromOwnerIndex(share.OwnerAddress, share)
+		// Owner index removed - not needed anymore
 
 		// Remove the share from the validator store. This method will handle its own locking.
 		return s.validatorStore.handleShareRemoved(share)
@@ -603,7 +526,6 @@ func (s *sharesStorage) Drop() error {
 		defer s.memoryMtx.Unlock()
 
 		s.shares = make(map[string]*types.SSVShare)
-		s.sharesByOwner = make(map[common.Address][]*types.SSVShare)
 		s.validatorStore.handleDrop()
 	}()
 
@@ -636,13 +558,6 @@ func ByOperatorID(operatorID spectypes.OperatorID) SharesFilter {
 func ByNotLiquidated() SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return !share.Liquidated
-	}
-}
-
-// ByActiveValidator filters for active validators.
-func ByActiveValidator() SharesFilter {
-	return func(share *types.SSVShare) bool {
-		return share.HasBeaconMetadata()
 	}
 }
 

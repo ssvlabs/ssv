@@ -10,6 +10,8 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -19,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -182,6 +183,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -190,6 +192,7 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			mockFeeProvider,
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
@@ -443,6 +446,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -451,6 +455,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			km,
 			opSigner,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			mockFeeProvider,
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:

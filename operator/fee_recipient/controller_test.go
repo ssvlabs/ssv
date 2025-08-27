@@ -25,6 +25,70 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// testRecipientStorage wraps real recipient storage but provides test-specific behavior
+type testRecipientStorage struct {
+	customRecipients map[common.Address]bellatrix.ExecutionAddress
+}
+
+func newTestRecipientStorage() *testRecipientStorage {
+	return &testRecipientStorage{
+		customRecipients: make(map[common.Address]bellatrix.ExecutionAddress),
+	}
+}
+
+func (trs *testRecipientStorage) SetCustomRecipient(owner common.Address, recipient bellatrix.ExecutionAddress) {
+	trs.customRecipients[owner] = recipient
+}
+
+func (trs *testRecipientStorage) GetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error) {
+	if recipient, found := trs.customRecipients[owner]; found {
+		return recipient, nil
+	}
+	// Return error to simulate no custom recipient (fallback will be handled by ValidatorStore)
+	return bellatrix.ExecutionAddress{}, fmt.Errorf("no custom recipient for owner %s", owner.Hex())
+}
+
+// testValidatorProvider implements ValidatorProvider for testing
+type testValidatorProvider struct {
+	shares           registrystorage.Shares
+	recipientStorage *testRecipientStorage
+	operatorID       spectypes.OperatorID
+}
+
+func newTestValidatorProvider(shares registrystorage.Shares, recipients *testRecipientStorage, operatorID spectypes.OperatorID) *testValidatorProvider {
+	return &testValidatorProvider{
+		shares:           shares,
+		recipientStorage: recipients,
+		operatorID:       operatorID,
+	}
+}
+
+func (tvp *testValidatorProvider) SelfValidators() []*types.SSVShare {
+	return tvp.shares.List(nil, registrystorage.ByOperatorID(tvp.operatorID), registrystorage.ByNotLiquidated())
+}
+
+func (tvp *testValidatorProvider) GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	// Find the share to get the owner
+	shares := tvp.shares.List(nil)
+	for _, share := range shares {
+		if share.ValidatorPubKey == validatorPK {
+			// Get fee recipient from test storage
+			if tvp.recipientStorage != nil {
+				recipient, err := tvp.recipientStorage.GetFeeRecipient(share.OwnerAddress)
+				if err == nil {
+					return recipient, nil
+				}
+			}
+			// Fallback to owner address if no custom recipient
+			var defaultRecipient bellatrix.ExecutionAddress
+			copy(defaultRecipient[:], share.OwnerAddress.Bytes())
+			return defaultRecipient, nil
+		}
+	}
+	// Return error for validator not found
+	return bellatrix.ExecutionAddress{}, fmt.Errorf("validator not found: %x", validatorPK)
+}
+
 func TestSubmitProposal(t *testing.T) {
 	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
@@ -36,38 +100,50 @@ func TestSubmitProposal(t *testing.T) {
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	db, shareStorage, recipientStorage := createStorageWithRecipients(t)
+	db, shareStorage := createStorage(t)
 	defer func() { require.NoError(t, db.Close()) }()
 
 	beaconConfig := networkconfig.TestNetwork.Beacon
 	populateStorage(t, shareStorage, operatorData)
 
+	// Create test recipient storage
+	testRecipientStorage := newTestRecipientStorage()
+
+	// Create ValidatorProvider for testing
+	validatorProvider := newTestValidatorProvider(shareStorage, testRecipientStorage, operatorData.ID)
+
 	frCtrl := NewController(logger, &ControllerOptions{
 		Ctx:               t.Context(),
 		BeaconConfig:      beaconConfig,
-		ShareStorage:      shareStorage,
+		ValidatorProvider: validatorProvider,
 		OperatorDataStore: operatorDataStore,
 	})
 
 	t.Run("custom fee recipients from storage", func(t *testing.T) {
-		// Set custom fee recipients for some validators
-		customRecipient1 := bellatrix.ExecutionAddress{0x11, 0x22, 0x33, 0x44, 0x55}
-		customRecipient2 := bellatrix.ExecutionAddress{0xaa, 0xbb, 0xcc, 0xdd, 0xee}
+		// Define custom recipients for testing
+		type recipientConfig struct {
+			owner     common.Address
+			recipient bellatrix.ExecutionAddress
+			index     phase0.ValidatorIndex // expected validator index
+		}
 
-		owner1 := common.HexToAddress("0x0000000000000000000000000000000000000000")
-		owner2 := common.HexToAddress("0x0000000000000000000000000000000000000001")
+		customRecipients := []recipientConfig{
+			{
+				owner:     common.HexToAddress("0x0000000000000000000000000000000000000000"),
+				recipient: bellatrix.ExecutionAddress{0x11, 0x22, 0x33, 0x44, 0x55},
+				index:     0,
+			},
+			{
+				owner:     common.HexToAddress("0x0000000000000000000000000000000000000001"),
+				recipient: bellatrix.ExecutionAddress{0xaa, 0xbb, 0xcc, 0xdd, 0xee},
+				index:     1,
+			},
+		}
 
-		_, err := recipientStorage.SaveRecipientData(nil, &registrystorage.RecipientData{
-			Owner:        owner1,
-			FeeRecipient: customRecipient1,
-		})
-		require.NoError(t, err)
-
-		_, err = recipientStorage.SaveRecipientData(nil, &registrystorage.RecipientData{
-			Owner:        owner2,
-			FeeRecipient: customRecipient2,
-		})
-		require.NoError(t, err)
+		// Set custom recipients in test storage
+		for _, config := range customRecipients {
+			testRecipientStorage.SetCustomRecipient(config.owner, config.recipient)
+		}
 
 		var capturedRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress
 
@@ -80,30 +156,39 @@ func TestSubmitProposal(t *testing.T) {
 
 		frCtrl.beaconClient = client
 
-		err = frCtrl.prepareAndSubmit(t.Context())
+		err := frCtrl.prepareAndSubmit(t.Context())
 		require.NoError(t, err)
 
-		// Verify custom recipients are used for validators with index 0 and 1
-		require.Equal(t, customRecipient1, capturedRecipients[0])
-		require.Equal(t, customRecipient2, capturedRecipients[1])
+		// Verify custom recipients are used for configured validators
+		for _, config := range customRecipients {
+			require.Equal(t, config.recipient, capturedRecipients[config.index],
+				"validator %d should have custom recipient", config.index)
+		}
 
-		// Verify owner address is used as default for others (e.g., index 2)
+		// Verify owner address is used as default for non-configured validators
 		owner2Addr := common.HexToAddress("0x0000000000000000000000000000000000000002")
 		var expectedDefault bellatrix.ExecutionAddress
 		copy(expectedDefault[:], owner2Addr.Bytes())
-		require.Equal(t, expectedDefault, capturedRecipients[2])
+		require.Equal(t, expectedDefault, capturedRecipients[2],
+			"validator 2 should use owner address as default")
 	})
 
 	t.Run("owner address as default fee recipient", func(t *testing.T) {
 		// Create fresh storage without custom recipients
-		db2, shareStorage2, _ := createStorageWithRecipients(t)
+		db2, shareStorage2 := createStorage(t)
 		defer func() { require.NoError(t, db2.Close()) }()
 		populateStorage(t, shareStorage2, operatorData)
+
+		// Create test recipient storage without custom recipients
+		testRecipientStorage2 := newTestRecipientStorage()
+
+		// Create ValidatorProvider for test
+		validatorProvider2 := newTestValidatorProvider(shareStorage2, testRecipientStorage2, operatorData.ID)
 
 		frCtrl2 := NewController(logger, &ControllerOptions{
 			Ctx:               t.Context(),
 			BeaconConfig:      beaconConfig,
-			ShareStorage:      shareStorage2,
+			ValidatorProvider: validatorProvider2,
 			OperatorDataStore: operatorDataStore,
 		})
 
@@ -163,7 +248,7 @@ func TestSubmitProposal(t *testing.T) {
 
 	t.Run("batch processing edge cases", func(t *testing.T) {
 		// Test with exactly 500 shares (one batch)
-		db2, shareStorage2, _ := createStorageWithRecipients(t)
+		db2, shareStorage2 := createStorage(t)
 		defer func() { require.NoError(t, db2.Close()) }()
 
 		// Create exactly 500 shares
@@ -183,10 +268,16 @@ func TestSubmitProposal(t *testing.T) {
 			require.NoError(t, shareStorage2.Save(nil, share))
 		}
 
+		// Create test recipient storage
+		testRecipientStorage2 := newTestRecipientStorage()
+
+		// Create ValidatorProvider for test
+		validatorProvider2 := newTestValidatorProvider(shareStorage2, testRecipientStorage2, operatorData.ID)
+
 		frCtrl2 := NewController(logger, &ControllerOptions{
 			Ctx:               t.Context(),
 			BeaconConfig:      beaconConfig,
-			ShareStorage:      shareStorage2,
+			ValidatorProvider: validatorProvider2,
 			OperatorDataStore: operatorDataStore,
 		})
 
@@ -210,14 +301,20 @@ func TestSubmitProposal(t *testing.T) {
 
 	t.Run("error handling", func(t *testing.T) {
 		// Test that errors are handled gracefully
-		db3, shareStorage3, _ := createStorageWithRecipients(t)
+		db3, shareStorage3 := createStorage(t)
 		defer func() { require.NoError(t, db3.Close()) }()
 		populateStorage(t, shareStorage3, operatorData)
+
+		// Create test recipient storage
+		testRecipientStorage3 := newTestRecipientStorage()
+
+		// Create ValidatorProvider for test
+		validatorProvider3 := newTestValidatorProvider(shareStorage3, testRecipientStorage3, operatorData.ID)
 
 		frCtrl3 := NewController(logger, &ControllerOptions{
 			Ctx:               t.Context(),
 			BeaconConfig:      beaconConfig,
-			ShareStorage:      shareStorage3,
+			ValidatorProvider: validatorProvider3,
 			OperatorDataStore: operatorDataStore,
 		})
 
@@ -232,18 +329,19 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorageWithRecipients(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
+func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
 	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	recipientStorage, setSharesUpdater := registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
+	// Create a minimal recipient storage just for SharesStorage initialization
+	recipientStorage, err := registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
+	require.NoError(t, err)
 	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, recipientStorage, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	setSharesUpdater(shareStorage)
-	return db, shareStorage, recipientStorage
+	return db, shareStorage
 }
 
 func populateStorage(t *testing.T, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {

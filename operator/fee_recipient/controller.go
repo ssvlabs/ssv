@@ -2,10 +2,11 @@ package fee_recipient
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -13,10 +14,15 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+
+// ValidatorProvider provides access to validator shares and their fee recipients.
+type ValidatorProvider interface {
+	SelfValidators() []*types.SSVShare
+	GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error)
+}
 
 // RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
@@ -28,7 +34,7 @@ type ControllerOptions struct {
 	Ctx                context.Context
 	BeaconClient       beaconprotocol.BeaconNode
 	BeaconConfig       *networkconfig.Beacon
-	ShareStorage       storage.Shares
+	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
 	OperatorDataStore  operatordatastore.OperatorDataStore
 }
@@ -39,7 +45,7 @@ type recipientController struct {
 	ctx                context.Context
 	beaconClient       beaconprotocol.BeaconNode
 	beaconConfig       *networkconfig.Beacon
-	shareStorage       storage.Shares
+	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
 	operatorDataStore  operatordatastore.OperatorDataStore
 }
@@ -50,56 +56,81 @@ func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientContro
 		ctx:                opts.Ctx,
 		beaconClient:       opts.BeaconClient,
 		beaconConfig:       opts.BeaconConfig,
-		shareStorage:       opts.ShareStorage,
+		validatorProvider:  opts.ValidatorProvider,
 		slotTickerProvider: opts.SlotTickerProvider,
 		operatorDataStore:  opts.OperatorDataStore,
 	}
 }
 
 func (rc *recipientController) Start(ctx context.Context) {
-	rc.listenToTicker(ctx)
+	go rc.listenToTicker(ctx)
 }
 
-// listenToTicker loop over the given slot channel
-// TODO: re-think this logic, we can use validator map instead of iterating over all shares
-// in addition, submitting "same data" every slot is not efficient and can overload beacon node
-// instead we can subscribe to beacon node events and submit only when there is
-// a new fee recipient event (or new validator) was handled or when there is a syncing issue with beacon node
+// getPreparations is a helper that fetches active validators and builds preparations
+func (rc *recipientController) getPreparations() map[phase0.ValidatorIndex]bellatrix.ExecutionAddress {
+	currentEpoch := rc.beaconConfig.EstimatedCurrentEpoch()
+
+	// Filter validators that are actively attesting
+	var activeShares []*types.SSVShare
+	for _, share := range rc.validatorProvider.SelfValidators() {
+		if share.IsAttesting(currentEpoch) {
+			activeShares = append(activeShares, share)
+		}
+	}
+
+	return rc.buildProposalPreparations(activeShares)
+}
+
+// listenToTicker submits proposal preparations periodically at the middle slot of each epoch.
+// This ensures beacon nodes have current fee recipient information even if no changes occur.
+// Event-driven updates are handled separately via listenToFeeRecipientChanges.
 func (rc *recipientController) listenToTicker(ctx context.Context) {
 	firstTimeSubmitted := false
 	ticker := rc.slotTickerProvider()
 	for {
-		<-ticker.Next()
-		slot := ticker.Slot()
-		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(slot)%rc.beaconConfig.SlotsPerEpoch != (rc.beaconConfig.SlotsPerEpoch/2) {
-			continue
-		}
-		firstTimeSubmitted = true
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.Next():
+			slot := ticker.Slot()
+			// submit if first time or if first slot in epoch
+			if firstTimeSubmitted && uint64(slot)%rc.beaconConfig.SlotsPerEpoch != (rc.beaconConfig.SlotsPerEpoch/2) {
+				continue
+			}
+			firstTimeSubmitted = true
 
-		if err := rc.prepareAndSubmit(ctx); err != nil {
-			rc.logger.Warn("could not submit proposal preparations", zap.Error(err))
+			if err := rc.prepareAndSubmit(ctx); err != nil {
+				rc.logger.Warn("could not submit proposal preparations", zap.Error(err))
+			}
 		}
 	}
 }
 
 func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
-	shares := rc.shareStorage.List(
-		nil,
-		storage.ByOperatorID(rc.operatorDataStore.GetOperatorID()),
-		storage.ByActiveValidator(),
-	)
+	preparations := rc.getPreparations()
+
+	// Convert map to slice of indices for batching
+	indices := make([]phase0.ValidatorIndex, 0, len(preparations))
+	for idx := range preparations {
+		indices = append(indices, idx)
+	}
 
 	const batchSize = 500
 	var submitted int
-	for start := 0; start < len(shares); start += batchSize {
+	for start := 0; start < len(indices); start += batchSize {
 		end := start + batchSize
-		if end > len(shares) {
-			end = len(shares)
+		if end > len(indices) {
+			end = len(indices)
 		}
-		batch := shares[start:end]
 
-		count, err := rc.submit(ctx, batch)
+		// Create batch map
+		batch := make(map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, end-start)
+		for i := start; i < end; i++ {
+			idx := indices[i]
+			batch[idx] = preparations[idx]
+		}
+
+		err := rc.beaconClient.SubmitProposalPreparation(ctx, batch)
 		if err != nil {
 			rc.logger.Warn("could not submit proposal preparation batch",
 				zap.Int("start_index", start),
@@ -107,35 +138,29 @@ func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
 			)
 			continue
 		}
-		submitted += count
+		submitted += len(batch)
 	}
 
 	rc.logger.Debug("✅  successfully submitted proposal preparations",
 		zap.Int("submitted", submitted),
-		zap.Int("total", len(shares)),
+		zap.Int("total", len(preparations)),
 	)
 	return nil
 }
 
-func (rc *recipientController) submit(ctx context.Context, shares []*types.SSVShare) (int, error) {
-	m, err := rc.toProposalPreparation(shares)
-	if err != nil {
-		return 0, errors.Wrap(err, "could not build proposal preparation batch")
-	}
-	err = rc.beaconClient.SubmitProposalPreparation(ctx, m)
-	if err != nil {
-		return 0, errors.Wrap(err, "could not submit proposal preparation batch")
-	}
-	return len(m), nil
-}
-
-func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {
-	// Build proposal preparation directly from shares which already have fee recipients
-	m := make(map[phase0.ValidatorIndex]bellatrix.ExecutionAddress)
+func (rc *recipientController) buildProposalPreparations(shares []*types.SSVShare) map[phase0.ValidatorIndex]bellatrix.ExecutionAddress {
+	preparations := make(map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, len(shares))
 	for _, share := range shares {
-		// Use the fee recipient directly from the share (already enriched)
-		m[share.ValidatorIndex] = share.FeeRecipientAddress
+		feeRecipient, err := rc.validatorProvider.GetFeeRecipient(share.ValidatorPubKey)
+		if err != nil {
+			// Log the error and skip this validator
+			rc.logger.Warn("could not get fee recipient for validator, skipping",
+				zap.String("validator", fmt.Sprintf("%x", share.ValidatorPubKey)),
+				zap.Error(err))
+			continue
+		}
+		preparations[share.ValidatorIndex] = feeRecipient
 	}
 
-	return m, nil
+	return preparations
 }

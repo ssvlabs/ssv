@@ -58,8 +58,6 @@ const (
 	networkRouterConcurrency = 2048
 )
 
-type GetRecipientDataFunc func(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
-
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
@@ -789,7 +787,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorRegistrationSubmitter, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
@@ -895,11 +893,11 @@ func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	for i, c := range s.Committee {
 		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.Signer, c.SharePubKey)
 	}
+
 	c.logger.Debug(msg,
 		fields.PubKey(s.ValidatorPubKey[:]),
 		zap.Bool("own_validator", s.BelongsToOperator(c.operatorDataStore.GetOperatorID())),
 		zap.Strings("committee", committee),
-		fields.FeeRecipient(s.FeeRecipientAddress[:]),
 	)
 }
 
@@ -1094,6 +1092,7 @@ func SetupRunners(
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
+	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
@@ -1144,7 +1143,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, validatorRegistrationSubmitter, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, validatorRegistrationSubmitter, validatorStore, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		default:

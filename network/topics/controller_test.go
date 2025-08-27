@@ -12,9 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -322,17 +320,6 @@ func committeeTopic(cidHex string) string {
 	return commons.CommitteeTopicID(spectypes.CommitteeID(cid))[0]
 }
 
-// noOpRecipientReader is a no-op implementation for tests
-type noOpRecipientReader struct{}
-
-func (n *noOpRecipientReader) GetRecipientData(_ basedb.Reader, _ common.Address) (*registrystorage.RecipientData, bool, error) {
-	return nil, false, nil
-}
-
-func (n *noOpRecipientReader) GetRecipientDataMany(_ basedb.Reader, _ []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
-	return make(map[common.Address]bellatrix.ExecutionAddress), nil
-}
-
 type P struct {
 	host host.Host
 	ps   *pubsub.PubSub
@@ -419,10 +406,14 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		ScoreInspectorInterval: 100 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
 	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, []byte("test"))
+	mockRecipients := mocks.NewMockRecipients(ctrl)
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, mockRecipients, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

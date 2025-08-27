@@ -244,8 +244,7 @@ func TestSetupValidators(t *testing.T) {
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
-	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
-	testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, feeRecipientBytes)
+	testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
 
 	opStorage, done := newOperatorStorageForTest(logger)
 	defer done()
@@ -553,7 +552,6 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	fakeOwnerAddressBytes := decodeHex(t, "61Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode fake owner address")
-	firstFeeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode first fee recipient address")
 	secondFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
 
 	const blockNumber = uint64(2)
@@ -562,7 +560,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, firstFeeRecipientBytes)
+		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
 
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			testValidator.Share.ValidatorPubKey: testValidator,
@@ -579,20 +577,22 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes), blockNumber)
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
 
-		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
-		require.Equal(t, secondFeeRecipientBytes, actualFeeRecipient, "Fee recipient address did not update correctly")
-
-		regDescriptor := <-validatorRegistrationCh
-		require.Equal(t, testValidator.Share.ValidatorIndex, regDescriptor.ValidatorIndex)
-		pkWant := phase0.BLSPubKey{}
-		copy(pkWant[:], testValidator.Share.ValidatorPubKey[:])
-		require.Equal(t, pkWant, regDescriptor.ValidatorPubkey)
-		require.Equal(t, secondFeeRecipientBytes, regDescriptor.FeeRecipient)
-		require.Equal(t, blockNumber, regDescriptor.BlockNumber)
+		// Verify that a registration message was sent with the new fee recipient
+		select {
+		case regDescriptor := <-validatorRegistrationCh:
+			require.Equal(t, testValidator.Share.ValidatorIndex, regDescriptor.ValidatorIndex)
+			pkWant := phase0.BLSPubKey{}
+			copy(pkWant[:], testValidator.Share.ValidatorPubKey[:])
+			require.Equal(t, pkWant, regDescriptor.ValidatorPubkey)
+			require.Equal(t, secondFeeRecipientBytes, regDescriptor.FeeRecipient)
+			require.Equal(t, blockNumber, regDescriptor.BlockNumber)
+		case <-time.After(time.Second):
+			t.Fatal("Expected registration descriptor but got none")
+		}
 	})
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, firstFeeRecipientBytes)
+		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			testValidator.Share.ValidatorPubKey: testValidator,
 		}
@@ -606,10 +606,13 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes), 1)
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
 
-		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
-		require.Equal(t, firstFeeRecipientBytes, actualFeeRecipient, "Fee recipient address should not have changed")
-
-		require.Len(t, validatorRegistrationCh, 0, "Validator registration channel should be empty")
+		// Verify that no registration message was sent because owner address doesn't match
+		select {
+		case <-validatorRegistrationCh:
+			t.Fatal("Unexpected registration descriptor sent for wrong owner address")
+		case <-time.After(100 * time.Millisecond):
+			// Expected - no message should be sent
+		}
 	})
 }
 
@@ -712,14 +715,13 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 	return res
 }
 
-func setupTestValidator(validatorPk spectypes.ValidatorPK, ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
+func setupTestValidator(validatorPk spectypes.ValidatorPK, ownerAddressBytes []byte) *validator.Validator {
 	return &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
 
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey:     validatorPk,
-				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
+				ValidatorPubKey: validatorPk,
 			},
 			OwnerAddress: common.BytesToAddress(ownerAddressBytes),
 		},

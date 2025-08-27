@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -460,18 +461,17 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 
 	logger.Debug("processing event")
 
-	recipientData, found, err := eh.nodeStorage.GetRecipientData(txn, event.Owner)
-	if err != nil {
-		return false, fmt.Errorf("get recipient data: %w", err)
+	// Convert event recipient address to bellatrix.ExecutionAddress
+	var feeRecipient bellatrix.ExecutionAddress
+	copy(feeRecipient[:], event.RecipientAddress.Bytes())
+
+	// Reject zero fee recipient address
+	if feeRecipient == (bellatrix.ExecutionAddress{}) {
+		return false, fmt.Errorf("invalid zero fee recipient address")
 	}
 
-	if !found || recipientData == nil {
-		recipientData = &registrystorage.RecipientData{
-			Owner: event.Owner,
-		}
-	}
-	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
-	r, err := eh.nodeStorage.SaveRecipientData(txn, recipientData)
+	// Save or update fee recipient (handles all logic internally)
+	r, err := eh.nodeStorage.SaveRecipientData(txn, event.Owner, feeRecipient)
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}

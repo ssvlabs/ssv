@@ -9,6 +9,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -21,6 +22,9 @@ import (
 )
 
 func TestEviction(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	f, err := os.OpenFile("./benchdata/slot_3707881_3707882.ssz", os.O_RDONLY, 0644)
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +43,8 @@ func TestEviction(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, nil)
+	mockRecipients := registrystoragemocks.NewMockRecipients(ctrl)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, mockRecipients, nil)
 
 	collector := New(t.Context(), zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon)
 

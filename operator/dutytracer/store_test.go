@@ -26,13 +26,17 @@ import (
 )
 
 func TestValidatorCommitteeMapping(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, nil)
+	mockRecipients := registrymocks.NewMockRecipients(ctrl)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, mockRecipients, nil)
 
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
@@ -305,12 +309,17 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	index1 := phase0.ValidatorIndex(1)
 
 	// Setup db, shares & collector
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 	dutyStore := store.New(db)
 	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
 	require.NoError(t, err)
-	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, nil)
+
+	mockRecipients := registrymocks.NewMockRecipients(ctrl)
+	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, mockRecipients, nil)
 	shares.Save(db, &types.SSVShare{
 		Status: eth2apiv1.ValidatorStateActiveOngoing,
 		Share: spectypes.Share{
