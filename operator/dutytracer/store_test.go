@@ -7,6 +7,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -18,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	registrymocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -119,25 +121,18 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 }
 
 func TestCommitteeDutyStore(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	vstore := registrymocks.NewMockValidatorStore(ctrl)
+
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	dutyStore := store.New(db)
 
-	// setup validator validatorPK -> index mapping
-	var validatorPK spectypes.ValidatorPK
-	validatorPK[0] = 7
-
-	var index = phase0.ValidatorIndex(1)
-	value := make([]byte, 8)
-	binary.LittleEndian.PutUint64(value, uint64(index))
-
-	err = db.Set([]byte("val_pki"), validatorPK[:], value)
-	require.NoError(t, err)
-
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, nil)
+	// setup validator validatorPK1 -> index mapping
+	index1, validatorPK1 := setupValidatorStoreMock(vstore, 1)
 
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
@@ -198,9 +193,9 @@ func TestCommitteeDutyStore(t *testing.T) {
 		// assert that decideds are available (in memory)
 		for _, slot := range []phase0.Slot{slot4, slot7} {
 			collector.saveValidatorToCommitteeLink(slot, &spectypes.PartialSignatureMessages{
-				Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index}},
+				Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index1}},
 			}, committeeID1)
-			dd, err := collector.GetCommitteeDecideds(slot, validatorPK)
+			dd, err := collector.GetCommitteeDecideds(slot, validatorPK1)
 			require.NoError(t, err)
 			require.NotNil(t, dd)
 			require.Len(t, dd, 1)
@@ -235,7 +230,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 		}
 
 		for _, slot := range []phase0.Slot{slot4, slot7} {
-			dd, err := collector.GetCommitteeDecideds(slot, validatorPK)
+			dd, err := collector.GetCommitteeDecideds(slot, validatorPK1)
 			require.NoError(t, err)
 			require.NotNil(t, dd)
 			require.Len(t, dd, 1)
@@ -281,14 +276,14 @@ func TestCommitteeDutyStore(t *testing.T) {
 		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &model.SignerData{Signer: 1})
 		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &model.SignerData{Signer: 2})
 		dutyTrace5.Attester = append(dutyTrace5.Attester, &model.SignerData{Signer: 3})
-		dd, err := collector.GetCommitteeDecideds(slot7, validatorPK)
+		dd, err := collector.GetCommitteeDecideds(slot7, validatorPK1)
 		require.NoError(t, err)
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
 		require.Equal(t, []spectypes.OperatorID{1, 2, 3}, dd[0].Signers)
 	}
 
-	err = dutyStore.SaveCommitteeDutyLink(slot7, index, committeeID1)
+	err = dutyStore.SaveCommitteeDutyLink(slot7, index1, committeeID1)
 	require.NoError(t, err)
 
 	dd, err := collector.GetAllCommitteeDecideds(slot7)
@@ -359,32 +354,34 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	}
 }
 
+func setupValidatorStoreMock(store *registrymocks.MockValidatorStore, idx int) (phase0.ValidatorIndex, spectypes.ValidatorPK) {
+	index := phase0.ValidatorIndex(idx)
+	var validatorPK spectypes.ValidatorPK
+	binary.BigEndian.PutUint32(validatorPK[:], uint32(idx))
+
+	store.EXPECT().Validator(validatorPK).Return(&types.SSVShare{Share: spectypes.Share{ValidatorIndex: index, ValidatorPubKey: validatorPK}}, true).AnyTimes()
+	store.EXPECT().ValidatorIndex(validatorPK).Return(index, true).AnyTimes()
+	store.EXPECT().ValidatorByIndex(index).Return(&types.SSVShare{Share: spectypes.Share{ValidatorIndex: index, ValidatorPubKey: validatorPK}}, true).AnyTimes()
+	return index, validatorPK
+}
+
 func TestValidatorDutyStore(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	vstore := registrymocks.NewMockValidatorStore(ctrl)
+
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	dutyStore := store.New(db)
 
 	// setup validator pubkey -> index mapping
 	// this is used to get the validator index from the pubkey
 	// when the duty is not found in the cache
 	// because on disk the validator index is stored
-	var validatorPK1 spectypes.ValidatorPK
-	validatorPK1[0] = 1
-
-	var validatorPK2 spectypes.ValidatorPK
-	validatorPK2[0] = 2
-
-	var index = phase0.ValidatorIndex(1)
-	value := make([]byte, 8)
-	binary.LittleEndian.PutUint64(value, uint64(index))
-
-	err = db.Set([]byte("val_pki"), validatorPK1[:], value)
-	require.NoError(t, err)
-
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, &noOpRecipientReader{}, nil)
+	index1, validatorPK1 := setupValidatorStoreMock(vstore, 1)
+	index2, validatorPK2 := setupValidatorStoreMock(vstore, 2)
 
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
@@ -393,7 +390,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	dutyTrace, _, err := collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
 	roleDutyTrace := dutyTrace.getOrCreate(slot4, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = index
+	roleDutyTrace.Validator = index1
 	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
@@ -403,7 +400,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK2)
 	require.NoError(t, err)
 	roleDutyTrace = dutyTrace.getOrCreate(slot4, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = phase0.ValidatorIndex(2)
+	roleDutyTrace.Validator = index2
 	require.NotNil(t, dutyTrace)
 
 	slot7 := phase0.Slot(7)
@@ -411,7 +408,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
 	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = index
+	roleDutyTrace.Validator = index1
 	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
 		Signers: []spectypes.OperatorID{5},
 	})
@@ -421,7 +418,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK2)
 	require.NoError(t, err)
 	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = phase0.ValidatorIndex(2)
+	roleDutyTrace.Validator = index2
 	require.NotNil(t, dutyTrace)
 
 	dd, err := collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
@@ -490,7 +487,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, storedDuty4_2)
 	assert.Equal(t, slot4, storedDuty4_2.Slot)
-	assert.Equal(t, phase0.ValidatorIndex(2), storedDuty4_2.Validator)
+	assert.Equal(t, index2, storedDuty4_2.Validator)
 
 	// assert non-evicted traces are not on disk
 	storedDuty7_1, err := dutyStore.GetValidatorDuty(slot7, spectypes.BNRoleProposer, 1)

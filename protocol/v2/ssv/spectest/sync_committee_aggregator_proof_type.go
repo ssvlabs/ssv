@@ -14,7 +14,6 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -30,7 +29,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	logger := log.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, testingutils.KeySetForShare(share))
 	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
-	r.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
+	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
 	lastErr := v.StartDuty(context.TODO(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {

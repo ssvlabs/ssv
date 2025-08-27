@@ -904,7 +904,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-	startTime := time.Now()
+	slotStartTime := time.Now()
 	mockTicker.Send(phase0.Slot(2))
 
 	// STEP 4: trigger head event (block arrival)
@@ -915,7 +915,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.beaconConfig.SlotDuration/3)
+	require.Less(t, time.Since(slotStartTime), scheduler.beaconConfig.SlotDuration/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
