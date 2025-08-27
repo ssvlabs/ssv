@@ -217,6 +217,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
 
+	logger.Debug("QBFT instance is decided")
+
 	// update the highest decided slot
 	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
@@ -315,7 +317,10 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		return traces.Errorf(span, "input data invalid: %w", err)
 	}
 
-	span.AddEvent("start new instance")
+	const startingNewQBFTInstanceEvent = "starting new QBFT instance"
+	logger.Debug(startingNewQBFTInstanceEvent)
+	span.AddEvent(startingNewQBFTInstanceEvent)
+
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
 		ctx,
 		logger,

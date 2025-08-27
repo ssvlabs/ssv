@@ -16,11 +16,11 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -82,7 +82,10 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 
 	newInstance := c.addAndStoreNewInstance()
 
-	span.AddEvent("start new instance")
+	const startingNewQBFTInstanceEvent = "starting new QBFT instance"
+	logger.Debug(startingNewQBFTInstanceEvent)
+	span.AddEvent(startingNewQBFTInstanceEvent)
+
 	newInstance.Start(ctx, logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
 

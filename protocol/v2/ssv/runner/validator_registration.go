@@ -160,9 +160,13 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		fields.FeeRecipient(registration.FeeRecipient[:]),
-		zap.String("signature", hex.EncodeToString(specSig[:])))
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+	)
 
 	r.GetState().Finished = true
+
+	const dutyFinishedEvent = "successfully finished duty processing"
+	logger.Info(dutyFinishedEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

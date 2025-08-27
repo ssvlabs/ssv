@@ -475,12 +475,10 @@ func (gc *GoClient) multiClientSubmit(
 			err := submitFunc(ctx, client)
 			recordRequestDuration(ctx, operationName, clientAddress, http.MethodPost, time.Since(start), err)
 			if err != nil {
-				logger.Debug("a client failed to submit",
-					zap.Error(err))
-				return fmt.Errorf("client %s failed to submit %s: %w", clientAddress, operationName, err)
+				return fmt.Errorf("client %s failed %s: %w", clientAddress, operationName, err)
 			}
 
-			logger.Debug("a client submitted successfully")
+			logger.Debug("a client has submitted successfully")
 
 			submissions.Add(1)
 			return nil
@@ -493,9 +491,7 @@ func (gc *GoClient) multiClientSubmit(
 		return nil
 	}
 	if err != nil {
-		logger.Error("all clients failed to submit",
-			zap.Error(err))
-		return fmt.Errorf("failed to submit %s", operationName)
+		return fmt.Errorf("all clients failed %s: %w", operationName, err)
 	}
 	return nil
 }

@@ -186,8 +186,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 
-		logger = logger.With(fields.QBFTHeight(qbftMsg.Height))
-
 		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
 			return traces.Error(span, err)
 		}

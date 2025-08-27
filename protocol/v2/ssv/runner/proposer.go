@@ -87,7 +87,7 @@ func NewProposerRunner(
 		operatorSigner:      operatorSigner,
 		doppelgangerHandler: doppelgangerHandler,
 		valCheck:            valCheck,
-		measurements:        NewMeasurementsStore(),
+		measurements:        newMeasurementsStore(),
 		graffiti:            graffiti,
 
 		proposerDelay: proposerDelay,
@@ -161,6 +161,10 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		}
 	}
 
+	waitedOutProposerDelayEvent := fmt.Sprintf("waited out proposer delay of %dms", r.proposerDelay.Milliseconds())
+	logger.Debug(waitedOutProposerDelayEvent)
+	span.AddEvent(waitedOutProposerDelayEvent)
+
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
@@ -221,7 +225,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		))
 	defer span.End()
 
-	span.AddEvent("checking if instance is decided")
+	span.AddEvent("checking if QBFT instance is decided")
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
@@ -234,7 +238,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return nil
 	}
 
-	span.AddEvent("instance is decided")
+	span.AddEvent("QBFT instance is decided")
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
 
@@ -310,6 +314,10 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 
+	const broadcastedPostEvent = "broadcasted post consensus partial signature message"
+	logger.Debug(broadcastedPostEvent)
+	span.AddEvent(broadcastedPostEvent)
+
 	span.SetStatus(codes.Ok, "")
 	return nil
 }
@@ -333,6 +341,13 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		return nil
 	}
 
+	r.measurements.EndPostConsensus()
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
+
+	const gotPostConsensusQuorumEvent = "got post consensus quorum"
+	logger.Debug(gotPostConsensusQuorumEvent)
+	span.AddEvent(gotPostConsensusQuorumEvent)
+
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]
 
@@ -346,13 +361,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
 
-	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
-
 	logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
-		zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
-		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
-		fields.QBFTRound(r.GetState().RunningInstance.State.Round))
+		zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)))
 
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
@@ -364,14 +374,10 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	start := time.Now()
 
-	logger = logger.With(
-		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-		fields.ConsensusTime(r.measurements.ConsensusTime()),
-		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
-		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
-		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
-		zap.Bool("blinded", r.decidedBlindedBlock()),
-	)
+	const submittingBlockProposalEvent = "submitting block proposal"
+	span.AddEvent(submittingBlockProposalEvent)
+	logger.Info(submittingBlockProposalEvent)
+
 	var (
 		bSummary     blockSummary
 		summarizeErr error
@@ -383,16 +389,13 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		}
 
 		bSummary, summarizeErr = summarizeBlock(vBlindedBlk)
-		logger = logger.With(
-			fields.BlockHash(bSummary.Hash),
-			zap.NamedError("summarize_err", summarizeErr),
-		)
+		logger = logger.With(fields.BlockHash(bSummary.Hash), zap.NamedError("summarize_err", summarizeErr))
 
 		if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(ctx, vBlindedBlk, specSig); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 
 			const errMsg = "could not submit blinded Beacon block"
-			logger.Error(errMsg, fields.SubmissionTime(time.Since(start)), zap.Error(err))
+			logger.Error(errMsg, fields.Took(time.Since(start)), zap.Error(err))
 			return traces.Errorf(span, "%s: %w", errMsg, err)
 		}
 	} else {
@@ -401,38 +404,27 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			return traces.Errorf(span, "could not get block: %w", err)
 		}
 		bSummary, summarizeErr = summarizeBlock(vBlk)
-		logger = logger.With(
-			fields.BlockHash(bSummary.Hash),
-			zap.NamedError("summarize_err", summarizeErr),
-		)
+		logger = logger.With(fields.BlockHash(bSummary.Hash), zap.NamedError("summarize_err", summarizeErr))
 
 		if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 
 			const errMsg = "could not submit Beacon block"
-			logger.Error(errMsg,
-				fields.SubmissionTime(time.Since(start)),
-				zap.Error(err))
+			logger.Error(errMsg, fields.Took(time.Since(start)), zap.Error(err))
 			return traces.Errorf(span, "%s: %w", errMsg, err)
 		}
 	}
 
-	const eventMsg = "✅ successfully submitted block proposal"
-	span.AddEvent(eventMsg, trace.WithAttributes(
-		observability.BeaconSlotAttribute(r.BaseRunner.State.StartingDuty.DutySlot()),
-		observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
+	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"
+	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(
 		observability.BeaconBlockHashAttribute(bSummary.Hash),
 		observability.BeaconBlockIsBlindedAttribute(bSummary.Blinded),
 	))
-	logger.Info(eventMsg,
-		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
-		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
+	logger.Info(submittedBlockProposalEvent,
 		zap.String("block_hash", bSummary.Hash.String()),
 		zap.Bool("blinded", bSummary.Blinded),
-		fields.Took(time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr),
-		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+		fields.Took(time.Since(start)),
 	)
 
 	r.GetState().Finished = true
@@ -445,6 +437,16 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
 		spectypes.BNRoleProposer,
 	)
+
+	const dutyFinishedEvent = "successfully finished duty processing"
+	logger.Info(dutyFinishedEvent,
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+	)
+	span.AddEvent(dutyFinishedEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

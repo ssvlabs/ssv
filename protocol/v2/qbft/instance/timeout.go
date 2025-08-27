@@ -31,7 +31,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer func() {
 		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
-		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
+		i.config.GetTimer().TimeoutForRound(i.State.Height, newRound)
 	}()
 
 	roundChange, err := i.CreateRoundChange(newRound)
@@ -46,15 +46,14 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 
 	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
 
-	const eventMsg = "📢 broadcasting round change message"
+	const eventMsg = "📢 broadcasting round change message (this round timed out)"
 	span.AddEvent(eventMsg,
 		trace.WithAttributes(
 			observability.BeaconBlockRootAttribute(root),
-			observability.DutyRoundAttribute(i.State.Round),
+			observability.DutyRoundAttribute(prevRound),
 		))
-
 	logger.Debug(eventMsg,
-		fields.QBFTRound(i.State.Round),
+		fields.QBFTRound(prevRound),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
 		fields.QBFTHeight(i.State.Height),
