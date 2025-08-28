@@ -21,7 +21,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -161,7 +160,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	}
 
 	network := &spectestingutils.TestingNetwork{}
-	var beaconNetwork *tests.TestingBeaconNodeWrapped
+	var beaconNetwork *protocoltesting.BeaconNodeWrapped
 	var committee []*spectypes.Operator
 
 	switch test.Runner.(type) {
@@ -172,12 +171,12 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			break
 		}
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork = runnerInstance.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		committee = c.CommitteeMember.Committee
 	default:
 		network = v.Network.(*spectestingutils.TestingNetwork)
 		committee = v.Operator.Committee
-		beaconNetwork = test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		beaconNetwork = test.Runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 	}
 
 	// test output message
@@ -195,21 +194,6 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		logger.Error("post runner state not equal", zap.String("state", diff))
 	}
 }
-
-//func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-//	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
-//	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
-//	for _, r1 := range test.BeaconBroadcastedRoots {
-//		found := false
-//		for _, r2 := range broadcastedRoots {
-//			if r1 == hex.EncodeToString(r2[:]) {
-//				found = true
-//				break
-//			}
-//		}
-//		require.Truef(t, found, "broadcasted beacon root not found")
-//	}
-//}
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testType := reflect.TypeOf(test).String()

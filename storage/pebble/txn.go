@@ -68,7 +68,7 @@ func (txn *txn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error {
 
 	defer func() { _ = iter.Close() }()
 
-	return allGetter(txn.logger, iter, prefix, fn)
+	return allGetter(iter, prefix, fn)
 }
 
 func (txn *txn) Delete(prefix []byte, key []byte) error {
@@ -102,7 +102,7 @@ func (txn *readTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error 
 
 	defer func() { _ = iter.Close() }()
 
-	return allGetter(txn.logger, iter, prefix, fn)
+	return allGetter(iter, prefix, fn)
 }
 
 func (txn *readTxn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
