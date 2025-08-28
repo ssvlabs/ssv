@@ -139,11 +139,6 @@ func (s *recipientsStorage) GetFeeRecipient(owner common.Address) (bellatrix.Exe
 	return recipient, nil
 }
 
-// GetRecipientsPrefix returns DB prefix
-func (s *recipientsStorage) GetRecipientsPrefix() []byte {
-	return recipientsPrefix
-}
-
 func (s *recipientsStorage) getRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error) {
 	obj, found, err := s.db.UsingReader(r).Get(s.prefix, buildRecipientKey(owner))
 	if err != nil {
