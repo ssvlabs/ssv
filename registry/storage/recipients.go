@@ -95,7 +95,7 @@ func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte)
 
 	// Load all recipients into memory
 	if err := rs.loadFromDB(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not load recipients from database: %w", err)
 	}
 
 	return rs, nil
@@ -216,7 +216,7 @@ func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address
 	}
 
 	if err = s.db.Using(rw).Set(s.prefix, buildRecipientKey(rData.Owner), raw); err != nil {
-		return err
+		return fmt.Errorf("could not set recipient data: %w", err)
 	}
 
 	// Update in-memory map only if this is a new recipient
@@ -261,7 +261,7 @@ func (s *recipientsStorage) SaveRecipientData(rw basedb.ReadWriter, owner common
 	}
 
 	if err = s.db.Using(rw).Set(s.prefix, buildRecipientKey(owner), raw); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not set recipient data: %w", err)
 	}
 
 	// Update in-memory map
@@ -275,7 +275,7 @@ func (s *recipientsStorage) DeleteRecipientData(rw basedb.ReadWriter, owner comm
 	defer s.lock.Unlock()
 
 	if err := s.db.Using(rw).Delete(s.prefix, buildRecipientKey(owner)); err != nil {
-		return err
+		return fmt.Errorf("could not delete recipient data: %w", err)
 	}
 
 	// Remove from in-memory map
@@ -289,7 +289,7 @@ func (s *recipientsStorage) DropRecipients() error {
 	defer s.lock.Unlock()
 
 	if err := s.db.DropPrefix(RecipientsDBPrefix(s.prefix)); err != nil {
-		return err
+		return fmt.Errorf("could not drop recipients prefix: %w", err)
 	}
 
 	// Clear in-memory map
