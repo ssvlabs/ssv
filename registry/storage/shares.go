@@ -98,11 +98,14 @@ const addressLength = 20
 // (e.g. 'Name, Address []byte')
 // GitHub issue: (https://github.com/ferranbt/fastssz/issues/188)
 type Share struct {
-	ValidatorIndex      uint64
-	ValidatorPubKey     []byte             `ssz-size:"48"`
-	SharePubKey         []byte             `ssz-max:"48"` // empty for not own shares
-	Committee           []*storageOperator `ssz-max:"13"`
-	DomainType          [4]byte            `ssz-size:"4"`
+	ValidatorIndex  uint64
+	ValidatorPubKey []byte             `ssz-size:"48"`
+	SharePubKey     []byte             `ssz-max:"48"` // empty for not own shares
+	Committee       []*storageOperator `ssz-max:"13"`
+	DomainType      [4]byte            `ssz-size:"4"`
+	// FeeRecipientAddress is unused - fee recipients are stored in Recipients storage.
+	// DO NOT REMOVE: Removing this field would break SSZ decoding of existing DB data.
+	// Wait for a major migration to batch this removal with other breaking changes.
 	FeeRecipientAddress [addressLength]byte
 	Graffiti            []byte `ssz-max:"32"`
 	Status              uint64

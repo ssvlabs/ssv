@@ -100,12 +100,13 @@ func mapShare(share *migration_6_OldStorageShare) *storage.Share {
 
 	domainShare := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorPubKey: validatorPubKey,
-			SharePubKey:     share.SharePubKey,
-			Committee:       committee,
-			DomainType:      share.DomainType,
-			Graffiti:        share.Graffiti,
-			ValidatorIndex:  phase0.ValidatorIndex(share.ValidatorIndex),
+			ValidatorPubKey:     validatorPubKey,
+			SharePubKey:         share.SharePubKey,
+			Committee:           committee,
+			DomainType:          share.DomainType,
+			FeeRecipientAddress: share.FeeRecipientAddress,
+			Graffiti:            share.Graffiti,
+			ValidatorIndex:      phase0.ValidatorIndex(share.ValidatorIndex),
 		},
 		OwnerAddress:    share.OwnerAddress,
 		Liquidated:      share.Liquidated,
