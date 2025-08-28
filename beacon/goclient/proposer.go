@@ -412,9 +412,13 @@ func (gc *GoClient) handleProposalPreparationsOnReconnect(ctx context.Context, c
 	provider := gc.proposalPreparationsProvider
 	gc.proposalPreparationsProviderMu.RUnlock()
 
-	// Provider might be nil if reconnection happens during startup before SetProposalPreparationsProvider is called
+	// Provider should always be set by the time reconnection occurs, as SetProposalPreparationsProvider
+	// is called during node initialization before any beacon client connections are established.
+	// If we hit this condition, it indicates an initialization ordering issue that should be investigated.
 	if provider == nil {
-		logger.Warn("proposal preparations provider not set yet, skipping re-submission on reconnect")
+		logger.Warn("proposal preparations provider not set during reconnection, check initialization order",
+			zap.String("expected", "provider set before reconnections"),
+			zap.String("impact", "skipping preparation re-submission for this reconnection"))
 		return
 	}
 
