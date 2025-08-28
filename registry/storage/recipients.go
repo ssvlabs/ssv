@@ -76,6 +76,8 @@ type Recipients interface {
 type recipientsStorage struct {
 	logger *zap.Logger
 	db     basedb.Database
+	// lock protects concurrent access to recipient data, ensuring atomic operations
+	// across both the in-memory feeRecipients map and database operations (nonce management)
 	lock   sync.RWMutex
 	prefix []byte
 
