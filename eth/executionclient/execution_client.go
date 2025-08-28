@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
@@ -67,7 +69,7 @@ type ExecutionClient struct {
 	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	client         *ethClient
+	client         *ethclient.Client
 	closed         chan struct{}
 	lastSyncedTime atomic.Int64
 }
@@ -484,12 +486,14 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	start := time.Now()
 	reqCtx, cancel := context.WithTimeout(ctx, ec.reqTimeout)
 	defer cancel()
-	c, err := ethclient.DialContext(reqCtx, ec.nodeAddr)
+	rpcClient, err := rpc.DialOptions(reqCtx, ec.nodeAddr, rpc.WithHTTPClient(&http.Client{
+		Timeout: ec.reqTimeout,
+	}))
 	if err != nil {
-		return ec.errWithDetails(fmt.Errorf("ethclient dial: %w", err), "DialContext")
+		return ec.errWithDetails(fmt.Errorf("ethclient: rpc client dial: %w", err), "DialContext")
 	}
 
-	ec.client = newEthClient(c, ec.reqTimeout)
+	ec.client = ethclient.NewClient(rpcClient)
 
 	ec.logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
 
