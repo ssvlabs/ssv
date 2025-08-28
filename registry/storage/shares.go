@@ -200,14 +200,12 @@ func (s *sharesStorage) loadFromDB() error {
 		}
 
 		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = share
-		// Owner index removed - not needed anymore
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-
-	// Fee recipients are now loaded by ValidatorStore during handleSharesAdded
 
 	return nil
 }
@@ -436,8 +434,6 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 
 		// Remove the share from local storage map
 		delete(s.shares, hex.EncodeToString(pubKey))
-
-		// Owner index removed - not needed anymore
 
 		// Remove the share from the validator store. This method will handle its own locking.
 		return s.validatorStore.handleShareRemoved(share)
