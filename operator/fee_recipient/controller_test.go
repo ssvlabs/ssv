@@ -106,20 +106,19 @@ func TestSubmitProposal(t *testing.T) {
 	beaconConfig := networkconfig.TestNetwork.Beacon
 	populateStorage(t, shareStorage, operatorData)
 
-	// Create test recipient storage
-	testRecipientStorage := newTestRecipientStorage()
-
-	// Create ValidatorProvider for testing
-	validatorProvider := newTestValidatorProvider(shareStorage, testRecipientStorage, operatorData.ID)
-
-	frCtrl := NewController(logger, &ControllerOptions{
-		Ctx:               t.Context(),
-		BeaconConfig:      beaconConfig,
-		ValidatorProvider: validatorProvider,
-		OperatorDataStore: operatorDataStore,
-	})
-
 	t.Run("custom fee recipients from storage", func(t *testing.T) {
+		// Create test recipient storage
+		testRecipientStorage := newTestRecipientStorage()
+
+		// Create ValidatorProvider for testing
+		validatorProvider := newTestValidatorProvider(shareStorage, testRecipientStorage, operatorData.ID)
+
+		frCtrl := NewController(logger, &ControllerOptions{
+			Ctx:               t.Context(),
+			BeaconConfig:      beaconConfig,
+			ValidatorProvider: validatorProvider,
+			OperatorDataStore: operatorDataStore,
+		})
 		// Define custom recipients for testing
 		type recipientConfig struct {
 			owner     common.Address
@@ -215,6 +214,19 @@ func TestSubmitProposal(t *testing.T) {
 	})
 
 	t.Run("correct validator index to fee recipient mapping", func(t *testing.T) {
+		// Create test recipient storage
+		testRecipientStorage := newTestRecipientStorage()
+
+		// Create ValidatorProvider for testing
+		validatorProvider := newTestValidatorProvider(shareStorage, testRecipientStorage, operatorData.ID)
+
+		frCtrl := NewController(logger, &ControllerOptions{
+			Ctx:               t.Context(),
+			BeaconConfig:      beaconConfig,
+			ValidatorProvider: validatorProvider,
+			OperatorDataStore: operatorDataStore,
+		})
+
 		var capturedRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress
 
 		client := beacon.NewMockBeaconNode(ctrl)
