@@ -261,8 +261,7 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 		return nil, fmt.Errorf("could not get fee recipient for validator %x: %w", validatorPubKey, err)
 	}
 
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], validatorPubKey[:])
+	pk := phase0.BLSPubKey(validatorPubKey)
 
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
 	// on the current epoch as compared to when this transition is supposed to happen.
@@ -408,8 +407,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 				if !share.IsAttesting(currentEpoch + 10) {
 					continue
 				}
-				pk := phase0.BLSPubKey{}
-				copy(pk[:], share.ValidatorPubKey[:])
+				pk := phase0.BLSPubKey(share.ValidatorPubKey)
 				r, ok := s.registrations[pk]
 				if !ok {
 					// we haven't constructed the corresponding validator registration for submission yet,

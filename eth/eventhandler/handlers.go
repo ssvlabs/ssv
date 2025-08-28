@@ -508,8 +508,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, nil
 	}
 
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], share.ValidatorPubKey[:])
+	pk := phase0.BLSPubKey(share.ValidatorPubKey)
 
 	ed := &duties.ExitDescriptor{
 		OwnValidator:   false,

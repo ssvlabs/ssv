@@ -83,8 +83,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 		if v.Share.OwnerAddress == owner {
 			logger.Debug("updated recipient address")
 
-			pk := phase0.BLSPubKey{}
-			copy(pk[:], v.Share.ValidatorPubKey[:])
+			pk := phase0.BLSPubKey(v.Share.ValidatorPubKey)
 			regDesc := duties.RegistrationDescriptor{
 				ValidatorIndex:  v.Share.ValidatorIndex,
 				ValidatorPubkey: pk,
