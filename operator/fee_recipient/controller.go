@@ -81,9 +81,7 @@ func (rc *recipientController) getPreparations() map[phase0.ValidatorIndex]bella
 	return rc.buildProposalPreparations(activeShares)
 }
 
-// listenToTicker submits proposal preparations periodically at the middle slot of each epoch.
-// This ensures beacon nodes have current fee recipient information even if no changes occur.
-// Event-driven updates are handled separately via listenToFeeRecipientChanges.
+// listenToTicker submits proposal preparations on startup and then at the middle slot of each epoch.
 func (rc *recipientController) listenToTicker(ctx context.Context) {
 	firstTimeSubmitted := false
 	ticker := rc.slotTickerProvider()
@@ -99,14 +97,12 @@ func (rc *recipientController) listenToTicker(ctx context.Context) {
 			}
 			firstTimeSubmitted = true
 
-			if err := rc.prepareAndSubmit(ctx); err != nil {
-				rc.logger.Warn("could not submit proposal preparations", zap.Error(err))
-			}
+			rc.prepareAndSubmit(ctx)
 		}
 	}
 }
 
-func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
+func (rc *recipientController) prepareAndSubmit(ctx context.Context) {
 	preparations := rc.getPreparations()
 
 	// Convert map to slice of indices for batching
@@ -145,7 +141,6 @@ func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
 		zap.Int("submitted", submitted),
 		zap.Int("total", len(preparations)),
 	)
-	return nil
 }
 
 func (rc *recipientController) buildProposalPreparations(shares []*types.SSVShare) map[phase0.ValidatorIndex]bellatrix.ExecutionAddress {

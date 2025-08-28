@@ -156,8 +156,7 @@ func TestSubmitProposal(t *testing.T) {
 
 		frCtrl.beaconClient = client
 
-		err := frCtrl.prepareAndSubmit(t.Context())
-		require.NoError(t, err)
+		frCtrl.prepareAndSubmit(t.Context())
 
 		// Verify custom recipients are used for configured validators
 		for _, config := range customRecipients {
@@ -203,8 +202,7 @@ func TestSubmitProposal(t *testing.T) {
 
 		frCtrl2.beaconClient = client
 
-		err := frCtrl2.prepareAndSubmit(t.Context())
-		require.NoError(t, err)
+		frCtrl2.prepareAndSubmit(t.Context())
 
 		// Verify all validators use their owner address as fee recipient
 		for i := 0; i < 10; i++ { // Check first 10 validators
@@ -228,8 +226,7 @@ func TestSubmitProposal(t *testing.T) {
 
 		frCtrl.beaconClient = client
 
-		err := frCtrl.prepareAndSubmit(t.Context())
-		require.NoError(t, err)
+		frCtrl.prepareAndSubmit(t.Context())
 
 		// Verify mapping has correct number of entries (100 committee validators)
 		require.Len(t, capturedRecipients, 100)
@@ -292,8 +289,7 @@ func TestSubmitProposal(t *testing.T) {
 
 		frCtrl2.beaconClient = client
 
-		err := frCtrl2.prepareAndSubmit(t.Context())
-		require.NoError(t, err)
+		frCtrl2.prepareAndSubmit(t.Context())
 
 		// Should have exactly 1 batch of 500
 		require.Equal(t, 500, batchSize)
@@ -324,8 +320,7 @@ func TestSubmitProposal(t *testing.T) {
 		frCtrl3.beaconClient = client
 
 		// Should handle error gracefully without panic
-		err := frCtrl3.prepareAndSubmit(t.Context())
-		require.NoError(t, err) // prepareAndSubmit logs errors but returns nil
+		frCtrl3.prepareAndSubmit(t.Context())
 	})
 }
 
