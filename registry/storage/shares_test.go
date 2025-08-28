@@ -429,32 +429,34 @@ func TestShareStorage_MultipleCommittees(t *testing.T) {
 			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 
-		share1 := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
-		share2 := fakeParticipatingShare(2, generateRandomPubKey(), []uint64{1, 2, 3, 4})
-		share3 := fakeParticipatingShare(3, generateRandomPubKey(), []uint64{3, 4, 5, 6})
-		share4 := fakeParticipatingShare(4, generateRandomPubKey(), []uint64{9, 10, 11, 12})
-		saveAndVerify(share1, share2, share3, share4)
+		testShares := []*ssvtypes.SSVShare{
+			fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4}),
+			fakeParticipatingShare(2, generateRandomPubKey(), []uint64{1, 2, 3, 4}),
+			fakeParticipatingShare(3, generateRandomPubKey(), []uint64{3, 4, 5, 6}),
+			fakeParticipatingShare(4, generateRandomPubKey(), []uint64{9, 10, 11, 12}),
+		}
+		saveAndVerify(testShares[0], testShares[1], testShares[2], testShares[3])
 
 		// Test that an exclusive committee with only 1 validator is removed then re-added
 		// for operators that also have other committees (edgecase).
-		deleteAndVerify(share3)
-		saveAndVerify(share3)
+		deleteAndVerify(testShares[2])
+		saveAndVerify(testShares[2])
 
 		// Test that a committee with multiple validators is not removed.
-		deleteAndVerify(share2)
+		deleteAndVerify(testShares[1])
 
 		// Test that a committee with multiple validators is removed when all committee validators are removed.
-		deleteAndVerify(share1)
+		deleteAndVerify(testShares[0])
 
 		// Test that ValidatorStore is empty after all validators are removed.
-		deleteAndVerify(share3)
-		deleteAndVerify(share4)
+		deleteAndVerify(testShares[2])
+		deleteAndVerify(testShares[3])
 		require.Empty(t, storage.ValidatorStore.Validators())
 		require.Empty(t, storage.ValidatorStore.Committees())
 		require.Empty(t, storage.ValidatorStore.OperatorValidators(1))
 
-		// Re-add share2 to test that ValidatorStore is updated correctly.
-		saveAndVerify(share2)
+		// Re-add second share to test that ValidatorStore is updated correctly.
+		saveAndVerify(testShares[1])
 	})
 }
 
@@ -464,10 +466,12 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	defer storage.Close()
 
-	share1 := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
-	share2 := fakeParticipatingShare(2, generateRandomPubKey(), []uint64{1, 2, 3, 4})
-	share3 := fakeParticipatingShare(3, generateRandomPubKey(), []uint64{3, 4, 5, 6})
-	share4 := fakeParticipatingShare(4, generateRandomPubKey(), []uint64{9, 10, 11, 12})
+	testShares := []*ssvtypes.SSVShare{
+		fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4}),
+		fakeParticipatingShare(2, generateRandomPubKey(), []uint64{1, 2, 3, 4}),
+		fakeParticipatingShare(3, generateRandomPubKey(), []uint64{3, 4, 5, 6}),
+		fakeParticipatingShare(4, generateRandomPubKey(), []uint64{9, 10, 11, 12}),
+	}
 
 	// High contention test with concurrent read, add, update, and remove
 	var wg sync.WaitGroup
@@ -481,11 +485,11 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 				for ctx.Err() == nil {
 					switch op {
 					case "add":
-						require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
+						require.NoError(t, storage.Shares.Save(nil, testShares[0], testShares[1], testShares[2], testShares[3]))
 					case "update":
 						_, err := storage.Shares.UpdateValidatorsMetadata(
 							map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-								share2.ValidatorPubKey: {
+								testShares[1].ValidatorPubKey: {
 									Status:          updatedShare2.Status,
 									Index:           updatedShare2.ValidatorIndex,
 									ActivationEpoch: updatedShare2.ActivationEpoch,
@@ -493,12 +497,12 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 							})
 						require.NoError(t, err)
 					case "remove1":
-						require.NoError(t, storage.Shares.Delete(nil, share1.ValidatorPubKey[:]))
+						require.NoError(t, storage.Shares.Delete(nil, testShares[0].ValidatorPubKey[:]))
 					case "remove4":
-						require.NoError(t, storage.Shares.Delete(nil, share4.ValidatorPubKey[:]))
+						require.NoError(t, storage.Shares.Delete(nil, testShares[3].ValidatorPubKey[:]))
 					case "read":
-						_, _ = storage.ValidatorStore.Validator(share1.ValidatorPubKey[:])
-						_, _ = storage.ValidatorStore.Committee(share1.CommitteeID())
+						_, _ = storage.ValidatorStore.Validator(testShares[0].ValidatorPubKey[:])
+						_, _ = storage.ValidatorStore.Committee(testShares[0].CommitteeID())
 						_ = storage.ValidatorStore.Validators()
 						_ = storage.ValidatorStore.Committees()
 					}
@@ -517,16 +521,16 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 			storage.ValidatorStore.OperatorCommittees(1)
 		})
 
-		// Verify that share2 and share3 are in the validator store (only share1 and share4 are potentially removed).
-		share2InStore, exists := storage.ValidatorStore.ValidatorByIndex(share2.ValidatorIndex)
+		// Verify that shares at index 1 and 2 are in the validator store (indices 0 and 3 are potentially removed).
+		shareInStore, exists := storage.ValidatorStore.ValidatorByIndex(testShares[1].ValidatorIndex)
 		require.True(t, exists)
-		require.NotNil(t, share2InStore)
-		requireEqualShare(t, share2, share2InStore)
+		require.NotNil(t, shareInStore)
+		requireEqualShare(t, testShares[1], shareInStore)
 
-		share3InStore, exists := storage.ValidatorStore.ValidatorByIndex(share3.ValidatorIndex)
+		shareInStore, exists = storage.ValidatorStore.ValidatorByIndex(testShares[2].ValidatorIndex)
 		require.True(t, exists)
-		require.NotNil(t, share3InStore)
-		requireEqualShare(t, share3, share3InStore)
+		require.NotNil(t, shareInStore)
+		requireEqualShare(t, testShares[2], shareInStore)
 
 		// Integrity check.
 		requireValidatorStoreIntegrity(t, storage.ValidatorStore, storage.Shares.List(nil))

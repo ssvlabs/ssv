@@ -1121,24 +1121,25 @@ func TestValidatorStore_FeeRecipients(t *testing.T) {
 		customRecipient1 := bellatrix.ExecutionAddress{0x11, 0x22, 0x33}
 		customRecipient2 := bellatrix.ExecutionAddress{0x44, 0x55, 0x66}
 
-		share1 := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorIndex:  1,
-				ValidatorPubKey: spectypes.ValidatorPK{1, 2, 3},
-				Committee:       []*spectypes.ShareMember{{Signer: 1}},
+		testShares := []*ssvtypes.SSVShare{
+			{
+				Share: spectypes.Share{
+					ValidatorIndex:  1,
+					ValidatorPubKey: spectypes.ValidatorPK{1, 2, 3},
+					Committee:       []*spectypes.ShareMember{{Signer: 1}},
+				},
+				Status:       eth2apiv1.ValidatorStateActiveOngoing,
+				OwnerAddress: owner1,
 			},
-			Status:       eth2apiv1.ValidatorStateActiveOngoing,
-			OwnerAddress: owner1,
-		}
-
-		share2 := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorIndex:  2,
-				ValidatorPubKey: spectypes.ValidatorPK{4, 5, 6},
-				Committee:       []*spectypes.ShareMember{{Signer: 1}},
+			{
+				Share: spectypes.Share{
+					ValidatorIndex:  2,
+					ValidatorPubKey: spectypes.ValidatorPK{4, 5, 6},
+					Committee:       []*spectypes.ShareMember{{Signer: 1}},
+				},
+				Status:       eth2apiv1.ValidatorStateActiveOngoing,
+				OwnerAddress: owner2,
 			},
-			Status:       eth2apiv1.ValidatorStateActiveOngoing,
-			OwnerAddress: owner2,
 		}
 
 		feeRecipientByOwner := func(owner common.Address) (bellatrix.ExecutionAddress, error) {
@@ -1152,8 +1153,8 @@ func TestValidatorStore_FeeRecipients(t *testing.T) {
 		}
 
 		shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{
-			share1.ValidatorPubKey: share1,
-			share2.ValidatorPubKey: share2,
+			testShares[0].ValidatorPubKey: testShares[0],
+			testShares[1].ValidatorPubKey: testShares[1],
 		}
 
 		store := newValidatorStore(
@@ -1170,14 +1171,14 @@ func TestValidatorStore_FeeRecipients(t *testing.T) {
 			networkConfig.Beacon,
 		)
 
-		require.NoError(t, store.handleSharesAdded(share1, share2))
+		require.NoError(t, store.handleSharesAdded(testShares[0], testShares[1]))
 
 		// Test GetFeeRecipient returns custom recipients
-		recipient1, err := store.GetFeeRecipient(share1.ValidatorPubKey)
+		recipient1, err := store.GetFeeRecipient(testShares[0].ValidatorPubKey)
 		require.NoError(t, err)
 		require.Equal(t, customRecipient1, recipient1)
 
-		recipient2, err := store.GetFeeRecipient(share2.ValidatorPubKey)
+		recipient2, err := store.GetFeeRecipient(testShares[1].ValidatorPubKey)
 		require.NoError(t, err)
 		require.Equal(t, customRecipient2, recipient2)
 
