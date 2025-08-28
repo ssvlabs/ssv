@@ -910,15 +910,11 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 }
 
 func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	mockRecipients := registrystoragemocks.NewMockRecipients(ctrl)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, mockRecipients, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
 	var committeeID = spectypes.CommitteeID{1}
 
@@ -1019,15 +1015,11 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 }
 
 func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	mockRecipients := registrystoragemocks.NewMockRecipients(ctrl)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, mockRecipients, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
 	var vPubKey = spectypes.ValidatorPK{1}
 	var role = spectypes.BNRoleAggregator

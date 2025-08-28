@@ -80,7 +80,7 @@ func NewNodeStorage(beaconCfg *networkconfig.Beacon, logger *zap.Logger, db base
 	}
 
 	// Create shares storage with recipients dependency
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, recipientStore, OperatorStoragePrefix)
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, recipientStore.GetFeeRecipient, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}

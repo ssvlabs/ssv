@@ -35,11 +35,8 @@ var sharesPrefix = []byte("shares_v2/")
 // since the churn of validators is low, we can use an append only mapping
 var pubkeyIndexMapping = []byte("val_pki")
 
-// FeeRecipientReader is a read-only interface for getting fee recipients.
-// This interface is consumed by shares storage to enrich shares with fee recipient data.
-type FeeRecipientReader interface {
-	GetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error)
-}
+// GetFeeRecipientFunc is a function type for getting fee recipients by owner.
+type GetFeeRecipientFunc func(owner common.Address) (bellatrix.ExecutionAddress, error)
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -73,11 +70,10 @@ type Shares interface {
 }
 
 type sharesStorage struct {
-	db              basedb.Database
-	storagePrefix   []byte
-	shares          map[string]*types.SSVShare
-	validatorStore  *validatorStore
-	recipientReader FeeRecipientReader
+	db             basedb.Database
+	storagePrefix  []byte
+	shares         map[string]*types.SSVShare
+	validatorStore *validatorStore
 	// storageMtx serializes access to the database in order to avoid
 	// re-creation of a deleted share during update metadata
 	storageMtx sync.Mutex
@@ -140,12 +136,11 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, recipientReader FeeRecipientReader, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, getFeeRecipient GetFeeRecipientFunc, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
-		shares:          make(map[string]*types.SSVShare),
-		db:              db,
-		storagePrefix:   prefix,
-		recipientReader: recipientReader,
+		shares:        make(map[string]*types.SSVShare),
+		db:            db,
+		storagePrefix: prefix,
 	}
 
 	if err := storage.loadFromDB(); err != nil {
@@ -160,9 +155,7 @@ func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, recip
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
-		func(owner common.Address) (bellatrix.ExecutionAddress, error) {
-			return recipientReader.GetFeeRecipient(owner)
-		},
+		getFeeRecipient,
 		pubkeyIndexMapping,
 		beaconCfg,
 	)

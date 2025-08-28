@@ -41,15 +41,6 @@ func init() {
 	threshold.Init()
 }
 
-// testRecipientReader is a simple test implementation that returns owner address as fee recipient
-type testRecipientReader struct{}
-
-func (t *testRecipientReader) GetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error) {
-	var recipient bellatrix.ExecutionAddress
-	copy(recipient[:], owner.Bytes())
-	return recipient, nil
-}
-
 func TestValidatorSerializer(t *testing.T) {
 	sk := &bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -212,8 +203,10 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	t.Run("KV_reuse_works", func(t *testing.T) {
-		testRecipients := &testRecipientReader{}
-		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, storage.db, testRecipients, []byte("test"))
+		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, storage.db,
+			func(owner common.Address) (bellatrix.ExecutionAddress, error) {
+				return bellatrix.ExecutionAddress{}, nil
+			}, []byte("test"))
 		require.NoError(t, err)
 		existingValidators := storageDuplicate.List(nil)
 
@@ -733,7 +726,7 @@ func (t *testStorage) open(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork.Beacon, t.db, t.Recipients, []byte("test"))
+	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork.Beacon, t.db, t.Recipients.GetFeeRecipient, []byte("test"))
 	if err != nil {
 		return err
 	}

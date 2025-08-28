@@ -343,7 +343,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
 	// Create a minimal recipient storage just for SharesStorage initialization
 	recipientStorage, err := registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
 	require.NoError(t, err)
-	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, recipientStorage, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, recipientStorage.GetFeeRecipient, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
