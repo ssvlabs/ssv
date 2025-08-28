@@ -63,7 +63,7 @@ func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientContro
 }
 
 func (rc *recipientController) Start(ctx context.Context) {
-	go rc.listenToTicker(ctx)
+	rc.listenToTicker(ctx)
 }
 
 // getPreparations is a helper that fetches active validators and builds preparations
