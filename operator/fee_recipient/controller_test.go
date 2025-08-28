@@ -92,7 +92,6 @@ func (tvp *testValidatorProvider) GetFeeRecipient(validatorPK spectypes.Validato
 func TestSubmitProposal(t *testing.T) {
 	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	operatorData := &registrystorage.OperatorData{
 		ID: 123456789,
