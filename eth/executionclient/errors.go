@@ -12,14 +12,13 @@ var (
 	ErrClosed        = fmt.Errorf("closed")
 	ErrBadInput      = fmt.Errorf("bad input")
 	ErrNothingToSync = errors.New("nothing to sync")
+	ErrSyncing       = fmt.Errorf("syncing")
 )
 
-// Domain-specific errors.
-var (
-	errSyncing = fmt.Errorf("syncing")
-)
-
-const elResponseErrMsg = "Execution client returned an error"
+// errWithDetails wraps provided error adding more details to it.
+func (ec *ExecutionClient) errWithDetails(err error, method string) error {
+	return fmt.Errorf("%w (address=%s method=%s)", err, ec.nodeAddr, method)
+}
 
 const (
 	// errCodeQueryLimit refers to request exceeding the defined limit

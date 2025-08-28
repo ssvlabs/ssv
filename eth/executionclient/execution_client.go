@@ -56,29 +56,30 @@ type ExecutionClient struct {
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
 	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-	connectionTimeout           time.Duration
+	reqTimeout                  time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	healthInvalidationInterval  time.Duration
 	logBatchSize                uint64
 
 	syncDistanceTolerance uint64
-	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
+	// syncProgressFn is a struct-field so it can be overwritten for testing
+	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	client         *ethclient.Client
+	client         *ethClient
 	closed         chan struct{}
 	lastSyncedTime atomic.Int64
 }
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
-	client := &ExecutionClient{
+	ec := &ExecutionClient{
 		nodeAddr:                    nodeAddr,
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
 		followDistance:              DefaultFollowDistance,
-		connectionTimeout:           DefaultConnectionTimeout,
+		reqTimeout:                  DefaultReqTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
@@ -86,28 +87,25 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		closed:                      make(chan struct{}),
 	}
 	for _, opt := range opts {
-		opt(client)
+		opt(ec)
 	}
 
-	client.logger.Info("execution client: connecting", fields.Address(nodeAddr))
+	ec.logger = ec.logger.With(fields.Address(nodeAddr))
 
-	err := client.connect(ctx)
+	err := ec.connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
 	}
 
-	client.syncProgressFn = client.syncProgress
+	ec.syncProgressFn = func(ctx context.Context) (*ethereum.SyncProgress, error) {
+		return ec.client.SyncProgress(ctx)
+	}
 
-	return client, nil
+	return ec, nil
 }
 
-// TODO: add comments about SyncProgress, syncProgress, syncProgressFn
 func (ec *ExecutionClient) SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
 	return ec.syncProgressFn(ctx)
-}
-
-func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
-	return ec.client.SyncProgress(ctx)
 }
 
 // Close shuts down ExecutionClient.
@@ -121,10 +119,7 @@ func (ec *ExecutionClient) Close() error {
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
 	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_blockNumber"),
-			zap.Error(err))
-		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
+		return nil, nil, ec.errWithDetails(fmt.Errorf("get current block: %w", err), "eth_blockNumber")
 	}
 	if currentBlock < ec.followDistance {
 		return nil, nil, ErrNothingToSync
@@ -167,7 +162,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
 			}
-
 			results, err := ec.subdivideLogFetch(ctx, query)
 			if err != nil {
 				errCh <- err
@@ -292,11 +286,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return combinedLogs, nil
 	}
 
-	ec.logger.Error(elResponseErrMsg,
-		zap.String("method", "eth_getLogs"),
-		zap.Error(err))
-
-	return nil, err
+	return nil, ec.errWithDetails(fmt.Errorf("get filtered logs: %w", err), "eth_getLogs")
 }
 
 // StreamLogs subscribes to events emitted by the contract.
@@ -361,17 +351,11 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 }
 
 func (ec *ExecutionClient) healthy(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
-	defer cancel()
-
 	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_syncing"),
-			zap.Error(err))
-		return err
+		return ec.errWithDetails(fmt.Errorf("get sync progress: %w", err), "eth_syncing")
 	}
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
@@ -382,7 +366,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
 			recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
-			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
+			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, ErrSyncing)
 		}
 	} else {
 		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
@@ -397,36 +381,24 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
 	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
 	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_getBlockByNumber"),
-			zap.Error(err))
-		return nil, err
+		return nil, ec.errWithDetails(fmt.Errorf("get header by block number %s: %w", blockNumber, err), "eth_getBlockByNumber")
 	}
-
 	return h, nil
 }
 
 func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
 	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "EthSubscribe"),
-			zap.Error(err))
-		return nil, err
+		return nil, ec.errWithDetails(fmt.Errorf("subscribe to filtered logs (query=%s): %w", q, err), "EthSubscribe")
 	}
-
 	return logs, nil
 }
 
 func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
 	logs, err := ec.client.FilterLogs(ctx, q)
 	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_getLogs"),
-			zap.Error(err))
-		return nil, err
+		return nil, ec.errWithDetails(fmt.Errorf("get filtered logs (query=%s): %w", q, err), "eth_getLogs")
 	}
-
 	return logs, nil
 }
 
@@ -462,10 +434,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 	// So we can restart from this block once everything is good.
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("operation", "SubscribeNewHead"),
-			zap.Error(err))
-		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
+		return fromBlock, ec.errWithDetails(fmt.Errorf("subscribe new head: %w", err), "SubscribeNewHead")
 	}
 	defer sub.Unsubscribe()
 
@@ -509,24 +478,21 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 }
 
 // connect connects to Ethereum execution client.
-// It must not be called twice in parallel.
 func (ec *ExecutionClient) connect(ctx context.Context) error {
-	logger := ec.logger.With(fields.Address(ec.nodeAddr))
-
-	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
-	defer cancel()
+	ec.logger.Info("execution client: connecting")
 
 	start := time.Now()
-	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
+	reqCtx, cancel := context.WithTimeout(ctx, ec.reqTimeout)
+	defer cancel()
+	c, err := ethclient.DialContext(reqCtx, ec.nodeAddr)
 	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("operation", "DialContext"),
-			zap.Error(err))
-		return err
+		return ec.errWithDetails(fmt.Errorf("ethclient dial: %w", err), "DialContext")
 	}
-	ec.client = client
 
-	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
+	ec.client = newEthClient(c, ec.reqTimeout)
+
+	ec.logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
+
 	return nil
 }
 
