@@ -11,7 +11,7 @@ import (
 var (
 	ErrClosed        = fmt.Errorf("closed")
 	ErrBadInput      = fmt.Errorf("bad input")
-	ErrNothingToSync = errors.New("nothing to sync")
+	ErrNothingToSync = fmt.Errorf("nothing to sync")
 	ErrSyncing       = fmt.Errorf("syncing")
 )
 
