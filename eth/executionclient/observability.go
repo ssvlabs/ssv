@@ -97,22 +97,17 @@ var (
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, err error) {
+func recordRequestDuration(ctx context.Context, routeName, serverAddr string, duration time.Duration, err error) {
 	attr := []attribute.KeyValue{
 		semconv.ServerAddress(serverAddr),
-		semconv.HTTPRequestMethodKey.String(requestMethod),
 		attribute.String("http.route_name", routeName),
 	}
 
 	var rpcErr rpc.Error
-	if !errors.As(err, &rpcErr) {
-		requestDurationHistogram.Record(
-			ctx,
-			duration.Seconds(),
-			metric.WithAttributes(attr...))
-		return
+	if errors.As(err, &rpcErr) {
+		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
 	}
-	attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
+
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
