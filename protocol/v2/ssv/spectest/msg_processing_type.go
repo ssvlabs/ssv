@@ -21,6 +21,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -219,7 +220,7 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	default:
 		t.Fatalf("unknown runner type")
 	}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)

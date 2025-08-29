@@ -18,6 +18,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -25,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type SyncCommitteeAggregatorRunner struct {
@@ -68,7 +69,7 @@ func NewSyncCommitteeAggregatorRunner(
 		signer:         signer,
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
-		measurements:   NewMeasurementsStore(),
+		measurements:   newMeasurementsStore(),
 	}, nil
 }
 
@@ -90,7 +91,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing sync committee selection proof message: %w", err)
 	}
@@ -143,23 +144,28 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	if len(selectionProofs) == 0 {
-		span.AddEvent("no selection proofs")
-		span.SetStatus(codes.Ok, "")
 		r.GetState().Finished = true
 		r.measurements.EndDutyFlow()
+		const dutyFinishedNoProofsEvent = "successfully finished duty processin (no selection proofs)"
+		logger.Info(dutyFinishedNoProofsEvent,
+			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+			fields.ConsensusTime(r.measurements.ConsensusTime()),
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+		)
+		span.AddEvent(dutyFinishedNoProofsEvent)
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
 	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-
-	r.measurements.PauseDutyFlow()
 
 	span.AddEvent("fetching sync committee contributions")
 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(ctx, duty.DutySlot(), selectionProofs, subnets)
 	if err != nil {
 		return traces.Errorf(span, "could not get sync committee contribution: %w", err)
 	}
-	r.measurements.ContinueDutyFlow()
 
 	byts, err := contributions.MarshalSSZ()
 	if err != nil {
@@ -192,7 +198,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		))
 	defer span.End()
 
-	span.AddEvent("checking if instance is decided")
+	span.AddEvent("processing QBFT consensus msg")
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
@@ -205,7 +211,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		return nil
 	}
 
-	span.AddEvent("instance is decided")
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
@@ -281,6 +286,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
 
+	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
+	logger.Debug(broadcastedPostConsensusMsgEvent)
+	span.AddEvent(broadcastedPostConsensusMsgEvent)
+
 	span.SetStatus(codes.Ok, "")
 	return nil
 }
@@ -294,7 +303,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
@@ -356,24 +365,26 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 				Signature: blsSignedContribAndProof,
 			}
 
-			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(ctx, signedContribAndProof); err != nil {
+			const submittingSyncCommitteeEvent = "submitting sync committee aggregator"
+			span.AddEvent(submittingSyncCommitteeEvent)
+			logger.Debug(submittingSyncCommitteeEvent, fields.Took(time.Since(start)))
+
+			err = r.GetBeaconNode().SubmitSignedContributionAndProof(ctx, signedContribAndProof)
+			if err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleSyncCommitteeContribution)
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
-					fields.SubmissionTime(time.Since(start)),
-					zap.Error(err))
+					fields.Took(time.Since(start)),
+					zap.Error(err),
+				)
 				return traces.Errorf(span, "could not submit to Beacon chain reconstructed contribution and proof: %w", err)
 			}
 
 			successfullySubmittedContributions++
 
-			const eventMsg = "✅ successfully submitted sync committee aggregator"
-			span.AddEvent(eventMsg)
-			logger.Debug(
-				eventMsg,
-				fields.SubmissionTime(time.Since(start)),
-				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-			)
+			const submittedSyncCommitteeEvent = "✅ successfully submitted sync committee aggregator"
+			span.AddEvent(submittedSyncCommitteeEvent)
+			logger.Debug(submittedSyncCommitteeEvent, fields.Took(time.Since(start)))
+
 			break
 		}
 	}
@@ -382,12 +393,18 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(
-		ctx,
-		successfullySubmittedContributions,
-		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleSyncCommitteeContribution,
+	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()), spectypes.BNRoleSyncCommitteeContribution)
+
+	const dutyFinishedEvent = "successfully finished duty processing"
+	logger.Info(dutyFinishedEvent,
+		zap.Uint32("submitted_contributions", successfullySubmittedContributions),
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 	)
+	span.AddEvent(dutyFinishedEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

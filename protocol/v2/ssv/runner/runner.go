@@ -165,21 +165,30 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(
-	ctx context.Context,
-	runner Runner,
-	signedMsg *spectypes.PartialSignatureMessages,
-) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus.base_msg_processing"))
+	defer span.End()
+
 	if err := b.ValidatePreConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+
+	if hasQuorum {
+		const gotPostConsensusQuorumEvent = "got pre consensus quorum"
+		logger.Debug(gotPostConsensusQuorumEvent)
+		span.AddEvent(gotPostConsensusQuorumEvent)
+	}
+
 	return hasQuorum, roots, nil
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_consensus.base_msg_processing"))
+	defer span.End()
+
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
@@ -217,6 +226,10 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
 
+	const qbftInstanceIsDecidedEvent = "QBFT instance is decided"
+	logger.Debug(qbftInstanceIsDecidedEvent)
+	span.AddEvent(qbftInstanceIsDecidedEvent)
+
 	// update the highest decided slot
 	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
@@ -224,12 +237,22 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus.base_msg_processing"))
+	defer span.End()
+
 	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+
+	if hasQuorum {
+		const gotPostConsensusQuorumEvent = "got post consensus quorum"
+		logger.Debug(gotPostConsensusQuorumEvent)
+		span.AddEvent(gotPostConsensusQuorumEvent)
+	}
+
 	return hasQuorum, roots, nil
 }
 
@@ -315,7 +338,6 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		return traces.Errorf(span, "input data invalid: %w", err)
 	}
 
-	span.AddEvent("start new instance")
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
 		ctx,
 		logger,

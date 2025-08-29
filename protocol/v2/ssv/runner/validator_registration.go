@@ -109,7 +109,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing validator registration message: %w", err)
 	}
@@ -160,9 +160,14 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		fields.FeeRecipient(registration.FeeRecipient[:]),
-		zap.String("signature", hex.EncodeToString(specSig[:])))
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+	)
 
 	r.GetState().Finished = true
+
+	const dutyFinishedEvent = "successfully finished duty processing"
+	logger.Info(dutyFinishedEvent)
+	span.AddEvent(dutyFinishedEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

@@ -20,7 +20,6 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -46,10 +45,10 @@ type dutyTraceStore interface {
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
-	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]ibftstorage.ParticipantsRangeEntry, error)
+	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) ([]ibftstorage.ParticipantsRangeEntry, error)
+	GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]ibftstorage.ParticipantsRangeEntry, error)
 }
 
 // === Decideds ======================================================================================
@@ -96,7 +95,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		role := spectypes.BeaconRole(r)
 		store := e.participantStores.Get(role)
 
-		var participantsRange []qbftstorage.ParticipantsRangeEntry
+		var participantsRange []ibftstorage.ParticipantsRangeEntry
 
 		if len(pubkeys) == 0 {
 			var err error
@@ -123,7 +122,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, response)
 }
 
-func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, *multierror.Error) {
+func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]ibftstorage.ParticipantsRangeEntry, *multierror.Error) {
 	var errs *multierror.Error
 
 	if len(pubkeys) == 0 {
@@ -134,7 +133,7 @@ func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, pubkeys []spect
 		return participants, errs
 	}
 
-	var participants []qbftstorage.ParticipantsRangeEntry
+	var participants []ibftstorage.ParticipantsRangeEntry
 
 	for _, pubkey := range pubkeys {
 		participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
@@ -147,7 +146,7 @@ func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, pubkeys []spect
 	return participants, errs
 }
 
-func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, *multierror.Error) {
+func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]ibftstorage.ParticipantsRangeEntry, *multierror.Error) {
 	var errs *multierror.Error
 
 	if len(pubkeys) == 0 {
@@ -186,7 +185,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		for s := request.From; s <= request.To; s++ {
 			slot := phase0.Slot(s)
 
-			var roleParticipants []qbftstorage.ParticipantsRangeEntry
+			var roleParticipants []ibftstorage.ParticipantsRangeEntry
 			var roleErrs *multierror.Error
 
 			switch role {
@@ -222,7 +221,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, response)
 }
 
-func toParticipantResponse(role spectypes.BeaconRole, entry qbftstorage.ParticipantsRangeEntry) *participantResponse {
+func toParticipantResponse(role spectypes.BeaconRole, entry ibftstorage.ParticipantsRangeEntry) *participantResponse {
 	response := &participantResponse{
 		Role:      role.String(),
 		Slot:      uint64(entry.Slot),
