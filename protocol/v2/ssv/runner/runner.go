@@ -180,7 +180,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_consensus.qbft_consensus_msg_processing"))
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_consensus.base_processing"))
 	defer span.End()
 
 	prevDecided := false
@@ -222,7 +222,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 
 	const qbftInstanceIsDecidedEvent = "QBFT instance is decided"
 	logger.Debug(qbftInstanceIsDecidedEvent)
-	span.AddEvent("QBFT instance is decided")
+	span.AddEvent(qbftInstanceIsDecidedEvent)
 
 	// update the highest decided slot
 	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
@@ -231,12 +231,22 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus.base_processing"))
+	defer span.End()
+
 	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+
+	if hasQuorum {
+		const gotPostConsensusQuorumEvent = "got post consensus quorum"
+		logger.Debug(gotPostConsensusQuorumEvent)
+		span.AddEvent(gotPostConsensusQuorumEvent)
+	}
+
 	return hasQuorum, roots, nil
 }
 

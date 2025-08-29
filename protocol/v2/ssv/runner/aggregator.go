@@ -283,9 +283,9 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
 
-	const broadcastedPostEvent = "broadcasted post consensus partial signature message"
-	logger.Debug(broadcastedPostEvent)
-	span.AddEvent(broadcastedPostEvent)
+	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
+	logger.Debug(broadcastedPostConsensusMsgEvent)
+	span.AddEvent(broadcastedPostConsensusMsgEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -300,7 +300,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
@@ -318,10 +318,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregator)
-
-	const gotPostConsensusQuorumEvent = "got post consensus quorum"
-	logger.Debug(gotPostConsensusQuorumEvent)
-	span.AddEvent(gotPostConsensusQuorumEvent)
 
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]

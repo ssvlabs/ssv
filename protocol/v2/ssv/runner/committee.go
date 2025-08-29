@@ -449,9 +449,9 @@ listener:
 		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
 
-	const broadcastedPostEvent = "broadcasted post consensus partial signature message"
-	logger.Debug(broadcastedPostEvent)
-	span.AddEvent(broadcastedPostEvent)
+	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
+	logger.Debug(broadcastedPostConsensusMsgEvent)
+	span.AddEvent(broadcastedPostConsensusMsgEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -532,7 +532,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	defer span.End()
 
 	span.AddEvent("base post consensus message processing")
-	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, cr, signedMsg)
+	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, cr, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
@@ -558,10 +558,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	cr.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, cr.measurements.PostConsensusTime(), spectypes.RoleCommittee)
-
-	const gotPostConsensusQuorumEvent = "got post consensus quorum"
-	logger.Debug(gotPostConsensusQuorumEvent)
-	span.AddEvent(gotPostConsensusQuorumEvent)
 
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
@@ -753,12 +749,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		attestationsCount := len(attestations)
 		if attestationsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(
-				ctx,
-				uint32(attestationsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleAttester,
-			)
+			recordSuccessfulSubmission(ctx, uint32(attestationsCount), cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()), spectypes.BNRoleAttester)
 		}
 
 		attData, err := attestations[0].Data()
@@ -813,13 +804,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(
-				ctx,
-				uint32(syncMsgsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleSyncCommittee,
-			)
+			recordSuccessfulSubmission(ctx, uint32(syncMsgsCount), cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()), spectypes.BNRoleSyncCommittee)
 		}
+
 		const eventMsg = "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),

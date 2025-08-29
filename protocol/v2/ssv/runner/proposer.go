@@ -313,9 +313,9 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 
-	const broadcastedPostEvent = "broadcasted post consensus partial signature message"
-	logger.Debug(broadcastedPostEvent)
-	span.AddEvent(broadcastedPostEvent)
+	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
+	logger.Debug(broadcastedPostConsensusMsgEvent)
+	span.AddEvent(broadcastedPostConsensusMsgEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -330,7 +330,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
@@ -342,10 +342,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
-
-	const gotPostConsensusQuorumEvent = "got post consensus quorum"
-	logger.Debug(gotPostConsensusQuorumEvent)
-	span.AddEvent(gotPostConsensusQuorumEvent)
 
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]
@@ -430,12 +426,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(
-		ctx,
-		1,
-		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleProposer,
-	)
+	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()), spectypes.BNRoleProposer)
 
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
