@@ -2,9 +2,11 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -95,11 +97,26 @@ var (
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordRequestDuration(ctx context.Context, serverAddr string, duration time.Duration) {
+func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, err error) {
+	attr := []attribute.KeyValue{
+		semconv.ServerAddress(serverAddr),
+		semconv.HTTPRequestMethodKey.String(requestMethod),
+		attribute.String("http.route_name", routeName),
+	}
+
+	var rpcErr rpc.Error
+	if !errors.As(err, &rpcErr) {
+		requestDurationHistogram.Record(
+			ctx,
+			duration.Seconds(),
+			metric.WithAttributes(attr...))
+		return
+	}
+	attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
-		metric.WithAttributes(semconv.ServerAddress(serverAddr)))
+		metric.WithAttributes(attr...))
 }
 
 func executionClientStatusAttribute(value executionClientStatus) attribute.KeyValue {

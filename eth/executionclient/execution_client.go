@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -119,7 +120,9 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
+	start := time.Now()
 	currentBlock, err := ec.client.BlockNumber(ctx)
+	recordRequestDuration(ctx, "BlockNumber", ec.nodeAddr, http.MethodGet, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_blockNumber"),
@@ -235,7 +238,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	default:
 	}
 
-	logs, err := ec.client.FilterLogs(ctx, q)
+	logs, err := ec.FilterLogs(ctx, q)
 	if err == nil {
 		return logs, nil
 	}
@@ -366,6 +369,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 
 	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
+	recordRequestDuration(ctx, "SyncProgress", ec.nodeAddr, http.MethodPost, time.Since(start), err)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 		ec.logger.Error(elResponseErrMsg,
@@ -373,7 +377,6 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 			zap.Error(err))
 		return err
 	}
-	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
 	if sp != nil {
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
@@ -395,7 +398,9 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 }
 
 func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
+	start := time.Now()
 	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
+	recordRequestDuration(ctx, "HeaderByNumber", ec.nodeAddr, http.MethodGet, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_getBlockByNumber"),
@@ -407,7 +412,9 @@ func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.
 }
 
 func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
+	start := time.Now()
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
+	recordRequestDuration(ctx, "SubscribeFilterLogs", ec.nodeAddr, http.MethodPost, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "EthSubscribe"),
@@ -419,7 +426,9 @@ func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.F
 }
 
 func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+	start := time.Now()
 	logs, err := ec.client.FilterLogs(ctx, q)
+	recordRequestDuration(ctx, "FilterLogs", ec.nodeAddr, http.MethodGet, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_getLogs"),
@@ -460,7 +469,9 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 	// It also allowed us to implement more 'atomic' behavior easier:
 	// We can revert the tx if there was an error in processing all the events of a block.
 	// So we can restart from this block once everything is good.
+	start := time.Now()
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
+	recordRequestDuration(ctx, "SubscribeNewHead", ec.nodeAddr, http.MethodPost, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "SubscribeNewHead"),
@@ -560,5 +571,8 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 }
 
 func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
-	return ec.client.ChainID(ctx)
+	start := time.Now()
+	chainID, err := ec.client.ChainID(ctx)
+	recordRequestDuration(ctx, "ChainID", ec.nodeAddr, http.MethodGet, time.Since(start), err)
+	return chainID, err
 }
