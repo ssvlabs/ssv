@@ -17,7 +17,7 @@ var (
 
 // errWithDetails wraps provided error adding more details to it.
 func (ec *ExecutionClient) errWithDetails(err error, method string) error {
-	return fmt.Errorf("%w (address=%s method=%s)", err, ec.nodeAddr, method)
+	return fmt.Errorf("%s -> %s: %w", method, ec.nodeAddr, err)
 }
 
 const (

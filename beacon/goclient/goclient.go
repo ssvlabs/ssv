@@ -175,7 +175,6 @@ func New(
 		return nil, fmt.Errorf("no beacon node address provided")
 	}
 
-	// TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
 
 	logger.Info("consensus client: connecting (multi client)",
