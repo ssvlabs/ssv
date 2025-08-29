@@ -402,8 +402,6 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	defer span.End()
 
 	for _, duty := range duties {
-		duty := duty
-
 		logger := s.loggerWithDutyContext(duty)
 
 		const eventMsg = "🔧 executing validator duty"
