@@ -180,6 +180,9 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_consensus.qbft_consensus_msg_processing"))
+	defer span.End()
+
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
@@ -217,7 +220,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
 
-	logger.Debug("QBFT instance is decided")
+	const qbftInstanceIsDecidedEvent = "QBFT instance is decided"
+	logger.Debug(qbftInstanceIsDecidedEvent)
+	span.AddEvent("QBFT instance is decided")
 
 	// update the highest decided slot
 	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
@@ -316,10 +321,6 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 	if err := runner.GetValCheckF()(byts); err != nil {
 		return traces.Errorf(span, "input data invalid: %w", err)
 	}
-
-	const startingNewQBFTInstanceEvent = "starting new QBFT instance"
-	logger.Debug(startingNewQBFTInstanceEvent)
-	span.AddEvent(startingNewQBFTInstanceEvent)
 
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
 		ctx,

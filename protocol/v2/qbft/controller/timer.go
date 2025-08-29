@@ -42,7 +42,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 	}
 
 	if decided, _ := instance.IsDecided(); decided {
-		span.AddEvent("QBFT instance is decided")
+		span.AddEvent("QBFT instance is already decided")
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
