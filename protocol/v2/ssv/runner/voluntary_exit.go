@@ -93,7 +93,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		span.SetAttributes(observability.ValidatorIndexAttribute(validatorIndex))
 	}
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing voluntary exit message: %w", err)
 	}

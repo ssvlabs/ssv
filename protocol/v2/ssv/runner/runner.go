@@ -165,22 +165,28 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(
-	ctx context.Context,
-	runner Runner,
-	signedMsg *spectypes.PartialSignatureMessages,
-) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus.base_msg_processing"))
+	defer span.End()
+
 	if err := b.ValidatePreConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+
+	if hasQuorum {
+		const gotPostConsensusQuorumEvent = "got pre consensus quorum"
+		logger.Debug(gotPostConsensusQuorumEvent)
+		span.AddEvent(gotPostConsensusQuorumEvent)
+	}
+
 	return hasQuorum, roots, nil
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_consensus.base_processing"))
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_consensus.base_msg_processing"))
 	defer span.End()
 
 	prevDecided := false
@@ -232,7 +238,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
 func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus.base_processing"))
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus.base_msg_processing"))
 	defer span.End()
 
 	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
