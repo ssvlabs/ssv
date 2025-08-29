@@ -176,9 +176,9 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
 
 	if hasQuorum {
-		const gotPostConsensusQuorumEvent = "got pre consensus quorum"
-		logger.Debug(gotPostConsensusQuorumEvent)
-		span.AddEvent(gotPostConsensusQuorumEvent)
+		const gotPreConsensusQuorumEvent = "got pre consensus quorum"
+		logger.Debug(gotPreConsensusQuorumEvent)
+		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
 
 	return hasQuorum, roots, nil

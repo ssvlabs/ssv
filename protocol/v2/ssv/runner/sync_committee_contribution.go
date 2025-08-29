@@ -146,7 +146,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	if len(selectionProofs) == 0 {
 		r.GetState().Finished = true
 		r.measurements.EndDutyFlow()
-		const dutyFinishedNoProofsEvent = "successfully finished duty processin (no selection proofs)"
+		const dutyFinishedNoProofsEvent = "successfully finished duty processing (no selection proofs)"
 		logger.Info(dutyFinishedNoProofsEvent,
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.ConsensusTime(r.measurements.ConsensusTime()),
