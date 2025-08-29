@@ -13,15 +13,9 @@ import (
 )
 
 // OnTimeout is trigger upon timeout for the given height
-func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg types.EventMsg) error {
-	// TODO add validation
+func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, timeoutData *types.TimeoutData) error {
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "on_timeout"))
 	defer span.End()
-
-	timeoutData, err := msg.GetTimeoutData()
-	if err != nil {
-		return traces.Errorf(span, "failed to get timeout data: %w", err)
-	}
 
 	span.SetAttributes(
 		observability.DutyRoundAttribute(timeoutData.Round),

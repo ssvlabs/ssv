@@ -119,7 +119,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
 		fields.QBFTHeight(i.State.Height),
-		zap.String("reason", "partial-quorum"))
+	)
 
 	if err := i.Broadcast(roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")

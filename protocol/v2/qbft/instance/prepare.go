@@ -28,7 +28,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 
 	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
 	logger.Debug("📬 got prepare message",
-		fields.QBFTRound(i.State.Round),
+		fields.QBFTRound(msg.QBFTMessage.Round),
 		zap.Any("prepare_signers", msg.SignedMessage.OperatorIDs),
 		fields.Root(proposedRoot))
 

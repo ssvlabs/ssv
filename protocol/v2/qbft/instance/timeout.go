@@ -57,7 +57,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
 		fields.QBFTHeight(i.State.Height),
-		zap.String("reason", "timeout"))
+	)
 
 	if err := i.Broadcast(roundChange); err != nil {
 		return traces.Errorf(span, "failed to broadcast round change message: %w", err)
