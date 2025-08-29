@@ -17,10 +17,9 @@ import (
 // UponCommit returns true if a quorum of commit messages was received.
 // Assumes commit message is valid!
 func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (bool, []byte, *spectypes.SignedSSVMessage, error) {
-	logger.Debug("📬 got commit message",
-		fields.QBFTRound(i.State.Round),
-		zap.Any("commit_signers", msg.SignedMessage.OperatorIDs),
-		fields.Root(msg.QBFTMessage.Root))
+	logger = logger.With(fields.Root(msg.QBFTMessage.Root))
+
+	logger.Debug("📬 got commit message", zap.Any("commit_signers", msg.SignedMessage.OperatorIDs))
 
 	addMsg, err := i.State.CommitContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
@@ -44,10 +43,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
 		}
 
-		logger.Debug("🎯 got commit quorum",
-			fields.QBFTRound(i.State.Round),
-			zap.Any("agg_signers", agg.OperatorIDs),
-			fields.Root(msg.QBFTMessage.Root))
+		logger.Debug("🎯 got commit quorum", zap.Any("agg_signers", agg.OperatorIDs))
 
 		i.metrics.EndStage(ctx, i.State.Round, stageCommit)
 

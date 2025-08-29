@@ -330,7 +330,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	case message.SSVEventMsgType:
 		eventMsg, ok := msg.Body.(*types.EventMsg)
 		if !ok {
-			return traces.Errorf(span, "could not decode event message")
+			return traces.Error(span, fmt.Errorf("could not decode event message"))
 		}
 
 		span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
