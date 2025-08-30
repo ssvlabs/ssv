@@ -114,9 +114,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		require.NoError(t, err)
 
 		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 			od := &storage.OperatorData{
@@ -173,9 +171,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		require.NoError(t, err)
 
 		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 			od := &storage.OperatorData{

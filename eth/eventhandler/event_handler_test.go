@@ -79,9 +79,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	}
 
 	eh, _, err := setupEventHandler(t, ctx, logger, netCfgVarEpoch, ops[0], false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Just creating one more key -> address for testing
 	wrongPk, err := crypto.HexToECDSA("42e14d227125f411d6d3285bb4a2e07c2dba2e210bd2f3f4e2a36633bd61bfe6")
