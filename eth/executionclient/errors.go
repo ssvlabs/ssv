@@ -39,5 +39,5 @@ func isRPCQueryLimitError(err error) bool {
 
 // isInterruptedError checks if the provided error represents some sort of interruption.
 func isInterruptedError(err error) bool {
-	return errors.Is(err, ErrClosed) || errors.Is(err, rpc.ErrClientQuit) || errors.Is(err, context.Canceled)
+	return errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled)
 }

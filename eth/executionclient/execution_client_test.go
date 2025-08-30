@@ -433,7 +433,7 @@ func TestStreamLogs(t *testing.T) {
 		err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance))
 		require.NoError(t, err)
 
-		logs := env.client.StreamLogs(env.ctx, 0)
+		logs, _ := env.client.StreamLogs(env.ctx, 0)
 		var streamedLogs []ethtypes.Log
 		var streamedLogsCount atomic.Int64
 		go func() {
@@ -503,7 +503,7 @@ func TestStreamLogs(t *testing.T) {
 		defer cancel()
 
 		// Start streaming logs
-		logs := env.client.StreamLogs(ctx, 0)
+		logs, _ := env.client.StreamLogs(ctx, 0)
 
 		// Set up a channel to detect when the log channel is closed
 		done := make(chan struct{})
@@ -543,7 +543,7 @@ func TestStreamLogs(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start streaming logs
-		logs := env.client.StreamLogs(env.ctx, 0)
+		logs, _ := env.client.StreamLogs(env.ctx, 0)
 
 		// Set up a channel to detect when the log channel is closed
 		done := make(chan struct{})
@@ -688,7 +688,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// require.NoError(t, err)
 	// require.True(t, isReady)
 	// // 2.
-	// logs := client.StreamLogs(ctx, 0)
+	// logs, _ := client.StreamLogs(ctx, 0)
 	// // 3.
 	// var parent *ethtypes.Header
 	// var goodTransactions []ethcommon.Hash
@@ -787,7 +787,7 @@ func TestSimSSV(t *testing.T) {
 	err = env.createClient(WithLogger(logger), WithFollowDistance(0))
 	require.NoError(t, err)
 
-	logs := env.client.StreamLogs(env.ctx, 0)
+	logs, _ := env.client.StreamLogs(env.ctx, 0)
 
 	// Emit event OperatorAdded
 	tx, err := boundContract.RegisterOperator(env.auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))

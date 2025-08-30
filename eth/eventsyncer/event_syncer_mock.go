@@ -75,11 +75,12 @@ func (mr *MockExecutionClientMockRecorder) HeaderByNumber(ctx, blockNumber any) 
 }
 
 // StreamLogs mocks base method.
-func (m *MockExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs {
+func (m *MockExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (chan executionclient.BlockLogs, chan error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamLogs", ctx, fromBlock)
-	ret0, _ := ret[0].(<-chan executionclient.BlockLogs)
-	return ret0
+	ret0, _ := ret[0].(chan executionclient.BlockLogs)
+	ret1, _ := ret[1].(chan error)
+	return ret0, ret1
 }
 
 // StreamLogs indicates an expected call of StreamLogs.
@@ -113,16 +114,16 @@ func (m *MockEventHandler) EXPECT() *MockEventHandlerMockRecorder {
 }
 
 // HandleBlockEventsStream mocks base method.
-func (m *MockEventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error) {
+func (m *MockEventHandler) HandleBlockEventsStream(ctx context.Context, logStreamCh <-chan executionclient.BlockLogs, logStreamErrsCh <-chan error, executeTasks bool) (uint64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleBlockEventsStream", ctx, logs, executeTasks)
+	ret := m.ctrl.Call(m, "HandleBlockEventsStream", ctx, logStreamCh, logStreamErrsCh, executeTasks)
 	ret0, _ := ret[0].(uint64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HandleBlockEventsStream indicates an expected call of HandleBlockEventsStream.
-func (mr *MockEventHandlerMockRecorder) HandleBlockEventsStream(ctx, logs, executeTasks any) *gomock.Call {
+func (mr *MockEventHandlerMockRecorder) HandleBlockEventsStream(ctx, logStreamCh, logStreamErrsCh, executeTasks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBlockEventsStream", reflect.TypeOf((*MockEventHandler)(nil).HandleBlockEventsStream), ctx, logs, executeTasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleBlockEventsStream", reflect.TypeOf((*MockEventHandler)(nil).HandleBlockEventsStream), ctx, logStreamCh, logStreamErrsCh, executeTasks)
 }

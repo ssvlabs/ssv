@@ -106,8 +106,13 @@ func New(
 	return eh, nil
 }
 
-func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
-	for blockLogs := range logs {
+func (eh *EventHandler) HandleBlockEventsStream(
+	ctx context.Context,
+	logStreamCh <-chan executionclient.BlockLogs,
+	logStreamErrsCh <-chan error,
+	executeTasks bool,
+) (lastProcessedBlock uint64, err error) {
+	for blockLogs := range logStreamCh {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
@@ -141,7 +146,12 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		}
 	}
 
-	return lastProcessedBlock, nil
+	var errs error
+	for err := range logStreamErrsCh {
+		errs = errors.Join(errs, err)
+	}
+
+	return lastProcessedBlock, errs
 }
 
 func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {

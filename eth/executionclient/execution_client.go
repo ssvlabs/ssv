@@ -3,8 +3,8 @@ package executionclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -26,8 +26,8 @@ import (
 //go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
 
 type Provider interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
-	StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logsCh <-chan BlockLogs, errorsCh <-chan error, err error)
+	StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs, errorsCh chan error)
 	Filterer() (*contract.ContractFilterer, error)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
 	ChainID(ctx context.Context) (*big.Int, error)
@@ -40,7 +40,7 @@ type Provider interface {
 type SingleClientProvider interface {
 	Provider
 	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
-	streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (nextBlockToProcess uint64, err error)
+	streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, progressed bool, err error)
 }
 
 var _ Provider = &ExecutionClient{}
@@ -301,13 +301,22 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	return nil, err
 }
 
-// StreamLogs subscribes to events emitted by the contract.
-func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
-	logs := make(chan BlockLogs)
+// StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
+// It spawns a go-routine that spins in a perpetual retry loop, terminating only on unrecoverable
+// interruptions (such as context cancels, client closure, etc.) as defined by isInterruptedError func.
+// Any errors encountered during log-streaming are relayed on errorsCh channel. Both logsCh and errorsCh
+// are closed once the streaming go-routine terminates.
+func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs, errorsCh chan error) {
+	logsCh = make(chan BlockLogs)
+	errorsCh = make(chan error)
 
 	go func() {
-		defer close(logs)
-		tries := 0
+		defer close(logsCh)
+		defer close(errorsCh)
+
+		const maxTries = math.MaxUint64 // infinitely many
+		tries := uint64(0)
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -315,36 +324,33 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 			case <-ec.closed:
 				return
 			default:
-				nextBlockToProcess, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				lastProcessedBlock, progressed, err := ec.streamLogsToChan(ctx, logsCh, fromBlock)
+				if progressed {
+					fromBlock = lastProcessedBlock + 1
+				}
 				if isInterruptedError(err) {
-					// This is a valid way to terminate, no need to log this error.
+					// This is a valid way to finish streamLogsToChan call. We are done with log streaming.
 					return
 				}
-				// streamLogsToChan should never return without an error, so we treat a nil error as
-				// an error by itself.
 				if err == nil {
-					err = errors.New("streamLogsToChan halted without an error")
+					// streamLogsToChan should never return without an error, so we treat a nil error as
+					// an error by itself.
+					err = fmt.Errorf("streamLogsToChan halted without an error")
 				}
 
 				tries++
-				if tries > 2 {
-					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
-				}
-
-				if nextBlockToProcess > fromBlock {
-					// Successfully streamed some logs, reset tries.
-					tries = 0
+				if tries > maxTries {
+					errorsCh <- fmt.Errorf("failed to stream registry events even after %d retries: %w", tries, err)
+					return
 				}
 
 				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 				ec.reconnect(ctx) // TODO: ethclient implements reconnection, consider removing this logic after thorough testing
-
-				fromBlock = nextBlockToProcess
 			}
 		}
 	}()
 
-	return logs
+	return logsCh, errorsCh
 }
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
@@ -447,10 +453,16 @@ func (ec *ExecutionClient) isClosed() bool {
 	}
 }
 
-// streamLogsToChan streams ongoing logs from the given block to the given channel.
-// streamLogsToChan *always* returns the next block to process.
+// streamLogsToChan streams ongoing logs from the given block to the given channel. This func blocks forever until
+// it returns an error along with the progressed-flag indicating whether or not it was able to stream at least 1 block,
+// and, when progressed=true, the last block number that streamed to logCh.
+//
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+func (ec *ExecutionClient) streamLogsToChan(
+	ctx context.Context,
+	logCh chan<- BlockLogs,
+	fromBlock uint64,
+) (lastBlock uint64, progressed bool, err error) {
 	heads := make(chan *ethtypes.Header)
 
 	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
@@ -475,23 +487,23 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "SubscribeNewHead"),
 			zap.Error(err))
-		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
+		return 0, false, fmt.Errorf("subscribe heads: %w", err)
 	}
 	defer sub.Unsubscribe()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return fromBlock, context.Canceled
+			return lastBlock, progressed, context.Canceled
 
 		case <-ec.closed:
-			return fromBlock, ErrClosed
+			return lastBlock, progressed, ErrClosed
 
 		case err := <-sub.Err():
 			if err == nil {
-				return fromBlock, ErrClosed
+				return lastBlock, progressed, ErrClosed
 			}
-			return fromBlock, fmt.Errorf("subscription: %w", err)
+			return lastBlock, progressed, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
 			if header.Number.Uint64() < ec.followDistance {
@@ -505,14 +517,17 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
 				logCh <- block
-				fromBlock = block.BlockNumber + 1
+				progressed = true
+				lastBlock = block.BlockNumber
 			}
+
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
-				return fromBlock, fmt.Errorf("fetch logs: %w", err)
+				return lastBlock, progressed, fmt.Errorf("fetch logs: %w", err)
 			}
 
 			fromBlock = toBlock + 1
+
 			metrics.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
 	}

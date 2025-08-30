@@ -32,13 +32,18 @@ var (
 )
 
 type ExecutionClient interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
-	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logsCh <-chan executionclient.BlockLogs, errorsCh <-chan error, err error)
+	StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan executionclient.BlockLogs, errorsCh chan error)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error)
 }
 
 type EventHandler interface {
-	HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
+	HandleBlockEventsStream(
+		ctx context.Context,
+		logStreamCh <-chan executionclient.BlockLogs,
+		logStreamErrsCh <-chan error,
+		executeTasks bool,
+	) (uint64, error)
 }
 
 // EventSyncer syncs registry contract events from the given ExecutionClient
@@ -112,7 +117,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	const maxTries = 3
 	var prevProcessedBlock uint64
 	for i := 0; i < maxTries; i++ {
-		fetchLogs, fetchError, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
+		fetchLogsCh, fetchErrorCh, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 		if errors.Is(err, executionclient.ErrNothingToSync) {
 			// Nothing to sync, should keep ongoing sync from the given fromBlock.
 			return 0, executionclient.ErrNothingToSync
@@ -121,13 +126,9 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 			return 0, fmt.Errorf("failed to fetch historical events: %w", err)
 		}
 
-		lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogs, false)
+		lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogsCh, fetchErrorCh, false)
 		if err != nil {
 			return 0, fmt.Errorf("handle historical block events: %w", err)
-		}
-		// TODO: (Alan) should it really be here?
-		if err := <-fetchError; err != nil {
-			return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
 		}
 		if lastProcessedBlock == 0 {
 			return 0, fmt.Errorf("handle historical block events: lastProcessedBlock is 0")
@@ -164,7 +165,11 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error {
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
-	logStream := es.executionClient.StreamLogs(ctx, fromBlock)
-	_, err := es.eventHandler.HandleBlockEventsStream(ctx, logStream, true)
-	return err
+	logStreamCh, logStreamErrsCh := es.executionClient.StreamLogs(ctx, fromBlock)
+	_, err := es.eventHandler.HandleBlockEventsStream(ctx, logStreamCh, logStreamErrsCh, true)
+	if err != nil {
+		return fmt.Errorf("handle block events stream: %w", err)
+	}
+
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -14,7 +15,6 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -148,15 +148,11 @@ func (mc *MultiClient) getClient(ctx context.Context, clientIndex int) (SingleCl
 // connect connects to a client by clientIndex and updates mc.clients[clientIndex] without locks.
 // Caller must lock mc.clientsMu[clientIndex].
 func (mc *MultiClient) connect(ctx context.Context, clientAddr string) (*ExecutionClient, error) {
-	// ExecutionClient may call Fatal on unsuccessful reconnection attempt.
-	// Therefore, we need to override its Fatal behavior to avoid crashing.
-	logger := mc.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop), zap.WithPanicHook(zapcore.WriteThenNoop))
-
 	singleClient, err := New(
 		ctx,
 		clientAddr,
 		mc.contractAddress,
-		WithLogger(logger),
+		WithLogger(mc.logger),
 		WithFollowDistance(mc.followDistance),
 		WithConnectionTimeout(mc.connectionTimeout),
 		WithReconnectionInitialInterval(mc.reconnectionInitialInterval),
@@ -201,10 +197,9 @@ func (mc *MultiClient) assertSameChainID(chainID *big.Int) (*big.Int, bool) {
 	return expected, true
 }
 
-// FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-// It calls FetchHistoricalLogs of all clients until a no-error result.
-// It doesn't handle errors in the error channel to simplify logic.
-// In this case, caller should call Panic/Fatal to restart the node.
+// FetchHistoricalLogs retrieves historical logs emitted by the Ethereum SSV contract(s) starting at fromBlock.
+// It delegates the FetchHistoricalLogs call to clients MultiClient is configured with until one of them manages
+// to serve it without an error.
 func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (<-chan BlockLogs, <-chan error, error) {
 	var logCh <-chan BlockLogs
 	var errCh <-chan error
@@ -220,7 +215,7 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 		return nil, nil
 	}
 
-	_, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs"), f, len(mc.clients))
+	_, err := mc.call(contextWithMethod(ctx, "FetchHistoricalLogs"), f)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -228,13 +223,22 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 	return logCh, errCh, nil
 }
 
-// StreamLogs subscribes to events emitted by the contract.
-// NOTE: StreamLogs spawns a goroutine which calls os.Exit(1) if no client is available.
-func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
-	logs := make(chan BlockLogs)
+// StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
+// It spawns a go-routine that spins in a perpetual retry loop, terminating only on unrecoverable
+// interruptions (such as context cancels, client closure, etc.) as defined by isInterruptedError func.
+// Any errors encountered during log-streaming are relayed on errorsCh channel. Both logsCh and errorsCh
+// are closed once the streaming go-routine terminates.
+func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs, errorsCh chan error) {
+	logsCh = make(chan BlockLogs)
+	errorsCh = make(chan error)
 
 	go func() {
-		defer close(logs)
+		defer close(logsCh)
+		defer close(errorsCh)
+
+		const maxTries = math.MaxUint64 // infinitely many
+		tries := uint64(0)
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -242,40 +246,44 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 			case <-mc.closed:
 				return
 			default:
-				// Update healthyCh of all nodes and make sure at least one of them is available.
-				if err := mc.Healthy(ctx); err != nil {
-					mc.logger.Fatal("no healthy clients", zap.Error(err))
-				}
-
-				// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
+				// fromBlock is defined in the outer scope (from f's func perspective), but we have to modify it
+				// inside the f func because in case of failover to another client - we want to keep progressing
+				// from the latest block (not re-read the whole feed from the initial value of fromBlock). Note,
+				// f is called sequentially by a single go-routine, hence there is no need to synchronize concurrent
+				// access to fromBlock variable.
 				f := func(client SingleClientProvider) (any, error) {
-					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
+					lastProcessedBlock, progressed, err := client.streamLogsToChan(ctx, logsCh, fromBlock)
+					if progressed {
+						fromBlock = lastProcessedBlock + 1
+					}
 					if isInterruptedError(err) {
+						// This is a valid way to finish streamLogsToChan call. Propagate error to let the caller know.
 						return nil, err
 					}
-
-					fromBlock = nextBlockToProcess
+					if err == nil {
+						// streamLogsToChan should never return without an error, so we treat a nil error as
+						// an error by itself.
+						err = fmt.Errorf("streamLogsToChan halted without an error")
+					}
 					return nil, err
 				}
-
-				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
-				if err == nil {
-					return
-				}
-
+				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f)
 				if isInterruptedError(err) {
-					mc.logger.Debug("stream logs stopped", zap.Error(err))
+					// We are done with log streaming.
 					return
 				}
 
-				// NOTE: There are unit tests that trigger Fatal and override its behavior.
-				// Therefore, the code must call `return` afterward.
-				mc.logger.Fatal("failed to stream logs", zap.Error(err))
+				tries++
+				if tries > maxTries {
+					errorsCh <- fmt.Errorf("failed to stream registry events even after %d retries: %w", tries, err)
+					return
+				}
+				mc.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
 			}
 		}
 	}()
 
-	return logs
+	return logsCh, errorsCh
 }
 
 // Healthy returns whether MultiClient has at least 1 healthy EL client (a client that responds to requests and
@@ -296,7 +304,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 				mc.logger.Warn("client unavailable",
 					zap.String("addr", mc.clientAddrs[i]),
 					zap.Error(err))
-
 				return err
 			}
 
@@ -304,9 +311,9 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 				mc.logger.Warn("client is not healthy",
 					zap.String("addr", mc.clientAddrs[i]),
 					zap.Error(err))
-
 				return err
 			}
+
 			healthyClients.Store(true)
 			healthyCount.Add(1)
 
@@ -331,7 +338,7 @@ func (mc *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int)
 	f := func(client SingleClientProvider) (any, error) {
 		return client.HeaderByNumber(ctx, blockNumber)
 	}
-	res, err := mc.call(contextWithMethod(ctx, "HeaderByNumber"), f, len(mc.clients))
+	res, err := mc.call(contextWithMethod(ctx, "HeaderByNumber"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +350,7 @@ func (mc *MultiClient) SubscribeFilterLogs(ctx context.Context, q ethereum.Filte
 	f := func(client SingleClientProvider) (any, error) {
 		return client.SubscribeFilterLogs(ctx, q, ch)
 	}
-	res, err := mc.call(contextWithMethod(ctx, "SubscribeFilterLogs"), f, len(mc.clients))
+	res, err := mc.call(contextWithMethod(ctx, "SubscribeFilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +362,7 @@ func (mc *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) (
 	f := func(client SingleClientProvider) (any, error) {
 		return client.FilterLogs(ctx, q)
 	}
-	res, err := mc.call(contextWithMethod(ctx, "FilterLogs"), f, len(mc.clients))
+	res, err := mc.call(contextWithMethod(ctx, "FilterLogs"), f)
 	if err != nil {
 		return nil, err
 	}
@@ -391,65 +398,43 @@ func (mc *MultiClient) Close() error {
 	return multiErr
 }
 
-// call calls f for all clients until it succeeds.
-//
-// If there's only one client, call just calls f for it preserving old behavior. The maxTries parameter is ignored in this case.
-// If maxTries is not 0, it tries all clients in a round-robin logic until the limit is hit,
-// and if no client is available then it returns an error.
-// If maxTries is 0, it iterates clients forever.
-//
-// It must be called with maxTries == 0 from StreamLogs because StreamLogs is called once per the node lifetime,
-// and it's possible that clients go up and down several times, therefore there should be no limit.
-// It must be called with maxTries != 0 from other methods to return an error if all nodes are down.
-func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error), maxTries int) (any, error) {
-	method := methodFromContext(ctx)
+// call calls f until it succeeds using MultiClient clients, starting with the most likely healthy client
+// (the one at currentClientIndex) iterating over the client list in round-robin fashion.
+func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvider) (any, error)) (any, error) {
+	method := routeNameFromContext(ctx)
 	startTime := time.Now()
 
-	if len(mc.clients) == 1 {
-		// TODO - about mutex
-		client := mc.clients[0]
-		result, err := f(client)
-		recordMultiClientMethodCall(ctx, method, mc.clientAddrs[0], time.Since(startTime), err)
-		return result, err
-	}
+	clientsTotal := len(mc.clients)
 
-	// Iterate over the clients in round-robin fashion,
-	// starting from the most likely healthy client (currentClientIndex).
+	// Iterate over the clients in round-robin fashion, starting from the most likely healthy client (currentClientIndex).
 	startingIndex := int(mc.currentClientIndex.Load())
 	var allErrs error
-	// Iterate maxTries times if maxTries != 0. Iterate forever if maxTries == 0
-	for i := 0; (maxTries == 0) || (i < maxTries); i++ {
-		clientIndex := (startingIndex + i) % len(mc.clients)
-		nextClientIndex := (clientIndex + 1) % len(mc.clients) // For logging.
+	for i := 0; i < clientsTotal; i++ {
+		clientIndex := (startingIndex + i) % clientsTotal
+		nextClientIndex := (clientIndex + 1) % clientsTotal // For logging.
 
 		client, err := mc.getClient(ctx, clientIndex)
 		if err != nil {
 			mc.logger.Warn("client unavailable, switching to the next client",
 				zap.String("addr", mc.clientAddrs[clientIndex]),
-				zap.Error(err))
-
-			if maxTries != 0 {
-				allErrs = errors.Join(allErrs, err)
-			}
+				zap.Error(err),
+			)
+			allErrs = errors.Join(allErrs, err)
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			recordClientSwitch(ctx, mc.clientAddrs[clientIndex], mc.clientAddrs[nextClientIndex])
 			continue
 		}
 
-		logger := mc.logger.With(
-			zap.String("addr", mc.clientAddrs[clientIndex]),
-			zap.String("method", method))
+		logger := mc.logger.With(zap.String("addr", mc.clientAddrs[clientIndex]), zap.String("method", method))
 
 		// Make sure this client is healthy. This shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
 			logger.Warn("client is not healthy, switching to the next client",
 				zap.String("next_addr", mc.clientAddrs[nextClientIndex]),
-				zap.Error(err))
-
-			if maxTries != 0 {
-				allErrs = errors.Join(allErrs, err)
-			}
+				zap.Error(err),
+			)
+			allErrs = errors.Join(allErrs, err)
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			recordClientSwitch(ctx, mc.clientAddrs[clientIndex], mc.clientAddrs[nextClientIndex])
 			continue
@@ -457,18 +442,15 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		v, err := f(client)
 		if isInterruptedError(err) {
-			logger.Debug("call was interrupted", zap.Error(err))
 			recordMultiClientMethodCall(ctx, method, mc.clientAddrs[clientIndex], time.Since(startTime), err)
 			return v, err
 		}
 		if err != nil {
 			logger.Error("call failed, switching to the next client",
 				zap.String("next_addr", mc.clientAddrs[nextClientIndex]),
-				zap.Error(err))
-
-			if maxTries != 0 {
-				allErrs = errors.Join(allErrs, err)
-			}
+				zap.Error(err),
+			)
+			allErrs = errors.Join(allErrs, err)
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			recordClientSwitch(ctx, mc.clientAddrs[clientIndex], mc.clientAddrs[nextClientIndex])
 			continue
@@ -481,19 +463,19 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	}
 
 	// Record the failure with the last attempted client
-	lastClientIndex := (startingIndex + maxTries - 1) % len(mc.clients)
+	lastClientIndex := (startingIndex + clientsTotal - 1) % clientsTotal
 	recordMultiClientMethodCall(ctx, method, mc.clientAddrs[lastClientIndex], time.Since(startTime), allErrs)
 	return nil, fmt.Errorf("all clients failed: %w", allErrs)
 }
 
-type methodContextKey struct{}
+type routeNameContextKey struct{}
 
 func contextWithMethod(ctx context.Context, method string) context.Context {
-	return context.WithValue(ctx, methodContextKey{}, method)
+	return context.WithValue(ctx, routeNameContextKey{}, method)
 }
 
-func methodFromContext(ctx context.Context) string {
-	v, ok := ctx.Value(methodContextKey{}).(string)
+func routeNameFromContext(ctx context.Context) string {
+	v, ok := ctx.Value(routeNameContextKey{}).(string)
 	if !ok {
 		return ""
 	}
