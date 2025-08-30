@@ -12,8 +12,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
@@ -56,13 +58,58 @@ var (
 			metric.WithDescription("beacon client selections for attestation data")))
 )
 
-func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, err error) {
+func recordSingleClientRequest(
+	ctx context.Context,
+	logger *zap.Logger,
+	routeName, clientAddr, httpMethod string,
+	duration time.Duration,
+	err error,
+) {
+	logger.Debug("CL single-client request done",
+		zap.String("client_addr", clientAddr),
+		zap.String("route_name", routeName),
+		zap.String("http_method", httpMethod),
+		zap.Bool("success", err == nil),
+		zap.Error(err),
+		fields.Took(duration),
+	)
+
 	attr := []attribute.KeyValue{
-		semconv.ServerAddress(serverAddr),
-		semconv.HTTPRequestMethodKey.String(requestMethod),
+		semconv.ServerAddress(clientAddr),
+		semconv.HTTPRequestMethodKey.String(httpMethod),
 		attribute.String("http.route_name", routeName),
 	}
+	var rpcErr rpc.Error
+	if errors.As(err, &rpcErr) {
+		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
+	}
 
+	requestDurationHistogram.Record(
+		ctx,
+		duration.Seconds(),
+		metric.WithAttributes(attr...))
+}
+
+func recordMultiClientRequest(
+	ctx context.Context,
+	logger *zap.Logger,
+	routeName, httpMethod string,
+	duration time.Duration,
+	err error,
+) {
+	logger.Debug("CL multi-client request done",
+		zap.String("route_name", routeName),
+		zap.String("http_method", httpMethod),
+		zap.Bool("success", err == nil),
+		zap.Error(err),
+		fields.Took(duration),
+	)
+
+	attr := []attribute.KeyValue{
+		semconv.ServerAddress("multi-client"),
+		semconv.HTTPRequestMethodKey.String(httpMethod),
+		attribute.String("http.route_name", routeName),
+	}
 	var rpcErr rpc.Error
 	if errors.As(err, &rpcErr) {
 		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))

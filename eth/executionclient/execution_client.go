@@ -121,7 +121,7 @@ func (ec *ExecutionClient) Close() error {
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
 	start := time.Now()
 	currentBlock, err := ec.client.BlockNumber(ctx)
-	recordRequestDuration(ctx, "BlockNumber", ec.nodeAddr, time.Since(start), err)
+	recordSingleClientRequest(ctx, ec.logger, "BlockNumber", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_blockNumber"),
@@ -368,7 +368,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 
 	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
-	recordRequestDuration(ctx, "SyncProgress", ec.nodeAddr, time.Since(start), err)
+	recordSingleClientRequest(ctx, ec.logger, "SyncProgress", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 		ec.logger.Error(elResponseErrMsg,
@@ -399,7 +399,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
 	start := time.Now()
 	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
-	recordRequestDuration(ctx, "HeaderByNumber", ec.nodeAddr, time.Since(start), err)
+	recordSingleClientRequest(ctx, ec.logger, "HeaderByNumber", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_getBlockByNumber"),
@@ -413,7 +413,7 @@ func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.
 func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
 	start := time.Now()
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
-	recordRequestDuration(ctx, "SubscribeFilterLogs", ec.nodeAddr, time.Since(start), err)
+	recordSingleClientRequest(ctx, ec.logger, "SubscribeFilterLogs", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "EthSubscribe"),
@@ -427,7 +427,7 @@ func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.F
 func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
 	start := time.Now()
 	logs, err := ec.client.FilterLogs(ctx, q)
-	recordRequestDuration(ctx, "FilterLogs", ec.nodeAddr, time.Since(start), err)
+	recordSingleClientRequest(ctx, ec.logger, "FilterLogs", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("method", "eth_getLogs"),
@@ -470,7 +470,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 	// So we can restart from this block once everything is good.
 	start := time.Now()
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
-	recordRequestDuration(ctx, "SubscribeNewHead", ec.nodeAddr, time.Since(start), err)
+	recordSingleClientRequest(ctx, ec.logger, "SubscribeNewHead", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "SubscribeNewHead"),
@@ -521,14 +521,12 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 // connect connects to Ethereum execution client.
 // It must not be called twice in parallel.
 func (ec *ExecutionClient) connect(ctx context.Context) error {
-	logger := ec.logger.With(fields.Address(ec.nodeAddr))
-
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
 	reqStart := time.Now()
 	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
-	recordRequestDuration(ctx, "DialContext", ec.nodeAddr, time.Since(reqStart), err)
+	recordSingleClientRequest(ctx, ec.logger, "DialContext", ec.nodeAddr, time.Since(reqStart), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "DialContext"),
@@ -536,8 +534,6 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 		return err
 	}
 	ec.client = client
-
-	logger.Info("connected to execution client")
 
 	return nil
 }
@@ -574,6 +570,6 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	start := time.Now()
 	chainID, err := ec.client.ChainID(ctx)
-	recordRequestDuration(ctx, "ChainID", ec.nodeAddr, time.Since(start), err)
+	recordSingleClientRequest(ctx, ec.logger, "ChainID", ec.nodeAddr, time.Since(start), err)
 	return chainID, err
 }

@@ -80,7 +80,7 @@ func Test_genesisForClient(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		genesis, err := genesisForClient(ctx, logger, client.multiClient)
+		genesis, err := client.genesisForClient(ctx, client.multiClient)
 		require.NoError(t, err)
 		require.NotNil(t, genesis)
 

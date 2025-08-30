@@ -11,8 +11,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
@@ -97,12 +99,25 @@ var (
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordRequestDuration(ctx context.Context, routeName, serverAddr string, duration time.Duration, err error) {
+func recordSingleClientRequest(
+	ctx context.Context,
+	logger *zap.Logger,
+	routeName, clientAddr string,
+	duration time.Duration,
+	err error,
+) {
+	logger.Debug("EL single-client request done",
+		zap.String("client_addr", clientAddr),
+		zap.String("route_name", routeName),
+		zap.Bool("success", err == nil),
+		zap.Error(err),
+		fields.Took(duration),
+	)
+
 	attr := []attribute.KeyValue{
-		semconv.ServerAddress(serverAddr),
+		semconv.ServerAddress(clientAddr),
 		attribute.String("http.route_name", routeName),
 	}
-
 	var rpcErr rpc.Error
 	if errors.As(err, &rpcErr) {
 		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))

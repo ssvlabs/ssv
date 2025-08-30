@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,11 +38,6 @@ const (
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
 	BlockRootToSlotCacheCapacityEpochs = 64
-
-	clResponseErrMsg            = "Consensus client returned an error"
-	clNilResponseErrMsg         = "Consensus client returned a nil response"
-	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
-	clNilResponseForkDataErrMsg = "Consensus client returned a nil response fork data"
 )
 
 // NodeClient is the type of the Beacon node.
@@ -54,8 +50,8 @@ const (
 	NodeUnknown    NodeClient = "unknown"
 )
 
-// ParseNodeClient derives the client from node's version string.
-func ParseNodeClient(version string) NodeClient {
+// parseNodeClient derives the Beacon client implementation from node version string (that we get from it).
+func parseNodeClient(version string) NodeClient {
 	version = strings.ToLower(version)
 	switch {
 	case strings.Contains(version, "lighthouse"):
@@ -315,32 +311,18 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	return &eth2clienthttp.Hooks{
 		OnActive: func(ctx context.Context, s *eth2clienthttp.Service) {
-			logger := gc.log.With(
-				fields.Name(s.Name()),
-				fields.Address(s.Address()),
-			)
-			// If err is nil, nodeVersionResp is never nil.
-			nodeVersionResp, err := s.NodeVersion(ctx, &api.NodeVersionOpts{})
-			if err != nil {
-				logger.Error(clResponseErrMsg,
-					zap.String("api", "NodeVersion"),
-					zap.Error(err),
-				)
-				return
-			}
+			logger := gc.log.With(fields.Name(s.Name()), fields.Address(s.Address()))
 
-			logger.Info("consensus client connected",
-				zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
-				zap.String("version", nodeVersionResp.Data),
-			)
+			nodeVersion, err := gc.fetchNodeVersion(ctx, s)
+			if err != nil {
+				logger.Fatal("couldn't fetch node version", zap.Error(err))
+				return // tests may override Fatal's behavior, hence gotta return in addition to the Fatal call
+			}
 
 			beaconConfig, err := gc.fetchBeaconConfig(ctx, s)
 			if err != nil {
-				logger.Error(clResponseErrMsg,
-					zap.String("api", "fetchBeaconConfig"),
-					zap.Error(err),
-				)
-				return
+				logger.Fatal("couldn't fetch beacon config", zap.Error(err))
+				return // tests may override Fatal's behavior, hence gotta return in addition to the Fatal call
 			}
 
 			currentConfig, err := gc.applyBeaconConfig(s.Address(), beaconConfig)
@@ -352,32 +334,31 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 					zap.Stringer("client_config", beaconConfig),
 					zap.Stringer("expected_config", currentConfig),
 				)
-				return // Tests may override Fatal's behavior
+				return // tests may override Fatal's behavior, hence gotta return in addition to the Fatal call
 			}
 
 			dataVersion, _ := currentConfig.ForkAtEpoch(currentConfig.EstimatedCurrentEpoch())
-			logger.Info("retrieved beacon config",
+			logger.Info("consensus client connected and retrieved beacon config",
+				zap.String("client", string(parseNodeClient(nodeVersion))),
+				zap.String("version", nodeVersion),
 				zap.Uint64("data_version", uint64(dataVersion)),
 				zap.Stringer("config", currentConfig),
 			)
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
-			gc.log.Warn("consensus client disconnected",
-				fields.Name(s.Name()),
-				fields.Address(s.Address()),
-			)
+			logger := gc.log.With(fields.Name(s.Name()), fields.Address(s.Address()))
+
+			logger.Warn("consensus client disconnected")
 		},
 		OnSynced: func(ctx context.Context, s *eth2clienthttp.Service) {
-			gc.log.Info("consensus client synced",
-				fields.Name(s.Name()),
-				fields.Address(s.Address()),
-			)
+			logger := gc.log.With(fields.Name(s.Name()), fields.Address(s.Address()))
+
+			logger.Info("consensus client synced")
 		},
 		OnDesynced: func(ctx context.Context, s *eth2clienthttp.Service) {
-			gc.log.Warn("consensus client desynced",
-				fields.Name(s.Name()),
-				fields.Address(s.Address()),
-			)
+			logger := gc.log.With(fields.Name(s.Name()), fields.Address(s.Address()))
+
+			logger.Warn("consensus client de-synced")
 		},
 	}
 }
@@ -405,9 +386,8 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 }
 
 var (
-	errUndefinedResponse = fmt.Errorf("undefined response")
-	errSyncing           = fmt.Errorf("syncing")
-	errOptimistic        = fmt.Errorf("optimistic")
+	errSyncing    = fmt.Errorf("syncing")
+	errOptimistic = fmt.Errorf("optimistic")
 )
 
 // Healthy returns if the consensus client (for single-client) or at least one of consensus clients (for multi-client)
@@ -431,7 +411,7 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	for _, client := range gc.clients {
 		go func() {
 			if err := gc.checkNodeHealth(ctx, client); err != nil {
-				errCh <- err
+				errCh <- fmt.Errorf("check node health: %w", err)
 				return
 			}
 
@@ -465,40 +445,34 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 
 // checkNodeHealth checks client's healthiness by checking if it's synced.
 func (gc *GoClient) checkNodeHealth(ctx context.Context, client Client) error {
-	logger := gc.log.With(
-		zap.String("api", "NodeSyncing"),
-		zap.String("address", client.Address()),
-	)
-
+	reqStart := time.Now()
 	nodeSyncingResp, err := client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	recordSingleClientRequest(ctx, gc.log, "NodeSyncing", client.Address(), http.MethodGet, time.Since(reqStart), err)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return nil // already found healthy nodes
 		}
-		logger.Error(clResponseErrMsg, zap.Error(err))
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
-		return fmt.Errorf("failed to obtain node syncing status: %w", err)
+		return errSingleClient(fmt.Errorf("fetch node syncing status: %w", err), client.Address(), "NodeSyncing")
 	}
 	if nodeSyncingResp == nil {
-		logger.Error(clNilResponseErrMsg)
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
-		return fmt.Errorf("%w: node syncing response is nil", errUndefinedResponse)
+		return errSingleClient(fmt.Errorf("node syncing response is nil"), client.Address(), "NodeSyncing")
 	}
 	if nodeSyncingResp.Data == nil {
-		logger.Error(clNilResponseDataErrMsg)
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
-		return fmt.Errorf("%w: node syncing data is nil", errUndefinedResponse)
+		return errSingleClient(fmt.Errorf("node syncing response data is nil"), client.Address(), "NodeSyncing")
 	}
+
 	syncState := nodeSyncingResp.Data
+
 	recordBeaconClientStatus(ctx, statusSyncing, client.Address())
 	recordSyncDistance(ctx, syncState.SyncDistance, client.Address())
 
 	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
-		logger.Error("Consensus client is not synced")
 		return errSyncing
 	}
 	if syncState.IsOptimistic {
-		logger.Error("Consensus client is in optimistic mode")
 		return errOptimistic
 	}
 

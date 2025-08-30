@@ -18,7 +18,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"go.uber.org/zap"
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -28,20 +27,15 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(ctx, "ProposerDuties", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
-
+	recordMultiClientRequest(ctx, gc.log, "ProposerDuties", http.MethodGet, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "ProposerDuties"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
+		return nil, errMultiClient(fmt.Errorf("fetch proposer duties: %w", err), "ProposerDuties")
 	}
 	if resp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "ProposerDuties"),
-		)
-		return nil, fmt.Errorf("proposer duties response is nil")
+		return nil, errMultiClient(fmt.Errorf("proposer duties response is nil"), "ProposerDuties")
+	}
+	if resp.Data == nil {
+		return nil, errMultiClient(fmt.Errorf("proposer duties response data is nil"), "ProposerDuties")
 	}
 
 	return resp.Data, nil
@@ -67,26 +61,15 @@ func (gc *GoClient) GetBeaconBlock(
 		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
 	})
-	recordRequestDuration(ctx, "Proposal", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
-
+	recordMultiClientRequest(ctx, gc.log, "Proposal", http.MethodGet, time.Since(reqStart), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Proposal"),
-			zap.Error(err),
-		)
-		return nil, DataVersionNil, fmt.Errorf("failed to get proposal: %w", err)
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch proposal: %w", err), "Proposal")
 	}
 	if proposalResp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "Proposal"),
-		)
-		return nil, DataVersionNil, fmt.Errorf("proposal response is nil")
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("proposal response is nil"), "Proposal")
 	}
 	if proposalResp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Proposal"),
-		)
-		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("proposal response data is nil"), "Proposal")
 	}
 
 	beaconBlock := proposalResp.Data

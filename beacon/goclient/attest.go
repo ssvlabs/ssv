@@ -39,19 +39,15 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(ctx, "AttesterDuties", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordMultiClientRequest(ctx, gc.log, "AttesterDuties", http.MethodPost, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "AttesterDuties"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to obtain attester duties: %w", err)
+		return nil, errMultiClient(fmt.Errorf("fetch attester duties: %w", err), "AttesterDuties")
 	}
 	if resp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "AttesterDuties"),
-		)
-		return nil, fmt.Errorf("attester duties response is nil")
+		return nil, errMultiClient(fmt.Errorf("attester duties response is nil"), "AttesterDuties")
+	}
+	if resp.Data == nil {
+		return nil, errMultiClient(fmt.Errorf("attester duties response data is nil"), "AttesterDuties")
 	}
 
 	return resp.Data, nil
@@ -248,84 +244,67 @@ func shouldWaitForAttestationDataResponse(responded, errored, timedOut, requests
 
 func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	logger := gc.log.With(fields.Slot(slot))
+
 	attDataReqStart := time.Now()
 	resp, err := gc.multiClient.AttestationData(ctx, &api.AttestationDataOpts{
 		Slot:           slot,
 		CommitteeIndex: 0,
 	})
-
-	recordRequestDuration(ctx, "AttestationData", gc.multiClient.Address(), http.MethodGet, time.Since(attDataReqStart), err)
-
+	recordMultiClientRequest(ctx, logger, "AttestationData", http.MethodGet, time.Since(attDataReqStart), err)
 	if err != nil {
-		logger.Error(clResponseErrMsg,
-			zap.String("api", "AttestationData"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to get attestation data: %w", err)
+		return nil, errMultiClient(fmt.Errorf("get attestation data: %w", err), "AttestationData")
 	}
 	if resp == nil {
-		logger.Error(clNilResponseErrMsg, zap.String("api", "AttestationData"))
-		return nil, fmt.Errorf("attestation data response is nil")
+		return nil, errMultiClient(fmt.Errorf("attestation data response is nil"), "AttestationData")
 	}
 	if resp.Data == nil {
-		logger.Error(clNilResponseDataErrMsg, zap.String("api", "AttestationData"))
-		return nil, fmt.Errorf("attestation data is nil")
+		return nil, errMultiClient(fmt.Errorf("attestation data is nil"), "AttestationData")
 	}
 
-	logger.With(
-		zap.Duration("elapsed", time.Since(attDataReqStart)),
+	logger.Debug("successfully fetched attestation data",
 		zap.Bool("with_weighted_attestation_data", false),
-		zap.String("client_addr", gc.multiClient.Address()),
 		fields.BlockRoot(resp.Data.BeaconBlockRoot),
-	).Debug("successfully fetched attestation data")
-
+	)
 	recordAttestationDataClientSelection(ctx, gc.multiClient.Address())
 
 	return resp.Data, nil
 }
 
-func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
+func (gc *GoClient) fetchWeightedAttestationData(
+	ctx context.Context,
 	client Client,
 	respCh chan *attestationDataResponse,
 	errCh chan *attestationDataError,
 	slot phase0.Slot,
 	logger *zap.Logger,
 ) {
-	addr := client.Address()
-	attDataReqStart := time.Now()
-
-	logger = logger.With(zap.String("client_addr", addr))
-
 	logger.Debug("fetching attestation data")
+
+	reqStart := time.Now()
 	response, err := client.AttestationData(ctx, &api.AttestationDataOpts{
 		Slot:           slot,
 		CommitteeIndex: 0,
 	})
-
-	recordRequestDuration(ctx, "AttestationData", addr, http.MethodGet, time.Since(attDataReqStart), err)
-
+	recordSingleClientRequest(ctx, logger, "AttestationData", client.Address(), http.MethodGet, time.Since(reqStart), err)
 	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
 		errCh <- &attestationDataError{
-			clientAddr: addr,
-			err:        err,
+			clientAddr: client.Address(),
+			err:        errSingleClient(fmt.Errorf("get attestation data: %w", err), client.Address(), "AttestationData"),
 		}
 		return
 	}
 	if response == nil {
-		logger.Error(clNilResponseErrMsg)
 		errCh <- &attestationDataError{
-			clientAddr: addr,
-			err:        fmt.Errorf("response is nil"),
+			clientAddr: client.Address(),
+			err:        errSingleClient(fmt.Errorf("response is nil"), client.Address(), "AttestationData"),
 		}
 		return
 	}
 	attestationData := response.Data
 	if attestationData == nil {
-		logger.Error(clNilResponseDataErrMsg)
 		errCh <- &attestationDataError{
-			clientAddr: addr,
-			err:        fmt.Errorf("attestation data nil"),
+			clientAddr: client.Address(),
+			err:        errSingleClient(fmt.Errorf("response data nil"), client.Address(), "AttestationData"),
 		}
 		return
 	}
@@ -336,7 +315,7 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 	score := gc.scoreAttestationData(ctx, client, attestationData, logger)
 
 	respCh <- &attestationDataResponse{
-		clientAddr:      addr,
+		clientAddr:      client.Address(),
 		attestationData: attestationData,
 		score:           score,
 	}
@@ -392,7 +371,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 
 		logger.
 			With(zap.Error(err)).
-			Warn("failed to obtain slot for block root")
+			Warn("couldn't fetch slot for block root")
 		select {
 		case <-ctx.Done():
 			logger.
@@ -459,43 +438,30 @@ func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 // Returns nil if at least one client successfully submitted the data.
 func (gc *GoClient) multiClientSubmit(
 	ctx context.Context,
-	operationName string,
+	routeName string,
 	submitFunc func(ctx context.Context, client Client) error,
 ) error {
-	logger := gc.log.With(zap.String("api", operationName))
-
 	submissions := atomic.Int32{}
 	p := pool.New().WithErrors().WithContext(ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
 		p.Go(func(ctx context.Context) error {
-			clientAddress := client.Address()
-			logger := logger.With(zap.String("client_addr", clientAddress))
-
 			start := time.Now()
 			err := submitFunc(ctx, client)
-			recordRequestDuration(ctx, operationName, clientAddress, http.MethodPost, time.Since(start), err)
+			recordSingleClientRequest(ctx, gc.log, routeName, client.Address(), http.MethodPost, time.Since(start), err)
 			if err != nil {
-				logger.Debug("a client failed to submit",
-					zap.Error(err))
-				return fmt.Errorf("client %s failed to submit %s: %w", clientAddress, operationName, err)
+				return errSingleClient(fmt.Errorf("failed to submit: %w", err), client.Address(), routeName)
 			}
-
-			logger.Debug("a client submitted successfully")
-
 			submissions.Add(1)
 			return nil
 		})
 	}
 	err := p.Wait()
 	if submissions.Load() > 0 {
-		// At least one client has submitted successfully,
-		// so we can return without error.
+		// At least one client has submitted successfully, so we can return without error.
 		return nil
 	}
 	if err != nil {
-		logger.Error("all clients failed to submit",
-			zap.Error(err))
-		return fmt.Errorf("failed to submit %s", operationName)
+		return fmt.Errorf("failed to submit %s", routeName)
 	}
 	return nil
 }
@@ -509,19 +475,12 @@ func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec
 		})
 	}
 
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitAttestations"),
-		zap.String("client_addr", clientAddress))
-
 	start := time.Now()
 	err := gc.multiClient.SubmitAttestations(ctx, opts)
-	recordRequestDuration(ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
+	recordMultiClientRequest(ctx, gc.log, "SubmitAttestations", http.MethodPost, time.Since(start), err)
 	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
+		return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
 	}
 
-	logger.Debug("consensus client submitted attestations")
 	return nil
 }

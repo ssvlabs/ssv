@@ -3,8 +3,10 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -91,15 +93,19 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 
 	if gc.withWeightedAttestationData {
 		for _, client := range gc.clients {
-			if err := client.Events(ctx, opts); err != nil {
-				logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
-				return err
+			reqStart := time.Now()
+			err := client.Events(ctx, opts)
+			recordSingleClientRequest(ctx, logger, "Events", client.Address(), http.MethodGet, time.Since(reqStart), err)
+			if err != nil {
+				return errSingleClient(fmt.Errorf("request events: %w", err), client.Address(), "Events")
 			}
 		}
 	} else {
-		if err := gc.multiClient.Events(ctx, opts); err != nil {
-			logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
-			return err
+		reqStart := time.Now()
+		err := gc.multiClient.Events(ctx, opts)
+		recordMultiClientRequest(ctx, logger, "Events", http.MethodGet, time.Since(reqStart), err)
+		if err != nil {
+			return errMultiClient(fmt.Errorf("request events: %w", err), "Events")
 		}
 	}
 

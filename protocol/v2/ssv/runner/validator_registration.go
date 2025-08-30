@@ -442,7 +442,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 			for _, r := range targetRegs {
 				validatorPk, err := r.PubKey()
 				if err != nil {
-					s.logger.Error("Failed to get validator pubkey", fields.Slot(currentSlot), zap.Error(err))
+					s.logger.Error("failed to get validator pubkey", fields.Slot(currentSlot), zap.Error(err))
 					continue
 				}
 
@@ -458,7 +458,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 
 			err := s.beacon.SubmitValidatorRegistrations(ctx, registrations)
 			if err != nil {
-				s.logger.Error("Failed to submit validator registrations",
+				s.logger.Error("failed to submit validator registrations",
 					zap.Int("registrations", len(registrations)),
 					fields.Slot(currentSlot),
 					zap.Error(err),

@@ -27,47 +27,51 @@ const (
 	DefaultIntervalsPerSlot                     = uint64(3)
 )
 
-// BeaconConfig returns the network Beacon configuration
+// BeaconConfig returns the network Beacon configuration. This method must be called only after GoClient
+// is initialized (gc.beaconConfig is set) since it returns nil otherwise.
 func (gc *GoClient) BeaconConfig() *networkconfig.Beacon {
-	// BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
-	// It fails otherwise.
-	config := gc.getBeaconConfig()
-	return config
+	return gc.getBeaconConfig()
 }
 
-func specForClient(ctx context.Context, log *zap.Logger, provider client.Service) (map[string]any, error) {
+func (gc *GoClient) fetchNodeVersion(ctx context.Context, client *eth2clienthttp.Service) (string, error) {
+	start := time.Now()
+	nodeVersionResp, err := client.NodeVersion(ctx, &api.NodeVersionOpts{})
+	recordSingleClientRequest(ctx, gc.log, "NodeVersion", client.Address(), http.MethodGet, time.Since(start), err)
+	if err != nil {
+		return "", errSingleClient(fmt.Errorf("fetch node version response: %w", err), client.Address(), "NodeVersion")
+	}
+	if nodeVersionResp == nil {
+		return "", errSingleClient(fmt.Errorf("node version response is nil"), client.Address(), "NodeVersion")
+	}
+	if nodeVersionResp.Data == "" {
+		return "", errSingleClient(fmt.Errorf("node version response data is nil"), client.Address(), "NodeVersion")
+	}
+
+	return nodeVersionResp.Data, nil
+}
+
+func (gc *GoClient) specForClient(ctx context.Context, provider client.Service) (map[string]any, error) {
 	start := time.Now()
 	specResponse, err := provider.(client.SpecProvider).Spec(ctx, &api.SpecOpts{})
-	recordRequestDuration(ctx, "Spec", provider.Address(), http.MethodGet, time.Since(start), err)
+	recordSingleClientRequest(ctx, gc.log, "Spec", provider.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
-		log.Error(clResponseErrMsg,
-			zap.String("api", "Spec"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to obtain spec response: %w", err)
+		return nil, errSingleClient(fmt.Errorf("fetch spec response: %w", err), provider.Address(), "Spec")
 	}
 	if specResponse == nil {
-		log.Error(clNilResponseErrMsg,
-			zap.String("api", "Spec"),
-		)
-		return nil, fmt.Errorf("spec response is nil")
+		return nil, errSingleClient(fmt.Errorf("spec response is nil"), provider.Address(), "Spec")
 	}
 	if specResponse.Data == nil {
-		log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Spec"),
-		)
-		return nil, fmt.Errorf("spec response data is nil")
+		return nil, errSingleClient(fmt.Errorf("spec response data is nil"), provider.Address(), "Spec")
 	}
 
 	return specResponse.Data, nil
 }
 
-// fetchBeaconConfig must be called once on GoClient's initialization
+// fetchBeaconConfig must be called once on GoClient's initialization.
 func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthttp.Service) (*networkconfig.Beacon, error) {
-	specResponse, err := specForClient(ctx, gc.log, client)
+	specResponse, err := gc.specForClient(ctx, client)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
-		return nil, fmt.Errorf("failed to obtain spec response: %w", err)
+		return nil, fmt.Errorf("fetch spec: %w", err)
 	}
 
 	// types of most values are already cast: https://github.com/attestantio/go-eth2-client/blob/v0.21.7/http/spec.go#L78
@@ -159,14 +163,12 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	forkData, err := gc.getForkData(specResponse)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
-		return nil, fmt.Errorf("failed to extract fork data: %w", err)
+		return nil, fmt.Errorf("extract fork data: %w", err)
 	}
 
-	genesisResponse, err := genesisForClient(ctx, gc.log, client)
+	gen, err := gc.genesisForClient(ctx, client)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg, zap.String("api", "Genesis"), zap.Error(err))
-		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
+		return nil, fmt.Errorf("fetch genesis: %w", err)
 	}
 
 	beaconConfig := &networkconfig.Beacon{
@@ -179,9 +181,9 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		TargetAggregatorsPerSyncSubcommittee: targetAggregatorsPerSyncSubcommittee,
 		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
 		IntervalsPerSlot:                     intervalsPerSlot,
-		GenesisForkVersion:                   genesisResponse.GenesisForkVersion,
-		GenesisTime:                          genesisResponse.GenesisTime,
-		GenesisValidatorsRoot:                genesisResponse.GenesisValidatorsRoot,
+		GenesisForkVersion:                   gen.GenesisForkVersion,
+		GenesisTime:                          gen.GenesisTime,
+		GenesisValidatorsRoot:                gen.GenesisValidatorsRoot,
 		Forks:                                forkData,
 	}
 
@@ -189,10 +191,6 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 }
 
 func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersion]phase0.Fork, error) {
-	if specResponse == nil {
-		return nil, fmt.Errorf("spec response is nil")
-	}
-
 	getForkEpoch := func(key string, required bool) (phase0.Epoch, error) {
 		raw, ok := specResponse[key]
 		if !ok {
