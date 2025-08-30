@@ -15,9 +15,9 @@ var (
 	ErrSyncing       = fmt.Errorf("syncing")
 )
 
-// errWithDetails wraps provided error adding more details to it.
-func (ec *ExecutionClient) errWithDetails(err error, method string) error {
-	return fmt.Errorf("%s -> %s: %w", ec.nodeAddr, method, err)
+// errSingleClient wraps provided error adding more details to it, useful for single-client errors.
+func (ec *ExecutionClient) errSingleClient(err error, routeName string) error {
+	return fmt.Errorf("single-client request %s -> %s: %w", ec.nodeAddr, routeName, err)
 }
 
 const (
