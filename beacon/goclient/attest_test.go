@@ -198,7 +198,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 		require.Nil(t, response)
 		require.Equal(t, DataVersionNil, dataVersion)
 		require.Error(t, err)
-		require.Equal(t, err.Error(), "fetch attestation data: GET failed with status 500")
+		require.Equal(t, "multi-client request -> AttestationData: get attestation data: GET failed with status 500", err.Error())
 	})
 
 	t.Run("concurrency: race conditions and deadlocks", func(t *testing.T) {

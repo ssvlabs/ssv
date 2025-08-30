@@ -315,14 +315,20 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 
 			nodeVersion, err := gc.fetchNodeVersion(ctx, s)
 			if err != nil {
-				logger.Fatal("couldn't fetch node version", zap.Error(err))
-				return // tests may override Fatal's behavior, hence gotta return in addition to the Fatal call
+				// Since connection can become active/inactive multiple times, we don't need to terminate
+				// the SSV node here. Unlike with the "unexpected beacon config" case below, here we might
+				// be able to recover automatically, so - we log an error and return for now.
+				logger.Error("couldn't fetch node version", zap.Error(err))
+				return
 			}
 
 			beaconConfig, err := gc.fetchBeaconConfig(ctx, s)
 			if err != nil {
-				logger.Fatal("couldn't fetch beacon config", zap.Error(err))
-				return // tests may override Fatal's behavior, hence gotta return in addition to the Fatal call
+				// Since connection can become active/inactive multiple times, we don't need to terminate
+				// the SSV node here. Unlike with the "unexpected beacon config" case below, here we might
+				// be able to recover automatically, so - we log an error and return for now.
+				logger.Error("couldn't fetch beacon config", zap.Error(err))
+				return
 			}
 
 			currentConfig, err := gc.applyBeaconConfig(s.Address(), beaconConfig)
