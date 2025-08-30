@@ -98,7 +98,11 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	}
 
 	ec.syncProgressFn = func(ctx context.Context) (*ethereum.SyncProgress, error) {
-		return ec.client.SyncProgress(ctx)
+		sp, err := ec.client.SyncProgress(ctx)
+		if err != nil {
+			return nil, ec.errWithDetails(fmt.Errorf("fetch sync progress: %w", err), "eth_syncing")
+		}
+		return sp, nil
 	}
 
 	return ec, nil
@@ -233,6 +237,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	if err == nil {
 		return logs, nil
 	}
+	err = ec.errWithDetails(fmt.Errorf("get filtered logs: %w", err), "eth_getLogs")
 
 	if isRPCQueryLimitError(err) {
 		if q.FromBlock == nil || q.ToBlock == nil {
@@ -286,7 +291,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return combinedLogs, nil
 	}
 
-	return nil, ec.errWithDetails(fmt.Errorf("get filtered logs: %w", err), "eth_getLogs")
+	return nil, err
 }
 
 // StreamLogs subscribes to events emitted by the contract.
@@ -389,7 +394,7 @@ func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.
 func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
 	if err != nil {
-		return nil, ec.errWithDetails(fmt.Errorf("subscribe to filtered logs (query=%s): %w", q, err), "EthSubscribe")
+		return nil, ec.errWithDetails(fmt.Errorf("subscribe to filtered logs (query=%s): %w", q, err), "logs")
 	}
 	return logs, nil
 }
@@ -434,7 +439,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 	// So we can restart from this block once everything is good.
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
-		return fromBlock, ec.errWithDetails(fmt.Errorf("subscribe new head: %w", err), "SubscribeNewHead")
+		return fromBlock, ec.errWithDetails(fmt.Errorf("subscribe new head: %w", err), "newHeads")
 	}
 	defer sub.Unsubscribe()
 
@@ -486,7 +491,7 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	defer cancel()
 	c, err := ethclient.DialContext(reqCtx, ec.nodeAddr)
 	if err != nil {
-		return ec.errWithDetails(fmt.Errorf("ethclient dial: %w", err), "DialContext")
+		return ec.errWithDetails(fmt.Errorf("ethclient dial: %w", err), "dial")
 	}
 
 	ec.client = newEthClient(c, ec.reqTimeout)
@@ -526,5 +531,9 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 }
 
 func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
-	return ec.client.ChainID(ctx)
+	chainID, err := ec.client.ChainID(ctx)
+	if err != nil {
+		return nil, ec.errWithDetails(fmt.Errorf("fetch chain ID: %w", err), "eth_chainId")
+	}
+	return chainID, nil
 }
