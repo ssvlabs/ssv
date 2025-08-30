@@ -68,7 +68,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	switch aggDataResp.Data.Version {
 	case spec.DataVersionElectra:
 		if aggDataResp.Data.Electra == nil {
-			return nil, DataVersionNil, fmt.Errorf("aggregate attestation electra data is nil")
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation electra data is nil"), "AggregateAttestation")
 		}
 		return &electra.AggregateAndProof{
 			AggregatorIndex: index,

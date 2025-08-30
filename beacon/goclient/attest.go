@@ -461,7 +461,7 @@ func (gc *GoClient) multiClientSubmit(
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("failed to submit %s", routeName)
+		return errMultiClient(fmt.Errorf("all clients failed to submit: %w", err), routeName)
 	}
 	return nil
 }

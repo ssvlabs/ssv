@@ -5,11 +5,11 @@ import (
 )
 
 // errSingleClient wraps provided error adding more details to it, useful for single-client errors.
-func errSingleClient(err error, clientAddr string, method string) error {
-	return fmt.Errorf("single-client request %s -> %s: %w", clientAddr, method, err)
+func errSingleClient(err error, clientAddr string, routeName string) error {
+	return fmt.Errorf("single-client request %s -> %s: %w", clientAddr, routeName, err)
 }
 
 // errMultiClient wraps provided error adding more details to it, useful for multi-client errors.
-func errMultiClient(err error, method string) error {
-	return fmt.Errorf("multi-client request -> %s: %w", method, err)
+func errMultiClient(err error, routeName string) error {
+	return fmt.Errorf("multi-client request -> %s: %w", routeName, err)
 }

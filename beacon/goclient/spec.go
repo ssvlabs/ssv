@@ -44,7 +44,7 @@ func (gc *GoClient) fetchNodeVersion(ctx context.Context, client *eth2clienthttp
 		return "", errSingleClient(fmt.Errorf("node version response is nil"), client.Address(), "NodeVersion")
 	}
 	if nodeVersionResp.Data == "" {
-		return "", errSingleClient(fmt.Errorf("node version response data is nil"), client.Address(), "NodeVersion")
+		return "", errSingleClient(fmt.Errorf("node version response data is empty"), client.Address(), "NodeVersion")
 	}
 
 	return nodeVersionResp.Data, nil
