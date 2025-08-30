@@ -134,7 +134,6 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 			logger = logger.With(fields.Type(task))
 			logger.Debug("executing task")
 			if err := task.Execute(); err != nil {
-				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				logger.Error("failed to execute task", zap.Error(err))
 			} else {
 				logger.Debug("executed task")

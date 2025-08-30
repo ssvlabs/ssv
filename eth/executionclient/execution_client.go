@@ -93,7 +93,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 
 	err := client.connect(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
+		return nil, fmt.Errorf("connect EL client: %w", err)
 	}
 
 	client.syncProgressFn = client.syncProgress
@@ -571,5 +571,9 @@ func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	start := time.Now()
 	chainID, err := ec.client.ChainID(ctx)
 	recordSingleClientRequest(ctx, ec.logger, "ChainID", ec.nodeAddr, time.Since(start), err)
+	if chainID == nil {
+		return big.NewInt(0), fmt.Errorf("chain id response is nil")
+	}
+
 	return chainID, err
 }

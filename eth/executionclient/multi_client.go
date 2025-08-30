@@ -68,7 +68,7 @@ type MultiClient struct {
 	chainID         atomic.Pointer[big.Int]
 	closed          chan struct{}
 
-	nodeAddrs          []string
+	clientAddrs        []string
 	clientsMu          []sync.Mutex           // clientsMu allow for lazy initialization of each client in `clients` slice in thread-safe manner (atomically)
 	clients            []SingleClientProvider // nil if not connected
 	currentClientIndex atomic.Int64
@@ -87,7 +87,7 @@ func NewMulti(
 	}
 
 	multiClient := &MultiClient{
-		nodeAddrs:                   nodeAddrs,
+		clientAddrs:                 nodeAddrs,
 		clients:                     make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
 		clientsMu:                   make([]sync.Mutex, len(nodeAddrs)),
 		contractAddress:             contractAddr,
@@ -108,36 +108,38 @@ func NewMulti(
 	var connected bool
 
 	var multiErr error
-	for clientIndex := range nodeAddrs {
-		if err := multiClient.connect(ctx, clientIndex); err != nil {
-			multiClient.logger.Error("failed to connect to node",
-				zap.String("address", nodeAddrs[clientIndex]),
-				zap.Error(err))
-
-			multiErr = errors.Join(multiErr, err)
+	for clientIndex, clientAddr := range nodeAddrs {
+		c, err := multiClient.connect(ctx, clientAddr)
+		if err != nil {
+			multiErr = errors.Join(multiErr, fmt.Errorf("connect EL client %s error: %w", clientAddr, err))
 			continue
 		}
-
+		multiClient.clients[clientIndex] = c
 		connected = true
 	}
 
 	if !connected {
-		return nil, fmt.Errorf("no available clients: %w", multiErr)
+		return nil, fmt.Errorf("couldn't connect even one of EL clients: %w", multiErr)
 	}
 
 	return multiClient, nil
 }
 
-// getClient gets a client at index.
-// If it's nil (which means it's not connected), it attempts to connect to it and store connected client instead of nil.
+// getClient gets a client at index. If it's nil (which means it's not connected), it attempts to connect to it and
+// store connected client instead of nil. Even though we try to connect all the EL clients in NewMulti some of those
+// clients might not connect successfully at the time, this lazy initialization implemented by getClient remedies
+// that (essentially serving as a clutch re-connect mechanism).
 func (mc *MultiClient) getClient(ctx context.Context, clientIndex int) (SingleClientProvider, error) {
 	mc.clientsMu[clientIndex].Lock()
 	defer mc.clientsMu[clientIndex].Unlock()
 
 	if mc.clients[clientIndex] == nil {
-		if err := mc.connect(ctx, clientIndex); err != nil {
-			return nil, fmt.Errorf("connect: %w", err)
+		clientAddr := mc.clientAddrs[clientIndex]
+		c, err := mc.connect(ctx, clientAddr)
+		if err != nil {
+			return nil, fmt.Errorf("connect EL client: %w", err)
 		}
+		mc.clients[clientIndex] = c
 	}
 
 	return mc.clients[clientIndex], nil
@@ -145,14 +147,14 @@ func (mc *MultiClient) getClient(ctx context.Context, clientIndex int) (SingleCl
 
 // connect connects to a client by clientIndex and updates mc.clients[clientIndex] without locks.
 // Caller must lock mc.clientsMu[clientIndex].
-func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
+func (mc *MultiClient) connect(ctx context.Context, clientAddr string) (*ExecutionClient, error) {
 	// ExecutionClient may call Fatal on unsuccessful reconnection attempt.
 	// Therefore, we need to override its Fatal behavior to avoid crashing.
 	logger := mc.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop), zap.WithPanicHook(zapcore.WriteThenNoop))
 
 	singleClient, err := New(
 		ctx,
-		mc.nodeAddrs[clientIndex],
+		clientAddr,
 		mc.contractAddress,
 		WithLogger(logger),
 		WithFollowDistance(mc.followDistance),
@@ -163,52 +165,40 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
 	)
 	if err != nil {
-		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
-		return fmt.Errorf("create single client: %w", err)
+		recordClientInitStatus(ctx, clientAddr, false)
+		return nil, fmt.Errorf("create single client: %w", err)
 	}
 
 	chainID, err := singleClient.ChainID(ctx)
 	if err != nil {
-		logger.Error("failed to get chain ID",
-			zap.String("address", mc.nodeAddrs[clientIndex]),
-			zap.Error(err))
-		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
-		return fmt.Errorf("get chain ID: %w", err)
+		recordClientInitStatus(ctx, clientAddr, false)
+		return nil, fmt.Errorf("get chain ID: %w", err)
 	}
 
-	if expected, err := mc.assertSameChainID(chainID); err != nil {
-		logger.Fatal("client returned unexpected chain ID",
-			zap.String("expected_chain_id", expected.String()),
-			zap.String("checked_chain_id", chainID.String()),
-			zap.String("address", mc.nodeAddrs[clientIndex]),
-			zap.Error(err),
-		)
-		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
-		return err
+	expectedChainID, ok := mc.assertSameChainID(chainID)
+	if !ok {
+		recordClientInitStatus(ctx, clientAddr, false)
+		return nil, fmt.Errorf("client responded with unexpected chain ID, want: %s, got: %s", expectedChainID.String(), chainID.String())
 	}
 
-	mc.clients[clientIndex] = singleClient
-	recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], true)
-	return nil
+	recordClientInitStatus(ctx, clientAddr, true)
+
+	return singleClient, nil
 }
 
 // assertSameChainID checks if client has the same chain ID.
 // It sets mc.chainID to the chain ID of the first healthy client encountered.
-func (mc *MultiClient) assertSameChainID(chainID *big.Int) (*big.Int, error) {
-	if chainID == nil {
-		return nil, fmt.Errorf("chain ID is nil")
-	}
-
+func (mc *MultiClient) assertSameChainID(chainID *big.Int) (*big.Int, bool) {
 	if mc.chainID.CompareAndSwap(nil, chainID) {
-		return chainID, nil
+		return chainID, true
 	}
 
 	expected := mc.chainID.Load()
 	if expected.Cmp(chainID) != 0 {
-		return expected, fmt.Errorf("different chain ID, expected %v, got %v", expected.String(), chainID.String())
+		return expected, false
 	}
 
-	return expected, nil
+	return expected, true
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
@@ -288,7 +278,8 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 	return logs
 }
 
-// Healthy returns whether execution client is currently healthy: responds to requests and not in the syncing state.
+// Healthy returns whether MultiClient has at least 1 healthy EL client (a client that responds to requests and
+// not is in the syncing state).
 func (mc *MultiClient) Healthy(ctx context.Context) error {
 	if time.Since(time.Unix(mc.lastHealthy.Load(), 0)) < mc.healthInvalidationInterval {
 		return nil
@@ -303,7 +294,7 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 			client, err := mc.getClient(ctx, i)
 			if err != nil {
 				mc.logger.Warn("client unavailable",
-					zap.String("addr", mc.nodeAddrs[i]),
+					zap.String("addr", mc.clientAddrs[i]),
 					zap.Error(err))
 
 				return err
@@ -311,7 +302,7 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 
 			if err := client.Healthy(ctx); err != nil {
 				mc.logger.Warn("client is not healthy",
-					zap.String("addr", mc.nodeAddrs[i]),
+					zap.String("addr", mc.clientAddrs[i]),
 					zap.Error(err))
 
 				return err
@@ -391,7 +382,7 @@ func (mc *MultiClient) Close() error {
 
 		if client != nil {
 			if err := client.Close(); err != nil {
-				mc.logger.Debug("Failed to close client", zap.String("address", mc.nodeAddrs[i]), zap.Error(err))
+				mc.logger.Debug("Failed to close client", zap.String("address", mc.clientAddrs[i]), zap.Error(err))
 				multiErr = errors.Join(multiErr, err)
 			}
 		}
@@ -415,9 +406,10 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 	startTime := time.Now()
 
 	if len(mc.clients) == 1 {
-		client := mc.clients[0] // no need for mutex because one client is always non-nil
+		// TODO - about mutex
+		client := mc.clients[0]
 		result, err := f(client)
-		recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[0], time.Since(startTime), err)
+		recordMultiClientMethodCall(ctx, method, mc.clientAddrs[0], time.Since(startTime), err)
 		return result, err
 	}
 
@@ -433,64 +425,64 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		client, err := mc.getClient(ctx, clientIndex)
 		if err != nil {
 			mc.logger.Warn("client unavailable, switching to the next client",
-				zap.String("addr", mc.nodeAddrs[clientIndex]),
+				zap.String("addr", mc.clientAddrs[clientIndex]),
 				zap.Error(err))
 
 			if maxTries != 0 {
 				allErrs = errors.Join(allErrs, err)
 			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
-			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
+			recordClientSwitch(ctx, mc.clientAddrs[clientIndex], mc.clientAddrs[nextClientIndex])
 			continue
 		}
 
 		logger := mc.logger.With(
-			zap.String("addr", mc.nodeAddrs[clientIndex]),
+			zap.String("addr", mc.clientAddrs[clientIndex]),
 			zap.String("method", method))
 
 		// Make sure this client is healthy. This shouldn't cause too many requests because the result is cached.
 		// TODO: Make sure the allowed tolerance doesn't cause issues in log streaming.
 		if err := client.Healthy(ctx); err != nil {
 			logger.Warn("client is not healthy, switching to the next client",
-				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
+				zap.String("next_addr", mc.clientAddrs[nextClientIndex]),
 				zap.Error(err))
 
 			if maxTries != 0 {
 				allErrs = errors.Join(allErrs, err)
 			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
-			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
+			recordClientSwitch(ctx, mc.clientAddrs[clientIndex], mc.clientAddrs[nextClientIndex])
 			continue
 		}
 
 		v, err := f(client)
 		if isInterruptedError(err) {
 			logger.Debug("call was interrupted", zap.Error(err))
-			recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[clientIndex], time.Since(startTime), err)
+			recordMultiClientMethodCall(ctx, method, mc.clientAddrs[clientIndex], time.Since(startTime), err)
 			return v, err
 		}
 		if err != nil {
 			logger.Error("call failed, switching to the next client",
-				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
+				zap.String("next_addr", mc.clientAddrs[nextClientIndex]),
 				zap.Error(err))
 
 			if maxTries != 0 {
 				allErrs = errors.Join(allErrs, err)
 			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
-			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
+			recordClientSwitch(ctx, mc.clientAddrs[clientIndex], mc.clientAddrs[nextClientIndex])
 			continue
 		}
 
 		// Update currentClientIndex to the successful client.
 		mc.currentClientIndex.Store(int64(clientIndex))
-		recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[clientIndex], time.Since(startTime), nil)
+		recordMultiClientMethodCall(ctx, method, mc.clientAddrs[clientIndex], time.Since(startTime), nil)
 		return v, nil
 	}
 
 	// Record the failure with the last attempted client
 	lastClientIndex := (startingIndex + maxTries - 1) % len(mc.clients)
-	recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[lastClientIndex], time.Since(startTime), allErrs)
+	recordMultiClientMethodCall(ctx, method, mc.clientAddrs[lastClientIndex], time.Since(startTime), allErrs)
 	return nil, fmt.Errorf("all clients failed: %w", allErrs)
 }
 

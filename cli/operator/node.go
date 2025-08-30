@@ -1173,14 +1173,15 @@ func syncContractEvents(
 			zap.Int("my_validators", operatorValidators),
 		)
 
-		// Sync ongoing registry events in the background.
+		// Sync ongoing registry events in the background, crash if ongoing sync has stopped because
+		// the SSV node cannot work without being up to date with Ethereum events.
 		go func() {
-			err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
-
-			// Crash if ongoing sync has stopped, regardless of the reason.
+			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+			//
 			logger.Fatal("failed syncing ongoing registry events",
 				zap.Uint64("last_processed_block", lastProcessedBlock),
-				zap.Error(err))
+				zap.Error(err),
+			)
 		}()
 	}
 
