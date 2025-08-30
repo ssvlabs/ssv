@@ -572,7 +572,9 @@ func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	chainID, err := ec.client.ChainID(ctx)
 	recordSingleClientRequest(ctx, ec.logger, "ChainID", ec.nodeAddr, time.Since(start), err)
 	if chainID == nil {
-		return big.NewInt(0), fmt.Errorf("chain id response is nil")
+		// TODO - once we've rebased onto https://github.com/ssvlabs/ssv/pull/2469 we need to update add the wrapping
+		// for this error (as implemented in https://github.com/ssvlabs/ssv/pull/2469)
+		return nil, fmt.Errorf("chain id response is nil")
 	}
 
 	return chainID, err
