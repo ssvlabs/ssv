@@ -526,8 +526,9 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	start := time.Now()
+	reqStart := time.Now()
 	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
+	recordRequestDuration(ctx, "DialContext", ec.nodeAddr, time.Since(reqStart), err)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "DialContext"),
@@ -536,7 +537,8 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	}
 	ec.client = client
 
-	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
+	logger.Info("connected to execution client")
+
 	return nil
 }
 
