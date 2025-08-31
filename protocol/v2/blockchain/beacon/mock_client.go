@@ -27,6 +27,7 @@ import (
 type MockAttesterCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockAttesterCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockAttesterCallsMockRecorder is the mock recorder for MockAttesterCalls.
@@ -80,6 +81,7 @@ func (mr *MockAttesterCallsMockRecorder) SubmitAttestations(ctx, attestations an
 type MockProposerCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockProposerCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockProposerCallsMockRecorder is the mock recorder for MockProposerCalls.
@@ -147,6 +149,7 @@ func (mr *MockProposerCallsMockRecorder) SubmitBlindedBeaconBlock(ctx, block, si
 type MockAggregatorCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockAggregatorCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockAggregatorCallsMockRecorder is the mock recorder for MockAggregatorCalls.
@@ -200,6 +203,7 @@ func (mr *MockAggregatorCallsMockRecorder) SubmitSignedAggregateSelectionProof(c
 type MockSyncCommitteeCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncCommitteeCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockSyncCommitteeCallsMockRecorder is the mock recorder for MockSyncCommitteeCalls.
@@ -217,22 +221,6 @@ func NewMockSyncCommitteeCalls(ctrl *gomock.Controller) *MockSyncCommitteeCalls 
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockSyncCommitteeCalls) EXPECT() *MockSyncCommitteeCallsMockRecorder {
 	return m.recorder
-}
-
-// GetSyncMessageBlockRoot mocks base method.
-func (m *MockSyncCommitteeCalls) GetSyncMessageBlockRoot(ctx context.Context) (phase0.Root, spec.DataVersion, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncMessageBlockRoot", ctx)
-	ret0, _ := ret[0].(phase0.Root)
-	ret1, _ := ret[1].(spec.DataVersion)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// GetSyncMessageBlockRoot indicates an expected call of GetSyncMessageBlockRoot.
-func (mr *MockSyncCommitteeCallsMockRecorder) GetSyncMessageBlockRoot(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncMessageBlockRoot", reflect.TypeOf((*MockSyncCommitteeCalls)(nil).GetSyncMessageBlockRoot), ctx)
 }
 
 // SubmitSyncMessages mocks base method.
@@ -253,6 +241,7 @@ func (mr *MockSyncCommitteeCallsMockRecorder) SubmitSyncMessages(ctx, msgs any) 
 type MockSyncCommitteeContributionCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncCommitteeContributionCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockSyncCommitteeContributionCallsMockRecorder is the mock recorder for MockSyncCommitteeContributionCalls.
@@ -334,6 +323,7 @@ func (mr *MockSyncCommitteeContributionCallsMockRecorder) SyncCommitteeSubnetID(
 type MockValidatorRegistrationCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorRegistrationCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockValidatorRegistrationCallsMockRecorder is the mock recorder for MockValidatorRegistrationCalls.
@@ -371,6 +361,7 @@ func (mr *MockValidatorRegistrationCallsMockRecorder) SubmitValidatorRegistratio
 type MockVoluntaryExitCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockVoluntaryExitCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockVoluntaryExitCallsMockRecorder is the mock recorder for MockVoluntaryExitCalls.
@@ -408,6 +399,7 @@ func (mr *MockVoluntaryExitCallsMockRecorder) SubmitVoluntaryExit(ctx, voluntary
 type MockDomainCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockDomainCallsMockRecorder
+	isgomock struct{}
 }
 
 // MockDomainCallsMockRecorder is the mock recorder for MockDomainCalls.
@@ -446,6 +438,7 @@ func (mr *MockDomainCallsMockRecorder) DomainData(ctx, epoch, domain any) *gomoc
 type MockbeaconDuties struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconDutiesMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconDutiesMockRecorder is the mock recorder for MockbeaconDuties.
@@ -528,6 +521,7 @@ func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(ctx, epoch, indices 
 type MockbeaconSubscriber struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconSubscriberMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconSubscriberMockRecorder is the mock recorder for MockbeaconSubscriber.
@@ -579,6 +573,7 @@ func (mr *MockbeaconSubscriberMockRecorder) SubmitSyncCommitteeSubscriptions(ctx
 type MockbeaconValidator struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconValidatorMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconValidatorMockRecorder is the mock recorder for MockbeaconValidator.
@@ -617,6 +612,7 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(ctx, validatorPubKey
 type Mockproposer struct {
 	ctrl     *gomock.Controller
 	recorder *MockproposerMockRecorder
+	isgomock struct{}
 }
 
 // MockproposerMockRecorder is the mock recorder for Mockproposer.
@@ -654,6 +650,7 @@ func (mr *MockproposerMockRecorder) SubmitProposalPreparation(ctx, feeRecipients
 type Mocksigner struct {
 	ctrl     *gomock.Controller
 	recorder *MocksignerMockRecorder
+	isgomock struct{}
 }
 
 // MocksignerMockRecorder is the mock recorder for Mocksigner.
@@ -692,6 +689,7 @@ func (mr *MocksignerMockRecorder) ComputeSigningRoot(object, domain any) *gomock
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.
@@ -802,22 +800,6 @@ func (m *MockBeaconNode) GetSyncCommitteeContribution(ctx context.Context, slot 
 func (mr *MockBeaconNodeMockRecorder) GetSyncCommitteeContribution(ctx, slot, selectionProofs, subnetIDs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeContribution", reflect.TypeOf((*MockBeaconNode)(nil).GetSyncCommitteeContribution), ctx, slot, selectionProofs, subnetIDs)
-}
-
-// GetSyncMessageBlockRoot mocks base method.
-func (m *MockBeaconNode) GetSyncMessageBlockRoot(ctx context.Context) (phase0.Root, spec.DataVersion, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncMessageBlockRoot", ctx)
-	ret0, _ := ret[0].(phase0.Root)
-	ret1, _ := ret[1].(spec.DataVersion)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// GetSyncMessageBlockRoot indicates an expected call of GetSyncMessageBlockRoot.
-func (mr *MockBeaconNodeMockRecorder) GetSyncMessageBlockRoot(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncMessageBlockRoot", reflect.TypeOf((*MockBeaconNode)(nil).GetSyncMessageBlockRoot), ctx)
 }
 
 // GetValidatorData mocks base method.

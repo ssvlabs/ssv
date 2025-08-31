@@ -45,8 +45,6 @@ type AggregatorCalls interface {
 
 // SyncCommitteeCalls interface has all sync committee duty specific calls
 type SyncCommitteeCalls interface {
-	// GetSyncMessageBlockRoot returns beacon block root for sync committee
-	GetSyncMessageBlockRoot(ctx context.Context) (phase0.Root, spec.DataVersion, error)
 	// SubmitSyncMessages submits signed sync committee messages
 	SubmitSyncMessages(ctx context.Context, msgs []*altair.SyncCommitteeMessage) error
 }
