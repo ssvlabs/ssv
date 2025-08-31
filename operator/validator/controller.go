@@ -115,7 +115,7 @@ type Controller interface {
 	IndicesChangeChan() chan struct{}
 	ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor
 	ValidatorExitChan() <-chan duties.ExitDescriptor
-	SetFeeRecipientChangeChan(ch chan struct{})
+	FeeRecipientChangeChan() <-chan struct{}
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
@@ -277,6 +277,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		indicesChangeCh:         make(chan struct{}),
 		validatorRegistrationCh: make(chan duties.RegistrationDescriptor),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
+		feeRecipientChangeCh:    make(chan struct{}, 1),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
 
@@ -306,8 +307,8 @@ func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
 	return c.validatorExitCh
 }
 
-func (c *controller) SetFeeRecipientChangeChan(ch chan struct{}) {
-	c.feeRecipientChangeCh = ch
+func (c *controller) FeeRecipientChangeChan() <-chan struct{} {
+	return c.feeRecipientChangeCh
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {

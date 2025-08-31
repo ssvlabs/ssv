@@ -79,20 +79,6 @@ func (m *MockRecipientController) EXPECT() *MockRecipientControllerMockRecorder 
 	return m.recorder
 }
 
-// FeeRecipientChangeChan mocks base method.
-func (m *MockRecipientController) FeeRecipientChangeChan() chan struct{} {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FeeRecipientChangeChan")
-	ret0, _ := ret[0].(chan struct{})
-	return ret0
-}
-
-// FeeRecipientChangeChan indicates an expected call of FeeRecipientChangeChan.
-func (mr *MockRecipientControllerMockRecorder) FeeRecipientChangeChan() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FeeRecipientChangeChan", reflect.TypeOf((*MockRecipientController)(nil).FeeRecipientChangeChan))
-}
-
 // Start mocks base method.
 func (m *MockRecipientController) Start(ctx context.Context) {
 	m.ctrl.T.Helper()
@@ -103,4 +89,16 @@ func (m *MockRecipientController) Start(ctx context.Context) {
 func (mr *MockRecipientControllerMockRecorder) Start(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start), ctx)
+}
+
+// SubscribeToFeeRecipientChanges mocks base method.
+func (m *MockRecipientController) SubscribeToFeeRecipientChanges(ch <-chan struct{}) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SubscribeToFeeRecipientChanges", ch)
+}
+
+// SubscribeToFeeRecipientChanges indicates an expected call of SubscribeToFeeRecipientChanges.
+func (mr *MockRecipientControllerMockRecorder) SubscribeToFeeRecipientChanges(ch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToFeeRecipientChanges", reflect.TypeOf((*MockRecipientController)(nil).SubscribeToFeeRecipientChanges), ch)
 }

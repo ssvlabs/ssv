@@ -26,7 +26,7 @@ type ValidatorProvider interface {
 // RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
 	Start(ctx context.Context)
-	FeeRecipientChangeChan() chan struct{}
+	SubscribeToFeeRecipientChanges(ch <-chan struct{})
 }
 
 // ControllerOptions holds the needed dependencies
@@ -50,20 +50,19 @@ type recipientController struct {
 	recipientStorage     storage.Recipients
 	slotTickerProvider   slotticker.Provider
 	operatorDataStore    operatordatastore.OperatorDataStore
-	feeRecipientChangeCh chan struct{}
+	feeRecipientChangeCh <-chan struct{}
 }
 
 func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientController {
 	return &recipientController{
-		logger:               logger,
-		ctx:                  opts.Ctx,
-		beaconClient:         opts.BeaconClient,
-		beaconConfig:         opts.BeaconConfig,
-		validatorProvider:    opts.ValidatorProvider,
-		recipientStorage:     opts.RecipientStorage,
-		slotTickerProvider:   opts.SlotTickerProvider,
-		operatorDataStore:    opts.OperatorDataStore,
-		feeRecipientChangeCh: make(chan struct{}, 1),
+		logger:             logger,
+		ctx:                opts.Ctx,
+		beaconClient:       opts.BeaconClient,
+		beaconConfig:       opts.BeaconConfig,
+		validatorProvider:  opts.ValidatorProvider,
+		recipientStorage:   opts.RecipientStorage,
+		slotTickerProvider: opts.SlotTickerProvider,
+		operatorDataStore:  opts.OperatorDataStore,
 	}
 }
 
@@ -72,9 +71,9 @@ func (rc *recipientController) Start(ctx context.Context) {
 	go rc.listenToFeeRecipientChanges(ctx)
 }
 
-// FeeRecipientChangeChan returns the channel used to notify about fee recipient changes
-func (rc *recipientController) FeeRecipientChangeChan() chan struct{} {
-	return rc.feeRecipientChangeCh
+// SubscribeToFeeRecipientChanges subscribes to fee recipient change notifications from ValidatorController
+func (rc *recipientController) SubscribeToFeeRecipientChanges(ch <-chan struct{}) {
+	rc.feeRecipientChangeCh = ch
 }
 
 // GetProposalPreparations returns the proposal preparations for all validators

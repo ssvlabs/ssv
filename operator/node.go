@@ -114,9 +114,8 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 	// This allows the beacon client to pull proposal preparations on reconnect
 	opts.BeaconNode.SetProposalPreparationsProvider(feeRecipientCtrl.GetProposalPreparations)
 
-	// Wire the validator controller to fee recipient controller
-	// This allows fee recipient controller to be notified when fee recipient changes occur
-	opts.ValidatorController.SetFeeRecipientChangeChan(feeRecipientCtrl.FeeRecipientChangeChan())
+	// Subscribe fee recipient controller to validator controller's change notifications
+	feeRecipientCtrl.SubscribeToFeeRecipientChanges(opts.ValidatorController.FeeRecipientChangeChan())
 
 	return node
 }
