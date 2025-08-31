@@ -116,7 +116,7 @@ func recordSingleClientRequest(
 
 	attr := []attribute.KeyValue{
 		semconv.ServerAddress(clientAddr),
-		attribute.String("http.route_name", routeName),
+		attribute.String("rpc.route_name", routeName),
 	}
 	if err != nil {
 		// Error code of 0 signifies the presence of some error, see if we can clarify if further by checking
@@ -126,7 +126,7 @@ func recordSingleClientRequest(
 		if errors.As(err, &rpcErr) {
 			errCode = rpcErr.ErrorCode()
 		}
-		attr = append(attr, attribute.Int("http.response.error_status_code", errCode))
+		attr = append(attr, attribute.Int("rpc.response.error_status_code", errCode))
 	}
 
 	requestDurationHistogram.Record(
