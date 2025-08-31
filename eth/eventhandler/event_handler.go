@@ -117,14 +117,15 @@ func (eh *EventHandler) HandleBlockEventsStream(
 
 		start := time.Now()
 		tasks, err := eh.processBlockEvents(ctx, blockLogs)
+		if err != nil {
+			return lastProcessedBlock, fmt.Errorf("process block events: %w", err)
+		}
+
 		logger.Debug("processed events from block",
 			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
-			zap.Error(err))
+		)
 
-		if err != nil {
-			return 0, fmt.Errorf("failed to process block events: %w", err)
-		}
 		lastProcessedBlock = blockLogs.BlockNumber
 
 		metrics.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)

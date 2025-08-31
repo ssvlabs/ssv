@@ -128,7 +128,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 
 		lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogsCh, fetchErrorCh, false)
 		if err != nil {
-			return 0, fmt.Errorf("handle historical block events: %w", err)
+			return lastProcessedBlock, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err)
 		}
 		if lastProcessedBlock == 0 {
 			return 0, fmt.Errorf("handle historical block events: lastProcessedBlock is 0")
@@ -166,9 +166,9 @@ func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error 
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
 	logStreamCh, logStreamErrsCh := es.executionClient.StreamLogs(ctx, fromBlock)
-	_, err := es.eventHandler.HandleBlockEventsStream(ctx, logStreamCh, logStreamErrsCh, true)
+	lastProcessedBlock, err := es.eventHandler.HandleBlockEventsStream(ctx, logStreamCh, logStreamErrsCh, true)
 	if err != nil {
-		return fmt.Errorf("handle block events stream: %w", err)
+		return fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err)
 	}
 
 	return nil
