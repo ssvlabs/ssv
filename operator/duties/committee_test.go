@@ -119,14 +119,13 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 	t.Parallel()
 
 	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
+		dutyStore    = dutystore.New()
+		attHandler   = NewAttesterHandler(dutyStore.Attester)
+		syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -142,7 +141,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
@@ -166,14 +165,13 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 	t.Parallel()
 
 	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
+		dutyStore    = dutystore.New()
+		attHandler   = NewAttesterHandler(dutyStore.Attester)
+		syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	syncDuties.Set(0, []*eth2apiv1.SyncCommitteeDuty{
 		{
@@ -188,7 +186,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
@@ -212,14 +210,13 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
+		dutyStore    = dutystore.New()
+		attHandler   = NewAttesterHandler(dutyStore.Attester)
+		syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -241,7 +238,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
@@ -266,14 +263,13 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	t.Parallel()
 
 	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
+		dutyStore    = dutystore.New()
+		attHandler   = NewAttesterHandler(dutyStore.Attester)
+		syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -288,7 +284,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 2: wait for no action to be taken
@@ -846,14 +842,13 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 	t.Parallel()
 
 	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
+		dutyStore    = dutystore.New()
+		attHandler   = NewAttesterHandler(dutyStore.Attester)
+		syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -867,7 +862,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	ticker.Send(phase0.Slot(0))
@@ -906,14 +901,13 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	t.Parallel()
 
 	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
+		dutyStore    = dutystore.New()
+		attHandler   = NewAttesterHandler(dutyStore.Attester)
+		syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -935,7 +929,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 2: wait for committee duty to be executed
@@ -978,14 +972,13 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	t.Parallel()
 
 	var (
-		dutyStore     = dutystore.New()
-		attHandler    = NewAttesterHandler(dutyStore.Attester)
-		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
-		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		waitForDuties = &SafeValue[bool]{}
-		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
+		dutyStore    = dutystore.New()
+		attHandler   = NewAttesterHandler(dutyStore.Attester)
+		syncHandler  = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
+		commHandler  = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+		attDuties    = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+		syncDuties   = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
+		activeShares = []*ssvtypes.SSVShare{
 			activeShare(1),
 			activeShare(2),
 			activeShare(3),
@@ -1009,7 +1002,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch-1)
-	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 1: wait for no action to be taken

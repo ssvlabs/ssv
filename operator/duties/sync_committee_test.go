@@ -97,10 +97,9 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = eligibleShares()
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = eligibleShares()
 	)
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -115,7 +114,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
@@ -530,10 +529,9 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
-		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = eligibleShares()
+		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
+		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+		activeShares = eligibleShares()
 	)
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -546,7 +544,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	duties, _ := dutiesMap.Get(0)

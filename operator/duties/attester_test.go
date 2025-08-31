@@ -110,9 +110,8 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
-		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		waitForDuties = &SafeValue[bool]{}
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -127,7 +126,7 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	waitForSlotN(scheduler.beaconConfig, 1)
-	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
@@ -146,9 +145,8 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
-		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		waitForDuties = &SafeValue[bool]{}
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -162,7 +160,7 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	ticker.Send(phase0.Slot(0))
@@ -436,8 +434,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	mockTicker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
 	waitForDuties.Set(true)
+	mockTicker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
 	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -892,9 +890,8 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
-		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		waitForDuties = &SafeValue[bool]{}
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -909,7 +906,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	mockTicker.Send(phase0.Slot(0))
