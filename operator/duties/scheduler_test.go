@@ -25,7 +25,7 @@ const (
 	baseDuration            = 100 * time.Millisecond
 	slotDuration            = 15 * baseDuration
 	timeout                 = 20 * baseDuration
-	noActionTimeout         = 7 * baseDuration
+	noActionTimeout         = 2 * baseDuration
 	clockError              = baseDuration
 	testBlockPropagateDelay = baseDuration
 	// testSlotTickerTriggerDelay is used to wait for the slot ticker to be triggered
