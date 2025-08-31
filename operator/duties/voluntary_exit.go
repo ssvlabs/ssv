@@ -64,7 +64,13 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			next = h.ticker.Next()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-			h.processExecution(ctx, currentSlot)
+
+			func() {
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1).Add(100*time.Millisecond))
+				defer cancel()
+
+				h.processExecution(tickCtx, currentSlot)
+			}()
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {

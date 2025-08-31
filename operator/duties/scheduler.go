@@ -402,29 +402,40 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	defer span.End()
 
 	for _, duty := range duties {
-		duty := duty
 		logger := s.loggerWithDutyContext(duty)
 
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
-			span.AddEvent(eventMsg,
-				trace.WithAttributes(
-					attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
-					observability.BeaconRoleAttribute(duty.Type),
-					observability.RunnerRoleAttribute(duty.RunnerRole())))
+			logger.Debug(eventMsg, zap.Duration("slot_delay", slotDelay))
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
+				observability.BeaconRoleAttribute(duty.Type),
+				observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		go func(ctx context.Context) {
-			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(duty.Slot)
-			}
-			recordDutyExecuted(ctx, duty.RunnerRole())
-			s.dutyExecutor.ExecuteDuty(ctx, duty)
-		}(ctx)
+		parentDeadline, ok := ctx.Deadline()
+		if !ok {
+			const eventMsg = "failed to get parent-context deadline"
+			span.AddEvent(eventMsg)
+			s.logger.Warn(eventMsg)
+			span.SetStatus(codes.Ok, "")
+			return
+		}
+
+		go func() {
+			// We want to inherit parent-context deadline, but we cannot use the parent-context itself
+			// here because we are now running asynchronously with the go-routine that's managing
+			// parent-context, and as a result once it decides it's done with the parent-context it will
+			// cancel it (also canceling our operations here). Thus, we create our own context instance.
+			dutyCtx, cancel := context.WithDeadline(context.Background(), parentDeadline)
+			defer cancel()
+
+			recordDutyExecuted(dutyCtx, duty.RunnerRole())
+			s.dutyExecutor.ExecuteDuty(dutyCtx, duty)
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -450,7 +461,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			logger.Debug(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				observability.CommitteeIDAttribute(committee.id),
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
@@ -458,11 +469,27 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		go func(ctx context.Context) {
+		parentDeadline, ok := ctx.Deadline()
+		if !ok {
+			const eventMsg = "failed to get parent-context deadline"
+			span.AddEvent(eventMsg)
+			s.logger.Warn(eventMsg)
+			span.SetStatus(codes.Ok, "")
+			return
+		}
+
+		go func() {
+			// We want to inherit parent-context deadline, but we cannot use the parent-context itself
+			// here because we are now running asynchronously with the go-routine that's managing
+			// parent-context, and as a result once it decides it's done with the parent-context it will
+			// cancel it (also canceling our operations here). Thus, we create our own context instance.
+			dutyCtx, cancel := context.WithDeadline(context.Background(), parentDeadline)
+			defer cancel()
+
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			recordDutyExecuted(ctx, duty.RunnerRole())
-			s.dutyExecutor.ExecuteCommitteeDuty(ctx, committee.id, duty)
-		}(ctx)
+			recordDutyExecuted(dutyCtx, duty.RunnerRole())
+			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, committee.id, duty)
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")

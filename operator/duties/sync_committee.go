@@ -91,10 +91,13 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
-			h.processExecution(ctx, period, slot)
-			h.processFetching(ctx, epoch, period, true)
-			cancel()
+			func() {
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
+				defer cancel()
+
+				h.processExecution(tickCtx, period, slot)
+				h.processFetching(tickCtx, epoch, period, true)
+			}()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
 			periodSlots := h.slotsPerPeriod()
@@ -148,16 +151,13 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch"),
+		observability.InstrumentName(observabilityNamespace, "sync_committee_contribution.fetch"),
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconPeriodAttribute(period),
-			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommitteeContribution),
 		))
 	defer span.End()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	if h.fetchCurrentPeriod {
 		span.AddEvent("fetching current period duties")
@@ -184,7 +184,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 
 func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "sync_committee.execute"),
+		observability.InstrumentName(observabilityNamespace, "sync_committee_contribution.execute"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconPeriodAttribute(period),
@@ -221,11 +221,11 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) error {
 	start := time.Now()
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
+		observability.InstrumentName(observabilityNamespace, "sync_committee_contribution.fetch_and_store"),
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconPeriodAttribute(period),
-			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommitteeContribution),
 		))
 	defer span.End()
 
@@ -285,26 +285,31 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		return nil
 	}
 
-	deadline, ok := ctx.Deadline()
+	span.AddEvent("submitting beacon sync committee subscriptions", trace.WithAttributes(
+		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
+	))
+
+	parentDeadline, ok := ctx.Deadline()
 	if !ok {
-		const eventMsg = "failed to get context deadline"
+		const eventMsg = "failed to get parent-context deadline"
 		span.AddEvent(eventMsg)
 		h.logger.Warn(eventMsg)
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	span.AddEvent("submitting beacon sync committee subscriptions", trace.WithAttributes(
-		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
-	))
-	go func(ctx context.Context, h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
-		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+	go func() {
+		// We want to inherit parent-context deadline, but we cannot use the parent-context itself
+		// here because we are now running asynchronously with the go-routine that's managing
+		// parent-context, and as a result once it decides it's done with the parent-context it will
+		// cancel it (also canceling our operations here). Thus, we create our own context instance.
+		subscriptionCtx, cancel := context.WithDeadline(context.Background(), parentDeadline)
 		defer cancel()
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
-	}(ctx, h, subscriptions)
+	}()
 
 	span.SetStatus(codes.Ok, "")
 	return nil

@@ -84,8 +84,13 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			h.processExecution(ctx, currentEpoch, slot)
-			h.processFetching(ctx, currentEpoch, slot)
+			func() {
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
+				defer cancel()
+
+				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
+				h.processFetching(tickCtx, currentEpoch, slot)
+			}()
 
 			slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 
@@ -159,9 +164,6 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		))
 	defer span.End()
 
-	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
-	defer cancel()
-
 	if h.fetchCurrentEpoch {
 		span.AddEvent("fetching current epoch duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, slot); err != nil {
@@ -185,7 +187,8 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+// executeAggregatorDuties is only processing aggregator-duties after Alan fork.
+func (h *AttesterHandler) executeAggregatorDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "attester.execute"),
 		trace.WithAttributes(
@@ -286,26 +289,31 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return nil
 	}
 
-	deadline, ok := ctx.Deadline()
+	span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
+		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
+	))
+
+	parentDeadline, ok := ctx.Deadline()
 	if !ok {
-		const eventMsg = "failed to get context deadline"
+		const eventMsg = "failed to get parent-context deadline"
 		span.AddEvent(eventMsg)
 		h.logger.Warn(eventMsg)
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
-		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
-	))
-	go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
-		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+	go func() {
+		// We want to inherit parent-context deadline, but we cannot use the parent-context itself
+		// here because we are now running asynchronously with the go-routine that's managing
+		// parent-context, and as a result once it decides it's done with the parent-context it will
+		// cancel it (also canceling our operations here). Thus, we create our own context instance.
+		subscriptionCtx, cancel := context.WithDeadline(context.Background(), parentDeadline)
 		defer cancel()
 
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
 		}
-	}(h, subscriptions)
+	}()
 
 	span.SetStatus(codes.Ok, "")
 	return nil
