@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	eth2api "github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -79,9 +79,15 @@ func recordSingleClientRequest(
 		semconv.HTTPRequestMethodKey.String(httpMethod),
 		attribute.String("http.route_name", routeName),
 	}
-	var rpcErr rpc.Error
-	if errors.As(err, &rpcErr) {
-		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
+	if err != nil {
+		// Error code of 0 signifies the presence of some error, see if we can clarify if further by using
+		// api error codes.
+		errCode := 0
+		var apiErr *eth2api.Error
+		if errors.As(err, &apiErr) {
+			errCode = apiErr.StatusCode
+		}
+		attr = append(attr, attribute.Int("http.response.error_status_code", errCode))
 	}
 
 	requestDurationHistogram.Record(
@@ -110,9 +116,15 @@ func recordMultiClientRequest(
 		semconv.HTTPRequestMethodKey.String(httpMethod),
 		attribute.String("http.route_name", routeName),
 	}
-	var rpcErr rpc.Error
-	if errors.As(err, &rpcErr) {
-		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
+	if err != nil {
+		// Error code of 0 signifies the presence of some error, see if we can clarify if further by using
+		// api error codes.
+		errCode := 0
+		var apiErr *eth2api.Error
+		if errors.As(err, &apiErr) {
+			errCode = apiErr.StatusCode
+		}
+		attr = append(attr, attribute.Int("http.response.error_status_code", errCode))
 	}
 
 	requestDurationHistogram.Record(
