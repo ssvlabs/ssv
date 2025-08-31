@@ -67,8 +67,8 @@ func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientContro
 }
 
 func (rc *recipientController) Start(ctx context.Context) {
-	go rc.listenToTicker(ctx)
-	go rc.listenToFeeRecipientChanges(ctx)
+	go rc.submitPreparationsOnSchedule(ctx)
+	go rc.submitPreparationsOnChange(ctx)
 }
 
 // SubscribeToFeeRecipientChanges subscribes to fee recipient change notifications from ValidatorController
@@ -98,10 +98,10 @@ func (rc *recipientController) getPreparations() ([]*eth2apiv1.ProposalPreparati
 	return rc.buildProposalPreparations(activeShares)
 }
 
-// listenToTicker submits proposal preparations periodically at the middle slot of each epoch.
+// submitPreparationsOnSchedule submits proposal preparations periodically at the middle slot of each epoch.
 // This ensures beacon nodes have current fee recipient information even if no changes occur.
-// Event-driven updates are handled separately via listenToFeeRecipientChanges.
-func (rc *recipientController) listenToTicker(ctx context.Context) {
+// Event-driven updates are handled separately via submitPreparationsOnChange.
+func (rc *recipientController) submitPreparationsOnSchedule(ctx context.Context) {
 	firstTimeSubmitted := false
 	ticker := rc.slotTickerProvider()
 	for {
@@ -123,8 +123,8 @@ func (rc *recipientController) listenToTicker(ctx context.Context) {
 	}
 }
 
-// listenToFeeRecipientChanges listens for fee recipient changes and submits preparations immediately
-func (rc *recipientController) listenToFeeRecipientChanges(ctx context.Context) {
+// submitPreparationsOnChange listens for fee recipient changes and submits preparations immediately
+func (rc *recipientController) submitPreparationsOnChange(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
