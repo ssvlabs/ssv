@@ -110,7 +110,9 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	})
 
 	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
@@ -176,7 +178,9 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	})
 
 	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2-1)
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2-1))
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, eligibleShares, dutiesMap, waitForDuties)
@@ -232,7 +236,9 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = eligibleShares()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
@@ -293,7 +299,9 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = eligibleShares()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
 	waitForSlotN(scheduler.beaconConfig, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
@@ -358,7 +366,9 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = eligibleShares()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
@@ -436,7 +446,9 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 		activeShares  = eligibleShares()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
@@ -530,7 +542,9 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 		},
 	})
 
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)

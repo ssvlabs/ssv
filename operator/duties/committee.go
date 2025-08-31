@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -63,7 +64,13 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
-			h.processExecution(ctx, period, epoch, slot)
+
+			func() {
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
+				defer cancel()
+
+				h.processExecution(tickCtx, period, epoch, slot)
+			}()
 
 		case <-h.reorg:
 			h.logger.Debug("🛠 reorg event")
