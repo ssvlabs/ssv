@@ -2,11 +2,10 @@ package executionclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
-	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -118,16 +117,23 @@ func recordSingleClientRequest(
 		semconv.ServerAddress(clientAddr),
 		attribute.String("rpc.route_name", routeName),
 	}
-	if err != nil {
-		// Error code of 0 signifies the presence of some error, see if we can clarify if further by checking
-		// for rpc error codes.
-		errCode := 0
-		var rpcErr rpc.Error
-		if errors.As(err, &rpcErr) {
-			errCode = rpcErr.ErrorCode()
-		}
-		attr = append(attr, attribute.Int("rpc.response.error_status_code", errCode))
+	// TODO
+	//if err != nil {
+	//	// Error code of 0 signifies the presence of some error, see if we can clarify if further by checking
+	//	// for rpc error codes.
+	//	errCode := 0
+	//	var rpcErr rpc.Error
+	//	if errors.As(err, &rpcErr) {
+	//		errCode = rpcErr.ErrorCode()
+	//	}
+	//	attr = append(attr, attribute.Int("rpc.response.error_status_code", errCode))
+	//}
+	// TODO
+	errCode := 0
+	if rand.Intn(2) == 0 { // nolint: gosec
+		errCode = 1
 	}
+	attr = append(attr, attribute.Int("rpc.response.error_status_code", errCode))
 
 	requestDurationHistogram.Record(
 		ctx,
