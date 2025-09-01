@@ -407,7 +407,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Duration("slot_delay", slotDelay))
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
 				observability.BeaconRoleAttribute(duty.Type),
@@ -461,7 +461,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Duration("slot_delay", slotDelay))
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				observability.CommitteeIDAttribute(committee.id),
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
