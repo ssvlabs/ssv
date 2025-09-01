@@ -640,7 +640,6 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		logger := c.logger.With(zap.String("msg_id", msg.MsgID.String()))
-		logger.Debug("processing partial signature message")
 
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
@@ -850,12 +849,6 @@ func (c *Collector) checkAndPublishQuorum(logger *zap.Logger, msg *spectypes.Par
 		var validatorPK spectypes.ValidatorPK
 		copy(validatorPK[:], validator.ValidatorPubKey[:])
 
-		logger.Debug("processing validator for quorum check",
-			zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
-			zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
-			zap.Uint64("signer", partialMsg.Signer),
-			zap.Uint64("threshold", threshold))
-
 		// Initialize tracking for this validator if needed
 		if trace.publishedQuorums[partialMsg.ValidatorIndex] == nil {
 			trace.publishedQuorums[partialMsg.ValidatorIndex] = make(map[spectypes.BeaconRole]string)
@@ -878,15 +871,12 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	threshold uint64,
 ) {
 	var signerData []*model.SignerData
-	var roleLogName string
 
 	switch role {
 	case spectypes.BNRoleAttester:
 		signerData = trace.Attester
-		roleLogName = "attester"
 	case spectypes.BNRoleSyncCommittee:
 		signerData = trace.SyncCommittee
-		roleLogName = "sync committee"
 	default:
 		return
 	}
@@ -899,13 +889,6 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	signersKey := c.signersToKey(signers)
 	lastPublished := trace.publishedQuorums[partialMsg.ValidatorIndex][role]
 
-	logger.Debug("quorum check",
-		zap.String("role", roleLogName),
-		zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
-		zap.String("signers_key", signersKey),
-		zap.String("last_published", lastPublished),
-		zap.Bool("will_publish", lastPublished == ""))
-
 	// Only publish the FIRST time quorum is reached, not for every signer set change
 	if lastPublished == "" {
 		trace.publishedQuorums[partialMsg.ValidatorIndex][role] = signersKey
@@ -917,35 +900,16 @@ func (c *Collector) checkAndPublishQuorumForRole(
 			Signers: signers,
 		}
 		c.decidedListenerFunc(decidedInfo)
-
-		logger.Info("data sent to listener feed",
-			zap.String("role", roleLogName),
-			zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)),
-			zap.String("validator_pk", fmt.Sprintf("%x", validatorPK[:])),
-			zap.Any("signers", signers))
 	}
 }
 
 // countUniqueSignersForValidatorAndRoot counts unique signers for a specific validator and signing root
-func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, signerData []*model.SignerData, validatorIndex phase0.ValidatorIndex, signingRoot phase0.Root) []spectypes.OperatorID {
+func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, signerData []*model.SignerData, validatorIndex phase0.ValidatorIndex, _ phase0.Root) []spectypes.OperatorID {
 	signers := make(map[spectypes.OperatorID]struct{})
 
-	logger.Debug("counting signers for validator",
-		zap.Uint64("validator_index", uint64(validatorIndex)),
-		zap.String("signing_root", fmt.Sprintf("%x", signingRoot[:])),
-		zap.Int("total_signer_data_entries", len(signerData)))
-
-	for i, data := range signerData {
-		// Check if this validator index is in the signer data
-		for _, vIdx := range data.ValidatorIdx {
-			if vIdx == validatorIndex {
-				signers[data.Signer] = struct{}{}
-				logger.Debug("found signer for validator",
-					zap.Uint64("validator_index", uint64(validatorIndex)),
-					zap.Uint64("signer", data.Signer),
-					zap.Int("signer_data_entry", i))
-				break
-			}
+	for _, data := range signerData {
+		if slices.Contains(data.ValidatorIdx, validatorIndex) {
+			signers[data.Signer] = struct{}{}
 		}
 	}
 
@@ -955,11 +919,6 @@ func (c *Collector) countUniqueSignersForValidatorAndRoot(logger *zap.Logger, si
 		result = append(result, signer)
 	}
 	slices.Sort(result)
-
-	logger.Debug("final unique signers for validator",
-		zap.Uint64("validator_index", uint64(validatorIndex)),
-		zap.Any("signers", result),
-		zap.Int("count", len(result)))
 
 	return result
 }
