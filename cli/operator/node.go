@@ -665,6 +665,10 @@ var StartNodeCmd = &cobra.Command{
 					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
 					NodeProber:      nodeProber,
 				},
+				&handlers.PinnedP2PPeers{
+					Provider: p2pNetwork.(p2pv1.PinnedPeersProvider),
+					Conn:     handlers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),
+				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},

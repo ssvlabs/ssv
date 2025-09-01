@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
@@ -51,6 +52,11 @@ const (
 	// inboundLimitRatio is the ratio of inbound connections to the total connections
 	// we allow (both inbound and outbound).
 	inboundLimitRatio = float64(0.5)
+	// pinned redial backoff: start at 10s, double until 10m, then stay at 10m
+	pinnedRedialInitialBackoff = 10 * time.Second
+	pinnedRedialMaxBackoff     = 10 * time.Minute
+	// stabilization window: connection must survive this long before we reset backoff
+	pinnedStabilizeWindow = 30 * time.Second
 )
 
 // Setup is used to setup the network
@@ -153,6 +159,9 @@ func (n *p2pNetwork) SetupHost() error {
 	}
 	n.backoffConnector = backoffConnector
 
+	// Apply pinned peers protections: persist addrs, protect & setup redial on disconnect.
+	n.applyPinnedPeersSettings()
+
 	return nil
 }
 
@@ -251,6 +260,76 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	return nil
 }
+
+// applyPinnedPeersSettings persists pinned peer addresses, protects them from pruning,
+// and installs a disconnect notifier to redial.
+func (n *p2pNetwork) applyPinnedPeersSettings() {
+	if n.host == nil || n.libConnManager == nil {
+		return
+	}
+	const protectTag = "pinned-peer"
+	// Keep peer addrs in peerstore and protect.
+	n.pinnedPeers.Range(func(_ peer.ID, ai *peer.AddrInfo) bool {
+		if ai == nil {
+			return true
+		}
+		if len(ai.Addrs) > 0 {
+			n.host.Peerstore().AddAddrs(ai.ID, ai.Addrs, peerstore.PermanentAddrTTL)
+		}
+		n.libConnManager.Protect(ai.ID, protectTag)
+		n.logger.Info("pinned peer protected", fields.PeerID(ai.ID), zap.Int("addr_count", len(ai.Addrs)))
+		// Proactively start redial for pinned peers that are not connected yet.
+		if n.host.Network().Connectedness(ai.ID) != network.Connected {
+			n.schedulePinnedConnect(ai.ID)
+		}
+		return true
+	})
+	// Redial on disconnect.
+	n.host.Network().Notify(&network.NotifyBundle{
+		ConnectedF:    func(_ network.Network, c network.Conn) { n.handlePinnedConnected(c.RemotePeer()) },
+		DisconnectedF: func(_ network.Network, c network.Conn) { n.handlePinnedDisconnected(c.RemotePeer()) },
+	})
+}
+
+// handlePinnedConnected is invoked when a connection is established. For pinned peers,
+// it stops any current backoff timer and starts a stabilization window; if the connection
+// survives the window, the backoff attempts are reset (via Cancel).
+func (n *p2pNetwork) handlePinnedConnected(pid peer.ID) {
+	if !n.isPinned(pid) {
+		return
+	}
+	n.pinnedRedialScheduler.Stop(pid.String())
+	if t, ok := n.pinnedStabilizers.Get(pid); ok && t != nil {
+		t.Stop()
+		n.pinnedStabilizers.Delete(pid)
+	}
+	t := time.AfterFunc(pinnedStabilizeWindow, func() {
+		if n.host != nil && n.host.Network().Connectedness(pid) == network.Connected {
+			n.pinnedRedialScheduler.Cancel(pid.String())
+		}
+		n.pinnedStabilizers.Delete(pid)
+	})
+	n.pinnedStabilizers.Set(pid, t)
+	n.logger.Info("pinned peer connected; starting stabilization window", fields.PeerID(pid))
+}
+
+// handlePinnedDisconnected is invoked when a connection is closed. For pinned peers,
+// it cancels any stabilization timer and schedules a redial using the backoff policy.
+func (n *p2pNetwork) handlePinnedDisconnected(pid peer.ID) {
+	ai, ok := n.pinnedPeers.Get(pid)
+	if !ok {
+		return
+	}
+	if t, ok := n.pinnedStabilizers.Get(pid); ok && t != nil {
+		t.Stop()
+		n.pinnedStabilizers.Delete(pid)
+	}
+	n.logger.Info("pinned peer disconnected; scheduling redial", fields.PeerID(pid))
+	n.schedulePinnedConnect(ai.ID)
+}
+
+// schedulePinnedRedial schedules a redial attempt for a pinned peer with an exponential backoff
+// capped at pinnedRedialMaxBackoff to prevent flooding when a peer is permanently offline.
 
 func (n *p2pNetwork) ActiveSubnets() p2pcommons.Subnets {
 	return n.currentSubnets

@@ -18,6 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	crand "crypto/rand"
+	"encoding/json"
+
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/api/handlers"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -133,6 +140,7 @@ func TestNew(t *testing.T) {
 		logger,
 		":8080",
 		node,
+		nil,
 		validators,
 		exporter,
 		false,
@@ -168,6 +176,7 @@ func TestRun_ActualExecution(t *testing.T) {
 		logger,
 		addr,
 		&handlers.Node{},
+		nil,
 		&handlers.Validators{},
 		&handlers.Exporter{},
 		false,
@@ -233,6 +242,7 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 		logger,
 		addr,
 		&handlers.Node{},
+		nil,
 		&handlers.Validators{},
 		&handlers.Exporter{},
 		true,
@@ -406,5 +416,140 @@ func TestRoutes(t *testing.T) {
 
 			route.validateBody(t, string(body))
 		})
+	}
+}
+
+// --- Pinned peers routes ---
+
+// mockPinnedProviderServer implements handlers.PinnedPeersProvider for server tests.
+type mockPinnedProviderServer struct {
+	pinned     []peer.AddrInfo
+	pinCalls   []peer.AddrInfo
+	unpinCalls []peer.ID
+}
+
+func (m *mockPinnedProviderServer) ListPinned() []peer.AddrInfo {
+	out := make([]peer.AddrInfo, len(m.pinned))
+	copy(out, m.pinned)
+	return out
+}
+
+func (m *mockPinnedProviderServer) PinPeer(ai peer.AddrInfo) error {
+	m.pinCalls = append(m.pinCalls, ai)
+	for _, p := range m.pinned {
+		if p.ID == ai.ID {
+			return nil
+		}
+	}
+	m.pinned = append(m.pinned, ai)
+	return nil
+}
+
+func (m *mockPinnedProviderServer) UnpinPeer(id peer.ID) error {
+	m.unpinCalls = append(m.unpinCalls, id)
+	kept := make([]peer.AddrInfo, 0, len(m.pinned))
+	for _, p := range m.pinned {
+		if p.ID != id {
+			kept = append(kept, p)
+		}
+	}
+	m.pinned = kept
+	return nil
+}
+
+type mockConnCheckerServer struct{}
+
+func (mockConnCheckerServer) IsConnected(peer.ID) bool { return false }
+
+func genPeerID(t *testing.T) peer.ID {
+	t.Helper()
+	sk, _, err := libp2pcrypto.GenerateEd25519Key(crand.Reader)
+	require.NoError(t, err)
+	id, err := peer.IDFromPrivateKey(sk)
+	require.NoError(t, err)
+	return id
+}
+
+func maFor(id peer.ID) string { return "/ip4/127.0.0.1/tcp/13001/p2p/" + id.String() }
+
+func TestRun_WithPinnedPeersEndpoints(t *testing.T) {
+	// pick a free localhost port
+	listener, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	addr := fmt.Sprintf("localhost:%d", port)
+	require.NoError(t, listener.Close())
+
+	prov := &mockPinnedProviderServer{}
+	id1 := genPeerID(t)
+	addr1, _ := ma.NewMultiaddr(maFor(id1))
+	prov.pinned = []peer.AddrInfo{{ID: id1, Addrs: []ma.Multiaddr{addr1}}}
+
+	srv := New(
+		zaptest.NewLogger(t),
+		addr,
+		&handlers.Node{},
+		&handlers.PinnedP2PPeers{Provider: prov, Conn: mockConnCheckerServer{}},
+		&handlers.Validators{},
+		&handlers.Exporter{},
+		false,
+	)
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.Run() }()
+
+	// wait for server to accept connections
+	var connectErr error
+	for i := 0; i < 10; i++ {
+		_, connectErr = net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if connectErr == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	require.NoError(t, connectErr)
+
+	baseURL := "http://" + addr
+	// GET list pinned peers
+	resp, err := http.Get(baseURL + "/v1/node/pinned-peers")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(body), id1.String())
+
+	// POST add another peer
+	id2 := genPeerID(t)
+	addr2 := maFor(id2)
+	addReq := handlers.PinPeersRequest{Peers: []string{addr2}}
+	b, _ := json.Marshal(addReq)
+	resp, err = http.Post(baseURL+"/v1/node/pinned-peers", "application/json", strings.NewReader(string(b)))
+	require.NoError(t, err)
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(body), id2.String())
+
+	// DELETE remove id1
+	delReq := handlers.UnpinPeersRequest{Peers: []string{maFor(id1)}}
+	b, _ = json.Marshal(delReq)
+	httpReq, _ := http.NewRequest(http.MethodDelete, baseURL+"/v1/node/pinned-peers", strings.NewReader(string(b)))
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(httpReq)
+	require.NoError(t, err)
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(body), id1.String())
+
+	// shutdown server
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	_ = srv.httpServer.Shutdown(ctx)
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not exit in time")
+	case <-errCh:
+		// ok
 	}
 }
