@@ -20,6 +20,7 @@ type Server struct {
 	addr   string
 
 	node       *handlers.Node
+	pinned     *handlers.PinnedP2PPeers
 	validators *handlers.Validators
 	exporter   *handlers.Exporter
 	httpServer *http.Server
@@ -27,11 +28,12 @@ type Server struct {
 	fullExporter bool
 }
 
-// New creates a new Server instance.
+// New creates a new Server instance. `pinned` may be nil to disable pinned-peers endpoints.
 func New(
 	logger *zap.Logger,
 	addr string,
 	node *handlers.Node,
+	pinned *handlers.PinnedP2PPeers,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
 	fullExporter bool,
@@ -40,6 +42,7 @@ func New(
 		logger:       logger,
 		addr:         addr,
 		node:         node,
+		pinned:       pinned,
 		validators:   validators,
 		exporter:     exporter,
 		fullExporter: fullExporter,
@@ -78,6 +81,27 @@ func (s *Server) Run() error {
 	// @Success 200 {object} handlers.TopicsResponse
 	// @Router /v1/node/topics [get]
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
+
+	// Pinned peers management (optional)
+	if s.pinned != nil {
+		// @Summary List pinned peers
+		// @Tags Node
+		// @Produce json
+		// @Router /v1/node/pinned-peers [get]
+		router.Get("/v1/node/pinned-peers", api.Handler(s.pinned.List))
+		// @Summary Add pinned peers
+		// @Tags Node
+		// @Accept json
+		// @Produce json
+		// @Router /v1/node/pinned-peers [post]
+		router.Post("/v1/node/pinned-peers", api.Handler(s.pinned.Add))
+		// @Summary Remove pinned peers
+		// @Tags Node
+		// @Accept json
+		// @Produce json
+		// @Router /v1/node/pinned-peers [delete]
+		router.Delete("/v1/node/pinned-peers", api.Handler(s.pinned.Remove))
+	}
 
 	// @Summary Get node health status
 	// @Description Returns the health status of the SSV node
