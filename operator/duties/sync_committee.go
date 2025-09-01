@@ -220,11 +220,11 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) error {
 	start := time.Now()
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "sync_committee_contribution.fetch_and_store"),
+		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconPeriodAttribute(period),
-			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommitteeContribution),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
 		))
 	defer span.End()
 

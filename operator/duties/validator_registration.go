@@ -120,6 +120,7 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
 
 	shares := h.validatorProvider.SelfValidators()
+	duties := make([]*spectypes.ValidatorDuty, 0, len(shares))
 	for _, share := range shares {
 		if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
 			// Only attesting validators are eligible for registration duties.
@@ -131,18 +132,20 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 
 		pk := phase0.BLSPubKey{}
 		copy(pk[:], share.ValidatorPubKey[:])
-		h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{{
+		duties = append(duties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleValidatorRegistration,
 			ValidatorIndex: share.ValidatorIndex,
 			PubKey:         pk,
 			Slot:           slot,
-		}})
+		})
 
 		h.logger.Debug("validator registration duty sent",
 			zap.Uint64("slot", uint64(slot)),
 			zap.Uint64("validator_index", uint64(share.ValidatorIndex)),
 			zap.String("validator_pubkey", pk.String()))
 	}
+
+	h.dutiesExecutor.ExecuteDuties(ctx, duties)
 }
 
 // blockSlot returns slot that happens (corresponds to) at the same time as block.
