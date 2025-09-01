@@ -57,7 +57,7 @@ type MultiClient struct {
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
 	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-	connectionTimeout           time.Duration
+	reqTimeout                  time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	healthInvalidationInterval  time.Duration
@@ -93,7 +93,7 @@ func NewMulti(
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
 		followDistance:              DefaultFollowDistance,
-		connectionTimeout:           DefaultConnectionTimeout,
+		reqTimeout:                  DefaultReqTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize,
@@ -106,21 +106,17 @@ func NewMulti(
 	multiClient.logger.Info("execution client: connecting (multi client)", fields.Addresses(nodeAddrs))
 
 	var connected bool
-
 	var multiErr error
 	for clientIndex := range nodeAddrs {
 		if err := multiClient.connect(ctx, clientIndex); err != nil {
 			multiClient.logger.Error("failed to connect to node",
 				zap.String("address", nodeAddrs[clientIndex]),
 				zap.Error(err))
-
 			multiErr = errors.Join(multiErr, err)
 			continue
 		}
-
 		connected = true
 	}
-
 	if !connected {
 		return nil, fmt.Errorf("no available clients: %w", multiErr)
 	}
@@ -156,7 +152,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		mc.contractAddress,
 		WithLogger(logger),
 		WithFollowDistance(mc.followDistance),
-		WithConnectionTimeout(mc.connectionTimeout),
+		WithReqTimeout(mc.reqTimeout),
 		WithReconnectionInitialInterval(mc.reconnectionInitialInterval),
 		WithReconnectionMaxInterval(mc.reconnectionMaxInterval),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),

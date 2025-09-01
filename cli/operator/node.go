@@ -185,8 +185,10 @@ var StartNodeCmd = &cobra.Command{
 
 		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
 		if err != nil {
-			logger.Fatal("failed to create beacon go-client", zap.Error(err),
-				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+			logger.Fatal("failed to create beacon go-client",
+				zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			)
 		}
 
 		networkConfig := &networkconfig.Network{
@@ -330,7 +332,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 		validatorRegistrationSubmitter := runner.NewVRSubmitter(cmd.Context(), logger, networkConfig.Beacon, consensusClient, validatorProvider)
 
-		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
+		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
 		if len(executionAddrList) == 0 {
 			logger.Fatal("no execution node address provided")
 		}
@@ -344,7 +346,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
 				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
@@ -362,7 +364,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
 				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithReconnectionInitialIntervalMulti(executionclient.DefaultReconnectionInitialInterval),
 				executionclient.WithReconnectionMaxIntervalMulti(executionclient.DefaultReconnectionMaxInterval),
 				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
