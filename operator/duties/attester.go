@@ -110,24 +110,29 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
-			// reset current epoch duties
-			if reorgEvent.Previous {
-				h.duties.ResetEpoch(currentEpoch)
-				h.fetchCurrentEpoch = true
-				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.ResetEpoch(currentEpoch + 1)
-					h.fetchNextEpoch = true
-				}
+			func() {
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(reorgEvent.Slot+1).Add(100*time.Millisecond))
+				defer cancel()
 
-				h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
-			} else if reorgEvent.Current {
-				// reset & re-fetch next epoch duties if in appropriate slot range,
-				// otherwise they will be fetched by the appropriate slot tick.
-				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.ResetEpoch(currentEpoch + 1)
-					h.fetchNextEpoch = true
+				// reset current epoch duties
+				if reorgEvent.Previous {
+					h.duties.ResetEpoch(currentEpoch)
+					h.fetchCurrentEpoch = true
+					if h.shouldFetchNexEpoch(reorgEvent.Slot) {
+						h.duties.ResetEpoch(currentEpoch + 1)
+						h.fetchNextEpoch = true
+					}
+
+					h.processFetching(tickCtx, currentEpoch, reorgEvent.Slot)
+				} else if reorgEvent.Current {
+					// reset & re-fetch next epoch duties if in appropriate slot range,
+					// otherwise they will be fetched by the appropriate slot tick.
+					if h.shouldFetchNexEpoch(reorgEvent.Slot) {
+						h.duties.ResetEpoch(currentEpoch + 1)
+						h.fetchNextEpoch = true
+					}
 				}
-			}
+			}()
 
 		case <-h.indicesChange:
 			slot := h.beaconConfig.EstimatedCurrentSlot()
@@ -311,7 +316,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		defer cancel()
 
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-			h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
+			h.logger.Error("failed to submit beacon committee subscription", zap.Error(err))
 		}
 	}()
 

@@ -113,7 +113,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		case reorgEvent := <-h.reorg:
 			epoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
 			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
@@ -307,7 +306,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		defer cancel()
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+			h.logger.Error("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
 	}()
 
