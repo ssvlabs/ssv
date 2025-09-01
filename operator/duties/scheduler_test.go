@@ -404,7 +404,7 @@ func TestScheduler_Run(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	logger := log.TestLogger(t)
@@ -458,7 +458,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()

@@ -23,7 +23,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh := make(chan ExitDescriptor)
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 

@@ -135,7 +135,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 		},
 	})
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -180,7 +180,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 		},
 	})
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -232,7 +232,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		},
 	})
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -280,7 +280,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -324,7 +324,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2), activeShare(3)}
 	)
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -404,7 +404,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2), activeShare(3)}
 	)
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -492,7 +492,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -563,7 +563,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
@@ -655,7 +655,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2)}
 	)
 
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
@@ -770,7 +770,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch)
@@ -858,7 +858,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 		},
 	})
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -923,7 +923,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 		},
 	})
 	// STEP 1: wait for attester & sync committee duties to be fetched (handle initial duties)
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
@@ -998,7 +998,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	// Duty executor expects deadline to be set on the parent context (see "failed to get parent-context deadline").
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch-1)

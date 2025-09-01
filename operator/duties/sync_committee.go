@@ -288,22 +288,14 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
-	parentDeadline, ok := ctx.Deadline()
-	if !ok {
-		const eventMsg = "failed to get parent-context deadline"
-		span.AddEvent(eventMsg)
-		h.logger.Warn(eventMsg)
-		span.SetStatus(codes.Ok, "")
-		return nil
-	}
-
 	go func() {
-		// We want to inherit parent-context deadline, but we cannot use the parent-context itself
-		// here because we are now running asynchronously with the go-routine that's managing
-		// parent-context, and as a result once it decides it's done with the parent-context it will
-		// cancel it (also canceling our operations here). Thus, we create our own context instance.
-		subscriptionCtx, cancel := context.WithDeadline(context.Background(), parentDeadline)
+		// Cannot use parent-context itself here, have to create independent instance
+		// to be able to continue working in background.
+		subscriptionCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
 		defer cancel()
+		if !withDeadline {
+			h.logger.Warn("parent-context has no deadline set")
+		}
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to subscribe sync committee to subnet", zap.Error(err))

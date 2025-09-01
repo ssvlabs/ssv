@@ -416,22 +416,14 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		parentDeadline, ok := ctx.Deadline()
-		if !ok {
-			const eventMsg = "failed to get parent-context deadline"
-			span.AddEvent(eventMsg)
-			s.logger.Warn(eventMsg)
-			span.SetStatus(codes.Ok, "")
-			return
-		}
-
 		go func() {
-			// We want to inherit parent-context deadline, but we cannot use the parent-context itself
-			// here because we are now running asynchronously with the go-routine that's managing
-			// parent-context, and as a result once it decides it's done with the parent-context it will
-			// cancel it (also canceling our operations here). Thus, we create our own context instance.
-			dutyCtx, cancel := context.WithDeadline(context.Background(), parentDeadline)
+			// Cannot use parent-context itself here, have to create independent instance
+			// to be able to continue working in background.
+			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
 			defer cancel()
+			if !withDeadline {
+				logger.Warn("parent-context has no deadline set")
+			}
 
 			recordDutyExecuted(dutyCtx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteDuty(dutyCtx, duty)
@@ -469,22 +461,14 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		parentDeadline, ok := ctx.Deadline()
-		if !ok {
-			const eventMsg = "failed to get parent-context deadline"
-			span.AddEvent(eventMsg)
-			s.logger.Warn(eventMsg)
-			span.SetStatus(codes.Ok, "")
-			return
-		}
-
 		go func() {
-			// We want to inherit parent-context deadline, but we cannot use the parent-context itself
-			// here because we are now running asynchronously with the go-routine that's managing
-			// parent-context, and as a result once it decides it's done with the parent-context it will
-			// cancel it (also canceling our operations here). Thus, we create our own context instance.
-			dutyCtx, cancel := context.WithDeadline(context.Background(), parentDeadline)
+			// Cannot use parent-context itself here, have to create independent instance
+			// to be able to continue working in background.
+			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
 			defer cancel()
+			if !withDeadline {
+				logger.Warn("parent-context has no deadline set")
+			}
 
 			s.waitOneThirdOrValidBlock(duty.Slot)
 			recordDutyExecuted(dutyCtx, duty.RunnerRole())
