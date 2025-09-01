@@ -85,7 +85,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
 				defer cancel()
 
 				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
@@ -111,7 +111,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			func() {
-				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(reorgEvent.Slot+1).Add(100*time.Millisecond))
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, reorgEvent.Slot)
 				defer cancel()
 
 				// reset current epoch duties
