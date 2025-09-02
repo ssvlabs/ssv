@@ -64,7 +64,10 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				// Attestations and sync-committee submissions are rewarded as long as they are finished within
+				// 2 slots after the target slot (the target slot itself, plus the next slot after that), hence
+				// we are setting the deadline here to target slot + 2.
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+1)
 				defer cancel()
 
 				h.processExecution(tickCtx, period, epoch, slot)

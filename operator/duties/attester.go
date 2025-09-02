@@ -85,6 +85,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			func() {
+				// Aggregates submissions are rewarded as long as they are finished within 2 slots after the target slot
+				// (the target slot itself, plus the next slot after that), hence we are setting the deadline here to
+				// target slot + 2.
 				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
 				defer cancel()
 
