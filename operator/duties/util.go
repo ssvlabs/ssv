@@ -9,10 +9,10 @@ import (
 // but not get canceled when parentCtx is canceled (e.g., we want to keep working in the
 // background until the deadline expires).
 func ctxWithParentDeadline(parentCtx context.Context) (ctx context.Context, cancel context.CancelFunc, withDeadline bool) {
-	ctx, cancel = context.Background(), func() {}
+	ctx, cancel = context.WithoutCancel(parentCtx), func() {}
 	parentDeadline, ok := parentCtx.Deadline()
 	if ok {
-		ctx, cancel = context.WithDeadline(context.Background(), parentDeadline)
+		ctx, cancel = context.WithDeadline(context.WithoutCancel(parentCtx), parentDeadline)
 		withDeadline = true
 	}
 	return ctx, cancel, withDeadline
