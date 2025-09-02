@@ -156,9 +156,6 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 		))
 	defer span.End()
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	if h.fetchCurrentPeriod {
 		span.AddEvent("fetching current period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
@@ -298,7 +295,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 	go func(ctx context.Context, h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
-		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+		subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
 		defer cancel()
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
