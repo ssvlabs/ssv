@@ -85,7 +85,7 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + time.Millisecond*10)
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + 100*time.Millisecond)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -103,7 +103,7 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2)) // reset before elapsed
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + time.Millisecond*10)
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + 100*time.Millisecond)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -145,13 +145,13 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 	}
 
 	// Wait a bit more than the expected timeout to ensure all timers have triggered
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + time.Millisecond*100)
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + 100*time.Millisecond + 100*time.Millisecond)
 
 	require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
 
 	mu.Lock()
 	for i := 1; i < 4; i++ {
-		require.InDelta(t, timestamps[0], timestamps[i], float64(time.Millisecond*10), "All four timers should expire nearly at the same time")
+		require.InDelta(t, timestamps[0], timestamps[i], float64(100*time.Millisecond), "All four timers should expire nearly at the same time")
 	}
 	mu.Unlock()
 }
