@@ -84,24 +84,55 @@ func genPeerID(t *testing.T) peer.ID {
 	return id
 }
 
-func maFor(id peer.ID) string {
-	return fmt.Sprintf("/ip4/127.0.0.1/tcp/13001/p2p/%s", id.String())
+// idsAndAddrs returns n IDs and their corresponding multiaddrs.
+func idsAndAddrs(t *testing.T, n int) ([]peer.ID, []ma.Multiaddr) {
+	t.Helper()
+	ids := make([]peer.ID, n)
+	addrs := make([]ma.Multiaddr, n)
+	for i := 0; i < n; i++ {
+		ids[i] = genPeerID(t)
+		a, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/127.0.0.1/tcp/13001/p2p/%s", ids[i].String()))
+		require.NoError(t, err)
+		addrs[i] = a
+	}
+	return ids, addrs
+}
+
+// test helpers to reduce duplication
+func newPinnedHandler(prov *mockPinnedProvider) *PinnedP2PPeers {
+	return &PinnedP2PPeers{Provider: prov, Conn: &mockConnChecker{connected: map[peer.ID]bool{}}}
+}
+
+func doJSON(t *testing.T, method string, handler api.HandlerFunc, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(body)
+	require.NoError(t, err)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(method, "/v1/node/pinned-peers", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	api.Handler(handler).ServeHTTP(rr, req)
+	return rr
+}
+
+// callIDs returns the string IDs that were pinned in order of calls.
+func callIDs(calls []peer.AddrInfo) []string {
+	out := make([]string, 0, len(calls))
+	for _, c := range calls {
+		out = append(out, c.ID.String())
+	}
+	return out
 }
 
 func TestPinned_List(t *testing.T) {
-	id1 := genPeerID(t)
-	id2 := genPeerID(t)
-
-	addr1, err := ma.NewMultiaddr(maFor(id1))
-	require.NoError(t, err)
+	ids, addrs := idsAndAddrs(t, 2)
 
 	prov := &mockPinnedProvider{
 		pinned: []peer.AddrInfo{
-			{ID: id1, Addrs: []ma.Multiaddr{addr1}},
-			{ID: id2},
+			{ID: ids[0], Addrs: []ma.Multiaddr{addrs[0]}},
+			{ID: ids[1]},
 		},
 	}
-	conn := &mockConnChecker{connected: map[peer.ID]bool{id1: true, id2: false}}
+	conn := &mockConnChecker{connected: map[peer.ID]bool{ids[0]: true, ids[1]: false}}
 
 	h := &PinnedP2PPeers{Provider: prov, Conn: conn}
 
@@ -114,98 +145,121 @@ func TestPinned_List(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	require.Len(t, resp.Pinned, 2)
 	// assert connected flags and addresses
-	require.Equal(t, resp.Pinned[0].ID, id1.String())
+	require.Equal(t, resp.Pinned[0].ID, ids[0].String())
 	require.True(t, resp.Pinned[0].Connected)
 	require.GreaterOrEqual(t, len(resp.Pinned[0].Addresses), 1)
-	require.Equal(t, id2.String(), resp.Pinned[1].ID)
+	require.Equal(t, ids[1].String(), resp.Pinned[1].ID)
 	require.False(t, resp.Pinned[1].Connected)
 }
 
-func TestPinned_Add(t *testing.T) {
-	id1 := genPeerID(t)
-	id2 := genPeerID(t)
-	id3 := genPeerID(t)
-
-	addr1, err := ma.NewMultiaddr(maFor(id1))
-	require.NoError(t, err)
-	addr2, err := ma.NewMultiaddr(maFor(id2))
-	require.NoError(t, err)
-	addr3, err := ma.NewMultiaddr(maFor(id3))
-	require.NoError(t, err)
+func TestPinned_Add_BestEffort(t *testing.T) {
+	ids, addrs := idsAndAddrs(t, 3)
 
 	prov := &mockPinnedProvider{
-		pinned: []peer.AddrInfo{{ID: id1, Addrs: []ma.Multiaddr{addr1}}},
+		pinned: []peer.AddrInfo{{ID: ids[0], Addrs: []ma.Multiaddr{addrs[0]}}},
 		pinErrFor: map[peer.ID]error{
-			id3: errors.New("pin failed"),
+			ids[2]: errors.New("pin failed"),
 		},
 	}
-	h := &PinnedP2PPeers{Provider: prov, Conn: &mockConnChecker{connected: map[peer.ID]bool{}}}
+	h := newPinnedHandler(prov)
 
-	// Provide: addr2 (valid add), addr1 (already pinned), addr3 (pin will fail), malformed multiaddr without /p2p
-	body := pinPeersRequest{Peers: []string{addr2.String(), addr1.String(), addr3.String(), "/ip4/127.0.0.1/tcp/13001"}}
-	b, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/node/pinned-peers", bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	api.Handler(h.Add).ServeHTTP(rr, req)
+	// Provide: addr2 (valid add), addr1 (already pinned), addr3 (pin will fail)
+	body := pinPeersRequest{Peers: []string{addrs[1].String(), addrs[0].String(), addrs[2].String()}}
+	rr := doJSON(t, http.MethodPost, h.Add, body)
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	var resp pinPeersResponse
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 
-	require.Contains(t, resp.Added, id2.String())
-	require.Contains(t, resp.AlreadyPinned, id1.String())
-	// invalids: id3 (pin failed), plus malformed multiaddr without /p2p
-	require.Equal(t, len(resp.Invalid), 2)
+	require.Contains(t, resp.Added, ids[1].String())
+	// id[0] is already pinned; Add merges addrs and reports success
+	require.Contains(t, resp.Added, ids[0].String())
+	// failed should contain id3, partial success is true
+	require.Len(t, resp.Failed, 1)
+	require.Equal(t, ids[2].String(), resp.Failed[0].ID)
+	require.True(t, resp.Partial)
 
-	// Pin calls should include id2 and id3, not id1 (already pinned)
-	called := make(map[string]bool)
-	for _, c := range prov.pinCalls {
-		called[c.ID.String()] = true
-	}
-	require.True(t, called[id2.String()])
-	require.True(t, called[id3.String()])
-	require.False(t, called[id1.String()])
+	// Pin calls should include id1, id2 and id3; id1 merges addrs
+	called := callIDs(prov.pinCalls)
+	require.Contains(t, called, ids[0].String())
+	require.Contains(t, called, ids[1].String())
+	require.Contains(t, called, ids[2].String())
 }
 
-func TestPinned_Remove(t *testing.T) {
-	id1 := genPeerID(t)
-	id2 := genPeerID(t)
-	addr1, err := ma.NewMultiaddr(maFor(id1))
-	require.NoError(t, err)
+func TestPinned_Add_400OnInvalid(t *testing.T) {
+	_, addrs := idsAndAddrs(t, 1)
+
+	prov := &mockPinnedProvider{}
+	h := newPinnedHandler(prov)
+
+	// Include a malformed multiaddr among inputs
+	body := pinPeersRequest{Peers: []string{addrs[0].String(), "/ip4/127.0.0.1/tcp/13001"}}
+	rr := doJSON(t, http.MethodPost, h.Add, body)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	// ensure no pin calls were performed
+	require.Empty(t, prov.pinCalls)
+}
+
+func TestPinned_Remove_BestEffort(t *testing.T) {
+	ids, addrs := idsAndAddrs(t, 2)
 
 	prov := &mockPinnedProvider{
-		pinned: []peer.AddrInfo{{ID: id1, Addrs: []ma.Multiaddr{addr1}}, {ID: id2}},
+		pinned: []peer.AddrInfo{{ID: ids[0], Addrs: []ma.Multiaddr{addrs[0]}}, {ID: ids[1]}},
 	}
-	h := &PinnedP2PPeers{Provider: prov, Conn: &mockConnChecker{connected: map[peer.ID]bool{}}}
+	h := newPinnedHandler(prov)
 
-	// Only full multiaddrs are accepted for removal
-	body := unpinPeersRequest{Peers: []string{maFor(id2), maFor(id1), "/ip4/127.0.0.1/tcp/13001"}}
-	b, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, "/v1/node/pinned-peers", bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	api.Handler(h.Remove).ServeHTTP(rr, req)
+	// Valid removals only
+	body := unpinPeersRequest{Peers: []string{ids[1].String(), ids[0].String()}}
+	rr := doJSON(t, http.MethodDelete, h.Remove, body)
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	var resp unpinPeersResponse
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 
-	// both id1 and id2 removed
-	require.ElementsMatch(t, []string{id1.String(), id2.String()}, resp.Removed)
-	// one invalid (malformed multiaddr without /p2p), not_found should be empty since both existed
-	require.Len(t, resp.Invalid, 1)
-	require.Empty(t, resp.NotFound)
+	// both ids[0] and ids[1] removed, no failures
+	require.ElementsMatch(t, []string{ids[0].String(), ids[1].String()}, resp.Removed)
+	require.Empty(t, resp.Failed)
+	require.False(t, resp.Partial)
 
 	// Verify UnpinPeer calls
-	called := make(map[string]bool)
+	called := make(map[string]struct{}, len(prov.unpinCalls))
 	for _, id := range prov.unpinCalls {
-		called[id.String()] = true
+		called[id.String()] = struct{}{}
 	}
-	require.True(t, called[id1.String()])
-	require.True(t, called[id2.String()])
+	require.Contains(t, called, ids[0].String())
+	require.Contains(t, called, ids[1].String())
+}
+
+func TestPinned_Remove_400OnInvalid(t *testing.T) {
+	ids, addrs := idsAndAddrs(t, 1)
+
+	prov := &mockPinnedProvider{pinned: []peer.AddrInfo{{ID: ids[0], Addrs: []ma.Multiaddr{addrs[0]}}}}
+	h := newPinnedHandler(prov)
+
+	// Mixed valid peer ID and multiaddr should 400 with friendly message
+	body := unpinPeersRequest{Peers: []string{ids[0].String(), "/ip4/127.0.0.1/tcp/13001"}}
+	rr := doJSON(t, http.MethodDelete, h.Remove, body)
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	require.Empty(t, prov.unpinCalls)
+}
+
+func TestPinned_Remove_FailedBestEffort(t *testing.T) {
+	ids, addrs := idsAndAddrs(t, 2)
+
+	prov := &mockPinnedProvider{
+		pinned:      []peer.AddrInfo{{ID: ids[0], Addrs: []ma.Multiaddr{addrs[0]}}, {ID: ids[1]}},
+		unpinErrFor: map[peer.ID]error{ids[1]: errors.New("unpin failed")},
+	}
+	h := newPinnedHandler(prov)
+
+	body := unpinPeersRequest{Peers: []string{ids[1].String(), ids[0].String()}}
+	rr := doJSON(t, http.MethodDelete, h.Remove, body)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp unpinPeersResponse
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	require.Contains(t, resp.Removed, ids[0].String())
+	require.Len(t, resp.Failed, 1)
+	require.Equal(t, ids[1].String(), resp.Failed[0].ID)
+	require.True(t, resp.Partial)
 }
