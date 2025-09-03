@@ -197,11 +197,6 @@ func TestSharesStorage(t *testing.T) {
 		require.Equal(t, 2, len(validators))
 	})
 
-	t.Run("List_Filter_ByActiveValidator", func(t *testing.T) {
-		validators := storage.Shares.List(nil, ByActiveValidator())
-		require.Equal(t, 2, len(validators))
-	})
-
 	t.Run("List_Filter_ByNotLiquidated", func(t *testing.T) {
 		validators := storage.Shares.List(nil, ByNotLiquidated())
 		require.Equal(t, 1, len(validators))

@@ -620,6 +620,52 @@ func TestGetValidatorStats(t *testing.T) {
 	})
 }
 
+func TestFeeRecipientChangeNotification(t *testing.T) {
+	logger := log.TestLogger(t)
+
+	t.Run("notifies on UpdateFeeRecipient", func(t *testing.T) {
+		ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "owner address")
+		feeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "fee recipient")
+		newFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "new fee recipient")
+
+		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, feeRecipientBytes)
+		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
+			testValidator.Share.ValidatorPubKey: testValidator,
+		}
+		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
+
+		controllerOptions := MockControllerOptions{
+			validatorsMap: mockValidatorsMap,
+		}
+		ctr := setupController(t, logger, controllerOptions)
+
+		// Get the fee recipient change channel
+		feeRecipientChangeCh := ctr.FeeRecipientChangeChan()
+
+		// Also need to set up validator registration channel as UpdateFeeRecipient expects it
+		validatorRegistrationCh := make(chan duties.RegistrationDescriptor, 1)
+		ctr.validatorRegistrationCh = validatorRegistrationCh
+
+		// Set up goroutine to listen for the notification before calling UpdateFeeRecipient
+		notificationReceived := make(chan bool, 1)
+		go func() {
+			select {
+			case <-feeRecipientChangeCh:
+				notificationReceived <- true
+			case <-time.After(time.Second):
+				notificationReceived <- false
+			}
+		}()
+
+		// Update fee recipient
+		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(newFeeRecipientBytes), 1)
+		require.NoError(t, err)
+
+		// Verify notification was sent
+		require.True(t, <-notificationReceived, "expected fee recipient change notification but didn't receive one")
+	})
+}
+
 func TestUpdateFeeRecipient(t *testing.T) {
 	// Setup logger for testing
 	logger := log.TestLogger(t)
@@ -709,6 +755,7 @@ func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOption
 		messageRouter:           newMessageRouter(logger),
 		committeeValidatorSetup: make(chan struct{}),
 		indicesChangeCh:         make(chan struct{}, 32),
+		feeRecipientChangeCh:    make(chan struct{}, 1),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          t.Context(),
 			WorkersCount: 1,
