@@ -43,11 +43,8 @@ func CreateTestNode(t *testing.T, n int, ctx context.Context) *Node {
 
 	nodeMock := &NodeMock{}
 	nodeMock.HealthyMock.Store(nil)
-	nodeProber := nodeprobe.NewProber(zap.L(), nil, map[string]nodeprobe.Node{
-		"consensus client": nodeMock,
-		"execution client": nodeMock,
-		"event syncer":     nodeMock,
-	})
+	nodeProber := nodeprobe.NewProber(zap.L(), nodeMock, nodeMock)
+	nodeProber.AddEventSyncer(nodeMock)
 
 	return &Node{
 		ListenAddresses: []string{

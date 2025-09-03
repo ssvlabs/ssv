@@ -2,164 +2,185 @@ package nodeprobe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 )
 
+type nodeName string
+
 const (
-	probeInterval = 24 * time.Second
+	cl          = "consensus client"
+	el          = "execution client"
+	eventSyncer = "event-syncer"
 )
 
+// Node represents a node being probed.
 type Node interface {
 	Healthy(ctx context.Context) error
 }
 
+const (
+	probeFrequency = 60 * time.Second
+)
+
+// Prober probes(monitors) the nodes it is configured with. It can do it periodically in the background via
+// Start func (which can crash the process via logger.Fatal call if it finds out that one of the nodes being
+// probed is not healthy), or it can probe on demand via Probe func.
+// It is used to make sure the Ethereum nodes (CL, EL) are up and running, and they are healthy enough to for
+// SSV node to be able to perform duties.
 type Prober struct {
-	logger           *zap.Logger
-	interval         time.Duration
-	nodes            map[string]Node
-	nodesMu          sync.Mutex
-	healthy          atomic.Bool
-	cond             *sync.Cond
-	unhealthyHandler func()
+	logger *zap.Logger
+
+	// nodesMu protects access to nodes, needed to handle the case when "event syncer" is added dynamically later on
+	// when the Proper is already running.
+	nodesMu sync.Mutex
+	nodes   map[nodeName]Node
 }
 
-func NewProber(logger *zap.Logger, unhealthyHandler func(), nodes map[string]Node) *Prober {
+func NewProber(logger *zap.Logger, consensusClient, executionClient Node) *Prober {
 	return &Prober{
-		logger:           logger,
-		unhealthyHandler: unhealthyHandler,
-		interval:         probeInterval,
-		nodes:            nodes,
-		cond:             sync.NewCond(&sync.Mutex{}),
+		logger: logger,
+		nodes: map[nodeName]Node{
+			el: executionClient,
+
+			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
+			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
+			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
+			cl: consensusClient,
+		},
 	}
 }
 
 func (p *Prober) Start(ctx context.Context) {
-	go func() {
-		if err := p.Run(ctx); err != nil {
-			p.logger.Error("finished probing nodes", zap.Error(err))
-		}
-	}()
-}
-
-func (p *Prober) Run(ctx context.Context) error {
-	ticker := time.NewTicker(p.interval)
+	ticker := time.NewTicker(probeFrequency)
 	defer ticker.Stop()
 
 	for {
-		p.probe(ctx)
+		func() {
+			probeCtx, cancel := context.WithTimeout(ctx, probeFrequency)
+			defer cancel()
+
+			if err := p.Probe(probeCtx); err != nil {
+				p.logger.Fatal("Ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.", zap.Error(err))
+			}
+		}()
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return
 		case <-ticker.C:
 			continue
 		}
 	}
 }
 
-func (p *Prober) probe(ctx context.Context) {
-	// Query all nodes in parallel.
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
+func (p *Prober) Probe(ctx context.Context) error {
+	// Probe all nodes in parallel, use cancel to quit early canceling irrelevant workers.
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	var healthy atomic.Bool
-	healthy.Store(true)
 	var wg sync.WaitGroup
+	errsCh := make(chan error)
+	go func() {
+		wg.Wait()
+		close(errsCh)
+	}()
+
 	p.nodesMu.Lock()
-	for name, node := range p.nodes {
+	nodes := p.nodes
+	p.nodesMu.Unlock()
+
+	for name, node := range nodes {
 		wg.Add(1)
-		go func(name string, node Node) {
+		go func() {
 			defer wg.Done()
 
-			var err error
-			defer func() {
-				// Catch panics.
-				if e := recover(); e != nil {
-					err = fmt.Errorf("panic: %v", e)
-				}
-				if err != nil {
-					// Update readiness and quit early.
-					healthy.Store(false)
-					cancel()
-				}
-			}()
-
-			err = node.Healthy(ctx)
+			err := p.probeNode(ctx, name, node)
 			if err != nil {
-				p.logger.Error("node is not healthy", zap.String("node", name), zap.Error(err))
+				// Relay the error and quit early.
+				errsCh <- err
+				cancel()
 			}
-		}(name, node)
+		}()
 	}
-	p.nodesMu.Unlock()
-	wg.Wait()
 
-	// Update readiness.
-	p.cond.L.Lock()
-	defer p.cond.L.Unlock()
+	var errs error
+	for err := range errsCh {
+		errs = errors.Join(errs, err)
+	}
+	if errs != nil {
+		errs = fmt.Errorf("probe health-check failed: %w", errs)
+	}
+	return errs
+}
 
-	p.healthy.Store(healthy.Load())
-
-	if !p.healthy.Load() {
-		p.logger.Error("not all nodes are healthy")
-		if h := p.unhealthyHandler; h != nil {
-			h()
+func (p *Prober) probeNode(ctx context.Context, name nodeName, node Node) (err error) {
+	defer func() {
+		// Catch panics to present these (however unlikely they are) as a readable error-message.
+		if e := recover(); e != nil {
+			err = fmt.Errorf("panic: %v", e)
 		}
-		return
+	}()
+
+	// Retry health-check multiple times to make sure we do not classify an occasional glitch (or a network blip)
+	// as node being unhealthy. Failing on the very 1st failed request would be too drastic a measure given it
+	// may result into SSV node restart.
+	const healthTimeout = 10 * time.Second
+	const maxAttempt = int(probeFrequency / healthTimeout)
+	for attempt := 1; attempt <= maxAttempt; attempt++ {
+		err = func() error {
+			healthCtx, cancel := context.WithTimeout(ctx, healthTimeout)
+			defer cancel()
+
+			return node.Healthy(healthCtx)
+		}()
+		if err == nil {
+			return nil // success
+		}
 	}
-	// Wake up any waiters.
-	p.cond.Broadcast()
+
+	// All retries failed.
+
+	if errors.Is(err, context.Canceled) {
+		// The caller canceled probing, it's not an error then.
+		return nil
+	}
+
+	return fmt.Errorf("%s is unhealthy: %w", name, err)
 }
 
-func (p *Prober) Wait() {
-	p.logger.Info("waiting until nodes are healthy")
-
-	p.cond.L.Lock()
-	defer p.cond.L.Unlock()
-
-	for !p.healthy.Load() {
-		p.cond.Wait()
-	}
-}
-
-func (p *Prober) AddNode(name string, node Node) {
+func (p *Prober) AddEventSyncer(node Node) {
 	p.nodesMu.Lock()
 	defer p.nodesMu.Unlock()
 
-	p.nodes[name] = node
+	p.nodes[eventSyncer] = node
 }
 
-// TODO: string constants are error-prone.
-// Add a method to clients that returns their name or solve this in another way
 func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
 	p.nodesMu.Lock()
 	defer p.nodesMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
-	defer cancel()
-	return p.nodes["consensus client"].Healthy(ctx)
+
+	return p.nodes[cl].Healthy(ctx)
 }
 
 func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
 	p.nodesMu.Lock()
 	defer p.nodesMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
-	defer cancel()
-	return p.nodes["execution client"].Healthy(ctx)
+
+	return p.nodes[el].Healthy(ctx)
 }
 
 func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
 	p.nodesMu.Lock()
 	defer p.nodesMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
-	defer cancel()
 
-	es, ok := p.nodes["event syncer"]
+	es, ok := p.nodes[eventSyncer]
 	if !ok {
-		return fmt.Errorf("event syncer not found")
+		return fmt.Errorf("%s not found among Prober nodes", eventSyncer)
 	}
 	return es.Healthy(ctx)
 }

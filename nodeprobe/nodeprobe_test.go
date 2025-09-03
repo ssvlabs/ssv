@@ -3,7 +3,6 @@ package nodeprobe
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,65 +13,143 @@ import (
 func TestProber(t *testing.T) {
 	ctx := t.Context()
 
-	node := &node{}
-	node.healthy.Store(nil)
+	t.Run("all nodes are healthy", func(t *testing.T) {
+		clNode := &nodeMock{}
+		clNode.healthy.Store(nil)
 
-	prober := NewProber(zap.L(), nil, map[string]Node{"test node": node})
-	prober.interval = 10 * time.Millisecond
+		elNode := &nodeMock{}
+		elNode.healthy.Store(nil)
 
-	healthy := prober.healthy.Load()
-	require.False(t, healthy)
+		p := NewProber(zap.L(), clNode, elNode)
 
-	prober.Start(ctx)
-	prober.Wait()
+		err := p.Probe(ctx)
+		require.NoError(t, err)
+	})
 
-	healthy = prober.healthy.Load()
-	require.True(t, healthy)
+	t.Run("CL went down", func(t *testing.T) {
+		clNode := &nodeMock{}
+		clNode.healthy.Store(nil)
 
-	notHealthy := fmt.Errorf("not healthy")
-	node.healthy.Store(&notHealthy)
-	time.Sleep(prober.interval * 2)
+		elNode := &nodeMock{}
+		elNode.healthy.Store(nil)
 
-	healthy = prober.healthy.Load()
-	require.False(t, healthy)
-}
+		p := NewProber(zap.L(), clNode, elNode)
 
-func TestProber_UnhealthyHandler(t *testing.T) {
-	ctx := t.Context()
+		err := p.Probe(ctx)
+		require.NoError(t, err)
 
-	node := &node{}
-	node.healthy.Store(nil)
+		clDownErr := fmt.Errorf("some error")
+		clNode.healthy.Store(&clDownErr)
 
-	var unhealthyHandlerCalled atomic.Bool
-	unhealthyHandler := func() {
-		unhealthyHandlerCalled.Store(true)
-	}
-	prober := NewProber(zap.L(), unhealthyHandler, map[string]Node{"test node": node})
-	prober.interval = 10 * time.Millisecond
-	prober.Start(ctx)
-	prober.Wait()
+		err = p.Probe(ctx)
+		require.ErrorContains(t, err, clDownErr.Error())
+	})
 
-	healthy := prober.healthy.Load()
-	require.True(t, healthy)
+	t.Run("EL went down", func(t *testing.T) {
+		clNode := &nodeMock{}
+		clNode.healthy.Store(nil)
 
-	notHealthy := fmt.Errorf("not healthy")
-	node.healthy.Store(&notHealthy)
+		elNode := &nodeMock{}
+		elNode.healthy.Store(nil)
 
-	time.Sleep(prober.interval * 2)
-	require.True(t, unhealthyHandlerCalled.Load())
+		p := NewProber(zap.L(), clNode, elNode)
 
-	healthy = prober.healthy.Load()
-	require.False(t, healthy)
-}
+		err := p.Probe(ctx)
+		require.NoError(t, err)
 
-type node struct {
-	healthy atomic.Pointer[error]
-}
+		elDownErr := fmt.Errorf("some error")
+		elNode.healthy.Store(&elDownErr)
 
-func (sc *node) Healthy(context.Context) error {
-	err := sc.healthy.Load()
-	if err != nil {
-		return *err
-	}
-	return nil
+		err = p.Probe(ctx)
+		require.ErrorContains(t, err, elDownErr.Error())
+	})
+
+	t.Run("all nodes + event-syncer are healthy", func(t *testing.T) {
+		clNode := &nodeMock{}
+		clNode.healthy.Store(nil)
+
+		elNode := &nodeMock{}
+		elNode.healthy.Store(nil)
+
+		p := NewProber(zap.L(), clNode, elNode)
+
+		err := p.Probe(ctx)
+		require.NoError(t, err)
+
+		eventSyncerNode := &nodeMock{}
+		eventSyncerNode.healthy.Store(nil)
+
+		p.AddEventSyncer(eventSyncerNode)
+
+		err = p.Probe(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("event-syncer went down", func(t *testing.T) {
+		clNode := &nodeMock{}
+		clNode.healthy.Store(nil)
+
+		elNode := &nodeMock{}
+		elNode.healthy.Store(nil)
+
+		p := NewProber(zap.L(), clNode, elNode)
+
+		err := p.Probe(ctx)
+		require.NoError(t, err)
+
+		eventSyncerNode := &nodeMock{}
+		eventSyncerNode.healthy.Store(nil)
+
+		p.AddEventSyncer(eventSyncerNode)
+
+		err = p.Probe(ctx)
+		require.NoError(t, err)
+
+		eventSyncerDownErr := fmt.Errorf("some error")
+		eventSyncerNode.healthy.Store(&eventSyncerDownErr)
+
+		err = p.Probe(ctx)
+		require.ErrorContains(t, err, eventSyncerDownErr.Error())
+	})
+
+	t.Run("probe deadline hit", func(t *testing.T) {
+		clNode := &stuckNodeMock{}
+		clNode.healthy.Store(nil)
+
+		elNode := &stuckNodeMock{}
+		elNode.healthy.Store(nil)
+
+		p := NewProber(zap.L(), clNode, elNode)
+
+		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+		defer cancel()
+		err := p.Probe(probeCtx)
+		require.ErrorContains(t, err, "deadline exceeded")
+	})
+
+	t.Run("probe context cancel is not an error", func(t *testing.T) {
+		clNode := &stuckNodeMock{}
+		clNode.healthy.Store(nil)
+
+		elNode := &stuckNodeMock{}
+		elNode.healthy.Store(nil)
+
+		p := NewProber(zap.L(), clNode, elNode)
+
+		probeCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		err := p.Probe(probeCtx)
+		require.NoError(t, err)
+	})
+
+	t.Run("node glitches survived via retries", func(t *testing.T) {
+		clNode := &glitchyNodeMock{}
+
+		elNode := &glitchyNodeMock{}
+
+		p := NewProber(zap.L(), clNode, elNode)
+
+		err := p.Probe(ctx)
+		require.NoError(t, err)
+	})
 }
