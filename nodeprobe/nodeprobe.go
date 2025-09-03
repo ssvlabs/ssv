@@ -36,7 +36,7 @@ type Prober struct {
 	logger *zap.Logger
 
 	// nodesMu protects access to nodes, needed to handle the case when "event syncer" is added dynamically later on
-	// when the Proper is already running.
+	// when the Prober is already running.
 	nodesMu sync.Mutex
 	nodes   map[nodeName]Node
 }
@@ -85,10 +85,6 @@ func (p *Prober) Probe(ctx context.Context) error {
 
 	var wg sync.WaitGroup
 	errsCh := make(chan error)
-	go func() {
-		wg.Wait()
-		close(errsCh)
-	}()
 
 	p.nodesMu.Lock()
 	nodes := p.nodes
@@ -107,6 +103,11 @@ func (p *Prober) Probe(ctx context.Context) error {
 			}
 		}()
 	}
+
+	go func() {
+		wg.Wait()
+		close(errsCh)
+	}()
 
 	var errs error
 	for err := range errsCh {

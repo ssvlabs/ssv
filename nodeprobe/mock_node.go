@@ -28,13 +28,13 @@ func (m *stuckNodeMock) Healthy(ctx context.Context) error {
 }
 
 type glitchyNodeMock struct {
-	calledCnt int
+	calledCnt atomic.Uint64
 }
 
 func (m *glitchyNodeMock) Healthy(ctx context.Context) error {
-	if m.calledCnt > 0 {
+	if m.calledCnt.Load() >= 2 {
 		return nil
 	}
-	m.calledCnt++
+	m.calledCnt.Add(1)
 	return fmt.Errorf("got a glitch")
 }
