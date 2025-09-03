@@ -1,90 +1,80 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
-	"github.com/libp2p/go-libp2p/core/network"
+	p2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ssvlabs/ssv/api"
+	ssvnetwork "github.com/ssvlabs/ssv/network"
 )
-
-// PinnedPeersProvider is the minimal interface the P2P layer must implement for pinned peers management.
-type PinnedPeersProvider interface {
-	ListPinned() []peer.AddrInfo
-	PinPeer(peer.AddrInfo) error
-	UnpinPeer(peer.ID) error
-}
 
 // PinnedP2PPeers exposes HTTP handlers to manage pinned peers at runtime.
 type PinnedP2PPeers struct {
-	Provider PinnedPeersProvider
-	Conn     ConnChecker
+	Provider ssvnetwork.PinnedPeers
+	Conn     connChecker
 }
 
-type PinnedPeerJSON struct {
+type pinnedPeerJSON struct {
 	ID        string   `json:"id"`
 	Addresses []string `json:"addresses"`
 	Connected bool     `json:"connected"`
 }
 
-type ListPinnedResponse struct {
-	Pinned []PinnedPeerJSON `json:"pinned"`
+type listPinnedResponse struct {
+	Pinned []pinnedPeerJSON `json:"pinned"`
 }
 
-type PinPeersRequest struct {
+type pinPeersRequest struct {
 	Peers []string `json:"peers"`
 }
 
-type PinPeersResponse struct {
+type pinPeersResponse struct {
 	Added         []string `json:"added"`
 	AlreadyPinned []string `json:"already_pinned"`
 	Invalid       []string `json:"invalid"`
 }
 
-type UnpinPeersRequest struct {
+type unpinPeersRequest struct {
 	Peers []string `json:"peers"`
 }
 
-type UnpinPeersResponse struct {
+type unpinPeersResponse struct {
 	Removed  []string `json:"removed"`
 	NotFound []string `json:"not_found"`
 	Invalid  []string `json:"invalid"`
 }
 
 // List returns the current pinned peers.
-func (h *PinnedP2PPeers) List(w http.ResponseWriter, r *http.Request) error {
-	list := h.Provider.ListPinned()
-	resp := ListPinnedResponse{Pinned: make([]PinnedPeerJSON, 0, len(list))}
+func (p *PinnedP2PPeers) List(w http.ResponseWriter, r *http.Request) error {
+	list := p.Provider.ListPinned()
+	resp := listPinnedResponse{Pinned: make([]pinnedPeerJSON, 0, len(list))}
 	for _, ai := range list {
-		pp := PinnedPeerJSON{ID: ai.ID.String()}
+		pp := pinnedPeerJSON{ID: ai.ID.String(), Addresses: make([]string, 0, len(ai.Addrs))}
 		for _, addr := range ai.Addrs {
 			pp.Addresses = append(pp.Addresses, addr.String())
 		}
-		pp.Connected = h.Conn.IsConnected(ai.ID)
+		pp.Connected = p.Conn.IsConnected(ai.ID)
 		resp.Pinned = append(resp.Pinned, pp)
 	}
-	return json.NewEncoder(w).Encode(resp)
+	return api.Render(w, r, resp)
 }
 
 // Add adds one or more peers to the pinned list. Requires full multiaddrs with /p2p/<peerID>.
-func (h *PinnedP2PPeers) Add(w http.ResponseWriter, r *http.Request) error {
-	var req PinPeersRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+func (p *PinnedP2PPeers) Add(w http.ResponseWriter, r *http.Request) error {
+	var req pinPeersRequest
+	if err := api.Bind(r, &req); err != nil {
 		return api.BadRequestError(fmt.Errorf("invalid request: %w", err))
 	}
 	already := make(map[string]struct{})
 	// Build a quick lookup of existing pins.
-	for _, ai := range h.Provider.ListPinned() {
+	for _, ai := range p.Provider.ListPinned() {
 		already[ai.ID.String()] = struct{}{}
 	}
-	var resp PinPeersResponse
+	var resp pinPeersResponse
 	for _, raw := range req.Peers {
-		if raw == "" {
-			continue
-		}
 		// Require full multiaddr with address for pinned peers; reject bare IDs.
 		if len(raw) == 0 || raw[0] != '/' {
 			resp.Invalid = append(resp.Invalid, raw)
@@ -99,31 +89,28 @@ func (h *PinnedP2PPeers) Add(w http.ResponseWriter, r *http.Request) error {
 			resp.AlreadyPinned = append(resp.AlreadyPinned, ai.ID.String())
 			continue
 		}
-		if err := h.Provider.PinPeer(*ai); err != nil {
+		if err := p.Provider.PinPeer(*ai); err != nil {
 			resp.Invalid = append(resp.Invalid, raw)
 			continue
 		}
 		resp.Added = append(resp.Added, ai.ID.String())
 		already[ai.ID.String()] = struct{}{}
 	}
-	return json.NewEncoder(w).Encode(resp)
+	return api.Render(w, r, resp)
 }
 
 // Remove removes peers from the pinned list. Requires full multiaddrs with /p2p/<peerID>.
-func (h *PinnedP2PPeers) Remove(w http.ResponseWriter, r *http.Request) error {
-	var req UnpinPeersRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+func (p *PinnedP2PPeers) Remove(w http.ResponseWriter, r *http.Request) error {
+	var req unpinPeersRequest
+	if err := api.Bind(r, &req); err != nil {
 		return api.BadRequestError(fmt.Errorf("invalid request: %w", err))
 	}
 	existing := make(map[string]struct{})
-	for _, ai := range h.Provider.ListPinned() {
+	for _, ai := range p.Provider.ListPinned() {
 		existing[ai.ID.String()] = struct{}{}
 	}
-	var resp UnpinPeersResponse
+	var resp unpinPeersResponse
 	for _, raw := range req.Peers {
-		if raw == "" {
-			continue
-		}
 		// Require full multiaddr and extract ID; reject bare IDs.
 		if len(raw) == 0 || raw[0] != '/' {
 			resp.Invalid = append(resp.Invalid, raw)
@@ -139,28 +126,28 @@ func (h *PinnedP2PPeers) Remove(w http.ResponseWriter, r *http.Request) error {
 			resp.NotFound = append(resp.NotFound, id.String())
 			continue
 		}
-		if err := h.Provider.UnpinPeer(id); err != nil {
+		if err := p.Provider.UnpinPeer(id); err != nil {
 			resp.Invalid = append(resp.Invalid, raw)
 			continue
 		}
 		resp.Removed = append(resp.Removed, id.String())
 		delete(existing, id.String())
 	}
-	return json.NewEncoder(w).Encode(resp)
+	return api.Render(w, r, resp)
 }
 
-// ConnChecker provides a minimal, testable interface for connection checks.
-type ConnChecker interface {
+// connChecker provides a minimal, testable interface for connection checks.
+type connChecker interface {
 	IsConnected(peer.ID) bool
 }
 
-// Libp2pConnChecker adapts libp2p network.Network to ConnChecker.
-type Libp2pConnChecker struct{ net network.Network }
+// libp2pConnChecker adapts libp2p p2pnetwork.Network to ConnChecker.
+type libp2pConnChecker struct{ net p2pnetwork.Network }
 
-func NewLibp2pConnChecker(net network.Network) *Libp2pConnChecker {
-	return &Libp2pConnChecker{net: net}
+func NewLibp2pConnChecker(net p2pnetwork.Network) *libp2pConnChecker {
+	return &libp2pConnChecker{net: net}
 }
 
-func (c *Libp2pConnChecker) IsConnected(id peer.ID) bool {
-	return c.net.Connectedness(id) == network.Connected
+func (c *libp2pConnChecker) IsConnected(id peer.ID) bool {
+	return c.net.Connectedness(id) == p2pnetwork.Connected
 }

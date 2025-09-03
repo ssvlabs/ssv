@@ -16,7 +16,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
@@ -95,8 +94,8 @@ type p2pNetwork struct {
 	connGater    connmgrcore.ConnectionGater
 	// trustedPeers are priority peers we trust, but disconnection from them is possible
 	trustedPeers []*peer.AddrInfo
-	// pinnedPeers are peers that must stay connected: they are protected from pruning, persisted with Permanent TTL and redialed
-	pinnedPeers *hashmap.Map[peer.ID, *peer.AddrInfo]
+	// pinned manages peers that must stay connected: protection, persistence and redial policy
+	pinned *pinnedPeersManager
 
 	state int32
 
@@ -124,12 +123,6 @@ type p2pNetwork struct {
 	// shortly after we've trimmed these (we still might consider connecting to these once they
 	// are removed from this map after some time passes)
 	trimmedRecently *ttl.Map[peer.ID, struct{}]
-
-	// backoff scheduler for pinned peer redials
-	pinnedRedialScheduler *retry.Scheduler
-	// stabilization timers per pinned peer: reset backoff only if connection
-	// survives this window without a disconnect.
-	pinnedStabilizers *hashmap.Map[peer.ID, *time.Timer]
 }
 
 // New creates a new p2p network
@@ -139,11 +132,13 @@ func New(
 ) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
+	logger = logger.Named(log.NameP2PNetwork)
+
 	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		logger:                  logger.Named(log.NameP2PNetwork),
+		logger:                  logger,
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
@@ -155,13 +150,12 @@ func New(
 		operatorDataStore:       cfg.OperatorDataStore,
 		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
 		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
-		pinnedPeers:             hashmap.New[peer.ID, *peer.AddrInfo](),
-		pinnedRedialScheduler: retry.NewScheduler(retry.BackoffConfig{
-			Initial: pinnedRedialInitialBackoff,
-			Max:     pinnedRedialMaxBackoff,
-			Jitter:  time.Second,
-		}),
-		pinnedStabilizers: hashmap.New[peer.ID, *time.Timer](),
+		pinned: newPinnedPeersManager(
+			ctx,
+			logger,
+			retry.BackoffConfig{Initial: pinnedRedialInitialBackoff, Max: pinnedRedialMaxBackoff, Jitter: time.Second},
+			pinnedStabilizeWindow,
+		),
 	}
 
 	if err := n.parsePinnedPeers(); err != nil {
@@ -175,78 +169,29 @@ func New(
 
 func (n *p2pNetwork) parseTrustedPeers() error {
 	if len(n.cfg.TrustedPeers) == 0 {
-		return nil // No trusted peers to parse, return early
+		return nil
 	}
-	grouped := parsePeerList(n.cfg.TrustedPeers, n.logger, "trusted")
-	for id, addrs := range grouped {
-		n.trustedPeers = append(n.trustedPeers, &peer.AddrInfo{ID: id, Addrs: addrs})
+	parsed := parsePeers("trusted", n.cfg.TrustedPeers, n.logger)
+	for i := range parsed {
+		ai := parsed[i]
+		n.trustedPeers = append(n.trustedPeers, &peer.AddrInfo{ID: ai.ID, Addrs: ai.Addrs})
 	}
 	return nil
 }
 
-// parsePinnedPeers parses the configured PinnedPeers and groups addresses by peer ID.
-// Supports YAML list or comma-separated entries, and multiaddrs containing /p2p/<id>.
+// parsePinnedPeers parses pinned peers from config and seeds the manager.
 func (n *p2pNetwork) parsePinnedPeers() error {
 	if len(n.cfg.PinnedPeers) == 0 {
 		return nil
 	}
-	grouped := parsePeerList(n.cfg.PinnedPeers, n.logger, "pinned")
-	for id, addrs := range grouped {
-		if len(addrs) == 0 {
-			n.logger.Warn("ignoring pinned peer without address (full multiaddr required)", fields.PeerID(id))
-			continue
-		}
-		ai := &peer.AddrInfo{ID: id, Addrs: addrs}
-		n.pinnedPeers.Set(id, ai)
-	}
-	return nil
+	pins := parsePeers("pinned", n.cfg.PinnedPeers, n.logger)
+	return n.pinned.SeedPins(pins)
 }
 
-func (n *p2pNetwork) isPinned(id peer.ID) bool { return n.pinnedPeers.Has(id) }
-
-func (n *p2pNetwork) filterUnpinned(ids []peer.ID) []peer.ID {
-	if len(ids) == 0 {
-		// nothing to filter
-		return ids
-	}
-	out := make([]peer.ID, 0, len(ids))
-	for _, id := range ids {
-		if !n.isPinned(id) {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
-// onPinnedPeerDiscovered updates pinned peer addresses and protection when a discovery event for it arrives.
-func (n *p2pNetwork) onPinnedPeerDiscovered(ai peer.AddrInfo) {
-	if !n.isPinned(ai.ID) || n.host == nil {
-		return
-	}
-	// Merge new addresses into pinned map and peerstore with permanent TTL.
-	if len(ai.Addrs) > 0 {
-		if existing, ok := n.pinnedPeers.Get(ai.ID); ok && existing != nil {
-			// make an updated copy instead of mutating to prevent concurrency issues
-			existing = &peer.AddrInfo{
-				ID:    existing.ID,
-				Addrs: append(existing.Addrs, ai.Addrs...),
-			}
-			n.pinnedPeers.Set(ai.ID, existing)
-		} else {
-			n.pinnedPeers.Set(ai.ID, &peer.AddrInfo{ID: ai.ID, Addrs: ai.Addrs})
-		}
-		n.host.Peerstore().AddAddrs(ai.ID, ai.Addrs, peerstore.PermanentAddrTTL)
-		n.logger.Info("updated pinned peer addrs via discovery", fields.PeerID(ai.ID), zap.Int("new_addrs", len(ai.Addrs)))
-	}
-	if n.libConnManager != nil {
-		n.libConnManager.Protect(ai.ID, pinnedPeerTag)
-	}
-}
-
-// parsePeerList parses a list of strings that may be comma-separated groups
-// or YAML list entries of full multiaddrs. It logs and skips
-// invalid entries and returns a map of peer.ID to the union of provided addrs.
-func parsePeerList(entries []string, logger *zap.Logger, kind string) map[peer.ID][]ma.Multiaddr {
+// parsePeers converts textual peer entries (YAML list or comma-separated strings)
+// into a normalized, deduplicated []peer.AddrInfo, logging and skipping malformed
+// entries and bare IDs without multiaddrs.
+func parsePeers(kind string, entries []string, logger *zap.Logger) []peer.AddrInfo {
 	grouped := make(map[peer.ID][]ma.Multiaddr)
 	for _, listStr := range entries {
 		for _, entry := range strings.Split(listStr, ",") {
@@ -256,15 +201,23 @@ func parsePeerList(entries []string, logger *zap.Logger, kind string) map[peer.I
 			}
 			ai, err := peer.AddrInfoFromString(entry)
 			if err != nil {
-				if logger != nil {
-					logger.Warn("could not parse peer entry", zap.String("kind", kind), zap.String("entry", entry), zap.Error(err))
-				}
+				logger.Warn("could not parse peer entry", zap.String("kind", kind), zap.String("entry", entry), zap.Error(err))
 				continue
 			}
 			grouped[ai.ID] = append(grouped[ai.ID], ai.Addrs...)
 		}
 	}
-	return grouped
+	out := make([]peer.AddrInfo, 0, len(grouped))
+	for id, addrs := range grouped {
+		addrs = commons.DedupMultiaddrs(addrs)
+		if len(addrs) == 0 {
+			continue
+		}
+		out = append(out, peer.AddrInfo{ID: id, Addrs: addrs})
+	}
+	// deterministic order by peer ID
+	slices.SortFunc(out, func(a, b peer.AddrInfo) int { return strings.Compare(a.ID.String(), b.ID.String()) })
+	return out
 }
 
 // Host implements HostProvider
@@ -307,17 +260,8 @@ func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
-	if n.pinnedRedialScheduler != nil {
-		n.pinnedRedialScheduler.Close()
-	}
-	if n.pinnedStabilizers != nil {
-		n.pinnedStabilizers.Range(func(_ peer.ID, t *time.Timer) bool {
-			if t != nil {
-				t.Stop()
-			}
-			return true
-		})
-	}
+	n.pinned.Close()
+
 	if err := n.libConnManager.Close(); err != nil {
 		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
@@ -353,18 +297,9 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 	// Connect to pinned and trusted peers first.
 	go func() {
 		// Pinned peers: enqueue configured pinned peers.
-		pinned := make([]*peer.AddrInfo, 0)
-		n.pinnedPeers.Range(func(_ peer.ID, ai *peer.AddrInfo) bool {
-			if ai != nil {
-				pinned = append(pinned, ai)
-			}
-			return true
-		})
-		for _, ai := range pinned {
-			if ai == nil {
-				continue
-			}
-			connector <- *ai
+		for _, ai := range n.pinned.ListPinned() {
+			local := ai
+			connector <- local
 		}
 		// Trusted peers: attempt to resolve addresses if missing, then enqueue.
 		for _, addrInfo := range n.trustedPeers {
@@ -375,105 +310,8 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 	return connector, nil
 }
 
-// PinnedPeersProvider exposes runtime management for pinned peers.
-type PinnedPeersProvider interface {
-	ListPinned() []peer.AddrInfo
-	PinPeer(peer.AddrInfo) error
-	UnpinPeer(peer.ID) error
-}
-
-// Ensure p2pNetwork implements PinnedPeersProvider
-var _ PinnedPeersProvider = (*p2pNetwork)(nil)
-
-// ListPinned returns a snapshot of pinned peers with their addresses.
-func (n *p2pNetwork) ListPinned() []peer.AddrInfo {
-	out := make([]peer.AddrInfo, 0)
-	n.pinnedPeers.Range(func(_ peer.ID, ai *peer.AddrInfo) bool {
-		if ai != nil {
-			cp := peer.AddrInfo{ID: ai.ID, Addrs: append([]ma.Multiaddr(nil), ai.Addrs...)}
-			out = append(out, cp)
-		}
-		return true
-	})
-	return out
-}
-
-// PinPeer adds or updates a pinned peer, protects it, persists addresses and attempts to connect.
-func (n *p2pNetwork) PinPeer(ai peer.AddrInfo) error {
-	if ai.ID == "" {
-		return fmt.Errorf("empty peer id")
-	}
-	if len(ai.Addrs) == 0 {
-		return fmt.Errorf("pinned peer requires full multiaddr with address")
-	}
-	if n.host == nil {
-		return fmt.Errorf("p2p host is not initialized")
-	}
-	// Merge into map
-	if existing, ok := n.pinnedPeers.Get(ai.ID); ok && existing != nil {
-		// make an updated copy instead of mutating to prevent concurrency issues
-		existing = &peer.AddrInfo{
-			ID:    existing.ID,
-			Addrs: append(existing.Addrs, ai.Addrs...),
-		}
-		n.pinnedPeers.Set(ai.ID, existing)
-	} else {
-		// ensure we store even with no addresses
-		n.pinnedPeers.Set(ai.ID, &peer.AddrInfo{ID: ai.ID, Addrs: append([]ma.Multiaddr(nil), ai.Addrs...)})
-	}
-
-	// Persist addresses & protect
-	n.host.Peerstore().AddAddrs(ai.ID, ai.Addrs, peerstore.PermanentAddrTTL)
-	if n.libConnManager != nil {
-		n.libConnManager.Protect(ai.ID, pinnedPeerTag)
-	}
-	// Attempt connect; if not connected, schedule redial with backoff.
-	go func(ai peer.AddrInfo) {
-		ctx, cancel := context.WithTimeout(n.ctx, 20*time.Second)
-		defer cancel()
-		_ = n.host.Connect(ctx, ai)
-		if n.host.Network().Connectedness(ai.ID) != p2pnet.Connected {
-			n.schedulePinnedConnect(ai.ID)
-		}
-	}(ai)
-	return nil
-}
-
-// schedulePinnedConnect schedules redial attempts for a pinned peer until the
-// peer becomes connected, using the configured backoff policy.
-func (n *p2pNetwork) schedulePinnedConnect(id peer.ID) {
-	n.pinnedRedialScheduler.Schedule(id.String(), func(attempt int) bool {
-		n.logger.Info("redialing pinned peer", fields.PeerID(id), zap.Int("attempt", attempt))
-		ctx2, cancel2 := context.WithTimeout(n.ctx, 20*time.Second)
-		defer cancel2()
-		if err := n.host.Connect(ctx2, peer.AddrInfo{ID: id}); err != nil {
-			n.logger.Debug("pinned peer connect failed", fields.PeerID(id), zap.Error(err))
-		}
-		return n.host.Network().Connectedness(id) == p2pnet.Connected
-	})
-}
-
-// UnpinPeer removes a pinned peer and cancels its protection/backoff.
-func (n *p2pNetwork) UnpinPeer(id peer.ID) error {
-	if id == "" {
-		return fmt.Errorf("empty peer id")
-	}
-	if !n.pinnedPeers.Delete(id) {
-		return fmt.Errorf("peer not pinned")
-	}
-
-	if n.libConnManager != nil {
-		n.libConnManager.Unprotect(id, pinnedPeerTag)
-	}
-	// Cancel any scheduled redial
-	n.pinnedRedialScheduler.Cancel(id.String())
-	// Cancel stabilization timer if present
-	if t, ok := n.pinnedStabilizers.Get(id); ok && t != nil {
-		t.Stop()
-		n.pinnedStabilizers.Delete(id)
-	}
-	return nil
-}
+// Pinned exposes the pinned peers manager
+func (n *p2pNetwork) Pinned() network.PinnedPeers { return n.pinned }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start() error {
@@ -493,7 +331,7 @@ func (n *p2pNetwork) Start() error {
 	for i, ima := range pAddrs {
 		maStrs[i] = ima.String()
 	}
-	pinnedCount := n.pinnedPeers.SlowLen()
+	pinnedCount := len(n.pinned.ListPinned())
 	n.logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
 		zap.Int("trusted_peers", len(n.trustedPeers)),
@@ -538,13 +376,13 @@ func (n *p2pNetwork) peersTrimming() func() {
 		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
 
 		// Never disconnect pinned peers when dropping bad peers.
-		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.filterUnpinned(n.host.Network().Peers()))
+		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.pinned.FilterUnpinned(n.host.Network().Peers()))
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
 			return
 		}
 
-		connectedPeers := n.filterUnpinned(n.host.Network().Peers())
+		connectedPeers := n.pinned.FilterUnpinned(n.host.Network().Peers())
 
 		const maximumIrrelevantPeersToDisconnect = 3
 		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(
@@ -570,7 +408,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
 		// enough to it - this ensures we don't skip trim iteration because of "random fluctuations"
 		// in currently connected peer count at that limit boundary
-		connectedPeers = n.filterUnpinned(n.host.Network().Peers())
+		connectedPeers = n.pinned.FilterUnpinned(n.host.Network().Peers())
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
 			// We probably don't want to trim outgoing connections then, but from time-to-time we want to
 			// trim (and rotate) some incoming connections when inbound limit is hit just to make sure
@@ -616,7 +454,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 	}
 
 	// Note: a pinned peer might not be in pubsub, but if it is, we must not trim it.
-	myPeers = n.filterUnpinned(myPeers)
+	myPeers = n.pinned.FilterUnpinned(myPeers)
 
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
 		// sort in asc order (peers with the lowest scores come first)
@@ -675,7 +513,7 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 				return
 			}
 			// If this is a pinned peer, persist/refresh its addrs and ensure protection.
-			n.onPinnedPeerDiscovered(e.AddrInfo)
+			n.pinned.OnDiscovered(e.AddrInfo)
 			select {
 			case connector <- e.AddrInfo:
 			default:

@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/api"
 )
 
-// mockPinnedProvider implements PinnedPeersProvider for testing.
 type mockPinnedProvider struct {
 	pinned     []peer.AddrInfo
 	pinCalls   []peer.AddrInfo
@@ -93,7 +92,8 @@ func TestPinned_List(t *testing.T) {
 	id1 := genPeerID(t)
 	id2 := genPeerID(t)
 
-	addr1, _ := ma.NewMultiaddr(maFor(id1))
+	addr1, err := ma.NewMultiaddr(maFor(id1))
+	require.NoError(t, err)
 
 	prov := &mockPinnedProvider{
 		pinned: []peer.AddrInfo{
@@ -110,21 +110,15 @@ func TestPinned_List(t *testing.T) {
 	api.Handler(h.List).ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 
-	var resp ListPinnedResponse
+	var resp listPinnedResponse
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	require.Len(t, resp.Pinned, 2)
 	// assert connected flags and addresses
-	if resp.Pinned[0].ID == id1.String() {
-		require.True(t, resp.Pinned[0].Connected)
-		require.GreaterOrEqual(t, len(resp.Pinned[0].Addresses), 1)
-		require.Equal(t, id2.String(), resp.Pinned[1].ID)
-		require.False(t, resp.Pinned[1].Connected)
-	} else {
-		require.True(t, resp.Pinned[1].Connected)
-		require.GreaterOrEqual(t, len(resp.Pinned[1].Addresses), 1)
-		require.Equal(t, id2.String(), resp.Pinned[0].ID)
-		require.False(t, resp.Pinned[0].Connected)
-	}
+	require.Equal(t, resp.Pinned[0].ID, id1.String())
+	require.True(t, resp.Pinned[0].Connected)
+	require.GreaterOrEqual(t, len(resp.Pinned[0].Addresses), 1)
+	require.Equal(t, id2.String(), resp.Pinned[1].ID)
+	require.False(t, resp.Pinned[1].Connected)
 }
 
 func TestPinned_Add(t *testing.T) {
@@ -132,9 +126,12 @@ func TestPinned_Add(t *testing.T) {
 	id2 := genPeerID(t)
 	id3 := genPeerID(t)
 
-	addr1, _ := ma.NewMultiaddr(maFor(id1))
-	addr2, _ := ma.NewMultiaddr(maFor(id2))
-	addr3, _ := ma.NewMultiaddr(maFor(id3))
+	addr1, err := ma.NewMultiaddr(maFor(id1))
+	require.NoError(t, err)
+	addr2, err := ma.NewMultiaddr(maFor(id2))
+	require.NoError(t, err)
+	addr3, err := ma.NewMultiaddr(maFor(id3))
+	require.NoError(t, err)
 
 	prov := &mockPinnedProvider{
 		pinned: []peer.AddrInfo{{ID: id1, Addrs: []ma.Multiaddr{addr1}}},
@@ -145,21 +142,23 @@ func TestPinned_Add(t *testing.T) {
 	h := &PinnedP2PPeers{Provider: prov, Conn: &mockConnChecker{connected: map[peer.ID]bool{}}}
 
 	// Provide: addr2 (valid add), addr1 (already pinned), addr3 (pin will fail), malformed multiaddr without /p2p
-	body := PinPeersRequest{Peers: []string{addr2.String(), addr1.String(), addr3.String(), "/ip4/127.0.0.1/tcp/13001"}}
-	b, _ := json.Marshal(body)
+	body := pinPeersRequest{Peers: []string{addr2.String(), addr1.String(), addr3.String(), "/ip4/127.0.0.1/tcp/13001"}}
+	b, err := json.Marshal(body)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/node/pinned-peers", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
 	api.Handler(h.Add).ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 
-	var resp PinPeersResponse
+	var resp pinPeersResponse
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 
 	require.Contains(t, resp.Added, id2.String())
 	require.Contains(t, resp.AlreadyPinned, id1.String())
 	// invalids: id3 (pin failed), plus malformed multiaddr without /p2p
-	require.GreaterOrEqual(t, len(resp.Invalid), 2)
+	require.Equal(t, len(resp.Invalid), 2)
 
 	// Pin calls should include id2 and id3, not id1 (already pinned)
 	called := make(map[string]bool)
@@ -174,7 +173,8 @@ func TestPinned_Add(t *testing.T) {
 func TestPinned_Remove(t *testing.T) {
 	id1 := genPeerID(t)
 	id2 := genPeerID(t)
-	addr1, _ := ma.NewMultiaddr(maFor(id1))
+	addr1, err := ma.NewMultiaddr(maFor(id1))
+	require.NoError(t, err)
 
 	prov := &mockPinnedProvider{
 		pinned: []peer.AddrInfo{{ID: id1, Addrs: []ma.Multiaddr{addr1}}, {ID: id2}},
@@ -182,15 +182,17 @@ func TestPinned_Remove(t *testing.T) {
 	h := &PinnedP2PPeers{Provider: prov, Conn: &mockConnChecker{connected: map[peer.ID]bool{}}}
 
 	// Only full multiaddrs are accepted for removal
-	body := UnpinPeersRequest{Peers: []string{maFor(id2), maFor(id1), "/ip4/127.0.0.1/tcp/13001"}}
-	b, _ := json.Marshal(body)
+	body := unpinPeersRequest{Peers: []string{maFor(id2), maFor(id1), "/ip4/127.0.0.1/tcp/13001"}}
+	b, err := json.Marshal(body)
+	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/v1/node/pinned-peers", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
 	api.Handler(h.Remove).ServeHTTP(rr, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 
-	var resp UnpinPeersResponse
+	var resp unpinPeersResponse
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 
 	// both id1 and id2 removed

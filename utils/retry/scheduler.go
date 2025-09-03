@@ -18,8 +18,28 @@ type BackoffConfig struct {
 	Jitter  time.Duration
 }
 
-// Scheduler manages retry timers per key with exponential backoff.
-// It is safe for concurrent use.
+// Scheduler runs keyed retry loops with exponential backoff.
+// For each key there is at most one pending attempt at a time.
+//
+// Usage:
+//
+//	Schedule(key, fn) schedules/continues the retry loop for that key.
+//	fn receives a 1-based attempt count and returns either
+//	true on success to stop the loop or false to retry after the next backoff.
+//
+// Semantics:
+//   - Per-key serialization: only one attempt is in-flight per key.
+//     Calling Schedule(key, …) replaces any pending timer for that key.
+//   - Stop(key): cancel the pending timer but keep the attempt counter
+//     (pauses retries without resetting backoff).
+//   - Cancel(key): cancel the pending timer and clear the counter
+//     (next Schedule restarts from the initial backoff).
+//   - Close(): cancel all timers, prevent new schedules, and close Done().
+//
+// Notes:
+//
+//	– This is not a worker pool; timers trigger attempts asynchronously.
+//	– Methods are safe for concurrent use.
 type Scheduler struct {
 	mu        sync.Mutex
 	attempts  map[string]int
@@ -140,6 +160,9 @@ func (s *Scheduler) Close() {
 			t.Stop()
 		}
 		delete(s.timers, k)
+	}
+	for k := range s.attempts {
+		delete(s.attempts, k)
 	}
 	s.closeOnce.Do(func() { close(s.done) })
 }
