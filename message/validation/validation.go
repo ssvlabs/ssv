@@ -134,8 +134,6 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
 	}()
 
-	recordMessage(ctx)
-
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
 		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
