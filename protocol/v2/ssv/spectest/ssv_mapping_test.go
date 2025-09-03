@@ -24,11 +24,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -38,7 +38,7 @@ import (
 func TestSSVMapping(t *testing.T) {
 	path, err := os.Getwd()
 	require.NoError(t, err)
-	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "ssv")
+	jsonTests, err := storage.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
 	logger := log.TestLogger(t)
@@ -387,7 +387,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 }
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
-	config := qbfttesting.TestingConfig(logger, ks)
+	config := protocoltesting.TestingConfig(logger, ks)
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,

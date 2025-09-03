@@ -35,14 +35,14 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger = logger.With(
-		fields.QBFTRound(i.State.Round),
-		fields.QBFTHeight(i.State.Height),
-		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
+		zap.Uint64("qbft_instance_round", uint64(i.State.Round)),
+		zap.Uint64("qbft_instance_height", uint64(i.State.Height)),
 	)
 
 	logger.Debug("🔄 got round change",
 		fields.Root(msg.QBFTMessage.Root),
-		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs))
+		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs),
+	)
 
 	justifiedRoundChangeMsg, valueToPropose, err := i.hasReceivedProposalJustificationForLeadingRound(msg)
 	if err != nil {
@@ -75,9 +75,9 @@ func (i *Instance) uponRoundChange(
 		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonJustified)
 
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
-			fields.QBFTRound(i.State.Round),
 			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(i.State.Round))),
-			fields.Root(r))
+			fields.Root(r),
+		)
 
 		if err := i.Broadcast(proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
@@ -115,11 +115,10 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	}
 
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
-		fields.QBFTRound(i.State.Round),
+		zap.Uint64("qbft_new_round", uint64(newRound)),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.QBFTHeight(i.State.Height),
-		zap.String("reason", "partial-quorum"))
+	)
 
 	if err := i.Broadcast(roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")

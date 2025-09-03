@@ -16,9 +16,9 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
+	protocoltesting "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type StartNewRunnerDutySpecTest struct {

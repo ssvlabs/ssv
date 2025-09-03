@@ -11,7 +11,6 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 const (
@@ -114,10 +113,10 @@ func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *
 	nm.Msg = res
 }
 
-func toParticipations(role spectypes.BeaconRole, pk spectypes.ValidatorPK, ee []qbftstorage.ParticipantsRangeEntry) []qbftstorage.Participation {
-	out := make([]qbftstorage.Participation, 0, len(ee))
+func toParticipations(role spectypes.BeaconRole, pk spectypes.ValidatorPK, ee []storage.ParticipantsRangeEntry) []storage.Participation {
+	out := make([]storage.Participation, 0, len(ee))
 	for _, e := range ee {
-		p := qbftstorage.Participation{
+		p := storage.Participation{
 			ParticipantsRangeEntry: e,
 			Role:                   role,
 			PubKey:                 pk,

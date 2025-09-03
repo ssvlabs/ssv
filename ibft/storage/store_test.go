@@ -19,11 +19,10 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -47,7 +46,7 @@ func TestRemoveSlot(t *testing.T) {
 	}
 
 	pk := sks[1].GetPublicKey()
-	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+	decided250Seq, err := CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -58,7 +57,7 @@ func TestRemoveSlot(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	storage := ibftStorage.Get(role).(*participantStorage)
+	storage := ibftStorage.Get(role).(*ParticipantStorage)
 
 	// save participants
 	for _, d := range decided250Seq {
@@ -86,7 +85,7 @@ func TestRemoveSlot(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, 151, len(pp)) // seq 0 - 150
 
-		found := slices.ContainsFunc(pp, func(e qbftstorage.ParticipantsRangeEntry) bool {
+		found := slices.ContainsFunc(pp, func(e ParticipantsRangeEntry) bool {
 			return e.Slot < threshold
 		})
 
@@ -129,7 +128,7 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// pk 1
 	pk := sks[1].GetPublicKey()
-	decided10Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+	decided10Seq, err := CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -140,7 +139,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	storage := ibftStorage.Get(role).(*participantStorage)
+	storage := ibftStorage.Get(role).(*ParticipantStorage)
 
 	// save participants
 	for _, d := range decided10Seq {
@@ -154,7 +153,7 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// pk 2
 	pk = sks[2].GetPublicKey()
-	decided10Seq, err = protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+	decided10Seq, err = CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(9), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,

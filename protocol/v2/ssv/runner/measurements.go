@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// measurementsStore stores consensus durations
+// measurementsStore stores consensus durations.
 type measurementsStore struct {
 	preConsensusStart     time.Time
 	consensusStart        time.Time
@@ -16,7 +16,7 @@ type measurementsStore struct {
 	dutyDuration          time.Duration
 }
 
-func NewMeasurementsStore() measurementsStore {
+func newMeasurementsStore() measurementsStore {
 	return measurementsStore{}
 }
 
@@ -85,26 +85,11 @@ func (cm *measurementsStore) EndPostConsensus() {
 	}
 }
 
-// StartDutyFullFlow stores duty full flow start time.
+// StartDutyFlow stores duty full flow start time.
 func (cm *measurementsStore) StartDutyFlow() {
 	if cm != nil {
 		cm.dutyStart = time.Now()
 		cm.dutyDuration = 0
-	}
-}
-
-// PauseDutyFlow stores duty full flow cumulative duration with ability to continue the flow.
-func (cm *measurementsStore) PauseDutyFlow() {
-	if cm != nil {
-		cm.dutyDuration += time.Since(cm.dutyStart)
-		cm.dutyStart = time.Time{}
-	}
-}
-
-// ContinueDutyFlow continues measuring duty full flow duration.
-func (cm *measurementsStore) ContinueDutyFlow() {
-	if cm != nil {
-		cm.dutyStart = time.Now()
 	}
 }
 

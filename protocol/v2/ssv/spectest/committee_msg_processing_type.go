@@ -18,6 +18,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -174,7 +175,7 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 
 func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
 	specCommittee := &ssv.Committee{}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	specCommittee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, specCommittee)
 

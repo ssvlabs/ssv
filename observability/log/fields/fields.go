@@ -70,7 +70,6 @@ const (
 	FieldRunnerRole          = "runner_role"
 	FieldSlot                = "slot"
 	FieldSlotStartTime       = "slot_start_time"
-	FieldSubmissionTime      = "submission_time"
 	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldTotalDutyTime       = "total_duty_time"
 	FieldSubnets             = "subnets"
@@ -253,10 +252,6 @@ func PostConsensusTime(val time.Duration) zap.Field {
 
 func BlockTime(val time.Duration) zap.Field {
 	return zap.String(FieldBlockTime, formatDuration(val))
-}
-
-func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, formatDuration(val))
 }
 
 func TotalConsensusTime(val time.Duration) zap.Field {

@@ -181,16 +181,16 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		if !ok {
 			return traces.Errorf(span, "could not decode consensus message from network message")
 		}
-
 		if err := qbftMsg.Validate(); err != nil {
 			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 
-		logger = logger.With(fields.QBFTHeight(qbftMsg.Height))
+		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
 
 		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
 			return traces.Error(span, err)
 		}
+
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case spectypes.SSVPartialSignatureMsgType:
@@ -217,18 +217,47 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			span.SetStatus(codes.Ok, "")
 			return nil
 		}
+
 		span.AddEvent("processing pre-consensus message")
 		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
 			return traces.Error(span, err)
 		}
+
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case message.SSVEventMsgType:
-		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
+		eventMsg, ok := msg.Body.(*ssvtypes.EventMsg)
+		if !ok {
+			return traces.Errorf(span, "could not decode event message")
 		}
-		span.SetStatus(codes.Ok, "")
-		return nil
+
+		span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
+
+		switch eventMsg.Type {
+		case ssvtypes.Timeout:
+			timeoutData, err := eventMsg.GetTimeoutData()
+			if err != nil {
+				return traces.Errorf(span, "get timeout data: %w", err)
+			}
+
+			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
+
+			if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(ctx, logger, timeoutData); err != nil {
+				return traces.Errorf(span, "timeout event: %w", err)
+			}
+
+			span.SetStatus(codes.Ok, "")
+			return nil
+		case ssvtypes.ExecuteDuty:
+			if err := v.OnExecuteDuty(ctx, logger, eventMsg); err != nil {
+				return traces.Errorf(span, "execute duty event: %w", err)
+			}
+
+			span.SetStatus(codes.Ok, "")
+			return nil
+		default:
+			return traces.Errorf(span, "unknown event msg - %s", eventMsg.Type.String())
+		}
 	default:
 		return traces.Errorf(span, "unknown message type %d", msgType)
 	}

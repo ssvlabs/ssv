@@ -9,7 +9,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -24,16 +23,17 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 		return nil // uponProposal was already called
 	}
 
-	logger.Debug("📬 got proposal message",
-		fields.QBFTRound(i.State.Round),
-		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
+	logger = logger.With(zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
 
-	newRound := msg.QBFTMessage.Round
+	logger.Debug("📬 got proposal message")
+
 	i.State.ProposalAcceptedForCurrentRound = msg
 
+	newRound := msg.QBFTMessage.Round
+
 	// A future justified proposal should bump us into future round and reset timer
-	if msg.QBFTMessage.Round > i.State.Round {
-		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, msg.QBFTMessage.Round)
+	if newRound > i.State.Round {
+		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, newRound)
 	}
 	i.bumpToRound(newRound)
 
@@ -50,10 +50,7 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 		return errors.Wrap(err, "could not create prepare msg")
 	}
 
-	logger.Debug("📢 got proposal, broadcasting prepare message",
-		fields.QBFTRound(i.State.Round),
-		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs),
-		zap.Any("prepare_signers", prepare.OperatorIDs))
+	logger.Debug("📢 got proposal, broadcasting prepare message", zap.Any("prepare_signers", prepare.OperatorIDs))
 
 	if err := i.Broadcast(prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
