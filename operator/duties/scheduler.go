@@ -402,29 +402,32 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	defer span.End()
 
 	for _, duty := range duties {
-		duty := duty
 		logger := s.loggerWithDutyContext(duty)
 
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
-			span.AddEvent(eventMsg,
-				trace.WithAttributes(
-					attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
-					observability.BeaconRoleAttribute(duty.Type),
-					observability.RunnerRoleAttribute(duty.RunnerRole())))
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
+				observability.BeaconRoleAttribute(duty.Type),
+				observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		go func(ctx context.Context) {
-			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(duty.Slot)
+		go func() {
+			// Cannot use parent-context itself here, have to create independent instance
+			// to be able to continue working in background.
+			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			defer cancel()
+			if !withDeadline {
+				logger.Warn("parent-context has no deadline set")
 			}
-			recordDutyExecuted(ctx, duty.RunnerRole())
-			s.dutyExecutor.ExecuteDuty(ctx, duty)
-		}(ctx)
+
+			recordDutyExecuted(dutyCtx, duty.RunnerRole())
+			s.dutyExecutor.ExecuteDuty(dutyCtx, duty)
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -450,7 +453,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				observability.CommitteeIDAttribute(committee.id),
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
@@ -458,11 +461,19 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		go func(ctx context.Context) {
+		go func() {
+			// Cannot use parent-context itself here, have to create independent instance
+			// to be able to continue working in background.
+			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			defer cancel()
+			if !withDeadline {
+				logger.Warn("parent-context has no deadline set")
+			}
+
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			recordDutyExecuted(ctx, duty.RunnerRole())
-			s.dutyExecutor.ExecuteCommitteeDuty(ctx, committee.id, duty)
-		}(ctx)
+			recordDutyExecuted(dutyCtx, duty.RunnerRole())
+			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, committee.id, duty)
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")

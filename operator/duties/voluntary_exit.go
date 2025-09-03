@@ -60,11 +60,18 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			currentSlot := h.ticker.Slot()
+			slot := h.ticker.Slot()
 			next = h.ticker.Next()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-			h.processExecution(ctx, currentSlot)
+			func() {
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				defer cancel()
+
+				h.processExecution(tickCtx, slot)
+			}()
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
