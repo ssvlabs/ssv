@@ -18,9 +18,7 @@ func (m *nodeMock) Healthy(context.Context) error {
 	return nil
 }
 
-type stuckNodeMock struct {
-	healthy atomic.Pointer[error]
-}
+type stuckNodeMock struct{}
 
 func (m *stuckNodeMock) Healthy(ctx context.Context) error {
 	<-ctx.Done() // stuck until the call is canceled
