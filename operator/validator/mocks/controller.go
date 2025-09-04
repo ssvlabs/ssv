@@ -88,6 +88,20 @@ func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex, ownValidator)
 }
 
+// FeeRecipientChangeChan mocks base method.
+func (m *MockController) FeeRecipientChangeChan() <-chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FeeRecipientChangeChan")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
+}
+
+// FeeRecipientChangeChan indicates an expected call of FeeRecipientChangeChan.
+func (mr *MockControllerMockRecorder) FeeRecipientChangeChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FeeRecipientChangeChan", reflect.TypeOf((*MockController)(nil).FeeRecipientChangeChan))
+}
+
 // FilterIndices mocks base method.
 func (m *MockController) FilterIndices(afterInit bool, filter func(*types0.SSVShare) bool) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()

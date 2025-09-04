@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
-	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
@@ -55,12 +54,10 @@ type ExecutionClient struct {
 	logger *zap.Logger
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
-	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-	connectionTimeout           time.Duration
-	reconnectionInitialInterval time.Duration
-	reconnectionMaxInterval     time.Duration
-	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64
+	followDistance             uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+	connectionTimeout          time.Duration
+	healthInvalidationInterval time.Duration
+	logBatchSize               uint64
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
@@ -74,16 +71,14 @@ type ExecutionClient struct {
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
 	client := &ExecutionClient{
-		nodeAddr:                    nodeAddr,
-		contractAddress:             contractAddr,
-		logger:                      zap.NewNop(),
-		followDistance:              DefaultFollowDistance,
-		connectionTimeout:           DefaultConnectionTimeout,
-		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
-		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
-		closed:                      make(chan struct{}),
+		nodeAddr:                   nodeAddr,
+		contractAddress:            contractAddr,
+		logger:                     zap.NewNop(),
+		followDistance:             DefaultFollowDistance,
+		connectionTimeout:          DefaultConnectionTimeout,
+		healthInvalidationInterval: DefaultHealthInvalidationInterval,
+		logBatchSize:               DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		closed:                     make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -328,15 +323,12 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				if tries > 2 {
 					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
 				}
+				ec.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
 
 				if nextBlockToProcess > fromBlock {
 					// Successfully streamed some logs, reset tries.
 					tries = 0
 				}
-
-				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
-				ec.reconnect(ctx) // TODO: ethclient implements reconnection, consider removing this logic after thorough testing
-
 				fromBlock = nextBlockToProcess
 			}
 		}
@@ -528,31 +520,6 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 
 	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
 	return nil
-}
-
-// reconnect tries to reconnect multiple times with an exponential interval.
-// It panics when reconnection limit is reached since SSV node can't operate
-// without stable connection to Ethereum execution client.
-// It must not be called concurrently.
-func (ec *ExecutionClient) reconnect(ctx context.Context) {
-	logger := ec.logger.With(fields.Address(ec.nodeAddr))
-
-	start := time.Now()
-	tasks.ExecWithInterval(ctx, func(lastTick time.Duration) (stop bool, cont bool) {
-		logger.Info("reconnecting")
-		if err := ec.connect(ctx); err != nil {
-			if ec.isClosed() {
-				return true, false
-			}
-			if lastTick >= ec.reconnectionMaxInterval {
-				logger.Panic("failed to reconnect", zap.Error(err))
-			}
-			logger.Warn("could not reconnect, still trying", zap.Error(err))
-			return false, false
-		}
-		logger.Info("reconnected", zap.Duration("took", time.Since(start)))
-		return true, false
-	}, ec.reconnectionInitialInterval, ec.reconnectionMaxInterval+(ec.reconnectionInitialInterval))
 }
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
