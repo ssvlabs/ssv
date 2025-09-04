@@ -15,6 +15,10 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
+const (
+	goSchedulerDelayMax = 100 * time.Millisecond
+)
+
 func TestTimeoutForRound(t *testing.T) {
 	roles := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
@@ -50,7 +54,7 @@ func TestTimeoutForRound(t *testing.T) {
 
 func setupTestBeaconConfig() *networkconfig.Beacon {
 	config := *networkconfig.TestNetwork.Beacon
-	config.SlotDuration = 120 * time.Millisecond
+	config.SlotDuration = 1200 * time.Millisecond
 	config.GenesisTime = time.Now()
 
 	return &config
@@ -66,8 +70,8 @@ func setupTimer(
 	timer := New(t.Context(), beaconConfig, role, onTimeout)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: round,
-		quick:          100 * time.Millisecond,
-		slow:           200 * time.Millisecond,
+		quick:          500 * time.Millisecond,
+		slow:           1000 * time.Millisecond,
 	}
 
 	return timer
@@ -83,9 +87,10 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 
 	timer := setupTimer(t, testBeaconConfig, onTimeout, role, threshold)
 
-	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + 100*time.Millisecond)
+
+	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + goSchedulerDelayMax)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -103,7 +108,7 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2)) // reset before elapsed
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + 100*time.Millisecond)
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + goSchedulerDelayMax)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -121,37 +126,35 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 		mu.Unlock()
 	}
 
-	var wg sync.WaitGroup
+	const quickTimeout = 300 * time.Millisecond
+
 	for i := 0; i < 4; i++ {
-		wg.Add(1)
 		go func(index int) {
 			timer := New(t.Context(), testBeaconConfig, role, func(round specqbft.Round) { onTimeout(index) })
 			timer.timeoutOptions = TimeoutOptions{
 				quickThreshold: threshold,
-				quick:          100 * time.Millisecond,
+				quick:          quickTimeout,
 			}
 			timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
-			wg.Done()
 		}(i)
-		time.Sleep(time.Millisecond * 10) // Introduce a sleep between creating timers
+		// Introduce a sleep between creating timers to simulate a real-world scenario.
+		time.Sleep(time.Millisecond * 10)
 	}
 
-	wg.Wait() // Wait for all go-routines to finish
-
-	timer := New(t.Context(), testBeaconConfig, role, nil)
-	timer.timeoutOptions = TimeoutOptions{
+	// To set up the correct expectations, we need to know when exactly this particular `role` is supposed to
+	// timeout (different roles time out at different times into slot). We need to use a reference-timer for that.
+	referenceTimer := New(t.Context(), testBeaconConfig, role, nil)
+	referenceTimer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
-		quick:          100 * time.Millisecond,
+		quick:          quickTimeout,
 	}
-
-	// Wait a bit more than the expected timeout to ensure all timers have triggered
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + 100*time.Millisecond + 100*time.Millisecond)
+	expectedTimeout := referenceTimer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + quickTimeout
+	<-time.After(expectedTimeout + goSchedulerDelayMax)
 
 	require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
-
 	mu.Lock()
 	for i := 1; i < 4; i++ {
-		require.InDelta(t, timestamps[0], timestamps[i], float64(100*time.Millisecond), "All four timers should expire nearly at the same time")
+		require.InDelta(t, timestamps[0], timestamps[i], float64(goSchedulerDelayMax), "All four timers should expire nearly at the same time")
 	}
 	mu.Unlock()
 }
