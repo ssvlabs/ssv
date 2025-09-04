@@ -16,6 +16,11 @@ import (
 )
 
 const (
+	slotDuration = 600 * time.Millisecond
+
+	quickTimeout = 300 * time.Millisecond
+	slowTimeout  = 600 * time.Millisecond
+
 	goSchedulerDelayMax = 100 * time.Millisecond
 )
 
@@ -54,7 +59,7 @@ func TestTimeoutForRound(t *testing.T) {
 
 func setupTestBeaconConfig() *networkconfig.Beacon {
 	config := *networkconfig.TestNetwork.Beacon
-	config.SlotDuration = 1200 * time.Millisecond
+	config.SlotDuration = slotDuration
 	config.GenesisTime = time.Now()
 
 	return &config
@@ -70,8 +75,8 @@ func setupTimer(
 	timer := New(t.Context(), beaconConfig, role, onTimeout)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: round,
-		quick:          500 * time.Millisecond,
-		slow:           1000 * time.Millisecond,
+		quick:          quickTimeout,
+		slow:           slowTimeout,
 	}
 
 	return timer
@@ -125,8 +130,6 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 		timestamps[index] = time.Now().UnixNano()
 		mu.Unlock()
 	}
-
-	const quickTimeout = 300 * time.Millisecond
 
 	for i := 0; i < 4; i++ {
 		go func(index int) {
