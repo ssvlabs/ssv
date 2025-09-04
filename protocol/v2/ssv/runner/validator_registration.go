@@ -261,8 +261,6 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 		return nil, fmt.Errorf("could not get fee recipient: %w", err)
 	}
 
-	pk := phase0.BLSPubKey(validatorPubKey)
-
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
 	// on the current epoch as compared to when this transition is supposed to happen.
 	gasLimit := r.gasLimit
@@ -279,7 +277,7 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 		FeeRecipient: feeRecipient,
 		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.NetworkConfig.EpochStartTime(epoch),
-		Pubkey:       pk,
+		Pubkey:       phase0.BLSPubKey(validatorPubKey),
 	}, nil
 }
 

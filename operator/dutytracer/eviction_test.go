@@ -21,7 +21,6 @@ import (
 )
 
 func TestEviction(t *testing.T) {
-
 	f, err := os.OpenFile("./benchdata/slot_3707881_3707882.ssz", os.O_RDONLY, 0644)
 	if err != nil {
 		t.Fatal(err)

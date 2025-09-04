@@ -198,8 +198,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 
 	t.Run("create recipient does not initialize nonce", func(t *testing.T) {
 		owner := common.BytesToAddress([]byte("0x11111"))
-		var feeRecipient bellatrix.ExecutionAddress
-		copy(feeRecipient[:], owner.Bytes())
+		feeRecipient := bellatrix.ExecutionAddress(owner)
 
 		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
@@ -218,8 +217,7 @@ func TestStorage_NonceManagement(t *testing.T) {
 
 	t.Run("bump nonce before fee recipient created", func(t *testing.T) {
 		owner := common.BytesToAddress([]byte("0x11112"))
-		var expectedFeeRecipient bellatrix.ExecutionAddress
-		copy(expectedFeeRecipient[:], owner.Bytes())
+		expectedFeeRecipient := bellatrix.ExecutionAddress(owner)
 
 		// Verify doesn't exist
 		_, err := storageCollection.GetFeeRecipient(owner)
@@ -293,8 +291,7 @@ func TestStorage_NonceManagement(t *testing.T) {
 
 	t.Run("get next nonce after fee recipient created", func(t *testing.T) {
 		owner := common.BytesToAddress([]byte("0x11116"))
-		var feeRecipient bellatrix.ExecutionAddress
-		copy(feeRecipient[:], owner.Bytes())
+		feeRecipient := bellatrix.ExecutionAddress(owner)
 
 		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
@@ -307,8 +304,7 @@ func TestStorage_NonceManagement(t *testing.T) {
 
 	t.Run("get next nonce progression", func(t *testing.T) {
 		owner := common.BytesToAddress([]byte("0x11117"))
-		var feeRecipient bellatrix.ExecutionAddress
-		copy(feeRecipient[:], owner.Bytes())
+		feeRecipient := bellatrix.ExecutionAddress(owner)
 
 		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)

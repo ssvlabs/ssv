@@ -82,9 +82,7 @@ func (tvp *testValidatorProvider) GetFeeRecipient(validatorPK spectypes.Validato
 				}
 			}
 			// 2) default to owner address bytes
-			var def bellatrix.ExecutionAddress
-			copy(def[:], share.OwnerAddress.Bytes())
-			return def, nil
+			return bellatrix.ExecutionAddress(share.OwnerAddress), nil
 		}
 	}
 	return bellatrix.ExecutionAddress{}, fmt.Errorf("validator not found: %x", validatorPK)
@@ -229,8 +227,7 @@ func TestSubmitProposal(t *testing.T) {
 
 		// index 2 should fall back to owner address
 		owner2 := common.HexToAddress("0x0000000000000000000000000000000000000002")
-		var expected bellatrix.ExecutionAddress
-		copy(expected[:], owner2.Bytes())
+		expected := bellatrix.ExecutionAddress(owner2)
 		require.Equal(t, expected, got[2], "index 2 should use owner address as default")
 	})
 

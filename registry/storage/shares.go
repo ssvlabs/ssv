@@ -102,8 +102,8 @@ type Share struct {
 	// FeeRecipientAddress is unused - fee recipients are stored in Recipients storage.
 	// DO NOT REMOVE: Removing this field would break SSZ decoding of existing DB data.
 	// Wait for a major migration to batch this removal with other breaking changes.
-	FeeRecipientAddress [addressLength]byte
-	Graffiti            []byte `ssz-max:"32"`
+	FeeRecipientAddress [addressLength]byte // DEPRECATED
+	Graffiti            []byte              `ssz-max:"32"`
 	Status              uint64
 	ActivationEpoch     uint64
 	ExitEpoch           uint64
@@ -184,7 +184,7 @@ func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]p
 }
 
 func (s *sharesStorage) loadFromDB() error {
-	err := s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
+	return s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
 		val := &Share{}
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
@@ -199,11 +199,6 @@ func (s *sharesStorage) loadFromDB() error {
 
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {

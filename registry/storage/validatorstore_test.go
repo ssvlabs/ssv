@@ -1104,9 +1104,7 @@ func createValidatorStore(shares map[spectypes.ValidatorPK]*ssvtypes.SSVShare) *
 		},
 		func(owner common.Address) (bellatrix.ExecutionAddress, error) {
 			// For tests, just return owner address as fee recipient
-			var feeRecipient bellatrix.ExecutionAddress
-			copy(feeRecipient[:], owner.Bytes())
-			return feeRecipient, nil
+			return bellatrix.ExecutionAddress(owner), nil
 		},
 		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 		networkConfig.Beacon,

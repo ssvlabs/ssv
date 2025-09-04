@@ -189,10 +189,10 @@ func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address
 
 		// Create an instance of RecipientData and assign the Nonce and Owner address values
 		rData = &RecipientData{
-			Owner: owner,
-			Nonce: &nonce, // Assign the address of nonceValue to Nonce field
+			Owner:        owner,
+			Nonce:        &nonce, // Assign the address of nonceValue to Nonce field
+			FeeRecipient: bellatrix.ExecutionAddress(owner),
 		}
-		copy(rData.FeeRecipient[:], owner.Bytes())
 	}
 
 	if rData == nil {

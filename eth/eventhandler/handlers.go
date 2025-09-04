@@ -461,8 +461,7 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 
 	logger.Debug("processing event")
 
-	var feeRecipient bellatrix.ExecutionAddress
-	copy(feeRecipient[:], event.RecipientAddress.Bytes())
+	feeRecipient := bellatrix.ExecutionAddress(event.RecipientAddress)
 
 	// Save or update fee recipient (handles all logic internally)
 	r, err := eh.nodeStorage.SaveRecipientData(txn, event.Owner, feeRecipient)
