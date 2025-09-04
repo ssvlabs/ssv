@@ -464,11 +464,6 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 	var feeRecipient bellatrix.ExecutionAddress
 	copy(feeRecipient[:], event.RecipientAddress.Bytes())
 
-	// Reject zero fee recipient address
-	if feeRecipient == (bellatrix.ExecutionAddress{}) {
-		return false, fmt.Errorf("invalid zero fee recipient address")
-	}
-
 	// Save or update fee recipient (handles all logic internally)
 	r, err := eh.nodeStorage.SaveRecipientData(txn, event.Owner, feeRecipient)
 	if err != nil {
