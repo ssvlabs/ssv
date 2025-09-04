@@ -551,10 +551,9 @@ func TestFeeRecipientChangeNotification(t *testing.T) {
 
 	t.Run("notifies on UpdateFeeRecipient", func(t *testing.T) {
 		ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "owner address")
-		feeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "fee recipient")
 		newFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "new fee recipient")
 
-		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, feeRecipientBytes)
+		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			testValidator.Share.ValidatorPubKey: testValidator,
 		}

@@ -167,4 +167,3 @@ func (rc *recipientController) buildProposalPreparations(shares []*types.SSVShar
 
 	return preparations, nil
 }
-
