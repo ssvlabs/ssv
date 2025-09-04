@@ -21,7 +21,9 @@ const (
 	quickTimeout = 300 * time.Millisecond
 	slowTimeout  = 600 * time.Millisecond
 
-	goSchedulerDelayMax = 100 * time.Millisecond
+	// safeTestDelay is a safety buffer (a guesstimate) to use in tests that set expectations making certain
+	// assumptions regarding the go-routine scheduling.
+	safeTestDelay = 100 * time.Millisecond
 )
 
 func TestTimeoutForRound(t *testing.T) {
@@ -95,7 +97,7 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + goSchedulerDelayMax)
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + safeTestDelay)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -113,7 +115,7 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2)) // reset before elapsed
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + goSchedulerDelayMax)
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + safeTestDelay)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -152,12 +154,12 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 		quick:          quickTimeout,
 	}
 	expectedTimeout := referenceTimer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + quickTimeout
-	<-time.After(expectedTimeout + goSchedulerDelayMax)
+	<-time.After(expectedTimeout + safeTestDelay)
 
 	require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
 	mu.Lock()
 	for i := 1; i < 4; i++ {
-		require.InDelta(t, timestamps[0], timestamps[i], float64(goSchedulerDelayMax), "All four timers should expire nearly at the same time")
+		require.InDelta(t, timestamps[0], timestamps[i], float64(safeTestDelay), "All four timers should expire nearly at the same time")
 	}
 	mu.Unlock()
 }
