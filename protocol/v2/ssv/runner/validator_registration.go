@@ -258,7 +258,7 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 
 	feeRecipient, err := r.feeRecipientProvider.GetFeeRecipient(validatorPubKey)
 	if err != nil {
-		return nil, fmt.Errorf("could not get fee recipient for validator %x: %w", validatorPubKey, err)
+		return nil, fmt.Errorf("could not get fee recipient: %w", err)
 	}
 
 	pk := phase0.BLSPubKey(validatorPubKey)
