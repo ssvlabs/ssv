@@ -59,7 +59,7 @@ func (gc *GoClient) fetchProposal(
 		RandaoReveal: sig,
 		Graffiti:     graffiti,
 	})
-	recordMultiClientRequest(ctx, gc.log, "Proposal", http.MethodGet, time.Since(reqStart), err)
+	recordSingleClientRequest(ctx, gc.log, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
 	if err != nil {
 		return nil, errSingleClient(fmt.Errorf("fetch proposal: %w", err), client.Address(), "Proposal")
 	}
@@ -96,7 +96,7 @@ func (gc *GoClient) GetBeaconBlock(
 			return nil, DataVersionNil, err
 		}
 	} else {
-		// For multiple clients, race them in parallel for fastest response
+		// For multiple clients, race them in parallel for the fastest response
 		beaconBlock, err = gc.getProposalParallel(ctx, slot, sig, graffiti)
 		if err != nil {
 			return nil, DataVersionNil, err
@@ -219,7 +219,7 @@ func (gc *GoClient) getProposalParallel(
 	type result struct {
 		proposal *api.VersionedProposal
 		err      error
-		address  string
+		client   string
 	}
 
 	resultCh := make(chan result, len(gc.clients))
@@ -228,7 +228,7 @@ func (gc *GoClient) getProposalParallel(
 		go func(c Client) {
 			proposal, err := gc.fetchProposal(parallelCtx, c, slot, sig, graffiti)
 			select {
-			case resultCh <- result{proposal: proposal, err: err, address: c.Address()}:
+			case resultCh <- result{proposal: proposal, err: err, client: c.Address()}:
 			case <-parallelCtx.Done():
 				// Context canceled, exit without blocking
 			}
@@ -236,20 +236,19 @@ func (gc *GoClient) getProposalParallel(
 	}
 
 	var lastErr error
-	for i := 0; i < len(gc.clients); i++ {
+	for range gc.clients {
 		select {
 		case res := <-resultCh:
 			if res.err != nil {
 				lastErr = res.err
 				continue
 			}
-			// Got a successful response, cancel other requests and return
-			gc.log.Debug("received proposal from client",
-				zap.String("address", res.address),
+			// Got a successful response, cancel other requests and return.
+			gc.log.Debug("received proposal, canceling other requests",
+				zap.String("client", res.client),
 				fields.Slot(slot),
-				zap.Int("response_number", i+1),
 			)
-			cancelParallel() // Cancel other goroutines immediately
+			cancelParallel()
 			return res.proposal, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
