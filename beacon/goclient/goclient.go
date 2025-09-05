@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +20,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/rs/zerolog"
+	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
@@ -430,6 +432,49 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 	}
 
 	return gc.beaconConfig, nil
+}
+
+// multiClientSubmit is a generic function that submits data to multiple beacon clients concurrently.
+// Returns nil if at least one client successfully submitted the data.
+func (gc *GoClient) multiClientSubmit(
+	ctx context.Context,
+	operationName string,
+	submitFunc func(ctx context.Context, client Client) error,
+) error {
+	logger := gc.log.With(zap.String("api", operationName))
+
+	submissions := atomic.Int32{}
+	p := pool.New().WithErrors().WithContext(ctx).WithMaxGoroutines(len(gc.clients))
+	for _, client := range gc.clients {
+		p.Go(func(ctx context.Context) error {
+			clientAddress := client.Address()
+			logger := logger.With(zap.String("client_addr", clientAddress))
+
+			start := time.Now()
+			err := submitFunc(ctx, client)
+			recordRequestDuration(ctx, operationName, clientAddress, http.MethodPost, time.Since(start), err)
+			if err != nil {
+				logger.Debug("a client failed to submit", zap.Error(err))
+				return fmt.Errorf("client %s failed to submit %s: %w", clientAddress, operationName, err)
+			}
+
+			logger.Debug("a client submitted successfully")
+
+			submissions.Add(1)
+			return nil
+		})
+	}
+	err := p.Wait()
+	if submissions.Load() > 0 {
+		// At least one client has submitted successfully,
+		// so we can return without error.
+		return nil
+	}
+	if err != nil {
+		logger.Error("all clients failed to submit", zap.Error(err))
+		return fmt.Errorf("failed to submit, operation: '%s', error: '%w'", operationName, err)
+	}
+	return nil
 }
 
 var (
