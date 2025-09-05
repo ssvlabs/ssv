@@ -43,7 +43,7 @@ func CreateTestNode(t *testing.T, n int, ctx context.Context) *Node {
 
 	nodeMock := &NodeMock{}
 	nodeMock.HealthyMock.Store(nil)
-	nodeProber := nodeprobe.NewProber(zap.L())
+	nodeProber := nodeprobe.New(zap.L())
 	const node1 = "node_1"
 	const node2 = "node_2"
 	const node3 = "node_3"

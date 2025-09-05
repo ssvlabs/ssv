@@ -571,7 +571,7 @@ var StartNodeCmd = &cobra.Command{
 			}()
 		}
 
-		nodeProber := nodeprobe.NewProber(logger)
+		nodeProber := nodeprobe.New(logger)
 		nodeProber.AddNode(clNodeName, consensusClient, 10*time.Second, 5)
 		nodeProber.AddNode(elNodeName, executionClient, 10*time.Second, 5)
 

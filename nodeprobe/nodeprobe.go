@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // node represents a node being probed.
@@ -23,25 +25,19 @@ type pNode struct {
 	retriesMax         int
 }
 
-// Prober probes(monitors) the nodes it is configured with. It can do it periodically in the background via
-// Start func (which can crash the process via logger.Fatal call if it finds out that one of the nodes being
-// probed is not healthy), or it can probe on demand via Probe func.
-// It is used to make sure the Ethereum nodes (CL, EL) are up and running, and they are healthy enough to for
-// SSV node to be able to perform duties.
+// Prober allows for probing (checking the health of) the nodes it is configured with. It supports retries
+// that are useful for tolerating occasional failures.
 type Prober struct {
 	logger *zap.Logger
 
-	// nodesMu protects access to nodes, needed to handle the case when "event syncer" is added dynamically later on
-	// when the Prober is already running.
-	nodesMu sync.Mutex
 	// nodes maps node-name to its Node.
-	nodes map[string]pNode
+	nodes *hashmap.Map[string, pNode]
 }
 
-func NewProber(logger *zap.Logger) *Prober {
+func New(logger *zap.Logger) *Prober {
 	return &Prober{
 		logger: logger,
-		nodes:  make(map[string]pNode),
+		nodes:  hashmap.New[string, pNode](),
 	}
 }
 
@@ -53,11 +49,7 @@ func (p *Prober) ProbeAll(ctx context.Context) error {
 	var wg sync.WaitGroup
 	errsCh := make(chan error)
 
-	p.nodesMu.Lock()
-	nodes := p.nodes
-	p.nodesMu.Unlock()
-
-	for name, n := range nodes {
+	p.nodes.Range(func(name string, n pNode) bool {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -69,7 +61,8 @@ func (p *Prober) ProbeAll(ctx context.Context) error {
 				cancel()
 			}
 		}()
-	}
+		return true
+	})
 
 	go func() {
 		wg.Wait()
@@ -87,15 +80,12 @@ func (p *Prober) ProbeAll(ctx context.Context) error {
 }
 
 func (p *Prober) Probe(ctx context.Context, nodeName string) error {
-	p.nodesMu.Lock()
-	defer p.nodesMu.Unlock()
-
-	node, ok := p.nodes[nodeName]
+	n, ok := p.nodes.Get(nodeName)
 	if !ok {
 		return fmt.Errorf("%s not found among Prober nodes", nodeName)
 	}
 
-	err := p.probeNode(ctx, node)
+	err := p.probeNode(ctx, n)
 	if err != nil {
 		return fmt.Errorf("probe node %s: %w", nodeName, err)
 	}
@@ -137,12 +127,9 @@ func (p *Prober) probeNode(ctx context.Context, node pNode) (err error) {
 }
 
 func (p *Prober) AddNode(nodeName string, node node, healthcheckTimeout time.Duration, retriesMax int) {
-	p.nodesMu.Lock()
-	defer p.nodesMu.Unlock()
-
-	p.nodes[nodeName] = pNode{
+	p.nodes.Set(nodeName, pNode{
 		n:                  node,
 		healthcheckTimeout: healthcheckTimeout,
 		retriesMax:         retriesMax,
-	}
+	})
 }

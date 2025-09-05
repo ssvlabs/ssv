@@ -24,7 +24,7 @@ func TestProber(t *testing.T) {
 		clNode := &nodeMock{}
 		clNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 
 		err := p.Probe(ctx, clNodeName)
@@ -34,7 +34,7 @@ func TestProber(t *testing.T) {
 	t.Run("1 node, success with glitchy node", func(t *testing.T) {
 		clNode := &glitchyNodeMock{}
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 
 		err := p.Probe(ctx, clNodeName)
@@ -45,7 +45,7 @@ func TestProber(t *testing.T) {
 		clNode := &nodeMock{}
 		clNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 
 		err := p.Probe(ctx, elNodeName)
@@ -57,7 +57,7 @@ func TestProber(t *testing.T) {
 		clNode := &nodeMock{}
 		clNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 
 		clDownErr := fmt.Errorf("some error")
@@ -71,7 +71,7 @@ func TestProber(t *testing.T) {
 	t.Run("1 node, probe failed due to node stuck", func(t *testing.T) {
 		clNode := &stuckNodeMock{}
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 
 		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
@@ -87,7 +87,7 @@ func TestProber(t *testing.T) {
 		elNode := &nodeMock{}
 		elNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
@@ -102,7 +102,7 @@ func TestProber(t *testing.T) {
 		elNode := &nodeMock{}
 		elNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
@@ -123,7 +123,7 @@ func TestProber(t *testing.T) {
 		elNode := &nodeMock{}
 		elNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
@@ -144,7 +144,7 @@ func TestProber(t *testing.T) {
 		elNode := &nodeMock{}
 		elNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
@@ -167,7 +167,7 @@ func TestProber(t *testing.T) {
 		elNode := &nodeMock{}
 		elNode.healthy.Store(nil)
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
@@ -193,7 +193,7 @@ func TestProber(t *testing.T) {
 		clNode := &stuckNodeMock{}
 		elNode := &stuckNodeMock{}
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
@@ -207,7 +207,7 @@ func TestProber(t *testing.T) {
 		clNode := &stuckNodeMock{}
 		elNode := &stuckNodeMock{}
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
@@ -222,7 +222,7 @@ func TestProber(t *testing.T) {
 
 		elNode := &glitchyNodeMock{}
 
-		p := NewProber(log.TestLogger(t))
+		p := New(log.TestLogger(t))
 		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
 		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
 
