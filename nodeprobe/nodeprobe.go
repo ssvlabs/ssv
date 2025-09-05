@@ -2,164 +2,142 @@ package nodeprobe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-const (
-	probeInterval = 24 * time.Second
-)
-
-type Node interface {
+// node represents a node being probed.
+type node interface {
 	Healthy(ctx context.Context) error
 }
 
+// pNode allows configuring the max number of retries intended for the node as well as the healthcheckTimeout
+// to use when checking for health.
+type pNode struct {
+	name string
+	n    node
+
+	healthcheckTimeout time.Duration
+	retriesMax         int
+}
+
+// Prober allows for probing (checking the health of) the nodes it is configured with. It supports retries
+// that are useful for tolerating occasional failures.
 type Prober struct {
-	logger           *zap.Logger
-	interval         time.Duration
-	nodes            map[string]Node
-	nodesMu          sync.Mutex
-	healthy          atomic.Bool
-	cond             *sync.Cond
-	unhealthyHandler func()
+	logger *zap.Logger
+
+	// nodes maps node-name to its Node.
+	nodes *hashmap.Map[string, pNode]
 }
 
-func NewProber(logger *zap.Logger, unhealthyHandler func(), nodes map[string]Node) *Prober {
+func New(logger *zap.Logger) *Prober {
 	return &Prober{
-		logger:           logger,
-		unhealthyHandler: unhealthyHandler,
-		interval:         probeInterval,
-		nodes:            nodes,
-		cond:             sync.NewCond(&sync.Mutex{}),
+		logger: logger,
+		nodes:  hashmap.New[string, pNode](),
 	}
 }
 
-func (p *Prober) Start(ctx context.Context) {
-	go func() {
-		if err := p.Run(ctx); err != nil {
-			p.logger.Error("finished probing nodes", zap.Error(err))
-		}
-	}()
-}
-
-func (p *Prober) Run(ctx context.Context) error {
-	ticker := time.NewTicker(p.interval)
-	defer ticker.Stop()
-
-	for {
-		p.probe(ctx)
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			continue
-		}
-	}
-}
-
-func (p *Prober) probe(ctx context.Context) {
-	// Query all nodes in parallel.
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
+func (p *Prober) ProbeAll(ctx context.Context) error {
+	// Probe all nodes in parallel, use cancel to quit early canceling irrelevant workers.
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	var healthy atomic.Bool
-	healthy.Store(true)
 	var wg sync.WaitGroup
-	p.nodesMu.Lock()
-	for name, node := range p.nodes {
+	errsCh := make(chan error)
+
+	p.nodes.Range(func(name string, n pNode) bool {
 		wg.Add(1)
-		go func(name string, node Node) {
+		go func() {
 			defer wg.Done()
 
-			var err error
-			defer func() {
-				// Catch panics.
-				if e := recover(); e != nil {
-					err = fmt.Errorf("panic: %v", e)
-				}
-				if err != nil {
-					// Update readiness and quit early.
-					healthy.Store(false)
-					cancel()
-				}
-			}()
-
-			err = node.Healthy(ctx)
+			err := p.probeNode(ctx, n)
 			if err != nil {
-				p.logger.Error("node is not healthy", zap.String("node", name), zap.Error(err))
+				// Relay the error and quit early.
+				errsCh <- fmt.Errorf("probe node %s: %w", name, err)
+				cancel()
 			}
-		}(name, node)
+		}()
+		return true
+	})
+
+	go func() {
+		wg.Wait()
+		close(errsCh)
+	}()
+
+	var errs error
+	for err := range errsCh {
+		errs = errors.Join(errs, err)
 	}
-	p.nodesMu.Unlock()
-	wg.Wait()
-
-	// Update readiness.
-	p.cond.L.Lock()
-	defer p.cond.L.Unlock()
-
-	p.healthy.Store(healthy.Load())
-
-	if !p.healthy.Load() {
-		p.logger.Error("not all nodes are healthy")
-		if h := p.unhealthyHandler; h != nil {
-			h()
-		}
-		return
+	if errs != nil {
+		errs = fmt.Errorf("probe health-check failed: %w", errs)
 	}
-	// Wake up any waiters.
-	p.cond.Broadcast()
+	return errs
 }
 
-func (p *Prober) Wait() {
-	p.logger.Info("waiting until nodes are healthy")
-
-	p.cond.L.Lock()
-	defer p.cond.L.Unlock()
-
-	for !p.healthy.Load() {
-		p.cond.Wait()
-	}
-}
-
-func (p *Prober) AddNode(name string, node Node) {
-	p.nodesMu.Lock()
-	defer p.nodesMu.Unlock()
-
-	p.nodes[name] = node
-}
-
-// TODO: string constants are error-prone.
-// Add a method to clients that returns their name or solve this in another way
-func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
-	p.nodesMu.Lock()
-	defer p.nodesMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
-	defer cancel()
-	return p.nodes["consensus client"].Healthy(ctx)
-}
-
-func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
-	p.nodesMu.Lock()
-	defer p.nodesMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
-	defer cancel()
-	return p.nodes["execution client"].Healthy(ctx)
-}
-
-func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
-	p.nodesMu.Lock()
-	defer p.nodesMu.Unlock()
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
-	defer cancel()
-
-	es, ok := p.nodes["event syncer"]
+func (p *Prober) Probe(ctx context.Context, nodeName string) error {
+	n, ok := p.nodes.Get(nodeName)
 	if !ok {
-		return fmt.Errorf("event syncer not found")
+		return fmt.Errorf("%s not found among Prober nodes", nodeName)
 	}
-	return es.Healthy(ctx)
+
+	err := p.probeNode(ctx, n)
+	if err != nil {
+		return fmt.Errorf("probe node %s: %w", nodeName, err)
+	}
+
+	return nil
+}
+
+func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
+	defer func() {
+		// Catch panics to present these (however unlikely they are) as a readable error-message.
+		if e := recover(); e != nil {
+			err = fmt.Errorf("panic: %v", e)
+		}
+	}()
+
+	// Retry health-check multiple times to make sure we do not classify an occasional glitch (or a network blip)
+	// as node being unhealthy. Failing on the very 1st failed request would be too drastic a measure given it
+	// may result into SSV node restart.
+	attemptsMax := 1 + n.retriesMax
+	for attempt := 1; attempt <= attemptsMax; attempt++ {
+		err = func() error {
+			healthCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+
+			return n.n.Healthy(healthCtx)
+		}()
+		if errors.Is(err, context.Canceled) {
+			return nil // probing was canceled (it's not an error then)
+		}
+		if err == nil {
+			return nil // success
+		}
+		if attempt == attemptsMax {
+			break // all retries failed
+		}
+
+		p.logger.Debug("health-check failed, gonna retry",
+			zap.String("node", n.name),
+			zap.Int("attempt", attempt),
+			zap.Error(err),
+		)
+	}
+
+	return fmt.Errorf("node is unhealthy: %w", err)
+}
+
+func (p *Prober) AddNode(nodeName string, node node, healthcheckTimeout time.Duration, retriesMax int) {
+	p.nodes.Set(nodeName, pNode{
+		n:                  node,
+		healthcheckTimeout: healthcheckTimeout,
+		retriesMax:         retriesMax,
+	})
 }
