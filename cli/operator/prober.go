@@ -23,6 +23,9 @@ func startNodeProber(ctx context.Context, logger *zap.Logger, p *nodeprobe.Probe
 
 	for {
 		func() {
+			logger.Debug("node-prober tick: probing all nodes")
+			defer logger.Debug("node-prober tick: probing all nodes done")
+
 			probeCtx, cancel := context.WithTimeout(ctx, probeFrequency)
 			defer cancel()
 

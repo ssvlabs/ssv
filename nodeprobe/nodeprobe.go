@@ -20,7 +20,9 @@ type node interface {
 // pNode allows configuring the max number of retries intended for the node as well as the healthcheckTimeout
 // to use when checking for health.
 type pNode struct {
-	n                  node
+	name string
+	n    node
+
 	healthcheckTimeout time.Duration
 	retriesMax         int
 }
@@ -93,7 +95,7 @@ func (p *Prober) Probe(ctx context.Context, nodeName string) error {
 	return nil
 }
 
-func (p *Prober) probeNode(ctx context.Context, node pNode) (err error) {
+func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
 	defer func() {
 		// Catch panics to present these (however unlikely they are) as a readable error-message.
 		if e := recover(); e != nil {
@@ -104,23 +106,29 @@ func (p *Prober) probeNode(ctx context.Context, node pNode) (err error) {
 	// Retry health-check multiple times to make sure we do not classify an occasional glitch (or a network blip)
 	// as node being unhealthy. Failing on the very 1st failed request would be too drastic a measure given it
 	// may result into SSV node restart.
-	for attempt := 0; attempt <= node.retriesMax; attempt++ {
+	attemptsMax := 1 + n.retriesMax
+	for attempt := 1; attempt <= attemptsMax; attempt++ {
 		err = func() error {
 			healthCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
 
-			return node.n.Healthy(healthCtx)
+			return n.n.Healthy(healthCtx)
 		}()
+		if errors.Is(err, context.Canceled) {
+			return nil // probing was canceled (it's not an error then)
+		}
 		if err == nil {
 			return nil // success
 		}
-	}
+		if attempt == attemptsMax {
+			break // all retries failed
+		}
 
-	// All retries failed.
-
-	if errors.Is(err, context.Canceled) {
-		// The caller canceled probing, it's not an error then.
-		return nil
+		p.logger.Debug("health-check failed, gonna retry",
+			zap.String("node", n.name),
+			zap.Int("attempt", attempt),
+			zap.Error(err),
+		)
 	}
 
 	return fmt.Errorf("node is unhealthy: %w", err)
