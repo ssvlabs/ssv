@@ -106,20 +106,26 @@ func New(
 	return eh, nil
 }
 
-func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
-	for blockLogs := range logs {
+func (eh *EventHandler) HandleBlockEventsStream(
+	ctx context.Context,
+	logStreamCh <-chan executionclient.BlockLogs,
+	logStreamErrsCh <-chan error,
+	executeTasks bool,
+) (lastProcessedBlock uint64, err error) {
+	for blockLogs := range logStreamCh {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
 		tasks, err := eh.processBlockEvents(ctx, blockLogs)
+		if err != nil {
+			return lastProcessedBlock, fmt.Errorf("process block events: %w", err)
+		}
+
 		logger.Debug("processed events from block",
 			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
-			zap.Error(err))
+		)
 
-		if err != nil {
-			return 0, fmt.Errorf("failed to process block events: %w", err)
-		}
 		lastProcessedBlock = blockLogs.BlockNumber
 
 		metrics.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
@@ -134,7 +140,6 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 			logger = logger.With(fields.Type(task))
 			logger.Debug("executing task")
 			if err := task.Execute(); err != nil {
-				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				logger.Error("failed to execute task", zap.Error(err))
 			} else {
 				logger.Debug("executed task")
@@ -142,7 +147,12 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		}
 	}
 
-	return lastProcessedBlock, nil
+	var errs error
+	for err := range logStreamErrsCh {
+		errs = errors.Join(errs, err)
+	}
+
+	return lastProcessedBlock, errs
 }
 
 func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {
