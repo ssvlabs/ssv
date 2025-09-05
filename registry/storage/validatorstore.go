@@ -258,7 +258,7 @@ func (c *validatorStore) GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bel
 
 	validatorIndex, found := c.byValidatorPubkey[validatorPK]
 	if !found {
-		return bellatrix.ExecutionAddress{}, fmt.Errorf("validator not found: %x", validatorPK)
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("validator not found")
 	}
 
 	share := c.byValidatorIndex[validatorIndex]
@@ -268,8 +268,7 @@ func (c *validatorStore) GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bel
 
 	recipient, err := c.feeRecipientByOwner(share.OwnerAddress)
 	if err != nil {
-		return bellatrix.ExecutionAddress{}, fmt.Errorf("fee recipient not found for validator %x (owner %s): %w",
-			validatorPK, share.OwnerAddress.Hex(), err)
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("no fee recipient for owner %s: %w", share.OwnerAddress.Hex(), err)
 	}
 	return recipient, nil
 }
