@@ -136,6 +136,7 @@ func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
 
 func (p *Prober) AddNode(nodeName string, node node, healthcheckTimeout time.Duration, retriesMax int) {
 	p.nodes.Set(nodeName, pNode{
+		name:               nodeName,
 		n:                  node,
 		healthcheckTimeout: healthcheckTimeout,
 		retriesMax:         retriesMax,
