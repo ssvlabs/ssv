@@ -99,7 +99,7 @@ func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
 	// Retry health-check multiple times to make sure we do not classify an occasional glitch (or a network blip)
 	// as node being unhealthy. Failing on the very 1st failed request would be too drastic a measure given it
 	// may result into SSV node restart.
-	attemptsMax := 1 + n.retriesMax
+	attemptsMax := 1 + n.retriesMax // the initial attempt + retries specified
 	for attempt := 1; attempt <= attemptsMax; attempt++ {
 		err = func() error {
 			healthCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
