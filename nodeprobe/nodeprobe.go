@@ -96,13 +96,6 @@ func (p *Prober) Probe(ctx context.Context, nodeName string) error {
 }
 
 func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
-	defer func() {
-		// Catch panics to present these (however unlikely they are) as a readable error-message.
-		if e := recover(); e != nil {
-			err = fmt.Errorf("panic: %v", e)
-		}
-	}()
-
 	// Retry health-check multiple times to make sure we do not classify an occasional glitch (or a network blip)
 	// as node being unhealthy. Failing on the very 1st failed request would be too drastic a measure given it
 	// may result into SSV node restart.
