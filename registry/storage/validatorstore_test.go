@@ -1226,7 +1226,7 @@ func TestValidatorStore_FeeRecipients(t *testing.T) {
 		// Test GetFeeRecipient returns error when no custom recipient is set
 		_, err := store.GetFeeRecipient(share.ValidatorPubKey)
 		require.Error(t, err, "Should error when no fee recipient is configured")
-		require.Contains(t, err.Error(), "fee recipient not found")
+		require.Contains(t, err.Error(), "no fee recipient for owner")
 		require.Contains(t, err.Error(), owner.Hex())
 	})
 
@@ -1269,7 +1269,7 @@ func TestValidatorStore_FeeRecipients(t *testing.T) {
 		// Test GetFeeRecipient returns error when no custom recipient is set
 		_, err := store.GetFeeRecipient(share.ValidatorPubKey)
 		require.Error(t, err, "Should error when no fee recipient is configured")
-		require.Contains(t, err.Error(), "fee recipient not found")
+		require.Contains(t, err.Error(), "no fee recipient for owner")
 	})
 
 	t.Run("GetFeeRecipient after share removal", func(t *testing.T) {
