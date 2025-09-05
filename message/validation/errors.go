@@ -136,6 +136,7 @@ var (
 	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
 	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
+	ErrEncodeOperators                         = Error{text: "encode operators", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {

@@ -56,10 +56,13 @@ type messageValidator struct {
 	logger          *zap.Logger
 	netCfg          *networkconfig.Network
 	pectraForkEpoch phase0.Epoch
-	state           *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
-	validatorStore  validatorStore
-	operators       operators
-	dutyStore       *dutystore.Store
+
+	consensusStateIndex   map[peerIDWithMessageID]*consensusState
+	consensusStateIndexMu sync.Mutex
+
+	validatorStore validatorStore
+	operators      operators
+	dutyStore      *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
@@ -78,7 +81,6 @@ type messageValidator struct {
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
-// It starts a goroutine that cleans up the state.
 func New(
 	netCfg *networkconfig.Network,
 	validatorStore validatorStore,
@@ -91,6 +93,7 @@ func New(
 	mv := &messageValidator{
 		logger:              zap.NewNop(),
 		netCfg:              netCfg,
+		consensusStateIndex: make(map[peerIDWithMessageID]*consensusState),
 		validationLockCache: ttlcache.New[peerIDWithMessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
 		operators:           operators,
@@ -99,19 +102,12 @@ func New(
 		pectraForkEpoch:     pectraForkEpoch,
 	}
 
-	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
-	mv.state = ttlcache.New(
-		ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
-	)
-
 	for _, opt := range opts {
 		opt(mv)
 	}
 
 	// Start automatic expired item deletion for validationLockCache.
 	go mv.validationLockCache.Start()
-	// Start automatic expired item deletion for state.
-	go mv.state.Start()
 
 	return mv
 }
@@ -219,7 +215,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 }
 
 func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.operatorIDs); err != nil {
 		return err
 	}
 
@@ -260,6 +256,12 @@ func (mv *messageValidator) getValidationLock(key peerIDWithMessageID) *sync.Mut
 	return lock
 }
 
+type CommitteeInfo struct {
+	operatorIDs []spectypes.OperatorID
+	indices     []phase0.ValidatorIndex
+	committeeID spectypes.CommitteeID
+}
+
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
@@ -277,7 +279,11 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
+		return CommitteeInfo{
+			operatorIDs: committee.Operators,
+			indices:     committee.Indices,
+			committeeID: committeeID,
+		}, nil
 	}
 
 	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
@@ -308,21 +314,26 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		operators = append(operators, c.Signer)
 	}
 
-	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
-	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
+	return CommitteeInfo{
+		operatorIDs: operators,
+		indices:     []phase0.ValidatorIndex{share.ValidatorIndex},
+		committeeID: share.CommitteeID(),
+	}, nil
 }
 
-func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {
-	if v := mv.state.Get(key); v != nil {
-		return v.Value()
+func (mv *messageValidator) consensusState(key peerIDWithMessageID) *consensusState {
+	mv.consensusStateIndexMu.Lock()
+	defer mv.consensusStateIndexMu.Unlock()
+
+	if _, ok := mv.consensusStateIndex[key]; !ok {
+		cs := &consensusState{
+			state:           make(map[spectypes.OperatorID]*OperatorState),
+			storedSlotCount: mv.netCfg.Beacon.SlotsPerEpoch * 2, // store last two epochs to calculate duty count
+		}
+		mv.consensusStateIndex[key] = cs
 	}
 
-	cs := &ValidatorState{
-		operators:       make([]*OperatorState, len(committee)),
-		storedSlotCount: mv.maxStoredSlots(),
-	}
-	mv.state.Set(key, cs, ttlcache.DefaultTTL)
-	return cs
+	return mv.consensusStateIndex[key]
 }
 
 // maxStoredSlots stores max amount of slots message validation stores.
