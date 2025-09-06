@@ -58,7 +58,7 @@ func (s *E2ETestSuite) GetContext() context.Context {
 
 // CalculateDomain computes the signing domain for a given domain type and epoch
 func (s *E2ETestSuite) CalculateDomain(domainType phase0.DomainType, epoch phase0.Epoch) (phase0.Domain, error) {
-	_, fork := s.env.GetBeaconConfig().ForkAtEpoch(epoch)
+	_, fork := s.env.GetBeaconConfig().BeaconForkAtEpoch(epoch)
 
 	forkData := &phase0.ForkData{
 		CurrentVersion:        fork.CurrentVersion,

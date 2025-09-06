@@ -69,6 +69,12 @@ type HostProvider interface {
 	Host() host.Host
 }
 
+type validatorStatusAndSubnet struct {
+	status     validatorStatus
+	subnet     uint64
+	subnetAlan uint64
+}
+
 // p2pNetwork implements network.P2PNetwork
 type p2pNetwork struct {
 	parentCtx context.Context
@@ -93,7 +99,7 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeCommittees *hashmap.Map[string, validatorStatus]
+	activeCommittees *hashmap.Map[string, validatorStatusAndSubnet]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
@@ -135,7 +141,7 @@ func New(
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
-		activeCommittees:        hashmap.New[string, validatorStatus](),
+		activeCommittees:        hashmap.New[string, validatorStatusAndSubnet](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
