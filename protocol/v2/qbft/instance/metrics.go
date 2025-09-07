@@ -23,6 +23,7 @@ func newMetrics(runnerRole spectypes.RunnerRole) *metricsRecorder {
 	}
 }
 
+// Start records the start of stage(phase) 1 for QBFT instance (it's either a proposal or prepare).
 func (m *metricsRecorder) Start() {
 	m.stageStart = time.Now()
 }
