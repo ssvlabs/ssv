@@ -1,7 +1,6 @@
 package spectest
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -527,8 +526,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		}
 	}
 
-	ctx := t.Context() // TODO refactor this
-	c := fixCommitteeForRun(t, ctx, logger, committeeMap)
+	c := fixCommitteeForRun(t, logger, committeeMap)
 
 	return &CommitteeSpecTest{
 		Name:                   m["Name"].(string),
@@ -541,16 +539,12 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
+func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
 	byts, _ := json.Marshal(committeeMap)
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
-	ctx, cancel := context.WithCancel(ctx)
-
 	c := validator.NewCommittee(
-		ctx,
-		cancel,
 		logger,
 		networkconfig.TestNetwork,
 		&specCommittee.CommitteeMember,
