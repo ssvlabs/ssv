@@ -22,7 +22,6 @@ var TestNetwork = &Network{
 		SyncCommitteeSubnetCount:             4,
 		TargetAggregatorsPerSyncSubcommittee: 16,
 		TargetAggregatorsPerCommittee:        16,
-		IntervalsPerSlot:                     3,
 		GenesisForkVersion:                   spectypes.BeaconTestNetwork.ForkVersion(),
 		GenesisTime:                          time.Unix(int64(spectypes.BeaconTestNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x043db0d9a83813551ee2f33450d23797757d430911a9320530ad8a0eabc43efb")),
