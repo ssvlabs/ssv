@@ -30,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -47,7 +48,6 @@ type ValidatorRegistrationRunner struct {
 	network                        specqbft.Network
 	signer                         ekm.BeaconSigner
 	operatorSigner                 ssvtypes.OperatorSigner
-	valCheck                       specqbft.ProposedValueCheckF
 	recipientsStorage              recipientsStorage
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
 	validatorOwnerAddress          common.Address
@@ -315,8 +315,8 @@ func (r *ValidatorRegistrationRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return r.valCheck
+func (r *ValidatorRegistrationRunner) GetValChecker() ssv.ValueChecker {
+	return nopValueChecker{}
 }
 
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {

@@ -29,7 +29,7 @@ import (
 type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() beacon.BeaconNode
-	GetValCheckF() specqbft.ProposedValueCheckF
+	GetValChecker() ssv.ValueChecker
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
@@ -298,7 +298,14 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	return true, nil
 }
 
-func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
+func (b *BaseRunner) decide(
+	ctx context.Context,
+	logger *zap.Logger,
+	runner Runner,
+	slot phase0.Slot,
+	input spectypes.Encoder,
+	spData *ssvtypes.SlashingProtectionData,
+) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
 		trace.WithAttributes(
@@ -311,7 +318,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		return traces.Errorf(span, "could not encode input data for consensus: %w", err)
 	}
 
-	if err := runner.GetValCheckF()(byts); err != nil {
+	if err := runner.GetValChecker().CheckValue(byts); err != nil {
 		return traces.Errorf(span, "input data invalid: %w", err)
 	}
 
@@ -321,6 +328,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		logger,
 		specqbft.Height(slot),
 		byts,
+		spData,
 	); err != nil {
 		return traces.Errorf(span, "could not start new QBFT instance: %w", err)
 	}
@@ -366,3 +374,7 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	}
 	return nil
 }
+
+type nopValueChecker struct{}
+
+func (nopValueChecker) CheckValue(value []byte) error { return nil }
