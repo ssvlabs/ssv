@@ -12,7 +12,9 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -32,6 +34,9 @@ var sharesPrefix = []byte("shares_v2/")
 // pubkeyIndexMapping is a prefix for the pubkey to index mapping.
 // since the churn of validators is low, we can use an append only mapping
 var pubkeyIndexMapping = []byte("val_pki")
+
+// GetFeeRecipientFunc is a function type for getting fee recipients by owner.
+type GetFeeRecipientFunc func(owner common.Address) (bellatrix.ExecutionAddress, error)
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -89,13 +94,16 @@ const addressLength = 20
 // (e.g. 'Name, Address []byte')
 // GitHub issue: (https://github.com/ferranbt/fastssz/issues/188)
 type Share struct {
-	ValidatorIndex      uint64
-	ValidatorPubKey     []byte             `ssz-size:"48"`
-	SharePubKey         []byte             `ssz-max:"48"` // empty for not own shares
-	Committee           []*storageOperator `ssz-max:"13"`
-	DomainType          [4]byte            `ssz-size:"4"`
-	FeeRecipientAddress [addressLength]byte
-	Graffiti            []byte `ssz-max:"32"`
+	ValidatorIndex  uint64
+	ValidatorPubKey []byte             `ssz-size:"48"`
+	SharePubKey     []byte             `ssz-max:"48"` // empty for not own shares
+	Committee       []*storageOperator `ssz-max:"13"`
+	DomainType      [4]byte            `ssz-size:"4"`
+	// FeeRecipientAddress is unused - fee recipients are stored in Recipients storage.
+	// DO NOT REMOVE: Removing this field would break SSZ decoding of existing DB data.
+	// Wait for a major migration to batch this removal with other breaking changes.
+	FeeRecipientAddress [addressLength]byte // DEPRECATED
+	Graffiti            []byte              `ssz-max:"32"`
 	Status              uint64
 	ActivationEpoch     uint64
 	ExitEpoch           uint64
@@ -128,7 +136,7 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, getFeeRecipient GetFeeRecipientFunc, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		shares:        make(map[string]*types.SSVShare),
 		db:            db,
@@ -147,6 +155,7 @@ func NewSharesStorage(beaconCfg *networkconfig.Beacon, db basedb.Database, prefi
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
+		getFeeRecipient,
 		pubkeyIndexMapping,
 		beaconCfg,
 	)
@@ -187,6 +196,7 @@ func (s *sharesStorage) loadFromDB() error {
 		}
 
 		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = share
+
 		return nil
 	})
 }
@@ -262,10 +272,13 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 
 			// Update validatorStore indices.
 			if _, ok := s.shares[key]; ok {
+				// Existing share - update
 				updateShares = append(updateShares, share)
 			} else {
+				// New share
 				addShares = append(addShares, share)
 			}
+			// Update the main shares map
 			s.shares[key] = share
 		}
 
@@ -308,6 +321,8 @@ func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.Validator
 }
 
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
+	// Fee recipients are no longer stored in shares - ValidatorStore manages them
+
 	// save validator pubkey -> index mapping
 	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
 
@@ -344,18 +359,17 @@ func FromSSVShare(share *types.SSVShare) *Share {
 	}
 
 	return &Share{
-		ValidatorIndex:      uint64(share.ValidatorIndex),
-		ValidatorPubKey:     share.ValidatorPubKey[:],
-		SharePubKey:         share.SharePubKey,
-		Committee:           committee,
-		DomainType:          share.DomainType,
-		FeeRecipientAddress: share.FeeRecipientAddress,
-		Graffiti:            share.Graffiti,
-		OwnerAddress:        share.OwnerAddress,
-		Liquidated:          share.Liquidated,
-		Status:              uint64(share.Status), //nolint: gosec
-		ActivationEpoch:     uint64(share.ActivationEpoch),
-		ExitEpoch:           uint64(share.ExitEpoch),
+		ValidatorIndex:  uint64(share.ValidatorIndex),
+		ValidatorPubKey: share.ValidatorPubKey[:],
+		SharePubKey:     share.SharePubKey,
+		Committee:       committee,
+		DomainType:      share.DomainType,
+		Graffiti:        share.Graffiti,
+		OwnerAddress:    share.OwnerAddress,
+		Liquidated:      share.Liquidated,
+		Status:          uint64(share.Status), //nolint: gosec
+		ActivationEpoch: uint64(share.ActivationEpoch),
+		ExitEpoch:       uint64(share.ExitEpoch),
 	}
 }
 
@@ -377,13 +391,12 @@ func ToSSVShare(stShare *Share) (*types.SSVShare, error) {
 
 	domainShare := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorIndex:      phase0.ValidatorIndex(stShare.ValidatorIndex),
-			ValidatorPubKey:     validatorPubKey,
-			SharePubKey:         stShare.SharePubKey,
-			Committee:           committee,
-			DomainType:          stShare.DomainType,
-			FeeRecipientAddress: stShare.FeeRecipientAddress,
-			Graffiti:            stShare.Graffiti,
+			ValidatorIndex:  phase0.ValidatorIndex(stShare.ValidatorIndex),
+			ValidatorPubKey: validatorPubKey,
+			SharePubKey:     stShare.SharePubKey,
+			Committee:       committee,
+			DomainType:      stShare.DomainType,
+			Graffiti:        stShare.Graffiti,
 		},
 		Status:          eth2apiv1.ValidatorState(stShare.Status), //nolint: gosec
 		ActivationEpoch: phase0.Epoch(stShare.ActivationEpoch),

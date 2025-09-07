@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -406,13 +408,14 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		ScoreInspectorInterval: 100 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
 	}
+
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, []byte("test"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, func(owner common.Address) (bellatrix.ExecutionAddress, error) {
+		return bellatrix.ExecutionAddress{}, nil
+	}, []byte("test"))
+	require.NoError(t, err)
 
 	ps, tm, err := topics.NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)
