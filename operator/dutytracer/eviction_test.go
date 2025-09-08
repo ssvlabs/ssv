@@ -52,7 +52,7 @@ func TestEviction(t *testing.T) {
 	collector.evict(slot1)
 	collector.evict(slot2)
 
-	collector.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+	collector.validatorTraces.Range(func(_ phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		_, found := slotToTraceMap.Get(slot1)
 		if found {
 			t.Fatalf("validator: slot %d not evicted", slot1)

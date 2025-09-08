@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -15,7 +14,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -41,15 +40,15 @@ func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantS
 }
 
 type dutyTraceStore interface {
-	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
-	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error)
-	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*model.CommitteeDutyTrace, error)
-	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
-	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*exporter.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*exporter.CommitteeDutyTrace, error)
+	GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
+	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	GetCommitteeDecideds(slot phase0.Slot, index phase0.ValidatorIndex, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 }
 
 // === Decideds ======================================================================================
@@ -123,46 +122,41 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, response)
 }
 
-func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, *multierror.Error) {
+func (e *Exporter) getCommitteeDecidedsForRole(slot phase0.Slot, indices []phase0.ValidatorIndex, role spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, *multierror.Error) {
 	var errs *multierror.Error
 
-	if len(pubkeys) == 0 {
-		participants, err := e.traceStore.GetAllCommitteeDecideds(slot, role)
-		if err != nil {
-			errs = multierror.Append(errs, err)
-		}
-		return participants, errs
+	if len(indices) == 0 {
+		entries, err := e.traceStore.GetAllCommitteeDecideds(slot, role)
+		errs = multierror.Append(errs, err)
+		return entries, errs
 	}
 
-	var participants []qbftstorage.ParticipantsRangeEntry
-
-	for _, pubkey := range pubkeys {
-		participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
+	var out []dutytracer.ParticipantsRangeIndexEntry
+	for _, index := range indices {
+		entries, err := e.traceStore.GetCommitteeDecideds(slot, index, role)
 		if err != nil {
 			errs = multierror.Append(errs, err)
 			continue
 		}
-		participants = append(participants, participantsByPK...)
+		out = append(out, entries...)
 	}
-	return participants, errs
+	return out, errs
 }
 
-func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, pubkeys []spectypes.ValidatorPK, role spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, *multierror.Error) {
+func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, indices []phase0.ValidatorIndex, role spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, *multierror.Error) {
 	var errs *multierror.Error
 
-	if len(pubkeys) == 0 {
-		participants, err := e.traceStore.GetAllValidatorDecideds(role, slot)
-		if err != nil {
-			errs = multierror.Append(errs, err)
-		}
-		return participants, errs
+	if len(indices) == 0 {
+		entries, err := e.traceStore.GetAllValidatorDecideds(role, slot)
+		errs = multierror.Append(errs, err)
+		return entries, errs
 	}
 
-	participants, err := e.traceStore.GetValidatorDecideds(role, slot, pubkeys)
+	entries, err := e.traceStore.GetValidatorDecideds(role, slot, indices)
 	if err != nil {
 		errs = multierror.Append(errs, err)
 	}
-	return participants, errs
+	return entries, errs
 }
 
 func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
@@ -180,31 +174,50 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	var participants = make([]*participantResponse, 0)
 	var errs *multierror.Error
 
+	// Collect indices from both pubkeys and indices in the request
+	indices := make([]phase0.ValidatorIndex, 0, len(request.Indices)+len(pubkeys))
+	for _, idx := range request.Indices {
+		indices = append(indices, phase0.ValidatorIndex(idx))
+	}
+	extra, merr := e.pubkeysToIndices(pubkeys)
+	errs = multierror.Append(errs, merr)
+	indices = append(indices, extra...)
+	slices.Sort(indices)
+	indices = slices.Compact(indices)
+
 	for _, r := range request.Roles {
 		role := spectypes.BeaconRole(r)
 
 		for s := request.From; s <= request.To; s++ {
 			slot := phase0.Slot(s)
 
-			var roleParticipants []qbftstorage.ParticipantsRangeEntry
+			var roleParticipantsIdx []dutytracer.ParticipantsRangeIndexEntry
 			var roleErrs *multierror.Error
 
 			switch role {
 			case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
-				roleParticipants, roleErrs = e.getCommitteeDecidedsForRole(slot, pubkeys, role)
+				roleParticipantsIdx, roleErrs = e.getCommitteeDecidedsForRole(slot, indices, role)
 			default:
-				roleParticipants, roleErrs = e.getValidatorDecidedsForRole(slot, pubkeys, role)
+				roleParticipantsIdx, roleErrs = e.getValidatorDecidedsForRole(slot, indices, role)
 			}
 
 			errs = multierror.Append(errs, roleErrs)
 
-			for _, pr := range roleParticipants {
+			for _, idxEntry := range roleParticipantsIdx {
 				// duty syncer fails to parse messages with no signers so instead
 				// we skip adding the message to the response altogether
-				if len(pr.Signers) == 0 {
-					errs = multierror.Append(errs, fmt.Errorf("omitting entry with no signers (pubkey=%x, slot=%d, role=%s)", pr.PubKey, slot, role.String()))
+				if len(idxEntry.Signers) == 0 {
+					errs = multierror.Append(errs, fmt.Errorf("omitting entry with no signers (index=%x, slot=%d, role=%s)", idxEntry.Index, slot, role.String()))
 					continue
 				}
+
+				// enrich response with validator pubkeys
+				pr, convErr := e.toParticipantsRangeEntry(idxEntry)
+				if convErr != nil {
+					errs = multierror.Append(errs, convErr)
+					continue
+				}
+
 				participants = append(participants, toParticipantResponse(role, pr))
 			}
 		}
@@ -231,6 +244,20 @@ func toParticipantResponse(role spectypes.BeaconRole, entry qbftstorage.Particip
 	response.Message.Signers = entry.Signers
 
 	return response
+}
+
+// toParticipantsRangeEntry converts an index-based entry into a ParticipantsRangeEntry
+// by resolving the validator's pubkey from the registry store.
+func (e *Exporter) toParticipantsRangeEntry(ent dutytracer.ParticipantsRangeIndexEntry) (qbftstorage.ParticipantsRangeEntry, error) {
+	share, found := e.validators.ValidatorByIndex(ent.Index)
+	if !found {
+		return qbftstorage.ParticipantsRangeEntry{}, fmt.Errorf("validator not found by index: %d", ent.Index)
+	}
+	return qbftstorage.ParticipantsRangeEntry{
+		Slot:    ent.Slot,
+		PubKey:  share.ValidatorPubKey,
+		Signers: ent.Signers,
+	}, nil
 }
 
 func toStrings(errs []error) []string {
@@ -264,13 +291,13 @@ func isNotFoundError(e error) bool {
 	return errors.Is(e, store.ErrNotFound) || errors.Is(e, dutytracer.ErrNotFound)
 }
 
-func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID) ([]*model.CommitteeDutyTrace, error) {
+func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID) ([]*exporter.CommitteeDutyTrace, error) {
 	if len(committeeIDs) == 0 {
 		duties, err := e.traceStore.GetCommitteeDuties(slot)
 		return duties, err
 	}
 
-	duties := make([]*model.CommitteeDutyTrace, 0, len(committeeIDs))
+	duties := make([]*exporter.CommitteeDutyTrace, 0, len(committeeIDs))
 
 	var errs *multierror.Error
 	for _, cmtID := range committeeIDs {
@@ -300,7 +327,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(err)
 	}
 
-	var all []*model.CommitteeDutyTrace
+	var all []*exporter.CommitteeDutyTrace
 	var errs *multierror.Error
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
@@ -311,7 +338,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toCommitteeTraceResponse(all, errs))
 }
 
-func toCommitteeTraceResponse(duties []*model.CommitteeDutyTrace, errs *multierror.Error) *committeeTraceResponse {
+func toCommitteeTraceResponse(duties []*exporter.CommitteeDutyTrace, errs *multierror.Error) *committeeTraceResponse {
 	r := new(committeeTraceResponse)
 	r.Data = make([]committeeTrace, 0)
 	for _, t := range duties {
@@ -358,65 +385,88 @@ func validateValidatorRequest(request *validatorRequest) error {
 	return nil
 }
 
-func (e *Exporter) extractPubKeys(request *validatorRequest) ([]spectypes.ValidatorPK, error) {
-	pubkeys := make([]spectypes.ValidatorPK, 0, len(request.Indices)+len(request.PubKeys))
+func (e *Exporter) extractIndices(request *validatorRequest) ([]phase0.ValidatorIndex, error) {
+	indices := make([]phase0.ValidatorIndex, 0, len(request.Indices)+len(request.PubKeys))
 	var errs *multierror.Error
+
+	for _, idx := range request.Indices {
+		indices = append(indices, phase0.ValidatorIndex(idx))
+	}
 
 	for _, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		copy(pubkey[:], req)
-		pubkeys = append(pubkeys, pubkey)
-	}
-
-	for _, index := range request.Indices {
-		share, found := e.validators.ValidatorByIndex(phase0.ValidatorIndex(index))
-		if !found {
-			errs = multierror.Append(errs, fmt.Errorf("validator not found, index: %d", index))
+		idx, ok := e.validators.ValidatorIndex(pubkey)
+		if !ok {
+			errs = multierror.Append(errs, fmt.Errorf("validator not found for pubkey: %x", pubkey))
 			continue
 		}
-		pubkeys = append(pubkeys, share.ValidatorPubKey)
+		indices = append(indices, idx)
 	}
 
-	slices.SortFunc(pubkeys, func(a, b spectypes.ValidatorPK) int {
-		return bytes.Compare(a[:], b[:])
-	})
-	pubkeys = slices.Compact(pubkeys)
+	slices.Sort(indices)
+	indices = slices.Compact(indices)
 
-	return pubkeys, errs.ErrorOrNil()
+	return indices, errs.ErrorOrNil()
 }
 
-func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, validatorPks []spectypes.ValidatorPK) ([]*dutytracer.ValidatorDutyTrace, error) {
-	if len(validatorPks) == 0 {
-		return e.traceStore.GetValidatorDuties(role, slot)
+type validatorDutyTraceWithCommitteeID struct {
+	exporter.ValidatorDutyTrace
+	CommitteeID *spectypes.CommitteeID
+}
+
+func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]validatorDutyTraceWithCommitteeID, error) {
+	if len(indices) == 0 {
+		traces, err := e.traceStore.GetValidatorDuties(role, slot)
+		out := make([]validatorDutyTraceWithCommitteeID, 0, len(traces))
+		for _, t := range traces {
+			out = append(out, validatorDutyTraceWithCommitteeID{ValidatorDutyTrace: *t})
+		}
+		return out, err
 	}
 
-	duties := make([]*dutytracer.ValidatorDutyTrace, 0, len(validatorPks))
+	duties := make([]validatorDutyTraceWithCommitteeID, 0, len(indices))
 	var errs *multierror.Error
 
-	for _, pubkey := range validatorPks {
-		duty, err := e.traceStore.GetValidatorDuty(role, slot, pubkey)
+	for _, idx := range indices {
+		var result validatorDutyTraceWithCommitteeID
+
+		duty, err := e.traceStore.GetValidatorDuty(role, slot, idx)
 		if err != nil {
 			// if error is not found, nothing to report as we might not have a duty for this role
 			// otherwise report it:
 			if !isNotFoundError(err) {
-				e.logger.Error("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
+				e.logger.Error("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
 				errs = multierror.Append(errs, err)
 			}
 			continue
 		}
-		duties = append(duties, duty)
+		result.ValidatorDutyTrace = *duty
+
+		// best effort attempt to fill the CommitteeID field, non blocking if it fails
+		// as the duty itself is still valid without it
+		committeeID, err := e.traceStore.GetCommitteeID(slot, idx)
+		if err == nil {
+			result.CommitteeID = &committeeID
+		} else if !isNotFoundError(err) {
+			// if error is not found, nothing to report to prevent unnecessary noise
+			e.logger.Debug("error getting committee ID", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
+			errs = multierror.Append(errs, err)
+		}
+
+		duties = append(duties, result)
 	}
 	return duties, errs.ErrorOrNil()
 }
 
-func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, validatorPks []spectypes.ValidatorPK) ([]*dutytracer.ValidatorDutyTrace, error) {
-	results := make([]*dutytracer.ValidatorDutyTrace, 0, len(validatorPks))
+func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]validatorDutyTraceWithCommitteeID, error) {
+	results := make([]validatorDutyTraceWithCommitteeID, 0, len(indices))
 	var errs *multierror.Error
 
-	for _, pubkey := range validatorPks {
-		committeeID, index, err := e.traceStore.GetCommitteeID(slot, pubkey)
+	for _, index := range indices {
+		committeeID, err := e.traceStore.GetCommitteeID(slot, index)
 		if err != nil {
-			e.logger.Debug("error getting committee ID", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
+			e.logger.Debug("error getting committee ID", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(index))
 			errs = multierror.Append(errs, err)
 			continue
 		}
@@ -426,20 +476,20 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 			// if error is not found, nothing to report as we might not have a duty for this role
 			// otherwise report it:
 			if !isNotFoundError(err) {
-				e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.PubKey(pubkey[:]))
+				e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.ValidatorIndex(index))
 				errs = multierror.Append(errs, err)
 			}
 			continue
 		}
 
-		validatorDuty := &dutytracer.ValidatorDutyTrace{
-			CommitteeID: committeeID,
-			ValidatorDutyTrace: model.ValidatorDutyTrace{
+		validatorDuty := validatorDutyTraceWithCommitteeID{
+			ValidatorDutyTrace: exporter.ValidatorDutyTrace{
 				ConsensusTrace: duty.ConsensusTrace,
 				Slot:           duty.Slot,
 				Validator:      index,
 				Role:           role,
 			},
+			CommitteeID: &committeeID,
 		}
 
 		results = append(results, validatorDuty)
@@ -460,9 +510,9 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	var errs *multierror.Error
-	var results []*dutytracer.ValidatorDutyTrace
+	var results []validatorDutyTraceWithCommitteeID
 
-	pubkeys, err := e.extractPubKeys(&request)
+	indices, err := e.extractIndices(&request)
 	errs = multierror.Append(errs, err)
 
 	for s := request.From; s <= request.To; s++ {
@@ -475,7 +525,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 				providerFunc = e.getValidatorCommitteeDutiesForRoleAndSlot
 			}
 
-			duties, err := providerFunc(role, slot, pubkeys)
+			duties, err := providerFunc(role, slot, indices)
 			results = append(results, duties...)
 			errs = multierror.Append(errs, err)
 		}
@@ -487,13 +537,12 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toValidatorTraceResponse(results, errs))
 }
 
-func toValidatorTraceResponse(duties []*dutytracer.ValidatorDutyTrace, errs *multierror.Error) *validatorTraceResponse {
-	var zeroCommitteeID spectypes.CommitteeID
+func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *multierror.Error) *validatorTraceResponse {
 	r := new(validatorTraceResponse)
 	r.Data = make([]validatorTrace, 0)
 	for _, t := range duties {
 		trace := toValidatorTrace(&t.ValidatorDutyTrace)
-		if t.CommitteeID != zeroCommitteeID {
+		if t.CommitteeID != nil {
 			trace.CommitteeID = hex.EncodeToString(t.CommitteeID[:])
 		}
 		r.Data = append(r.Data, trace)
@@ -510,4 +559,20 @@ func toApiError(errs *multierror.Error) *api.ErrorResponse {
 		return api.Error(errs.Errors[0])
 	}
 	return api.Error(errs)
+}
+
+// pubkeysToIndices converts pubkeys to indices using the validator store,
+// aggregating missing validators into a multierror instead of failing fast.
+func (e *Exporter) pubkeysToIndices(pubkeys []spectypes.ValidatorPK) ([]phase0.ValidatorIndex, *multierror.Error) {
+	indices := make([]phase0.ValidatorIndex, 0, len(pubkeys))
+	var errs *multierror.Error
+	for _, pk := range pubkeys {
+		idx, ok := e.validators.ValidatorIndex(pk)
+		if !ok {
+			errs = multierror.Append(errs, fmt.Errorf("validator not found by pubkey: %x", pk))
+			continue
+		}
+		indices = append(indices, idx)
+	}
+	return indices, errs
 }
