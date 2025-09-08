@@ -107,10 +107,7 @@ func TestDropRegistryData(t *testing.T) {
 	for _, owner := range recipientOwners {
 		var fr bellatrix.ExecutionAddress
 		copy(fr[:], append([]byte{1}, owner[:]...))
-		_, err := storage.SaveRecipientData(nil, &registrystorage.RecipientData{
-			Owner:        owner,
-			FeeRecipient: fr,
-		})
+		_, err := storage.SaveRecipientData(nil, owner, fr)
 		require.NoError(t, err)
 	}
 
@@ -124,9 +121,15 @@ func TestDropRegistryData(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, allShares, shares)
 
-		allRecipients, err := storage.GetRecipientDataMany(nil, recipientOwners)
-		require.NoError(t, err)
-		require.Len(t, allRecipients, recipients)
+		// Check that all recipients were saved
+		recipientCount := 0
+		for _, owner := range recipientOwners {
+			_, err := storage.GetFeeRecipient(owner)
+			if err == nil {
+				recipientCount++
+			}
+		}
+		require.Equal(t, recipients, recipientCount)
 	}
 	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
 
@@ -199,21 +202,6 @@ func TestGetOperatorsPrefix(t *testing.T) {
 	operatorStorage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 	require.Equal(t, []byte("operators"), operatorStorage.GetOperatorsPrefix())
-}
-
-func TestGetRecipientsPrefix(t *testing.T) {
-	logger := log.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer func() {
-		_ = db.Close()
-	}()
-
-	require.NoError(t, err)
-
-	operatorStorage, err := NewNodeStorage(network.Beacon, logger, db)
-	require.NoError(t, err)
-
-	require.Equal(t, []byte("recipients"), operatorStorage.GetRecipientsPrefix())
 }
 
 func Test_Config(t *testing.T) {
@@ -339,17 +327,13 @@ func Test_NonceBumping(t *testing.T) {
 	var fr bellatrix.ExecutionAddress
 	copy(fr[:], append([]byte{1}, owner[:]...))
 
-	recipientData := &registrystorage.RecipientData{
-		Owner:        owner,
-		FeeRecipient: fr,
-	}
-	_, err = operatorStorage.SaveRecipientData(nil, recipientData)
+	_, err = operatorStorage.SaveRecipientData(nil, owner, fr)
 	require.NoError(t, err)
 
-	data, found, err := operatorStorage.GetRecipientData(nil, owner)
+	// Check that fee recipient was saved
+	recipient, err := operatorStorage.GetFeeRecipient(owner)
 	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, *recipientData, *data)
+	require.Equal(t, fr, recipient)
 
 	require.NoError(t, operatorStorage.BumpNonce(nil, owner))
 	require.NoError(t, operatorStorage.BumpNonce(nil, owner))
@@ -360,10 +344,9 @@ func Test_NonceBumping(t *testing.T) {
 	err = operatorStorage.DeleteRecipientData(nil, owner)
 	require.NoError(t, err)
 
-	data, found, err = operatorStorage.GetRecipientData(nil, owner)
-	require.NoError(t, err)
-	require.False(t, found)
-	require.Nil(t, data)
+	// Check that fee recipient was deleted
+	_, err = operatorStorage.GetFeeRecipient(owner)
+	require.Error(t, err)
 
 	nonce, err = operatorStorage.GetNextNonce(nil, owner)
 	require.NoError(t, err)

@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -13,7 +14,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -21,6 +21,7 @@ import (
 // ValidatorProvider provides access to validator shares
 type ValidatorProvider interface {
 	SelfValidators() []*types.SSVShare
+	GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error)
 }
 
 // RecipientController submit proposal preparation to beacon node for all committee validators
@@ -35,7 +36,6 @@ type ControllerOptions struct {
 	BeaconClient       beaconprotocol.BeaconNode
 	BeaconConfig       *networkconfig.Beacon
 	ValidatorProvider  ValidatorProvider
-	RecipientStorage   storage.Recipients
 	SlotTickerProvider slotticker.Provider
 	OperatorDataStore  operatordatastore.OperatorDataStore
 }
@@ -47,7 +47,6 @@ type recipientController struct {
 	beaconClient         beaconprotocol.BeaconNode
 	beaconConfig         *networkconfig.Beacon
 	validatorProvider    ValidatorProvider
-	recipientStorage     storage.Recipients
 	slotTickerProvider   slotticker.Provider
 	operatorDataStore    operatordatastore.OperatorDataStore
 	feeRecipientChangeCh <-chan struct{}
@@ -60,7 +59,6 @@ func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientContro
 		beaconClient:       opts.BeaconClient,
 		beaconConfig:       opts.BeaconConfig,
 		validatorProvider:  opts.ValidatorProvider,
-		recipientStorage:   opts.RecipientStorage,
 		slotTickerProvider: opts.SlotTickerProvider,
 		operatorDataStore:  opts.OperatorDataStore,
 	}
@@ -84,10 +82,8 @@ func (rc *recipientController) GetProposalPreparations() ([]*eth2apiv1.ProposalP
 
 // getPreparations is a helper that fetches active validators and builds preparations
 func (rc *recipientController) getPreparations() ([]*eth2apiv1.ProposalPreparation, error) {
-	// Get current epoch for filtering
 	currentEpoch := rc.beaconConfig.EstimatedCurrentEpoch()
 
-	// Filter validators that are actively attesting
 	var activeShares []*types.SSVShare
 	for _, share := range rc.validatorProvider.SelfValidators() {
 		if share.IsAttesting(currentEpoch) {
@@ -152,29 +148,17 @@ func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
 }
 
 func (rc *recipientController) buildProposalPreparations(shares []*types.SSVShare) ([]*eth2apiv1.ProposalPreparation, error) {
-	// build unique owners
-	keys := make(map[common.Address]bool)
-	var uniq []common.Address
-	for _, entry := range shares {
-		if _, value := keys[entry.OwnerAddress]; !value {
-			keys[entry.OwnerAddress] = true
-			uniq = append(uniq, entry.OwnerAddress)
-		}
-	}
-
-	// get recipients
-	rds, err := rc.recipientStorage.GetRecipientDataMany(nil, uniq)
-	if err != nil {
-		return nil, fmt.Errorf("could not get recipients data: %w", err)
-	}
-
-	// build proposal preparations
 	preparations := make([]*eth2apiv1.ProposalPreparation, 0, len(shares))
+
 	for _, share := range shares {
-		feeRecipient, found := rds[share.OwnerAddress]
-		if !found {
-			copy(feeRecipient[:], share.OwnerAddress.Bytes())
+		feeRecipient, err := rc.validatorProvider.GetFeeRecipient(share.ValidatorPubKey)
+		if err != nil {
+			rc.logger.Warn("could not get fee recipient for validator, skipping",
+				zap.String("validator", fmt.Sprintf("%x", share.ValidatorPubKey)),
+				zap.Error(err))
+			continue
 		}
+
 		preparations = append(preparations, &eth2apiv1.ProposalPreparation{
 			ValidatorIndex: share.ValidatorIndex,
 			FeeRecipient:   feeRecipient,
