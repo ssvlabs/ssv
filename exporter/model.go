@@ -119,7 +119,7 @@ func (trace *ProposalTrace) DeepCopy() *ProposalTrace {
 }
 
 type QBFTTrace struct {
-	Round        uint64      // same for
+	Round        uint64
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
 	ReceivedTime uint64
@@ -165,10 +165,10 @@ func (trace *CommitteeDutyTrace) DeepCopy() *CommitteeDutyTrace {
 	if trace == nil {
 		return nil
 	}
-	// copy operator IDs
+
 	opIDs := make([]spectypes.OperatorID, len(trace.OperatorIDs))
 	copy(opIDs, trace.OperatorIDs)
-	// copy proposal data
+
 	pd := make([]byte, len(trace.ProposalData))
 	copy(pd, trace.ProposalData)
 
@@ -188,7 +188,7 @@ func (trace *CommitteeDutyTrace) DeepCopy() *CommitteeDutyTrace {
 
 type SignerData struct {
 	Signer       spectypes.OperatorID
-	ValidatorIdx []phase0.ValidatorIndex `ssz-max:"1000"`
+	ValidatorIdx []phase0.ValidatorIndex `ssz-max:"3000"`
 	ReceivedTime uint64
 }
 
@@ -197,10 +197,13 @@ func (data *SignerData) DeepCopy() *SignerData {
 	if data == nil {
 		return nil
 	}
-	// Note: ValidatorIdx is intentionally shallow-copied to match existing behavior.
+
+	validatorIdx := make([]phase0.ValidatorIndex, len(data.ValidatorIdx))
+	copy(validatorIdx, data.ValidatorIdx)
+
 	return &SignerData{
 		Signer:       data.Signer,
-		ValidatorIdx: data.ValidatorIdx,
+		ValidatorIdx: validatorIdx,
 		ReceivedTime: data.ReceivedTime,
 	}
 }
@@ -224,7 +227,7 @@ func (trace *ValidatorDutyTrace) DeepCopy() *ValidatorDutyTrace {
 	if trace == nil {
 		return nil
 	}
-	// ProposalData copy
+
 	pd := make([]byte, len(trace.ProposalData))
 	copy(pd, trace.ProposalData)
 

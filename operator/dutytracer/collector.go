@@ -593,7 +593,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			index, found := c.validators.ValidatorIndex(validatorPK)
 			if !found {
 				c.logger.Error("validator not found by pubkey", fields.Validator(validatorPK[:]))
-				return nil
+				return fmt.Errorf("validator not found by pubkey: %x", validatorPK[:])
 			}
 
 			trace, late, err := c.getOrCreateValidatorTrace(slot, bnRole, index)

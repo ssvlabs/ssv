@@ -449,7 +449,7 @@ func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, s
 		if err == nil {
 			result.CommitteeID = &committeeID
 		} else if !isNotFoundError(err) {
-			// if error is not found, nothing to report to prevent unnecessary noise
+			// if error is not found, nothing to report to prevent unnecessary noise, otherwise log the error:
 			e.logger.Debug("error getting committee ID", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
 			errs = multierror.Append(errs, err)
 		}
