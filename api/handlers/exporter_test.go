@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
@@ -1908,6 +1909,7 @@ type mockValidatorStore struct {
 	OperatorValidatorsFunc      func(id spectypes.OperatorID) []*ssvtypes.SSVShare
 	ParticipatingCommitteesFunc func(epoch phase0.Epoch) []*storage.Committee
 	WithOperatorIDFunc          func(operatorID func() spectypes.OperatorID) storage.SelfValidatorStore
+	GetFeeRecipientFunc         func(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error)
 }
 
 func newMockValidatorStore() *mockValidatorStore {
@@ -1989,4 +1991,11 @@ func (m *mockValidatorStore) WithOperatorID(operatorID func() spectypes.Operator
 		return m.WithOperatorIDFunc(operatorID)
 	}
 	return nil
+}
+
+func (m *mockValidatorStore) GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	if m.GetFeeRecipientFunc != nil {
+		return m.GetFeeRecipientFunc(validatorPK)
+	}
+	return bellatrix.ExecutionAddress{}, fmt.Errorf("not found")
 }

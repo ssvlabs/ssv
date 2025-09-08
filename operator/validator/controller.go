@@ -58,8 +58,6 @@ const (
 	networkRouterConcurrency = 2048
 )
 
-type GetRecipientDataFunc func(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
-
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
@@ -79,7 +77,6 @@ type ControllerOptions struct {
 	OperatorDataStore              operatordatastore.OperatorDataStore
 	RegistryStorage                nodestorage.Storage
 	ValidatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
-	RecipientsStorage              Recipients
 	NewDecidedHandler              qbftcontroller.NewDecidedHandler
 	DutyRoles                      []spectypes.BeaconRole
 	DutyTraceCollector             *dutytracer.Collector
@@ -128,11 +125,6 @@ type Controller interface {
 
 type Nonce uint16
 
-type Recipients interface {
-	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
-	SaveRecipientData(rw basedb.ReadWriter, recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error)
-}
-
 type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
@@ -156,7 +148,6 @@ type controller struct {
 	networkConfig                  *networkconfig.Network
 	sharesStorage                  SharesStorage
 	operatorsStorage               registrystorage.Operators
-	recipientsStorage              Recipients
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
 	ibftStorageMap                 *storage.ParticipantStores
 
@@ -238,7 +229,6 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		networkConfig:                  options.NetworkConfig,
 		sharesStorage:                  options.RegistryStorage.Shares(),
 		operatorsStorage:               options.RegistryStorage,
-		recipientsStorage:              options.RegistryStorage,
 		validatorRegistrationSubmitter: options.ValidatorRegistrationSubmitter,
 		ibftStorageMap:                 options.StorageMap,
 		validatorStore:                 options.ValidatorStore,
@@ -792,10 +782,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		return nil, nil, nil
 	}
 
-	if err := c.setShareFeeRecipient(share); err != nil {
-		return nil, nil, fmt.Errorf("could not set share fee recipient: %w", err)
-	}
-
 	operator, err := c.committeeMemberFromShare(share)
 	if err != nil {
 		return nil, nil, err
@@ -808,7 +794,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.recipientsStorage, c.validatorRegistrationSubmitter, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
@@ -914,46 +900,12 @@ func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	for i, c := range s.Committee {
 		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.Signer, c.SharePubKey)
 	}
+
 	c.logger.Debug(msg,
 		fields.PubKey(s.ValidatorPubKey[:]),
 		zap.Bool("own_validator", s.BelongsToOperator(c.operatorDataStore.GetOperatorID())),
 		zap.Strings("committee", committee),
-		fields.FeeRecipient(s.FeeRecipientAddress[:]),
 	)
-}
-
-func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare) error {
-	data, found, err := c.recipientsStorage.GetRecipientData(nil, share.OwnerAddress)
-	if err != nil {
-		return fmt.Errorf("could not get recipient data: %w", err)
-	}
-
-	if found {
-		c.logger.Debug(
-			"setting fee recipient to the value from recipient storage",
-			fields.Validator(share.ValidatorPubKey[:]),
-			fields.FeeRecipient(data.FeeRecipient[:]),
-		)
-		share.FeeRecipientAddress = data.FeeRecipient
-		return nil
-	}
-
-	c.logger.Debug(
-		"setting fee recipient to owner address",
-		fields.Validator(share.ValidatorPubKey[:]),
-		fields.FeeRecipient(share.OwnerAddress.Bytes()),
-	)
-	copy(share.FeeRecipientAddress[:], share.OwnerAddress.Bytes())
-	recipientData := &registrystorage.RecipientData{
-		Owner: share.OwnerAddress,
-	}
-	copy(recipientData.FeeRecipient[:], share.OwnerAddress.Bytes())
-	_, err = c.recipientsStorage.SaveRecipientData(nil, recipientData)
-	if err != nil {
-		return fmt.Errorf("save recipient data: %w", err)
-	}
-
-	return nil
 }
 
 func (c *controller) validatorStart(validator *validator.Validator) (bool, error) {
@@ -1163,8 +1115,8 @@ func SetupRunners(
 	logger *zap.Logger,
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
-	recipientsStorage Recipients,
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
+	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
@@ -1215,7 +1167,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, share.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, validatorRegistrationSubmitter, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, validatorRegistrationSubmitter, validatorStore, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		default:

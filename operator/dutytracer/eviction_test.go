@@ -39,9 +39,9 @@ func TestEviction(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon)
+	collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
 	for _, trace := range traces {
 		collector.Collect(t.Context(), trace, dummyVerify)

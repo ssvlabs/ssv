@@ -13,7 +13,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	types "github.com/ssvlabs/ssv/protocol/v2/types"
+	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
+	types "github.com/ssvlabs/ssv-spec/types"
+	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,11 +43,26 @@ func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 	return m.recorder
 }
 
+// GetFeeRecipient mocks base method.
+func (m *MockValidatorProvider) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockValidatorProviderMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockValidatorProvider)(nil).GetFeeRecipient), validatorPK)
+}
+
 // SelfValidators mocks base method.
-func (m *MockValidatorProvider) SelfValidators() []*types.SSVShare {
+func (m *MockValidatorProvider) SelfValidators() []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfValidators")
-	ret0, _ := ret[0].([]*types.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 

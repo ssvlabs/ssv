@@ -7,7 +7,9 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -30,7 +32,7 @@ type BaseValidatorStore interface {
 	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
 	OperatorCommittees(id spectypes.OperatorID) []*Committee
 
-	// TODO: save recipient address
+	GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error)
 }
 
 type ValidatorStore interface {
@@ -72,9 +74,10 @@ type sharesAndCommittees struct {
 }
 
 type validatorStore struct {
-	operatorID func() spectypes.OperatorID
-	shares     func() []*types.SSVShare
-	byPubKey   func([]byte) (*types.SSVShare, bool)
+	operatorID          func() spectypes.OperatorID
+	shares              func() []*types.SSVShare
+	byPubKey            func([]byte) (*types.SSVShare, bool)
+	feeRecipientByOwner func(common.Address) (bellatrix.ExecutionAddress, error)
 
 	byValidatorPubkey map[spectypes.ValidatorPK]phase0.ValidatorIndex
 	byValidatorIndex  map[phase0.ValidatorIndex]*types.SSVShare
@@ -89,17 +92,19 @@ type validatorStore struct {
 func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
+	feeRecipientByOwner func(owner common.Address) (bellatrix.ExecutionAddress, error),
 	pubkeyIndexMapping map[spectypes.ValidatorPK]phase0.ValidatorIndex,
 	beaconCfg *networkconfig.Beacon,
 ) *validatorStore {
 	return &validatorStore{
-		shares:            shares,
-		byPubKey:          shareByPubKey,
-		byValidatorPubkey: pubkeyIndexMapping,
-		byValidatorIndex:  make(map[phase0.ValidatorIndex]*types.SSVShare),
-		byCommitteeID:     make(map[spectypes.CommitteeID]*Committee),
-		byOperatorID:      make(map[spectypes.OperatorID]*sharesAndCommittees),
-		beaconCfg:         beaconCfg,
+		shares:              shares,
+		byPubKey:            shareByPubKey,
+		byValidatorPubkey:   pubkeyIndexMapping,
+		feeRecipientByOwner: feeRecipientByOwner,
+		byValidatorIndex:    make(map[phase0.ValidatorIndex]*types.SSVShare),
+		byCommitteeID:       make(map[spectypes.CommitteeID]*Committee),
+		byOperatorID:        make(map[spectypes.OperatorID]*sharesAndCommittees),
+		beaconCfg:           beaconCfg,
 	}
 }
 
@@ -243,6 +248,29 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 		}
 	}
 	return participating
+}
+
+// GetFeeRecipient returns the fee recipient for a validator.
+// Returns an error if the validator is not found or if no fee recipient is configured.
+func (c *validatorStore) GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	validatorIndex, found := c.byValidatorPubkey[validatorPK]
+	if !found {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("validator not found")
+	}
+
+	share := c.byValidatorIndex[validatorIndex]
+	if share == nil {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("validator share is nil for index %d", validatorIndex)
+	}
+
+	recipient, err := c.feeRecipientByOwner(share.OwnerAddress)
+	if err != nil {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("no fee recipient for owner %s: %w", share.OwnerAddress.Hex(), err)
+	}
+	return recipient, nil
 }
 
 func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {

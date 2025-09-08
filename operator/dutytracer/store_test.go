@@ -32,7 +32,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
 	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
 
@@ -310,7 +310,8 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	dutyStore := store.New(db)
 	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
 	require.NoError(t, err)
-	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
+
+	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 	shares.Save(db, &types.SSVShare{
 		Status: eth2apiv1.ValidatorStateActiveOngoing,
 		Share: spectypes.Share{
