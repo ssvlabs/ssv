@@ -131,6 +131,21 @@ func (mr *MockOperatorsMockRecorder) ListOperators(r, from, to any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperators", reflect.TypeOf((*MockOperators)(nil).ListOperators), r, from, to)
 }
 
+// ListOperatorsAll mocks base method.
+func (m *MockOperators) ListOperatorsAll(r basedb.Reader) ([]storage.OperatorData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOperatorsAll", r)
+	ret0, _ := ret[0].([]storage.OperatorData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOperatorsAll indicates an expected call of ListOperatorsAll.
+func (mr *MockOperatorsMockRecorder) ListOperatorsAll(r any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOperatorsAll", reflect.TypeOf((*MockOperators)(nil).ListOperatorsAll), r)
+}
+
 // OperatorsExist mocks base method.
 func (m *MockOperators) OperatorsExist(r basedb.Reader, ids []types.OperatorID) (bool, error) {
 	m.ctrl.T.Helper()

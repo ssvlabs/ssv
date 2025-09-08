@@ -1142,7 +1142,7 @@ func syncContractEvents(
 
 		// Print registry stats.
 		shares := nodeStorage.Shares().List(nil)
-		operators, err := nodeStorage.ListOperators(nil, 0, 0)
+		operators, err := nodeStorage.ListOperatorsAll(nil)
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}
