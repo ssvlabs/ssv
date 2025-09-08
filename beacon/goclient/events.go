@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -90,11 +91,18 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 	}
 
 	if gc.withWeightedAttestationData {
+		var errs error
+		success := false
 		for _, client := range gc.clients {
 			if err := client.Events(ctx, opts); err != nil {
 				logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
-				return err
+				errs = errors.Join(errs, err)
+				continue
 			}
+			success = true
+		}
+		if !success {
+			return errs
 		}
 	} else {
 		if err := gc.multiClient.Events(ctx, opts); err != nil {
