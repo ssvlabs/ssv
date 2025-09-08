@@ -87,35 +87,61 @@ func (hc healthCheckJSON) String() string {
 }
 
 type Node struct {
-	ListenAddresses []string
-	PeersIndex      networkpeers.Index
-	TopicIndex      TopicIndex
-	Network         network.Network
-	NodeProber      *nodeprobe.Prober
+	listenAddresses []string
+	peersIndex      networkpeers.Index
+	topicIndex      TopicIndex
+	network         network.Network
+
+	nodeProber          *nodeprobe.Prober
+	clNodeName          string
+	elNodeName          string
+	eventSyncerNodeName string
+}
+
+func NewNode(
+	listenAddresses []string,
+	peersIndex networkpeers.Index,
+	network network.Network,
+	topicIndex TopicIndex,
+	nodeProber *nodeprobe.Prober,
+	clNodeName string,
+	elNodeName string,
+	eventSyncerNodeName string,
+) *Node {
+	return &Node{
+		listenAddresses:     listenAddresses,
+		peersIndex:          peersIndex,
+		topicIndex:          topicIndex,
+		network:             network,
+		nodeProber:          nodeProber,
+		clNodeName:          clNodeName,
+		elNodeName:          elNodeName,
+		eventSyncerNodeName: eventSyncerNodeName,
+	}
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
-	nodeInfo := h.PeersIndex.Self()
+	nodeInfo := h.peersIndex.Self()
 	resp := identityJSON{
-		PeerID:  h.Network.LocalPeer(),
+		PeerID:  h.network.LocalPeer(),
 		Subnets: nodeInfo.Metadata.Subnets,
 		Version: nodeInfo.Metadata.NodeVersion,
 	}
-	for _, addr := range h.Network.ListenAddresses() {
+	for _, addr := range h.network.ListenAddresses() {
 		resp.Addresses = append(resp.Addresses, addr.String())
 	}
 	return api.Render(w, r, resp)
 }
 
 func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
-	peers := h.Network.Peers()
+	peers := h.network.Peers()
 	resp := h.peers(peers)
 	return api.Render(w, r, resp)
 }
 
 func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
-	byTopic := h.TopicIndex.PeersByTopic()
-	peers := h.Network.Peers()
+	byTopic := h.topicIndex.PeersByTopic()
+	peers := h.network.Peers()
 	resp := AllPeersAndTopicsJSON{
 		AllPeers:     peers,
 		PeersByTopic: make([]topicIndexJSON, 0, len(byTopic)),
@@ -132,10 +158,10 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	var resp healthCheckJSON
 
 	// Retrieve P2P listen addresses.
-	resp.Advanced.ListenAddresses = h.ListenAddresses
+	resp.Advanced.ListenAddresses = h.listenAddresses
 
 	// Count peers and connections.
-	peers := h.Network.Peers()
+	peers := h.network.Peers()
 	for _, p := range h.peers(peers) {
 		if p.Connectedness == network.Connected.String() {
 			resp.Advanced.Peers++
@@ -159,9 +185,9 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check the health of Ethereum nodes and EventSyncer.
-	resp.BeaconNode = healthStatus{h.NodeProber.CheckBeaconNodeHealth(ctx)}
-	resp.ExecutionNode = healthStatus{h.NodeProber.CheckExecutionNodeHealth(ctx)}
-	resp.EventSyncer = healthStatus{h.NodeProber.CheckEventSyncerHealth(ctx)}
+	resp.BeaconNode = healthStatus{h.nodeProber.Probe(ctx, h.clNodeName)}
+	resp.ExecutionNode = healthStatus{h.nodeProber.Probe(ctx, h.elNodeName)}
+	resp.EventSyncer = healthStatus{h.nodeProber.Probe(ctx, h.eventSyncerNodeName)}
 
 	return api.Render(w, r, resp)
 }
@@ -169,19 +195,19 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) peers(peers []peer.ID) []peerJSON {
 	resp := make([]peerJSON, len(peers))
 	for i, id := range peers {
-		subnets, _ := h.PeersIndex.GetPeerSubnets(id)
+		subnets, _ := h.peersIndex.GetPeerSubnets(id)
 
 		resp[i] = peerJSON{
 			ID:            id,
-			Connectedness: h.Network.Connectedness(id).String(),
+			Connectedness: h.network.Connectedness(id).String(),
 			Subnets:       subnets.String(),
 		}
 
-		for _, addr := range h.Network.Peerstore().Addrs(id) {
+		for _, addr := range h.network.Peerstore().Addrs(id) {
 			resp[i].Addresses = append(resp[i].Addresses, addr.String())
 		}
 
-		conns := h.Network.ConnsToPeer(id)
+		conns := h.network.ConnsToPeer(id)
 		for _, conn := range conns {
 			resp[i].Connections = append(resp[i].Connections, connectionJSON{
 				Address:   conn.RemoteMultiaddr().String(),
@@ -189,7 +215,7 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 			})
 		}
 
-		nodeInfo := h.PeersIndex.NodeInfo(id)
+		nodeInfo := h.peersIndex.NodeInfo(id)
 		if nodeInfo == nil {
 			continue
 		}
