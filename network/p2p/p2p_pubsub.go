@@ -21,12 +21,14 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
-type validatorStatus int
+// committeeSubscriptionStatus reflects the state of committee subscription (whether we are subscribed to the
+// corresponding p2p topic).
+type committeeSubscriptionStatus int
 
 const (
-	validatorStatusInactive    validatorStatus = 0
-	validatorStatusSubscribing validatorStatus = 1
-	validatorStatusSubscribed  validatorStatus = 2
+	committeeSubscriptionStatusInactive    committeeSubscriptionStatus = 0
+	committeeSubscriptionStatusSubscribing committeeSubscriptionStatus = 1
+	committeeSubscriptionStatusSubscribed  committeeSubscriptionStatus = 2
 )
 
 // UseMessageRouter registers a message router to handle incoming messages
@@ -127,12 +129,13 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 	return nil
 }
 
-// SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets and the active committees/validators.
+// SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets
+// and the active committees/validators.
 func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	updatedSubnets := n.persistentSubnets
 
-	n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
+	n.subscribedCommittees.Range(func(cid string, status committeeSubscriptionStatus) bool {
 		subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
 		updatedSubnets.Set(subnet)
 		return true
@@ -160,20 +163,24 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	return nil
 }
 
-// subscribeCommittee handles the subscription logic for committee subnets
+// subscribeCommittee subscribes us to the topic that corresponds to cid committee, also
+// ensuring we only subscribe once (when the committee is "newly activated").
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
-	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid))
-	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
-	if found && status != validatorStatusInactive {
+	status, found := n.subscribedCommittees.GetOrSet(string(cid[:]), committeeSubscriptionStatusSubscribing)
+	if found && status != committeeSubscriptionStatusInactive {
 		return nil
 	}
+
+	n.logger.Debug("subscribing to a topic corresponding to a newly activated committee", fields.CommitteeID(cid))
 
 	for _, topic := range commons.CommitteeTopicID(cid) {
 		if err := n.topicsCtrl.Subscribe(topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
-	n.activeCommittees.Set(string(cid[:]), validatorStatusSubscribed)
+
+	n.subscribedCommittees.Set(string(cid[:]), committeeSubscriptionStatusSubscribed)
+
 	return nil
 }
 
@@ -208,7 +215,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 			return err
 		}
 	}
-	n.activeCommittees.Delete(string(cmtid[:]))
+	n.subscribedCommittees.Delete(string(cmtid[:]))
 	return nil
 }
 
