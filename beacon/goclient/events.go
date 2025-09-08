@@ -103,7 +103,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 	// clients GoClient is configured with to get the most up-to-date data to score attestations correctly
 	// (and if some clients are unavailable at the moment - it's not a big deal, `go-eth2-client` automatically
 	// periodically resubscribes to Events).
-	// There is no need to issue these calls asynchronously since they spawn their own go-routines are return fast.
+	// There is no need to issue these calls asynchronously since they spawn their own go-routines and return fast.
 	subscribeToEvents := func() error {
 		err := gc.multiClient.Events(ctx, opts)
 		if err != nil {
