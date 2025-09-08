@@ -102,7 +102,7 @@ func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
 	attemptsMax := 1 + n.retriesMax // the initial attempt + retries specified
 	for attempt := 1; attempt <= attemptsMax; attempt++ {
 		err = func() error {
-			healthCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			healthCtx, cancel := context.WithTimeout(ctx, n.healthcheckTimeout)
 			defer cancel()
 
 			return n.n.Healthy(healthCtx)

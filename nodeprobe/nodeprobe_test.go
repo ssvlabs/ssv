@@ -189,7 +189,29 @@ func TestProber(t *testing.T) {
 		require.ErrorContains(t, err, eventSyncerDownErr.Error())
 	})
 
-	t.Run("probe deadline hit", func(t *testing.T) {
+	t.Run("probe deadline hit (timeout configured via AddNode)", func(t *testing.T) {
+		clNode := &stuckNodeMock{}
+		elNode := &stuckNodeMock{}
+
+		p := New(log.TestLogger(t))
+		p.AddNode(clNodeName, clNode, 10*time.Millisecond, 5)
+		p.AddNode(elNodeName, elNode, 10*time.Millisecond, 5)
+
+		errCh := make(chan error)
+		go func() {
+			probeCtx := t.Context()
+			errCh <- p.ProbeAll(probeCtx)
+		}()
+
+		select {
+		case err := <-errCh:
+			require.ErrorContains(t, err, "deadline exceeded")
+		case <-time.After(5 * time.Second):
+			require.Fail(t, "test timed out")
+		}
+	})
+
+	t.Run("probe deadline hit (parent context deadlined)", func(t *testing.T) {
 		clNode := &stuckNodeMock{}
 		elNode := &stuckNodeMock{}
 
