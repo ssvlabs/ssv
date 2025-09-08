@@ -153,10 +153,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 		defer close(errCh)
 
 		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += ec.logBatchSize {
-			toBlock := fromBlock + ec.logBatchSize - 1
-			if toBlock > endBlock {
-				toBlock = endBlock
-			}
+			toBlock := min(fromBlock+ec.logBatchSize-1, endBlock)
 
 			start := time.Now()
 			query := ethereum.FilterQuery{
