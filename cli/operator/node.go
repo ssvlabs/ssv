@@ -665,6 +665,10 @@ var StartNodeCmd = &cobra.Command{
 					elNodeName,
 					eventSyncerNodeName,
 				),
+				&handlers.PinnedP2PPeers{
+					Provider: p2pNetwork.Pinned(),
+					Conn:     handlers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),
+				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},

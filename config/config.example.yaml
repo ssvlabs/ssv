@@ -28,10 +28,35 @@ eth1:
 p2p:
   # Optionally specify the external IP address of the node, if it cannot be determined automatically.
   # HostAddress: 192.168.1.1
+  # Or advertise a DNS name instead of an IP address.
+  # HostDNS: mynode.example.com
 
   # Optionally override the default TCP & UDP ports of the node.
   # TcpPort: 13001
   # UdpPort: 12001
+
+  # Prefer connecting to these peers early (does not force them to stay connected):
+  # TrustedPeers:
+  #   - "/ip4/203.0.113.10/tcp/13001/p2p/12D3KooWDemoPeerID1"
+  #   - "/dns4/node.example.com/tcp/13001/p2p/12D3KooWDemoPeerID2"
+
+  # Keep these peers always connected (whitelist/pinned). The node will
+  # protect them from pruning, persist their addrs with PermanentAddrTTL,
+  # and attempt to reconnect if they disconnect.
+  # PinnedPeers:
+  #   - "/ip4/198.51.100.5/tcp/13001/p2p/12D3KooWYourPeerID1"   # full multiaddr
+
+# Deterministic P2P identity (peer ID)
+# Set a fixed libp2p Secp256k1 private key (hex-encoded) to make the node's peer ID reproducible across deployments.
+# If unset, the node generates a key on first run and persists it in the DB; future runs reuse it from the DB.
+# Env variable: NETWORK_PRIVATE_KEY or yaml key: NetworkPrivateKey.
+# Example (placeholder):
+# NetworkPrivateKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+# With `p2p.HostAddress`/`p2p.HostDNS` and `p2p.TcpPort`, your advertised multiaddr will look like:
+#   /ip4/<HostAddress>/tcp/<TcpPort>/p2p/<PeerID>
+# or
+#   /dns4/<HostDNS>/tcp/<TcpPort>/p2p/<PeerID>
+# You can copy that full multiaddr into `p2p.PinnedPeers` for always-on peering.
 
 # Note: Operator private key can be generated with the `generate-operator-keys` command.
 OperatorPrivateKey:
