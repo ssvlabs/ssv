@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -63,15 +63,11 @@ func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMe
 		attribute.String("http.route_name", routeName),
 	}
 
-	var apiErr api.Error
-	if !errors.As(err, &apiErr) {
-		requestDurationHistogram.Record(
-			ctx,
-			duration.Seconds(),
-			metric.WithAttributes(attr...))
-		return
+	var rpcErr rpc.Error
+	if errors.As(err, &rpcErr) {
+		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
 	}
-	attr = append(attr, attribute.Int("http.response.error_status_code", apiErr.StatusCode))
+
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),

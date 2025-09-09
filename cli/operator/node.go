@@ -446,7 +446,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.ValidatorRegistrationSubmitter = validatorRegistrationSubmitter
-		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
 		var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 		if cfg.WsAPIPort != 0 {
@@ -454,7 +453,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
-			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws)
+			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -566,24 +565,17 @@ var StartNodeCmd = &cobra.Command{
 			}()
 		}
 
-		nodeProber := nodeprobe.NewProber(
-			logger,
-			func() {
-				logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.")
-			},
-			map[string]nodeprobe.Node{
-				"execution client": executionClient,
+		nodeProber := nodeprobe.New(logger)
+		nodeProber.AddNode(clNodeName, consensusClient, 10*time.Second, 5)
+		nodeProber.AddNode(elNodeName, executionClient, 10*time.Second, 5)
 
-				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
-				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-				"consensus client": consensusClient,
-			},
-		)
+		probeCtx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+		defer cancel()
+		if err := nodeProber.ProbeAll(probeCtx); err != nil {
+			logger.Fatal("Ethereum node(s) are not healthy", zap.Error(err))
+		}
 
-		nodeProber.Start(cmd.Context())
-		nodeProber.Wait()
-		logger.Info("ethereum node(s) are healthy")
+		logger.Info("Ethereum node(s) are healthy")
 
 		eventSyncer := syncContractEvents(
 			cmd.Context(),
@@ -598,8 +590,9 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode("event syncer", eventSyncer)
+			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, 10*time.Second, 5)
 		}
+		go startNodeProber(cmd.Context(), logger, nodeProber)
 
 		if _, err := metadataSyncer.SyncAll(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
@@ -654,14 +647,17 @@ var StartNodeCmd = &cobra.Command{
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
-				&handlers.Node{
+				handlers.NewNode(
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
-					ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
-					PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
-					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
-					NodeProber:      nodeProber,
-				},
+					[]string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+					p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					p2pNetwork.(handlers.TopicIndex),
+					nodeProber,
+					clNodeName,
+					elNodeName,
+					eventSyncerNodeName,
+				),
 				pinned_peers.New(
 					p2pNetwork.Pinned(),
 					pinned_peers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),

@@ -21,49 +21,36 @@ func TestStorage_DropRecipients(t *testing.T) {
 	require.NotNil(t, storageCollection)
 	defer done()
 
-	var nonce storage.Nonce
-	rdToSave := &storage.RecipientData{
-		Owner: common.BytesToAddress([]byte("0x3")),
-		Nonce: &nonce,
-	}
-	copy(rdToSave.FeeRecipient[:], "0x3")
+	owner := common.BytesToAddress([]byte("0x3"))
+	var feeRecipient bellatrix.ExecutionAddress
+	copy(feeRecipient[:], "0x3")
 
-	rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
+	// First bump nonce to create recipient with nonce
+	err := storageCollection.BumpNonce(nil, owner)
+	require.NoError(t, err)
+
+	// Update fee recipient
+	rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 	require.NoError(t, err)
 	require.NotNil(t, rd)
 	require.NotNil(t, rd.Nonce)
 	require.Equal(t, storage.Nonce(0), *rd.Nonce)
 
-	rdToSave, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
-	require.NoError(t, err)
-	require.True(t, found)
-	rdDup, err := storageCollection.SaveRecipientData(nil, rdToSave)
+	// Try to save same fee recipient again - should return nil
+	rdDup, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 	require.NoError(t, err)
 	require.Nil(t, rdDup)
-	require.NotNil(t, rd.Nonce)
-	require.Equal(t, storage.Nonce(0), *rd.Nonce)
 
-	rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+	// Verify fee recipient is saved
+	recipient, err := storageCollection.GetFeeRecipient(owner)
 	require.NoError(t, err)
-	require.True(t, found)
-	require.NotNil(t, rdFromDB.Nonce)
-	require.Equal(t, storage.Nonce(0), *rdFromDB.Nonce)
+	require.Equal(t, feeRecipient, recipient)
 
 	err = storageCollection.DropRecipients()
 	require.NoError(t, err)
 
-	_, found, err = storageCollection.GetRecipientData(nil, rd.Owner)
-	require.NoError(t, err)
-	require.False(t, found)
-}
-
-func TestStorage_GetRecipientsPrefix(t *testing.T) {
-	logger := log.TestLogger(t)
-	storageCollection, done := newRecipientStorageForTest(logger)
-	require.NotNil(t, storageCollection)
-	defer done()
-
-	require.Equal(t, []byte("recipients"), storageCollection.GetRecipientsPrefix())
+	_, err = storageCollection.GetFeeRecipient(owner)
+	require.Error(t, err)
 }
 
 func TestStorage_SaveAndGetRecipientData(t *testing.T) {
@@ -72,319 +59,445 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	require.NotNil(t, storageCollection)
 	defer done()
 
-	recipientData := &storage.RecipientData{
-		Owner: common.BytesToAddress([]byte("0x1")),
-	}
-	copy(recipientData.FeeRecipient[:], "0x2")
-
 	t.Run("get non-existing recipient", func(t *testing.T) {
-		nonExistingRecipient, found, err := storageCollection.GetRecipientData(nil, recipientData.Owner)
-		require.NoError(t, err)
-		require.Nil(t, nonExistingRecipient)
-		require.False(t, found)
+		owner := common.BytesToAddress([]byte("0x1"))
+		_, err := storageCollection.GetFeeRecipient(owner)
+		require.Error(t, err)
 	})
 
 	t.Run("create and get recipient", func(t *testing.T) {
-		rd, err := storageCollection.SaveRecipientData(nil, recipientData)
-		require.NoError(t, err)
+		owner := common.BytesToAddress([]byte("0x1"))
+		var feeRecipient bellatrix.ExecutionAddress
+		copy(feeRecipient[:], "0x2")
 
-		recipientDataFromDB, found, err := storageCollection.GetRecipientData(nil, recipientData.Owner)
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, recipientData.Owner, recipientDataFromDB.Owner)
-		require.Equal(t, recipientData.FeeRecipient, recipientDataFromDB.FeeRecipient)
-		require.Equal(t, recipientData.Owner, rd.Owner)
-		require.Equal(t, recipientData.FeeRecipient, rd.FeeRecipient)
+		require.NotNil(t, rd)
+		require.Equal(t, owner, rd.Owner)
+		require.Equal(t, feeRecipient, rd.FeeRecipient)
+
+		// Get from in-memory map
+		recipientFromMap, err := storageCollection.GetFeeRecipient(owner)
+		require.NoError(t, err)
+		require.Equal(t, feeRecipient, recipientFromMap)
 	})
 
-	t.Run("create existing recipient", func(t *testing.T) {
-		rdToSave := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x2")),
-		}
-		copy(rdToSave.FeeRecipient[:], "0x2")
+	t.Run("create existing recipient with same fee", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x2"))
+		var feeRecipient bellatrix.ExecutionAddress
+		copy(feeRecipient[:], "0x2")
 
-		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		rdDup, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		// Save again with same fee recipient - should return nil
+		rdDup, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
 		require.Nil(t, rdDup)
 
-		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+		// Verify it still exists
+		recipient, err := storageCollection.GetFeeRecipient(owner)
 		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, rdFromDB)
+		require.Equal(t, feeRecipient, recipient)
 	})
 
-	t.Run("save/get/save fee recipient address without overwriting nonce", func(t *testing.T) {
-		var nonce storage.Nonce
-		rdToSave := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x3")),
-			Nonce: &nonce,
-		}
-		copy(rdToSave.FeeRecipient[:], "0x3")
+	t.Run("update fee recipient preserves nonce", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x3"))
+		var feeRecipient1 bellatrix.ExecutionAddress
+		copy(feeRecipient1[:], "0x3")
+		var feeRecipient2 bellatrix.ExecutionAddress
+		copy(feeRecipient2[:], "0x4")
 
-		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		// First create with nonce by bumping
+		err := storageCollection.BumpNonce(nil, owner)
+		require.NoError(t, err)
+
+		// Set initial fee recipient
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient1)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 		require.NotNil(t, rd.Nonce)
 		require.Equal(t, storage.Nonce(0), *rd.Nonce)
 
-		rdToSave, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+		// Update fee recipient
+		rdNew, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient2)
 		require.NoError(t, err)
-		require.True(t, found)
-		rdDup, err := storageCollection.SaveRecipientData(nil, rdToSave)
-		require.NoError(t, err)
-		require.Nil(t, rdDup)
-		require.NotNil(t, rd.Nonce)
-		require.Equal(t, storage.Nonce(0), *rd.Nonce)
+		require.NotNil(t, rdNew)
+		require.NotNil(t, rdNew.Nonce)
+		require.Equal(t, storage.Nonce(0), *rdNew.Nonce, "nonce should be preserved")
 
-		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+		// Verify in-memory map is updated
+		recipient, err := storageCollection.GetFeeRecipient(owner)
 		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, rdFromDB.Nonce)
-		require.Equal(t, storage.Nonce(0), *rdFromDB.Nonce)
+		require.Equal(t, feeRecipient2, recipient)
 	})
 
 	t.Run("update existing recipient", func(t *testing.T) {
-		rdToSave := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x3")),
-		}
-		copy(rdToSave.FeeRecipient[:], "0x2")
+		owner := common.BytesToAddress([]byte("0x4"))
+		var feeRecipient1 bellatrix.ExecutionAddress
+		copy(feeRecipient1[:], "0x2")
+		var feeRecipient2 bellatrix.ExecutionAddress
+		copy(feeRecipient2[:], "0x3")
 
-		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient1)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 		require.Nil(t, rd.Nonce)
 
-		copy(rdToSave.FeeRecipient[:], "0x3")
-		rdNew, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		rdNew, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient2)
 		require.NoError(t, err)
 		require.NotNil(t, rdNew)
-		require.Nil(t, rd.Nonce)
+		require.Nil(t, rdNew.Nonce)
+		require.Equal(t, feeRecipient2, rdNew.FeeRecipient)
 
-		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+		recipient, err := storageCollection.GetFeeRecipient(owner)
 		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, rdNew.Owner, rdFromDB.Owner)
-		require.Equal(t, rdNew.FeeRecipient, rdFromDB.FeeRecipient)
-		require.Nil(t, rd.Nonce)
+		require.Equal(t, feeRecipient2, recipient)
 	})
 
 	t.Run("delete recipient", func(t *testing.T) {
-		rdToSave := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x4")),
-		}
-		copy(rdToSave.FeeRecipient[:], "0x2")
+		owner := common.BytesToAddress([]byte("0x5"))
+		var feeRecipient bellatrix.ExecutionAddress
+		copy(feeRecipient[:], "0x2")
 
-		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		err = storageCollection.DeleteRecipientData(nil, rd.Owner)
+		err = storageCollection.DeleteRecipientData(nil, owner)
 		require.NoError(t, err)
 
-		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
-		require.NoError(t, err)
-		require.False(t, found)
-		require.Nil(t, rdFromDB)
+		_, err = storageCollection.GetFeeRecipient(owner)
+		require.Error(t, err)
 	})
 
 	t.Run("create and get many recipients", func(t *testing.T) {
-		var ownerAddresses []common.Address
-		var savedRecipients []*storage.RecipientData
+		var owners []common.Address
+		var expectedRecipients []bellatrix.ExecutionAddress
+
 		for i := 0; i < 10; i++ {
-			rd := storage.RecipientData{
-				Owner: common.BytesToAddress([]byte(fmt.Sprintf("0x%d", i))),
-			}
-			copy(recipientData.FeeRecipient[:], fmt.Sprintf("0x%d", i))
-			ownerAddresses = append(ownerAddresses, rd.Owner)
+			owner := common.BytesToAddress([]byte(fmt.Sprintf("owner%d", i)))
+			var feeRecipient bellatrix.ExecutionAddress
+			copy(feeRecipient[:], fmt.Sprintf("fee%d", i))
 
-			_, err := storageCollection.SaveRecipientData(nil, &rd)
+			owners = append(owners, owner)
+			expectedRecipients = append(expectedRecipients, feeRecipient)
+
+			_, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 			require.NoError(t, err)
-
-			savedRecipients = append(savedRecipients, &rd)
 		}
 
-		recipients, err := storageCollection.GetRecipientDataMany(nil, ownerAddresses)
-		require.NoError(t, err)
-		require.Equal(t, len(ownerAddresses), len(recipients))
-
-		for _, r := range savedRecipients {
-			require.Equal(t, r.FeeRecipient, recipients[r.Owner])
+		// Verify all recipients are saved correctly
+		for i, owner := range owners {
+			recipient, err := storageCollection.GetFeeRecipient(owner)
+			require.NoError(t, err)
+			require.Equal(t, expectedRecipients[i], recipient)
 		}
 	})
 
-	t.Run("create recipient should not initializing nonce", func(t *testing.T) {
-		rdToCreate := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x11111")),
-		}
+	t.Run("create recipient does not initialize nonce", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x11111"))
+		feeRecipient := bellatrix.ExecutionAddress(owner)
 
-		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
-
-		recipientDataFromDB, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, rdToCreate.Owner, recipientDataFromDB.Owner)
-		require.Equal(t, rdToCreate.FeeRecipient, recipientDataFromDB.FeeRecipient)
-		require.Nil(t, recipientDataFromDB.Nonce)
-		require.Equal(t, rdToCreate.Owner, rd.Owner)
-		require.Equal(t, rdToCreate.FeeRecipient, rd.FeeRecipient)
+		require.NotNil(t, rd)
+		require.Equal(t, owner, rd.Owner)
+		require.Equal(t, feeRecipient, rd.FeeRecipient)
 		require.Nil(t, rd.Nonce)
 	})
+}
+
+func TestStorage_NonceManagement(t *testing.T) {
+	logger := log.TestLogger(t)
+	storageCollection, done := newRecipientStorageForTest(logger)
+	require.NotNil(t, storageCollection)
+	defer done()
 
 	t.Run("bump nonce before fee recipient created", func(t *testing.T) {
 		owner := common.BytesToAddress([]byte("0x11112"))
-		var feeRecipient bellatrix.ExecutionAddress
-		copy(feeRecipient[:], owner.Bytes())
+		expectedFeeRecipient := bellatrix.ExecutionAddress(owner)
 
-		data, found, err := storageCollection.GetRecipientData(nil, owner)
+		// Verify doesn't exist
+		_, err := storageCollection.GetFeeRecipient(owner)
+		require.Error(t, err)
+
+		// Bump nonce - creates recipient with owner as default fee recipient
+		err = storageCollection.BumpNonce(nil, owner)
 		require.NoError(t, err)
-		require.False(t, found)
-		require.Nil(t, data)
+
+		// Verify created with owner as fee recipient
+		feeRecipient, err := storageCollection.GetFeeRecipient(owner)
+		require.NoError(t, err)
+		require.Equal(t, expectedFeeRecipient, feeRecipient)
+
+		// Verify nonce is 0
+		nonce, err := storageCollection.GetNextNonce(nil, owner)
+		require.NoError(t, err)
+		require.Equal(t, storage.Nonce(1), nonce)
+	})
+
+	t.Run("bump nonce after fee recipient created", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x11113"))
+		var feeRecipient bellatrix.ExecutionAddress
+		copy(feeRecipient[:], "custom_fee")
+
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
+		require.NoError(t, err)
+		require.NotNil(t, rd)
+		require.Nil(t, rd.Nonce)
 
 		err = storageCollection.BumpNonce(nil, owner)
 		require.NoError(t, err)
 
-		data, found, err = storageCollection.GetRecipientData(nil, owner)
+		// Verify fee recipient unchanged
+		recipient, err := storageCollection.GetFeeRecipient(owner)
 		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, data)
-		require.Equal(t, owner, data.Owner)
-		require.Equal(t, feeRecipient, data.FeeRecipient)
-		require.Equal(t, storage.Nonce(0), *data.Nonce)
-	})
+		require.Equal(t, feeRecipient, recipient)
 
-	t.Run("bump nonce after fee recipient created", func(t *testing.T) {
-		rdToCreate := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x11113")),
-		}
-		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
-		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
+		// Verify nonce is now 0
+		nonce, err := storageCollection.GetNextNonce(nil, owner)
 		require.NoError(t, err)
-		require.NotNil(t, rd)
-
-		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
-		require.NoError(t, err)
-
-		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, data)
-		require.Equal(t, storage.Nonce(0), *data.Nonce)
+		require.Equal(t, storage.Nonce(1), nonce)
 	})
 
 	t.Run("bump non-zero nonce", func(t *testing.T) {
-		rdToCreate := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x11114")),
-		}
-		nonce := storage.Nonce(0)
-		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
-		rdToCreate.Nonce = &nonce
+		owner := common.BytesToAddress([]byte("0x11114"))
 
-		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
-		require.NoError(t, err)
-		require.NotNil(t, rd)
-
-		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
+		// Bump twice
+		err := storageCollection.BumpNonce(nil, owner)
 		require.NoError(t, err)
 
-		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
+		err = storageCollection.BumpNonce(nil, owner)
 		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, data)
-		require.Equal(t, storage.Nonce(1), *data.Nonce)
+
+		nonce, err := storageCollection.GetNextNonce(nil, owner)
+		require.NoError(t, err)
+		require.Equal(t, storage.Nonce(2), nonce)
 	})
 
-	t.Run("get next nonce before fee recipient created - should be 0", func(t *testing.T) {
+	t.Run("get next nonce before fee recipient created", func(t *testing.T) {
 		owner := common.BytesToAddress([]byte("0x11115"))
-		var feeRecipient bellatrix.ExecutionAddress
-		copy(feeRecipient[:], owner.Bytes())
-
-		data, found, err := storageCollection.GetRecipientData(nil, owner)
-		require.NoError(t, err)
-		require.False(t, found)
-		require.Nil(t, data)
 
 		nonce, err := storageCollection.GetNextNonce(nil, owner)
 		require.NoError(t, err)
 		require.Equal(t, storage.Nonce(0), nonce)
 
-		data, found, err = storageCollection.GetRecipientData(nil, owner)
-		require.NoError(t, err)
-		require.False(t, found)
-		require.Nil(t, data)
+		// Should not create recipient
+		_, err = storageCollection.GetFeeRecipient(owner)
+		require.Error(t, err)
 	})
 
-	t.Run("get next nonce after fee recipient created - should be 0", func(t *testing.T) {
-		rdToCreate := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x11116")),
-		}
-		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
+	t.Run("get next nonce after fee recipient created", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x11116"))
+		feeRecipient := bellatrix.ExecutionAddress(owner)
 
-		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		nonce, err := storageCollection.GetNextNonce(nil, rdToCreate.Owner)
+		nonce, err := storageCollection.GetNextNonce(nil, owner)
+		require.NoError(t, err)
+		require.Equal(t, storage.Nonce(0), nonce)
+	})
+
+	t.Run("get next nonce progression", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x11117"))
+		feeRecipient := bellatrix.ExecutionAddress(owner)
+
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
+		require.NoError(t, err)
+		require.NotNil(t, rd)
+
+		// Initially should be 0
+		nonce, err := storageCollection.GetNextNonce(nil, owner)
 		require.NoError(t, err)
 		require.Equal(t, storage.Nonce(0), nonce)
 
-		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, data)
-		require.Nil(t, data.Nonce)
-	})
-
-	t.Run("get next nonce before bump", func(t *testing.T) {
-		rdToCreate := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x11117")),
-		}
-		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
-
-		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
-		require.NoError(t, err)
-		require.NotNil(t, rd)
-
-		nonce, err := storageCollection.GetNextNonce(nil, rdToCreate.Owner)
-		require.NoError(t, err)
-		require.Equal(t, storage.Nonce(0), nonce)
-
-		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
+		// After bump should be 1
+		err = storageCollection.BumpNonce(nil, owner)
 		require.NoError(t, err)
 
-		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, data)
-		require.Equal(t, storage.Nonce(0), *data.Nonce)
-	})
-
-	t.Run("get next nonce after bump", func(t *testing.T) {
-		rdToCreate := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x11118")),
-		}
-		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
-
-		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
-		require.NoError(t, err)
-		require.NotNil(t, rd)
-
-		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
-		require.NoError(t, err)
-
-		nonce, err := storageCollection.GetNextNonce(nil, rdToCreate.Owner)
+		nonce, err = storageCollection.GetNextNonce(nil, owner)
 		require.NoError(t, err)
 		require.Equal(t, storage.Nonce(1), nonce)
+	})
+}
 
-		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
+func TestStorage_Persistence(t *testing.T) {
+	logger := log.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	owner1 := common.BytesToAddress([]byte("owner1"))
+	owner2 := common.BytesToAddress([]byte("owner2"))
+	var feeRecipient1, feeRecipient2, newFeeRecipient bellatrix.ExecutionAddress
+	copy(feeRecipient1[:], "fee1")
+	copy(feeRecipient2[:], "fee2")
+	copy(newFeeRecipient[:], "newfee")
+
+	// Create first instance and save data
+	{
+		storage1, err := storage.NewRecipientsStorage(logger, db, []byte("test"))
 		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, data)
-		require.Equal(t, storage.Nonce(0), *data.Nonce)
+
+		_, err = storage1.SaveRecipientData(nil, owner1, feeRecipient1)
+		require.NoError(t, err)
+		_, err = storage1.SaveRecipientData(nil, owner2, feeRecipient2)
+		require.NoError(t, err)
+
+		// Bump nonce for owner1
+		err = storage1.BumpNonce(nil, owner1)
+		require.NoError(t, err)
+		err = storage1.BumpNonce(nil, owner1)
+		require.NoError(t, err)
+	}
+
+	// Create second instance - should load from DB
+	{
+		storage2, err := storage.NewRecipientsStorage(logger, db, []byte("test"))
+		require.NoError(t, err)
+
+		// Check that in-memory map was loaded correctly
+		recipient1, err := storage2.GetFeeRecipient(owner1)
+		require.NoError(t, err)
+		require.Equal(t, feeRecipient1, recipient1)
+
+		recipient2, err := storage2.GetFeeRecipient(owner2)
+		require.NoError(t, err)
+		require.Equal(t, feeRecipient2, recipient2)
+
+		// Check nonce was preserved
+		nonce, err := storage2.GetNextNonce(nil, owner1)
+		require.NoError(t, err)
+		require.Equal(t, storage.Nonce(2), nonce)
+
+		// Update fee recipient and verify in-memory map
+		_, err = storage2.SaveRecipientData(nil, owner1, newFeeRecipient)
+		require.NoError(t, err)
+
+		recipient1New, err := storage2.GetFeeRecipient(owner1)
+		require.NoError(t, err)
+		require.Equal(t, newFeeRecipient, recipient1New)
+	}
+
+	// Create third instance to verify update was persisted
+	{
+		storage3, err := storage.NewRecipientsStorage(logger, db, []byte("test"))
+		require.NoError(t, err)
+
+		recipient1, err := storage3.GetFeeRecipient(owner1)
+		require.NoError(t, err)
+		require.Equal(t, newFeeRecipient, recipient1, "should have updated fee recipient")
+	}
+}
+
+func TestGetFeeRecipient(t *testing.T) {
+	logger := log.TestLogger(t)
+	storageCollection, done := newRecipientStorageForTest(logger)
+	require.NotNil(t, storageCollection)
+	defer done()
+
+	t.Run("get non-existing fee recipient", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x1"))
+		_, err := storageCollection.GetFeeRecipient(owner)
+		require.Error(t, err)
+	})
+
+	t.Run("save and get fee recipient", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x2"))
+		var feeRecipient bellatrix.ExecutionAddress
+		copy(feeRecipient[:], []byte("0xFEE"))
+
+		// Save fee recipient
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
+		require.NoError(t, err)
+		require.NotNil(t, rd)
+		require.Equal(t, owner, rd.Owner)
+		require.Equal(t, feeRecipient, rd.FeeRecipient)
+
+		// Get fee recipient from in-memory map
+		recipient, err := storageCollection.GetFeeRecipient(owner)
+		require.NoError(t, err)
+		require.Equal(t, feeRecipient, recipient)
+	})
+
+	t.Run("update fee recipient", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x3"))
+		var feeRecipient1 bellatrix.ExecutionAddress
+		copy(feeRecipient1[:], []byte("0xFEE1"))
+		var feeRecipient2 bellatrix.ExecutionAddress
+		copy(feeRecipient2[:], []byte("0xFEE2"))
+
+		// Save initial fee recipient
+		rd, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient1)
+		require.NoError(t, err)
+		require.NotNil(t, rd)
+
+		// Update fee recipient
+		rd, err = storageCollection.SaveRecipientData(nil, owner, feeRecipient2)
+		require.NoError(t, err)
+		require.NotNil(t, rd)
+		require.Equal(t, feeRecipient2, rd.FeeRecipient)
+
+		// Verify in-memory map is updated
+		recipient, err := storageCollection.GetFeeRecipient(owner)
+		require.NoError(t, err)
+		require.Equal(t, feeRecipient2, recipient)
+	})
+
+	t.Run("delete removes from in-memory map", func(t *testing.T) {
+		owner := common.BytesToAddress([]byte("0x4"))
+		var feeRecipient bellatrix.ExecutionAddress
+		copy(feeRecipient[:], []byte("0xFEE"))
+
+		// Save fee recipient
+		_, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
+		require.NoError(t, err)
+
+		// Verify it exists
+		_, err = storageCollection.GetFeeRecipient(owner)
+		require.NoError(t, err)
+
+		// Delete
+		err = storageCollection.DeleteRecipientData(nil, owner)
+		require.NoError(t, err)
+
+		// Verify it's removed from in-memory map
+		_, err = storageCollection.GetFeeRecipient(owner)
+		require.Error(t, err)
+	})
+
+	t.Run("drop clears in-memory map", func(t *testing.T) {
+		// Add multiple recipients
+		for i := 0; i < 5; i++ {
+			owner := common.BytesToAddress([]byte(fmt.Sprintf("drop%d", i)))
+			var feeRecipient bellatrix.ExecutionAddress
+			copy(feeRecipient[:], fmt.Sprintf("fee%d", i))
+
+			_, err := storageCollection.SaveRecipientData(nil, owner, feeRecipient)
+			require.NoError(t, err)
+		}
+
+		// Verify they exist
+		for i := 0; i < 5; i++ {
+			owner := common.BytesToAddress([]byte(fmt.Sprintf("drop%d", i)))
+			_, err := storageCollection.GetFeeRecipient(owner)
+			require.NoError(t, err)
+		}
+
+		// Drop all
+		err := storageCollection.DropRecipients()
+		require.NoError(t, err)
+
+		// Verify all are gone
+		for i := 0; i < 5; i++ {
+			owner := common.BytesToAddress([]byte(fmt.Sprintf("drop%d", i)))
+			_, err := storageCollection.GetFeeRecipient(owner)
+			require.Error(t, err)
+		}
 	})
 }
 
@@ -394,7 +507,11 @@ func newRecipientStorageForTest(logger *zap.Logger) (storage.Recipients, func())
 		return nil, func() {}
 	}
 
-	s := storage.NewRecipientsStorage(logger, db, []byte("test"))
+	s, err := storage.NewRecipientsStorage(logger, db, []byte("test"))
+	if err != nil {
+		db.Close()
+		return nil, func() { db.Close() }
+	}
 	return s, func() {
 		db.Close()
 	}

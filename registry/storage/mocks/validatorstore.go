@@ -12,6 +12,7 @@ package mocks
 import (
 	reflect "reflect"
 
+	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -70,6 +71,21 @@ func (m *MockBaseValidatorStore) Committees() []*storage.Committee {
 func (mr *MockBaseValidatorStoreMockRecorder) Committees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committees", reflect.TypeOf((*MockBaseValidatorStore)(nil).Committees))
+}
+
+// GetFeeRecipient mocks base method.
+func (m *MockBaseValidatorStore) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockBaseValidatorStoreMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockBaseValidatorStore)(nil).GetFeeRecipient), validatorPK)
 }
 
 // OperatorCommittees mocks base method.
@@ -238,6 +254,21 @@ func (m *MockValidatorStore) Committees() []*storage.Committee {
 func (mr *MockValidatorStoreMockRecorder) Committees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committees", reflect.TypeOf((*MockValidatorStore)(nil).Committees))
+}
+
+// GetFeeRecipient mocks base method.
+func (m *MockValidatorStore) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockValidatorStoreMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockValidatorStore)(nil).GetFeeRecipient), validatorPK)
 }
 
 // OperatorCommittees mocks base method.
@@ -420,6 +451,21 @@ func (m *MockSelfValidatorStore) Committees() []*storage.Committee {
 func (mr *MockSelfValidatorStoreMockRecorder) Committees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committees", reflect.TypeOf((*MockSelfValidatorStore)(nil).Committees))
+}
+
+// GetFeeRecipient mocks base method.
+func (m *MockSelfValidatorStore) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockSelfValidatorStoreMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockSelfValidatorStore)(nil).GetFeeRecipient), validatorPK)
 }
 
 // OperatorCommittees mocks base method.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -460,18 +461,10 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 
 	logger.Debug("processing event")
 
-	recipientData, found, err := eh.nodeStorage.GetRecipientData(txn, event.Owner)
-	if err != nil {
-		return false, fmt.Errorf("get recipient data: %w", err)
-	}
+	feeRecipient := bellatrix.ExecutionAddress(event.RecipientAddress)
 
-	if !found || recipientData == nil {
-		recipientData = &registrystorage.RecipientData{
-			Owner: event.Owner,
-		}
-	}
-	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
-	r, err := eh.nodeStorage.SaveRecipientData(txn, recipientData)
+	// Save or update fee recipient (handles all logic internally)
+	r, err := eh.nodeStorage.SaveRecipientData(txn, event.Owner, feeRecipient)
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
@@ -509,8 +502,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, nil
 	}
 
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], share.ValidatorPubKey[:])
+	pk := phase0.BLSPubKey(share.ValidatorPubKey)
 
 	ed := &duties.ExitDescriptor{
 		OwnValidator:   false,

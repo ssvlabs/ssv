@@ -67,16 +67,20 @@ type storage struct {
 
 // NewNodeStorage creates a new instance of Storage
 func NewNodeStorage(beaconCfg *networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
+	recipientStore, err := registrystorage.NewRecipientsStorage(logger, db, OperatorStoragePrefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create recipients storage: %w", err)
+	}
+
 	stg := &storage{
 		logger:         logger,
 		db:             db,
 		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix),
-		recipientStore: registrystorage.NewRecipientsStorage(logger, db, OperatorStoragePrefix),
+		recipientStore: recipientStore,
 	}
 
-	var err error
-
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, OperatorStoragePrefix)
+	// Create shares storage with recipients dependency
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, recipientStore.GetFeeRecipient, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -128,16 +132,12 @@ func (s *storage) GetOperatorsPrefix() []byte {
 	return s.operatorStore.GetOperatorsPrefix()
 }
 
-func (s *storage) GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error) {
-	return s.recipientStore.GetRecipientData(r, owner)
+func (s *storage) GetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error) {
+	return s.recipientStore.GetFeeRecipient(owner)
 }
 
-func (s *storage) GetRecipientDataMany(r basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
-	return s.recipientStore.GetRecipientDataMany(r, owners)
-}
-
-func (s *storage) SaveRecipientData(rw basedb.ReadWriter, recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
-	return s.recipientStore.SaveRecipientData(rw, recipientData)
+func (s *storage) SaveRecipientData(rw basedb.ReadWriter, owner common.Address, feeRecipient bellatrix.ExecutionAddress) (*registrystorage.RecipientData, error) {
+	return s.recipientStore.SaveRecipientData(rw, owner, feeRecipient)
 }
 
 func (s *storage) DeleteRecipientData(rw basedb.ReadWriter, owner common.Address) error {
@@ -150,10 +150,6 @@ func (s *storage) GetNextNonce(r basedb.Reader, owner common.Address) (registrys
 
 func (s *storage) BumpNonce(rw basedb.ReadWriter, owner common.Address) error {
 	return s.recipientStore.BumpNonce(rw, owner)
-}
-
-func (s *storage) GetRecipientsPrefix() []byte {
-	return s.recipientStore.GetRecipientsPrefix()
 }
 
 func (s *storage) DropRegistryData() error {

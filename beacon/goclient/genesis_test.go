@@ -59,8 +59,7 @@ func Test_genesisForClient(t *testing.T) {
 						"SYNC_COMMITTEE_SIZE": "512",
 						"SYNC_COMMITTEE_SUBNET_COUNT": "4",
 						"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
-						"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
-						"INTERVALS_PER_SLOT": "3"
+						"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16"
 					}
 				}`), nil
 			}

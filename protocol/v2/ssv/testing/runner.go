@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -20,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -117,9 +117,6 @@ var ConstructBaseRunner = func(
 	shareMap[share.ValidatorIndex] = share
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
-	rStorage := mocks.NewMockrecipientsStorage()
-	rStorage.FeeRecipient = share.FeeRecipientAddress
-
 	var r runner.Runner
 	var err error
 
@@ -186,16 +183,16 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			common.Address{},
 			beaconNode,
 			net,
 			km,
 			opSigner,
-			rStorage,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			mockFeeProvider,
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
@@ -449,16 +446,16 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleValidatorRegistration:
 		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			common.Address{},
 			beaconNode,
 			net,
 			km,
 			opSigner,
-			nil, // recipientStorage is unused in these tests
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			mockFeeProvider,
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:

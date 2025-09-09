@@ -172,7 +172,10 @@ func sharesEqual(left *migration_6_OldStorageShare, right *storage.Share) bool {
 		!bytes.Equal(left.SharePubKey, right.SharePubKey) ||
 		!bytes.Equal(left.Graffiti, right.Graffiti) ||
 		!bytes.Equal(left.DomainType[:], right.DomainType[:]) ||
-		!bytes.Equal(left.FeeRecipientAddress[:], right.FeeRecipientAddress[:]) ||
+		// FeeRecipientAddress is not compared - it's now managed in Recipients storage.
+		// The migration doesn't map this field since it's unused. Operators who haven't
+		// run the migration will not be affected - the field remains empty in new shares.
+
 		!bytes.Equal(left.OwnerAddress[:], right.OwnerAddress[:]) {
 		return false
 	}
