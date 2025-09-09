@@ -1112,6 +1112,20 @@ func TestHandleMetadataUpdates(t *testing.T) {
 					share := &types.SSVShare{}
 					share.SharePubKey = make([]byte, 48)
 					share.SetBeaconMetadata(metadata)
+					share.Committee = []*spectypes.ShareMember{
+						{
+							Signer: 1,
+						},
+						{
+							Signer: 2,
+						},
+						{
+							Signer: 3,
+						},
+						{
+							Signer: 4,
+						},
+					}
 					shares = append(shares, share)
 				}
 				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shares).AnyTimes()
