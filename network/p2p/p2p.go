@@ -58,6 +58,11 @@ const (
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute
 	topicsReportingInterval         = 60 * time.Second
+	// pinned redial backoff: start at 10s, double until 10m, then stay at 10m
+	pinnedRedialInitialBackoff = 10 * time.Second
+	pinnedRedialMaxBackoff     = 10 * time.Minute
+	// stabilization window: connection must survive this long before we reset backoff
+	pinnedStabilizeWindow = 30 * time.Second
 )
 
 const pinnedPeerTag = "pinned-peer"
@@ -298,8 +303,7 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 	go func() {
 		// Pinned peers: enqueue configured pinned peers.
 		for _, ai := range n.pinned.ListPinned() {
-			local := ai
-			connector <- local
+			connector <- ai
 		}
 		// Trusted peers: attempt to resolve addresses if missing, then enqueue.
 		for _, addrInfo := range n.trustedPeers {

@@ -38,9 +38,11 @@ func BuildMultiAddress(ipAddr, protocol string, port uint, id peer.ID) (ma.Multi
 // DedupMultiaddrs returns a copy of addrs with duplicates removed, preserving order.
 // Two addresses are considered equal if their multiaddr string representations match.
 func DedupMultiaddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
+	if addrs == nil {
+		return nil
+	}
 	if len(addrs) <= 1 {
-		// nothing to deduplicate
-		// also covers nil slice
+		// nothing to deduplicate, just return a copy for consistency
 		return append([]ma.Multiaddr(nil), addrs...)
 	}
 	seen := make(map[string]struct{}, len(addrs))

@@ -22,6 +22,11 @@ import (
 	"github.com/ssvlabs/ssv/utils/retry"
 )
 
+const (
+	DefaultInitialBackoff = 10 * time.Second
+	DefaultMaxBackoff     = 10 * time.Minute
+)
+
 // pinnedPeersManager encapsulates pinned peers state and lifecycle.
 // It implements List/Pin/Unpin and integrates with libp2p host to
 // persist addresses, protect peers and redial on disconnect.
@@ -42,14 +47,14 @@ type pinnedPeersManager struct {
 
 func newPinnedPeersManager(ctx context.Context, logger *zap.Logger, backoff retry.BackoffConfig, stabilizeWindow time.Duration) *pinnedPeersManager {
 	if backoff.Initial <= 0 {
-		backoff.Initial = 10 * time.Second
+		backoff.Initial = DefaultInitialBackoff
 	}
 	if backoff.Max <= 0 {
-		backoff.Max = 10 * time.Minute
+		backoff.Max = DefaultMaxBackoff
 	}
 	return &pinnedPeersManager{
 		ctx:             ctx,
-		logger:          logger,
+		logger:          logger.Named("PinnedPeers"),
 		peers:           hashmap.New[peer.ID, *peer.AddrInfo](),
 		redial:          retry.NewScheduler(backoff),
 		stabilizers:     hashmap.New[peer.ID, *time.Timer](),
@@ -170,7 +175,7 @@ func (m *pinnedPeersManager) PinPeer(ai peer.AddrInfo) error {
 		existing = &peer.AddrInfo{ID: existing.ID, Addrs: p2pcommons.DedupMultiaddrs(append(existing.Addrs, ai.Addrs...))}
 		m.peers.Set(ai.ID, existing)
 	} else {
-		m.peers.Set(ai.ID, &peer.AddrInfo{ID: ai.ID, Addrs: p2pcommons.DedupMultiaddrs(append([]ma.Multiaddr(nil), ai.Addrs...))})
+		m.peers.Set(ai.ID, &peer.AddrInfo{ID: ai.ID, Addrs: p2pcommons.DedupMultiaddrs(ai.Addrs)})
 	}
 	m.host.Peerstore().AddAddrs(ai.ID, ai.Addrs, peerstore.PermanentAddrTTL)
 	if m.connMgr != nil {
@@ -179,7 +184,9 @@ func (m *pinnedPeersManager) PinPeer(ai peer.AddrInfo) error {
 	go func(ai peer.AddrInfo) {
 		ctx, cancel := context.WithTimeout(m.ctx, 20*time.Second)
 		defer cancel()
-		_ = m.host.Connect(ctx, ai)
+		if err := m.host.Connect(ctx, ai); err != nil {
+			m.logger.Error("pinned peer connect attempt", fields.PeerID(ai.ID), zap.Error(err))
+		}
 		if m.host.Network().Connectedness(ai.ID) != p2pnet.Connected {
 			m.scheduleConnect(ai.ID)
 		}
@@ -261,9 +268,9 @@ func (m *pinnedPeersManager) onDisconnected(pid peer.ID) {
 func (m *pinnedPeersManager) scheduleConnect(id peer.ID) {
 	m.redial.Schedule(id.String(), func(attempt int) bool {
 		m.logger.Info("redialing pinned peer", fields.PeerID(id), zap.Int("attempt", attempt))
-		ctx2, cancel2 := context.WithTimeout(m.ctx, 20*time.Second)
-		defer cancel2()
-		if err := m.host.Connect(ctx2, peer.AddrInfo{ID: id}); err != nil {
+		ctx, cancel := context.WithTimeout(m.ctx, 20*time.Second)
+		defer cancel()
+		if err := m.host.Connect(ctx, peer.AddrInfo{ID: id}); err != nil {
 			m.logger.Debug("pinned peer connect failed", fields.PeerID(id), zap.Error(err))
 		}
 		return m.host.Network().Connectedness(id) == p2pnet.Connected

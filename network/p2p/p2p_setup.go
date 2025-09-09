@@ -51,11 +51,6 @@ const (
 	// inboundLimitRatio is the ratio of inbound connections to the total connections
 	// we allow (both inbound and outbound).
 	inboundLimitRatio = float64(0.5)
-	// pinned redial backoff: start at 10s, double until 10m, then stay at 10m
-	pinnedRedialInitialBackoff = 10 * time.Second
-	pinnedRedialMaxBackoff     = 10 * time.Minute
-	// stabilization window: connection must survive this long before we reset backoff
-	pinnedStabilizeWindow = 30 * time.Second
 )
 
 // Setup is used to setup the network

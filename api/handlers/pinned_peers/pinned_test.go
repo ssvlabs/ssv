@@ -1,4 +1,4 @@
-package handlers
+package pinned_peers
 
 import (
 	"bytes"
@@ -99,8 +99,8 @@ func idsAndAddrs(t *testing.T, n int) ([]peer.ID, []ma.Multiaddr) {
 }
 
 // test helpers to reduce duplication
-func newPinnedHandler(prov *mockPinnedProvider) *PinnedP2PPeers {
-	return &PinnedP2PPeers{Provider: prov, Conn: &mockConnChecker{connected: map[peer.ID]bool{}}}
+func newPinnedHandler(prov *mockPinnedProvider) *Handler {
+	return New(prov, &mockConnChecker{connected: map[peer.ID]bool{}})
 }
 
 func doJSON(t *testing.T, method string, handler api.HandlerFunc, body any) *httptest.ResponseRecorder {
@@ -134,7 +134,7 @@ func TestPinned_List(t *testing.T) {
 	}
 	conn := &mockConnChecker{connected: map[peer.ID]bool{ids[0]: true, ids[1]: false}}
 
-	h := &PinnedP2PPeers{Provider: prov, Conn: conn}
+	h := New(prov, conn)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/node/pinned-peers", nil)

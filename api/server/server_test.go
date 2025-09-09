@@ -20,6 +20,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/api/handlers"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -146,7 +147,7 @@ func TestNew(t *testing.T) {
 	node := &handlers.Node{}
 	validators := &handlers.Validators{}
 	exporter := &handlers.Exporter{}
-	pinned := &handlers.PinnedP2PPeers{}
+	pinned := &pinnedpeers.Handler{}
 
 	server := New(
 		logger,
@@ -188,7 +189,7 @@ func TestRun_ActualExecution(t *testing.T) {
 		logger,
 		addr,
 		&handlers.Node{},
-		&handlers.PinnedP2PPeers{},
+		&pinnedpeers.Handler{},
 		&handlers.Validators{},
 		&handlers.Exporter{},
 		false,
@@ -254,7 +255,7 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 		logger,
 		addr,
 		&handlers.Node{},
-		&handlers.PinnedP2PPeers{},
+		&pinnedpeers.Handler{},
 		&handlers.Validators{},
 		&handlers.Exporter{},
 		true,

@@ -34,6 +34,7 @@ import (
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
 	"github.com/ssvlabs/ssv/api/handlers"
+	pinned_peers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
@@ -661,10 +662,10 @@ var StartNodeCmd = &cobra.Command{
 					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
 					NodeProber:      nodeProber,
 				},
-				&handlers.PinnedP2PPeers{
-					Provider: p2pNetwork.Pinned(),
-					Conn:     handlers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),
-				},
+				pinned_peers.New(
+					p2pNetwork.Pinned(),
+					pinned_peers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),
+				),
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},

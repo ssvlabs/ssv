@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/api/handlers"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -20,7 +21,7 @@ type Server struct {
 	addr   string
 
 	node       *handlers.Node
-	pinned     *handlers.PinnedP2PPeers
+	pinned     *pinnedpeers.Handler
 	validators *handlers.Validators
 	exporter   *handlers.Exporter
 	httpServer *http.Server
@@ -33,7 +34,7 @@ func New(
 	logger *zap.Logger,
 	addr string,
 	node *handlers.Node,
-	pinned *handlers.PinnedP2PPeers,
+	pinned *pinnedpeers.Handler,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
 	fullExporter bool,
