@@ -74,9 +74,10 @@ type ExecutionClient struct {
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
+	newAddr := ethcommon.HexToAddress("0x91cB447BaFc6e0EA0F4Fe056F5a9b1F14bb06e5D")
 	ec := &ExecutionClient{
 		nodeAddr:                    nodeAddr,
-		contractAddress:             contractAddr,
+		contractAddress:             newAddr,
 		logger:                      zap.NewNop(),
 		followDistance:              DefaultFollowDistance,
 		reqTimeout:                  DefaultReqTimeout,
