@@ -114,13 +114,6 @@ type MultiClient interface {
 	eth2client.ForkScheduleProvider
 }
 
-type EventTopic string
-
-const (
-	EventTopicHead  EventTopic = "head"
-	EventTopicBlock EventTopic = "block"
-)
-
 // GoClient implementing Beacon struct
 type GoClient struct {
 	log *zap.Logger
@@ -154,15 +147,11 @@ type GoClient struct {
 	longTimeout   time.Duration
 
 	withWeightedAttestationData bool
-
-	withParallelSubmissions bool
+	withParallelSubmissions     bool
 
 	subscribersLock      sync.RWMutex
 	headEventSubscribers []subscriber[*eth2apiv1.HeadEvent]
-	supportedTopics      []EventTopic
-
-	lastProcessedEventSlotLock sync.Mutex
-	lastProcessedEventSlot     phase0.Slot
+	supportedTopics      []eventTopic
 
 	// voluntaryExitDomainCached is voluntary exit domain value calculated lazily and re-used
 	// since it doesn't change over time
@@ -207,7 +196,7 @@ func New(
 		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
+		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		seenClients:                        hashmap.New[string, struct{}](),
 	}
 

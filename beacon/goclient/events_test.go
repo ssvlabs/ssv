@@ -66,7 +66,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	t.Run("Should not create subscriber and return error when supported topics does not contain HeadEventTopic", func(t *testing.T) {
 		server := mocks.NewServer(nil)
 		client := eventsTestClient(t, server.URL)
-		client.supportedTopics = []EventTopic{}
+		client.supportedTopics = []eventTopic{}
 		defer server.Close()
 
 		err := client.SubscribeToHeadEvents(t.Context(), "test_caller", make(chan<- *apiv1.HeadEvent))
