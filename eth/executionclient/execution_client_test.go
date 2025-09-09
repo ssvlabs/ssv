@@ -173,7 +173,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
 			WithConnectionTimeout(2*time.Second),
-			WithReconnectionInitialInterval(2*time.Second),
 		)
 		require.NoError(t, err)
 
@@ -213,7 +212,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
 			WithConnectionTimeout(2*time.Second),
-			WithReconnectionInitialInterval(2*time.Second),
 		)
 		require.NoError(t, err)
 
@@ -235,7 +233,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
 			WithConnectionTimeout(2*time.Second),
-			WithReconnectionInitialInterval(2*time.Second),
 		)
 		require.NoError(t, err)
 
@@ -266,7 +263,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 			WithLogger(logger),
 			WithFollowDistance(8),
 			WithConnectionTimeout(100*time.Millisecond),
-			WithReconnectionInitialInterval(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 

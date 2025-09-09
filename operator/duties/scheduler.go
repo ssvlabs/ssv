@@ -416,13 +416,11 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 					observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
 
-		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
-
 		go func(ctx context.Context) {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			recordDutyExecuted(ctx, duty.RunnerRole())
+			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 			s.dutyExecutor.ExecuteDuty(ctx, duty)
 		}(ctx)
 	}
@@ -456,11 +454,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
 		}
 
-		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
-
 		go func(ctx context.Context) {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			recordDutyExecuted(ctx, duty.RunnerRole())
+			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, committee.id, duty)
 		}(ctx)
 	}

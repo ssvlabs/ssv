@@ -25,6 +25,13 @@ const (
 )
 
 // SSVShare is a spectypes.Share with extra data that fully describes SSV validator share.
+//
+// WARNING: Do NOT use FeeRecipientAddress from spectypes.Share - it's deprecated.
+// Fee recipients are stored separately because SSVShare is accessed concurrently by multiple
+// goroutines (network handlers, duty runners, API handlers, etc). Updating FeeRecipientAddress
+// here would cause torn reads - corrupted addresses when one goroutine reads while another writes.
+//
+// Always use ValidatorStore.GetFeeRecipient() which provides proper synchronization.
 type SSVShare struct {
 	spectypes.Share
 

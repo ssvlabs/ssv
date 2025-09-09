@@ -65,6 +65,17 @@ type Node struct {
 
 // New is the constructor of Node
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
+
+	feeRecipientCtrl := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
+		Ctx:                opts.Context,
+		BeaconClient:       opts.BeaconNode,
+		BeaconConfig:       opts.NetworkConfig.Beacon,
+		ValidatorProvider:  selfValidatorStore,
+		OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
+		SlotTickerProvider: slotTickerProvider,
+	})
+
 	node := &Node{
 		logger:           logger.Named(log.NameOperator),
 		context:          opts.Context,
@@ -82,7 +93,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			BeaconNode:              opts.BeaconNode,
 			ExecutionClient:         opts.ExecutionClient,
 			BeaconConfig:            opts.NetworkConfig.Beacon,
-			ValidatorProvider:       opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
+			ValidatorProvider:       selfValidatorStore,
 			ValidatorController:     opts.ValidatorController,
 			DutyExecutor:            opts.ValidatorController,
 			IndicesChg:              opts.ValidatorController.IndicesChangeChan(),
@@ -92,19 +103,18 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			SlotTickerProvider:      slotTickerProvider,
 			P2PNetwork:              opts.P2PNetwork,
 		}),
-		feeRecipientCtrl: fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
-			Ctx:                opts.Context,
-			BeaconClient:       opts.BeaconNode,
-			BeaconConfig:       opts.NetworkConfig.Beacon,
-			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
-			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
-			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
-			SlotTickerProvider: slotTickerProvider,
-		}),
+		feeRecipientCtrl: feeRecipientCtrl,
 
 		ws:        opts.WS,
 		wsAPIPort: opts.WsAPIPort,
 	}
+
+	// Wire the beacon client to the fee recipient controller
+	// This allows the beacon client to pull proposal preparations on reconnect
+	opts.BeaconNode.SetProposalPreparationsProvider(feeRecipientCtrl.GetProposalPreparations)
+
+	// Subscribe fee recipient controller to validator controller's change notifications
+	feeRecipientCtrl.SubscribeToFeeRecipientChanges(opts.ValidatorController.FeeRecipientChangeChan())
 
 	return node
 }

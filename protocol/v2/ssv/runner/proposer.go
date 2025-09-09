@@ -12,6 +12,7 @@ import (
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
@@ -182,6 +183,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	const eventMsg = "🧊 got beacon block proposal"
 	logger.Info(eventMsg,
 		zap.String("block_hash", blockSummary.Hash.String()),
+		zap.Stringer("fee_recipient", blockSummary.FeeRecipient),
 		zap.Bool("blinded", blockSummary.Blinded),
 		zap.Duration("proposer_delay", r.proposerDelay),
 		fields.Took(time.Since(start)),
@@ -668,11 +670,12 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-// blockSummary contains essentials about a block. Useful for logging.
+// blockSummary contains essentials about a block. Useful for logging and zero fee recipient check
 type blockSummary struct {
-	Hash    phase0.Hash32
-	Blinded bool
-	Version spec.DataVersion
+	Hash         phase0.Hash32
+	Blinded      bool
+	Version      spec.DataVersion
+	FeeRecipient bellatrix.ExecutionAddress
 }
 
 // summarizeBlock returns a blockSummary for the given block.
@@ -728,6 +731,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
 		summary.Version = spec.DataVersionCapella
 
 	case *deneb.BeaconBlock:
@@ -735,6 +739,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
 		summary.Version = spec.DataVersionDeneb
 
 	case *electra.BeaconBlock:
@@ -742,6 +747,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
 		summary.Version = spec.DataVersionElectra
 
 	case *apiv1electra.BlockContents:
@@ -755,6 +761,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
 		summary.Blinded = true
 		summary.Version = spec.DataVersionCapella
 
@@ -763,6 +770,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
 		summary.Blinded = true
 		summary.Version = spec.DataVersionDeneb
 
@@ -771,6 +779,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
 		summary.Blinded = true
 		summary.Version = spec.DataVersionElectra
 	}

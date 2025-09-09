@@ -24,7 +24,6 @@ const (
 	DefaultSyncCommitteeSubnetCount             = uint64(4)
 	DefaultTargetAggregatorsPerSyncSubcommittee = uint64(16)
 	DefaultTargetAggregatorsPerCommittee        = uint64(16)
-	DefaultIntervalsPerSlot                     = uint64(3)
 )
 
 // BeaconConfig returns the network Beacon configuration
@@ -79,7 +78,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	slotDuration, err := get[time.Duration](specResponse, "SECONDS_PER_SLOT")
 	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+		gc.log.Debug("could not get extract parameter from beacon node response, using default value",
 			zap.Error(err),
 			zap.String("parameter", "SECONDS_PER_SLOT"),
 			zap.Any("default_value", DefaultSlotDuration))
@@ -89,7 +88,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	slotsPerEpoch, err := get[uint64](specResponse, "SLOTS_PER_EPOCH")
 	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+		gc.log.Debug("could not get extract parameter from beacon node response, using default value",
 			zap.Error(err),
 			zap.String("parameter", "SLOTS_PER_EPOCH"),
 			zap.Any("default_value", DefaultSlotsPerEpoch))
@@ -99,7 +98,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	epochsPerSyncCommitteePeriod, err := get[uint64](specResponse, "EPOCHS_PER_SYNC_COMMITTEE_PERIOD")
 	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+		gc.log.Debug("could not get extract parameter from beacon node response, using default value",
 			zap.Error(err),
 			zap.String("parameter", "EPOCHS_PER_SYNC_COMMITTEE_PERIOD"),
 			zap.Any("default_value", DefaultEpochsPerSyncCommitteePeriod))
@@ -109,7 +108,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	syncCommitteeSize, err := get[uint64](specResponse, "SYNC_COMMITTEE_SIZE")
 	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+		gc.log.Debug("could not get extract parameter from beacon node response, using default value",
 			zap.Error(err),
 			zap.String("parameter", "SYNC_COMMITTEE_SIZE"),
 			zap.Any("default_value", DefaultSyncCommitteeSize))
@@ -119,7 +118,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	targetAggregatorsPerCommittee, err := get[uint64](specResponse, "TARGET_AGGREGATORS_PER_COMMITTEE")
 	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+		gc.log.Debug("could not get extract parameter from beacon node response, using default value",
 			zap.Error(err),
 			zap.String("parameter", "TARGET_AGGREGATORS_PER_COMMITTEE"),
 			zap.Any("default_value", DefaultTargetAggregatorsPerCommittee))
@@ -129,7 +128,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	targetAggregatorsPerSyncSubcommittee, err := get[uint64](specResponse, "TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE")
 	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+		gc.log.Debug("could not get extract parameter from beacon node response, using default value",
 			zap.Error(err),
 			zap.String("parameter", "TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"),
 			zap.Any("default_value", DefaultTargetAggregatorsPerSyncSubcommittee))
@@ -137,19 +136,9 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		targetAggregatorsPerSyncSubcommittee = DefaultTargetAggregatorsPerSyncSubcommittee
 	}
 
-	intervalsPerSlot, err := get[uint64](specResponse, "INTERVALS_PER_SLOT")
-	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
-			zap.Error(err),
-			zap.String("parameter", "INTERVALS_PER_SLOT"),
-			zap.Any("default_value", DefaultIntervalsPerSlot))
-
-		intervalsPerSlot = DefaultIntervalsPerSlot
-	}
-
 	syncCommitteeSubnetCount, err := get[uint64](specResponse, "SYNC_COMMITTEE_SUBNET_COUNT")
 	if err != nil {
-		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+		gc.log.Debug("could not get extract parameter from beacon node response, using default value",
 			zap.Error(err),
 			zap.String("parameter", "SYNC_COMMITTEE_SUBNET_COUNT"),
 			zap.Any("default_value", DefaultSyncCommitteeSubnetCount))
@@ -178,7 +167,6 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		SyncCommitteeSubnetCount:             syncCommitteeSubnetCount,
 		TargetAggregatorsPerSyncSubcommittee: targetAggregatorsPerSyncSubcommittee,
 		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
-		IntervalsPerSlot:                     intervalsPerSlot,
 		GenesisForkVersion:                   genesisResponse.GenesisForkVersion,
 		GenesisTime:                          genesisResponse.GenesisTime,
 		GenesisValidatorsRoot:                genesisResponse.GenesisValidatorsRoot,

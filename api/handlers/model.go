@@ -9,11 +9,55 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/exporter"
 )
 
+// === Decideds ======================================================================
+type participantResponse struct {
+	Role      string `json:"role"`
+	Slot      uint64 `json:"slot"`
+	PublicKey string `json:"public_key"`
+	Message   struct {
+		// We're keeping "Signers" capitalized to avoid breaking existing clients that rely on the current structure
+		Signers []uint64 `json:"Signers"`
+	} `json:"message"`
+}
+
+type decidedResponse struct {
+	Data   []*participantResponse `json:"data"`
+	Errors []string               `json:"errors,omitempty"`
+}
+
+type decidedRequest struct {
+	From    uint64          `json:"from"`
+	To      uint64          `json:"to"`
+	Roles   api.RoleSlice   `json:"roles"`
+	PubKeys api.HexSlice    `json:"pubkeys"`
+	Indices api.Uint64Slice `json:"indices"`
+}
+
+func (r *decidedRequest) parsePubkeys() []spectypes.ValidatorPK {
+	pubKeys := make([]spectypes.ValidatorPK, len(r.PubKeys))
+	for i, pk := range r.PubKeys {
+		copy(pubKeys[i][:], pk)
+	}
+	return pubKeys
+}
+
+// === ValidatorTrace ======================================================================
+
+type validatorRequest struct {
+	From    uint64          `json:"from"`
+	To      uint64          `json:"to"`
+	Roles   api.RoleSlice   `json:"roles"`
+	PubKeys api.HexSlice    `json:"pubkeys"`
+	Indices api.Uint64Slice `json:"indices"`
+}
+
 type validatorTraceResponse struct {
-	Data []validatorTrace `json:"data"`
+	Data   []validatorTrace `json:"data"`
+	Errors []string         `json:"errors,omitempty"`
 }
 
 type validatorTrace struct {
@@ -64,7 +108,7 @@ type message struct {
 	ReceivedTime time.Time            `json:"time"`
 }
 
-func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
+func toValidatorTrace(t *exporter.ValidatorDutyTrace) validatorTrace {
 	return validatorTrace{
 		Slot:      t.Slot,
 		Role:      t.Role.String(),
@@ -77,7 +121,7 @@ func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 	}
 }
 
-func toMessageTrace(m []*model.PartialSigTrace) (out []message) {
+func toMessageTrace(m []*exporter.PartialSigTrace) (out []message) {
 	for _, mt := range m {
 		out = append(out, message{
 			BeaconRoot:   mt.BeaconRoot,
@@ -89,7 +133,7 @@ func toMessageTrace(m []*model.PartialSigTrace) (out []message) {
 	return
 }
 
-func toRounds(r []*model.RoundTrace) (out []round) {
+func toRounds(r []*exporter.RoundTrace) (out []round) {
 	for _, rt := range r {
 		out = append(out, round{
 			Proposal:     toProposalTrace(rt.ProposalTrace),
@@ -102,7 +146,7 @@ func toRounds(r []*model.RoundTrace) (out []round) {
 	return
 }
 
-func toProposalTrace(rt *model.ProposalTrace) *proposalTrace {
+func toProposalTrace(rt *exporter.ProposalTrace) *proposalTrace {
 	if rt == nil {
 		return nil
 	}
@@ -125,7 +169,7 @@ func toProposalTrace(rt *model.ProposalTrace) *proposalTrace {
 	}
 }
 
-func toUIMessageTrace(m []*model.QBFTTrace) (out []message) {
+func toUIMessageTrace(m []*exporter.QBFTTrace) (out []message) {
 	for _, mt := range m {
 		out = append(out, message{
 			Round:        mt.Round,
@@ -138,7 +182,7 @@ func toUIMessageTrace(m []*model.QBFTTrace) (out []message) {
 	return
 }
 
-func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
+func toUIRoundChangeTrace(m []*exporter.RoundChangeTrace) (out []roundChange) {
 	for _, mt := range m {
 		out = append(out, roundChange{
 			message: message{
@@ -155,9 +199,25 @@ func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
 	return
 }
 
-// committee
+// === CommiteeTrace ======================================================================
+
+type committeeRequest struct {
+	From         uint64       `json:"from"`
+	To           uint64       `json:"to"`
+	CommitteeIDs api.HexSlice `json:"committeeIDs"`
+}
+
+func (req *committeeRequest) parseCommitteeIds() []spectypes.CommitteeID {
+	committeeIDs := make([]spectypes.CommitteeID, len(req.CommitteeIDs))
+	for i, cmt := range req.CommitteeIDs {
+		copy(committeeIDs[i][:], cmt)
+	}
+	return committeeIDs
+}
+
 type committeeTraceResponse struct {
-	Data []committeeTrace `json:"data"`
+	Data   []committeeTrace `json:"data"`
+	Errors []string         `json:"errors,omitempty"`
 }
 
 type committeeTrace struct {
@@ -178,7 +238,7 @@ type committeeMessage struct {
 	ReceivedTime time.Time `json:"time"`
 }
 
-func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
+func toCommitteeTrace(t *exporter.CommitteeDutyTrace) committeeTrace {
 	return committeeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
@@ -191,7 +251,7 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 	}
 }
 
-func toDecideds(d []*model.DecidedTrace) (out []decided) {
+func toDecideds(d []*exporter.DecidedTrace) (out []decided) {
 	for _, dt := range d {
 		out = append(out, decided{
 			Round:        dt.Round,
@@ -204,7 +264,7 @@ func toDecideds(d []*model.DecidedTrace) (out []decided) {
 	return
 }
 
-func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
+func toCommitteePost(m []*exporter.SignerData) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
 			Signer:       mt.Signer,
@@ -216,7 +276,7 @@ func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 	return
 }
 
-// helpers
+// === Helpers ======================================================================
 
 func toUint64Slice(s []phase0.ValidatorIndex) []uint64 {
 	out := make([]uint64, len(s))

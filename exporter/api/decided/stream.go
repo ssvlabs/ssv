@@ -14,6 +14,7 @@ import (
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.
@@ -36,34 +37,34 @@ func NewStreamPublisher(logger *zap.Logger, domainType spectypes.DomainType, ws 
 
 // NewDecidedListener handles incoming newly decided messages.
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
-func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws api.WebSocketServer) func(dutytracer.DecidedInfo) {
+func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws api.WebSocketServer, validators registrystorage.ValidatorStore) func(dutytracer.DecidedInfo) {
 	feed := ws.BroadcastFeed()
-	logger = logger.Named("DecidedListener")
 	cache := cache.New(time.Minute, 90*time.Second) // 1m TTL, 1.5m eviction to avoid flooding ws stream
 
 	return func(msg dutytracer.DecidedInfo) {
+		// backfill pubkey for retro-compatibility until we deprecate it
+		share, found := validators.ValidatorByIndex(msg.Index)
+		if !found {
+			logger.Debug("decided listener: validator not found by index", fields.ValidatorIndex(msg.Index))
+			return
+		}
+
 		participation := qbftstorage.Participation{
 			ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
-				PubKey:  msg.PubKey,
+				PubKey:  share.ValidatorPubKey,
 				Slot:    msg.Slot,
 				Signers: msg.Signers,
 			},
 			Role:   msg.Role,
-			PubKey: msg.PubKey,
+			PubKey: share.ValidatorPubKey,
 		}
 
-		key := fmt.Sprintf("%x:%d:%d", msg.PubKey[:], msg.Slot, len(msg.Signers))
+		key := fmt.Sprintf("%d:%d:%d", msg.Index, msg.Slot, len(msg.Signers))
 		_, ok := cache.Get(key)
 		if ok {
 			// already sent in the last minute, skipping to avoid flooding ws stream
 			return
 		}
-		logger.Info("sending to websocket feed",
-			zap.String("validator_pk", fmt.Sprintf("%x", msg.PubKey[:])),
-			zap.String("signers", fmt.Sprintf("%v", msg.Signers)),
-			zap.Uint64("slot", uint64(msg.Slot)),
-			zap.String("role", msg.Role.String()),
-		)
 		cache.SetDefault(key, true)
 		feed.Send(api.NewParticipantsAPIMsg(domainType, participation))
 	}

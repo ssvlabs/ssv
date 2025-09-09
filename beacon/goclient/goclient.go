@@ -12,7 +12,7 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	eth2clientmulti "github.com/attestantio/go-eth2-client/multi"
 	"github.com/attestantio/go-eth2-client/spec"
@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 const (
@@ -37,6 +38,9 @@ const (
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
 	BlockRootToSlotCacheCapacityEpochs = 64
+
+	// ProposalPreparationBatchSize is the maximum number of preparations to submit in a single request
+	ProposalPreparationBatchSize = 500
 
 	clResponseErrMsg            = "Consensus client returned an error"
 	clNilResponseErrMsg         = "Consensus client returned a nil response"
@@ -110,13 +114,6 @@ type MultiClient interface {
 	eth2client.ForkScheduleProvider
 }
 
-type EventTopic string
-
-const (
-	EventTopicHead  EventTopic = "head"
-	EventTopicBlock EventTopic = "block"
-)
-
 // GoClient implementing Beacon struct
 type GoClient struct {
 	log *zap.Logger
@@ -150,19 +147,22 @@ type GoClient struct {
 	longTimeout   time.Duration
 
 	withWeightedAttestationData bool
-
-	withParallelSubmissions bool
+	withParallelSubmissions     bool
 
 	subscribersLock      sync.RWMutex
-	headEventSubscribers []subscriber[*apiv1.HeadEvent]
-	supportedTopics      []EventTopic
-
-	lastProcessedEventSlotLock sync.Mutex
-	lastProcessedEventSlot     phase0.Slot
+	headEventSubscribers []subscriber[*eth2apiv1.HeadEvent]
+	supportedTopics      []eventTopic
 
 	// voluntaryExitDomainCached is voluntary exit domain value calculated lazily and re-used
 	// since it doesn't change over time
 	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
+
+	// Provider for proposal preparations from fee recipient controller
+	proposalPreparationsProviderMu sync.RWMutex
+	proposalPreparationsProvider   func() ([]*eth2apiv1.ProposalPreparation, error)
+
+	// Tracks which clients have been seen before (for reconnection detection)
+	seenClients *hashmap.Map[string, struct{}]
 }
 
 // New init new client and go-client instance
@@ -196,7 +196,8 @@ func New(
 		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
+		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
+		seenClients:                        hashmap.New[string, struct{}](),
 	}
 
 	if opt.BeaconNodeAddr == "" {
@@ -259,6 +260,13 @@ func New(
 	return client, nil
 }
 
+// SetProposalPreparationsProvider sets the callback to get current proposal preparations
+func (gc *GoClient) SetProposalPreparationsProvider(provider func() ([]*eth2apiv1.ProposalPreparation, error)) {
+	gc.proposalPreparationsProviderMu.Lock()
+	defer gc.proposalPreparationsProviderMu.Unlock()
+	gc.proposalPreparationsProvider = provider
+}
+
 // getBeaconConfig provides thread-safe access to the beacon configuration
 func (gc *GoClient) getBeaconConfig() *networkconfig.Beacon {
 	gc.beaconConfigMu.RLock()
@@ -315,10 +323,14 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	return &eth2clienthttp.Hooks{
 		OnActive: func(ctx context.Context, s *eth2clienthttp.Service) {
+			// Check if reconnection (true) or initial connection (false)
+			_, isReconnection := gc.seenClients.GetOrSet(s.Address(), struct{}{})
+
 			logger := gc.log.With(
 				fields.Name(s.Name()),
 				fields.Address(s.Address()),
 			)
+
 			// If err is nil, nodeVersionResp is never nil.
 			nodeVersionResp, err := s.NodeVersion(ctx, &api.NodeVersionOpts{})
 			if err != nil {
@@ -360,6 +372,11 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.Uint64("data_version", uint64(dataVersion)),
 				zap.Stringer("config", currentConfig),
 			)
+
+			if isReconnection {
+				// Re-submit proposal preparations on reconnection
+				go gc.handleProposalPreparationsOnReconnect(ctx, s, logger)
+			}
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",

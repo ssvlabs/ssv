@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolTypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -38,7 +39,7 @@ func BeaconVersionAttribute(version spec.DataVersion) attribute.KeyValue {
 }
 
 func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
-	return attribute.String(RunnerRoleAttrKey, role.String())
+	return attribute.String(RunnerRoleAttrKey, utils.FormatRunnerRole(role))
 }
 
 func BeaconSlotAttribute(slot phase0.Slot) attribute.KeyValue {
