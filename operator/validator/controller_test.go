@@ -18,10 +18,11 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
+
+	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
