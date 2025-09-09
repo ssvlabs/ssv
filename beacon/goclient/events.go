@@ -144,7 +144,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 	return nil
 }
 
-// eventHandler creates a handler to process CL events.
+// newEventHandler creates a handler to process CL events.
 // IMPORTANT: this func is called concurrently by different CL client implementations, hence the handling it
 // performs must be thread-safe and idempotent (it can receive the same event multiple times).
 func (gc *GoClient) newEventHandler() func(*apiv1.Event) {
