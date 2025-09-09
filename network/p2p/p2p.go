@@ -65,8 +65,6 @@ const (
 	pinnedStabilizeWindow = 30 * time.Second
 )
 
-const pinnedPeerTag = "pinned-peer"
-
 // PeersIndexProvider holds peers index instance
 type PeersIndexProvider interface {
 	PeersIndex() peers.Index
@@ -97,7 +95,8 @@ type p2pNetwork struct {
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
 	connGater    connmgrcore.ConnectionGater
-	// trustedPeers are priority peers we trust, but disconnection from them is possible
+	// trustedPeers are peers to prefer connecting to on node startup, disconnecting from these is still
+	// possible (unlike for `pinnedPeers` we won't be retrying to connect peers from this list afterwards)
 	trustedPeers []*peer.AddrInfo
 	// pinned manages peers that must stay connected: protection, persistence and redial policy
 	pinned *pinnedPeersManager

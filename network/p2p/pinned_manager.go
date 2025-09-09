@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	DefaultInitialBackoff = 10 * time.Second
-	DefaultMaxBackoff     = 10 * time.Minute
+	defaultInitialBackoff = 10 * time.Second
+	defaultMaxBackoff     = 10 * time.Minute
+	pinnedPeerTag         = "pinned-peer"
 )
 
 // pinnedPeersManager encapsulates pinned peers state and lifecycle.
@@ -47,10 +48,10 @@ type pinnedPeersManager struct {
 
 func newPinnedPeersManager(ctx context.Context, logger *zap.Logger, backoff retry.BackoffConfig, stabilizeWindow time.Duration) *pinnedPeersManager {
 	if backoff.Initial <= 0 {
-		backoff.Initial = DefaultInitialBackoff
+		backoff.Initial = defaultInitialBackoff
 	}
 	if backoff.Max <= 0 {
-		backoff.Max = DefaultMaxBackoff
+		backoff.Max = defaultMaxBackoff
 	}
 	return &pinnedPeersManager{
 		ctx:             ctx,
