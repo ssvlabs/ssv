@@ -70,7 +70,7 @@ func validateValidatorRequest(request *validatorRequest) error {
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
 			if isCommitteeDuty(role) {
-				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for specific a validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
+				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
 			}
 		}
 	}

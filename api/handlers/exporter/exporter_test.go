@@ -1490,7 +1490,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 					Message string `json:"error"`
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, "role ATTESTER is a committee duty, please provide either pubkeys or indices to filter the duty for specific a validators subset or use the /committee endpoint to query all the corresponding duties", resp.Message)
+				assert.Equal(t, "role ATTESTER is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", resp.Message)
 			},
 		},
 		{
