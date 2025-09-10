@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 
@@ -125,18 +126,20 @@ func TestEthExecLayer(t *testing.T) {
 	// Main difference between "online" events handling and syncing the historical (old) events
 	// is that here we have to check that the controller was triggered
 	t.Run("SyncOngoing happy flow", func(t *testing.T) {
+		var wg sync.WaitGroup
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			err = eventSyncer.SyncOngoing(ctx, lastHandledBlockNum+1)
 			require.NoError(t, err)
 		}()
 
-		stopChan := make(chan struct{})
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case <-ctx.Done():
-					return
-				case <-stopChan:
 					return
 				default:
 					time.Sleep(100 * time.Millisecond)
@@ -327,6 +330,7 @@ func TestEthExecLayer(t *testing.T) {
 			require.Equal(t, testAddrBob.Bytes(), feeRecipient[:])
 		}
 
-		stopChan <- struct{}{}
+		cancel()
+		wg.Wait()
 	})
 }
