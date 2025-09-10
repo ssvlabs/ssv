@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/api/handlers"
+	"github.com/ssvlabs/ssv/eth/loganalyzer"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -19,10 +20,12 @@ type Server struct {
 	logger *zap.Logger
 	addr   string
 
-	node       *handlers.Node
-	validators *handlers.Validators
-	exporter   *handlers.Exporter
-	httpServer *http.Server
+	node        *handlers.Node
+	pinned      *handlers.PinnedP2PPeers
+	validators  *handlers.Validators
+	exporter    *handlers.Exporter
+	logAnalyzer *loganalyzer.APIHandler
+	httpServer  *http.Server
 
 	fullExporter bool
 }
@@ -32,16 +35,20 @@ func New(
 	logger *zap.Logger,
 	addr string,
 	node *handlers.Node,
+	pinned *handlers.PinnedP2PPeers,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
+	logAnalyzer *loganalyzer.APIHandler,
 	fullExporter bool,
 ) *Server {
 	return &Server{
 		logger:       logger,
 		addr:         addr,
 		node:         node,
+		pinned:       pinned,
 		validators:   validators,
 		exporter:     exporter,
+		logAnalyzer:  logAnalyzer,
 		fullExporter: fullExporter,
 	}
 }
@@ -78,6 +85,24 @@ func (s *Server) Run() error {
 	// @Success 200 {object} handlers.TopicsResponse
 	// @Router /v1/node/topics [get]
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
+
+	// @Summary List pinned peers
+	// @Tags Node
+	// @Produce json
+	// @Router /v1/node/pinned-peers [get]
+	router.Get("/v1/node/pinned-peers", api.Handler(s.pinned.List))
+	// @Summary Add pinned peers
+	// @Tags Node
+	// @Accept json
+	// @Produce json
+	// @Router /v1/node/pinned-peers [post]
+	router.Post("/v1/node/pinned-peers", api.Handler(s.pinned.Add))
+	// @Summary Remove pinned peers
+	// @Tags Node
+	// @Accept json
+	// @Produce json
+	// @Router /v1/node/pinned-peers [delete]
+	router.Delete("/v1/node/pinned-peers", api.Handler(s.pinned.Remove))
 
 	// @Summary Get node health status
 	// @Description Returns the health status of the SSV node
@@ -159,6 +184,39 @@ func (s *Server) Run() error {
 		// @Success 200 {object} handlers.DecidedsResponse
 		// @Router /v1/exporter/decideds [post]
 		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+	}
+
+	// LogAnalyzer routes
+	if s.logAnalyzer != nil {
+		// @Summary Get log analyzer status and health
+		// @Description Returns health status and capabilities of the log analyzer
+		// @Tags LogAnalyzer
+		// @Produce json
+		// @Success 200 {object} map[string]interface{}
+		// @Router /v1/loganalyzer/health [get]
+		router.Get("/v1/loganalyzer/health", api.Handler(s.logAnalyzer.Health))
+
+		// @Summary Get block analysis statistics
+		// @Description Returns analysis statistics for a single block or block range
+		// @Tags LogAnalyzer
+		// @Param block query string false "Single block number or 'latest' for most recent finalized block"
+		// @Param from query int false "Starting block number for range"
+		// @Param to query int false "Ending block number for range"
+		// @Produce json
+		// @Success 200 {object} loganalyzer.BlockStatsResponse
+		// @Router /v1/loganalyzer/stats [get]
+		router.Get("/v1/loganalyzer/stats", api.Handler(s.logAnalyzer.Stats))
+
+		// @Summary Get problematic blocks
+		// @Description Returns blocks that had log discrepancies between sources. When called with no parameters, returns the last 10 problematic blocks.
+		// @Tags LogAnalyzer
+		// @Param start_block query int false "Starting block number (optional - if not provided, returns last 10 problematic blocks)"
+		// @Param end_block query int false "Ending block number (optional)"
+		// @Param limit query int false "Maximum number of results (default 100, or 10 when no start_block provided)"
+		// @Produce json
+		// @Success 200 {object} loganalyzer.ProblematicBlocksResponse
+		// @Router /v1/loganalyzer/problematic-blocks [get]
+		router.Get("/v1/loganalyzer/problematic-blocks", api.Handler(s.logAnalyzer.ProblematicBlocks))
 	}
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))

@@ -148,6 +148,34 @@ func (mr *MockProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Healthy", reflect.TypeOf((*MockProvider)(nil).Healthy), ctx)
 }
 
+// StreamFilterLogs mocks base method.
+func (m *MockProvider) StreamFilterLogs(ctx context.Context, fromBlock uint64) <-chan types.Log {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamFilterLogs", ctx, fromBlock)
+	ret0, _ := ret[0].(<-chan types.Log)
+	return ret0
+}
+
+// StreamFilterLogs indicates an expected call of StreamFilterLogs.
+func (mr *MockProviderMockRecorder) StreamFilterLogs(ctx, fromBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamFilterLogs", reflect.TypeOf((*MockProvider)(nil).StreamFilterLogs), ctx, fromBlock)
+}
+
+// StreamFinalizedLogs mocks base method.
+func (m *MockProvider) StreamFinalizedLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamFinalizedLogs", ctx, fromBlock)
+	ret0, _ := ret[0].(<-chan BlockLogs)
+	return ret0
+}
+
+// StreamFinalizedLogs indicates an expected call of StreamFinalizedLogs.
+func (mr *MockProviderMockRecorder) StreamFinalizedLogs(ctx, fromBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamFinalizedLogs", reflect.TypeOf((*MockProvider)(nil).StreamFinalizedLogs), ctx, fromBlock)
+}
+
 // StreamLogs mocks base method.
 func (m *MockProvider) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	m.ctrl.T.Helper()
@@ -303,6 +331,34 @@ func (m *MockSingleClientProvider) Healthy(ctx context.Context) error {
 func (mr *MockSingleClientProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Healthy", reflect.TypeOf((*MockSingleClientProvider)(nil).Healthy), ctx)
+}
+
+// StreamFilterLogs mocks base method.
+func (m *MockSingleClientProvider) StreamFilterLogs(ctx context.Context, fromBlock uint64) <-chan types.Log {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamFilterLogs", ctx, fromBlock)
+	ret0, _ := ret[0].(<-chan types.Log)
+	return ret0
+}
+
+// StreamFilterLogs indicates an expected call of StreamFilterLogs.
+func (mr *MockSingleClientProviderMockRecorder) StreamFilterLogs(ctx, fromBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamFilterLogs", reflect.TypeOf((*MockSingleClientProvider)(nil).StreamFilterLogs), ctx, fromBlock)
+}
+
+// StreamFinalizedLogs mocks base method.
+func (m *MockSingleClientProvider) StreamFinalizedLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StreamFinalizedLogs", ctx, fromBlock)
+	ret0, _ := ret[0].(<-chan BlockLogs)
+	return ret0
+}
+
+// StreamFinalizedLogs indicates an expected call of StreamFinalizedLogs.
+func (mr *MockSingleClientProviderMockRecorder) StreamFinalizedLogs(ctx, fromBlock any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamFinalizedLogs", reflect.TypeOf((*MockSingleClientProvider)(nil).StreamFinalizedLogs), ctx, fromBlock)
 }
 
 // StreamLogs mocks base method.
