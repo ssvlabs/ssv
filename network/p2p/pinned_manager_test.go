@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/utils/retry"
 )
 
 // test helpers shared across pinned manager tests
@@ -29,9 +28,14 @@ func genPeerID(t *testing.T) peer.ID {
 func maFor(id peer.ID) string { return "/ip4/127.0.0.1/tcp/13001/p2p/" + id.String() }
 
 func TestPinnedManager_PinPeer_RejectsNoAddrs(t *testing.T) {
-	m := newPinnedPeersManager(t.Context(), log.TestLogger(t), retry.BackoffConfig{}, 30*time.Second)
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	m.attachHost(h, h.ConnManager())
 	// empty ID
-	err := m.PinPeer(peer.AddrInfo{})
+	err = m.PinPeer(peer.AddrInfo{})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "empty peer id")
 	// valid ID but no addrs
@@ -42,9 +46,14 @@ func TestPinnedManager_PinPeer_RejectsNoAddrs(t *testing.T) {
 }
 
 func TestPinnedManager_UnpinPeer_NotPinned(t *testing.T) {
-	m := newPinnedPeersManager(t.Context(), log.TestLogger(t), retry.BackoffConfig{}, 30*time.Second)
-	t.Cleanup(func() { m.Close() })
-	err := m.UnpinPeer(genPeerID(t))
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	m.attachHost(h, h.ConnManager())
+	t.Cleanup(func() { m.close() })
+	err = m.UnpinPeer(genPeerID(t))
 	require.Error(t, err)
 	require.ErrorContains(t, err, "peer not pinned")
 }
@@ -52,7 +61,7 @@ func TestPinnedManager_UnpinPeer_NotPinned(t *testing.T) {
 func TestPinnedManager_ListPinned_SnapshotAndOrder(t *testing.T) {
 	id1 := genPeerID(t)
 	id2 := genPeerID(t)
-	m := newPinnedPeersManager(t.Context(), log.TestLogger(t), retry.BackoffConfig{}, 30*time.Second)
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
 	// seed
 	// insert in reverse order to verify sorting is by ID
 	m.peers.Set(id2, &peer.AddrInfo{ID: id2})
@@ -79,9 +88,9 @@ func TestPinnedManager_PinPeer_Success_WithHostAndCanceledCtx(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	m := newPinnedPeersManager(ctx, log.TestLogger(t), retry.BackoffConfig{}, 30*time.Second)
-	m.AttachHost(h, h.ConnManager())
-	t.Cleanup(func() { m.Close() })
+	m := newPinnedPeersManager(ctx, log.TestLogger(t))
+	m.attachHost(h, h.ConnManager())
+	t.Cleanup(func() { m.close() })
 
 	id := genPeerID(t)
 	addr, err := ma.NewMultiaddr(maFor(id))
@@ -98,11 +107,11 @@ func TestPinnedManager_PinPeer_Success_WithHostAndCanceledCtx(t *testing.T) {
 
 func TestPinnedManager_OnPinnedPeerDiscovered_NoHost(t *testing.T) {
 	id := genPeerID(t)
-	m := newPinnedPeersManager(t.Context(), log.TestLogger(t), retry.BackoffConfig{}, 30*time.Second)
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
 	m.peers.Set(id, &peer.AddrInfo{ID: id})
 
 	// With nil host and pinned peer, function should return early without panic and without changes
-	m.OnDiscovered(peer.AddrInfo{ID: id})
+	m.onDiscovered(peer.AddrInfo{ID: id})
 
 	ai, ok := m.peers.Get(id)
 	require.True(t, ok)
@@ -119,11 +128,11 @@ func TestPinnedManager_AttachHost_PersistsAddrsAndProtects(t *testing.T) {
 	addr, err := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/13001")
 	require.NoError(t, err)
 
-	m := newPinnedPeersManager(t.Context(), log.TestLogger(t), retry.BackoffConfig{Initial: 5 * time.Millisecond, Max: 5 * time.Millisecond}, 30*time.Second)
-	t.Cleanup(func() { m.Close() })
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	t.Cleanup(func() { m.close() })
 
 	m.peers.Set(id, &peer.AddrInfo{ID: id, Addrs: []ma.Multiaddr{addr}})
-	m.AttachHost(h, h.ConnManager())
+	m.attachHost(h, h.ConnManager())
 
 	addrs := h.Peerstore().Addrs(id)
 	found := false
@@ -136,52 +145,110 @@ func TestPinnedManager_AttachHost_PersistsAddrsAndProtects(t *testing.T) {
 	require.True(t, found, "expected pinned peer address to be persisted")
 }
 
+func TestPinnedManager_AttachHost_PanicsOnNilInputs(t *testing.T) {
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	// nil host and nil conn manager
+	require.Panics(t, func() { m.attachHost(nil, nil) })
+
+	// non-nil host but nil conn manager
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+	require.Panics(t, func() { m.attachHost(h, nil) })
+}
+
+func TestPinnedManager_AttachHost_PanicsOnSecondCall(t *testing.T) {
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	m.attachHost(h, h.ConnManager())
+	require.Panics(t, func() { m.attachHost(h, h.ConnManager()) })
+}
+
 func TestPinnedManager_OnConnected_SetsStabilizationTimer(t *testing.T) {
 	id := genPeerID(t)
-	m := newPinnedPeersManager(t.Context(), log.TestLogger(t), retry.BackoffConfig{}, 30*time.Second)
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	m.attachHost(h, h.ConnManager())
 	m.peers.Set(id, &peer.AddrInfo{ID: id})
 
-	m.onConnected(id)
-	if _, ok := m.stabilizers.Get(id); !ok {
+	m.keepalive.onConnected(id)
+	if _, ok := m.keepalive.stabilizers.Get(id); !ok {
 		t.Fatalf("expected stabilization timer set for %s", id)
 	}
 }
 
 func TestPinnedManager_OnDisconnected_ClearsTimer(t *testing.T) {
 	id := genPeerID(t)
-	m := newPinnedPeersManager(t.Context(), log.TestLogger(t), retry.BackoffConfig{}, 30*time.Second)
-	t.Cleanup(func() { m.Close() })
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	m.attachHost(h, h.ConnManager())
+	t.Cleanup(func() { m.close() })
 	m.peers.Set(id, &peer.AddrInfo{ID: id})
 	tmr := time.AfterFunc(time.Hour, func() {})
-	m.stabilizers.Set(id, tmr)
+	m.keepalive.stabilizers.Set(id, tmr)
 
-	m.onDisconnected(id)
-	if _, ok := m.stabilizers.Get(id); ok {
+	m.keepalive.onDisconnected(id)
+	if _, ok := m.keepalive.stabilizers.Get(id); ok {
 		t.Fatalf("expected stabilization timer cleared for %s", id)
 	}
 }
 
-func TestPinnedManager_SeedPins_AfterAttachHost_Errors(t *testing.T) {
+func TestPinnedManager_UnpinPeer_ClearsKeepalive(t *testing.T) {
+	id := genPeerID(t)
+
+	h, err := libp2p.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = h.Close() })
+
+	m := newPinnedPeersManager(t.Context(), log.TestLogger(t))
+	m.attachHost(h, h.ConnManager())
+	t.Cleanup(func() { m.close() })
+
+	// Mark as pinned to allow UnpinPeer to proceed.
+	m.peers.Set(id, &peer.AddrInfo{ID: id})
+
+	// Seed a stabilization timer.
+	tmr := time.AfterFunc(time.Hour, func() {})
+	m.keepalive.stabilizers.Set(id, tmr)
+
+	// Now unpin: this must clear stabilization timer.
+	require.NoError(t, m.UnpinPeer(id))
+
+	if _, ok := m.keepalive.stabilizers.Get(id); ok {
+		t.Fatalf("expected stabilization timer cleared for %s", id)
+	}
+
+	// No need to rely on timing for redial cancellation here.
+}
+
+func TestPinnedManager_SeedPins_AfterAttachHost_Panics(t *testing.T) {
 	h, err := libp2p.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = h.Close() })
 
 	logger := log.TestLogger(t)
-	m := newPinnedPeersManager(t.Context(), logger, retry.BackoffConfig{}, 30*time.Second)
-	m.AttachHost(h, h.ConnManager())
+	m := newPinnedPeersManager(t.Context(), logger)
+	m.attachHost(h, h.ConnManager())
 
 	id := genPeerID(t)
 	addr, err := ma.NewMultiaddr(maFor(id))
 	require.NoError(t, err)
 	pins := []peer.AddrInfo{{ID: id, Addrs: []ma.Multiaddr{addr}}}
 
-	err = m.SeedPins(pins)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "SeedPins must be called before AttachHost")
+	require.Panics(t, func() { m.seedPinsFromConfig(pins) })
 }
 
-// parse and p2pNetwork pinned config integration
-func Test_parsePeers_ValidAndInvalid(t *testing.T) {
+// parsePeers: all valid entries succeed and deduplicate by ID.
+func Test_parsePeers_AllValid(t *testing.T) {
 	id1 := genPeerID(t)
 	id2 := genPeerID(t)
 
@@ -189,16 +256,13 @@ func Test_parsePeers_ValidAndInvalid(t *testing.T) {
 	good2 := maFor(id2)
 
 	entries := []string{
-		good1 + ",  /ip4/127.0.0.1/tcp/13002/p2p/" + id1.String(), // second addr for id1
+		good1 + ",/ip4/127.0.0.1/tcp/13002/p2p/" + id1.String(), // second addr for id1
 		good2,
-		id2.String(),               // bare ID should be ignored
-		"/ip4/127.0.0.1/tcp/13003", // missing /p2p -> invalid
-		"",
-		"   ",
 	}
 
 	logger := log.TestLogger(t)
-	parsed := parsePeers("pinned", entries, logger)
+	parsed, err := parsePeers("pinned", entries, logger)
+	require.NoError(t, err)
 	require.Len(t, parsed, 2)
 	mp := map[peer.ID]int{}
 	for _, ai := range parsed {
@@ -210,24 +274,42 @@ func Test_parsePeers_ValidAndInvalid(t *testing.T) {
 	require.Equal(t, 1, mp[id2])
 }
 
-func Test_parsePinnedPeers_AcceptsOnlyMultiaddrs(t *testing.T) {
+// parsePeers: any invalid entry returns an error.
+func Test_parsePeers_InvalidReturnsError(t *testing.T) {
 	id1 := genPeerID(t)
 	id2 := genPeerID(t)
-	id3 := genPeerID(t)
+
+	good1 := maFor(id1)
+	good2 := maFor(id2)
+
+	entries := []string{
+		good1,
+		good2,
+		id2.String(),               // bare ID -> invalid
+		"/ip4/127.0.0.1/tcp/13003", // missing /p2p -> invalid
+	}
+
+	logger := log.TestLogger(t)
+	_, err := parsePeers("pinned", entries, logger)
+	require.Error(t, err)
+}
+
+func Test_parsePinnedPeers_ValidOnly(t *testing.T) {
+	id1 := genPeerID(t)
+	id2 := genPeerID(t)
 
 	entries := []string{
 		maFor(id1), // ok
 		maFor(id2) + ",/ip4/127.0.0.1/tcp/13005/p2p/" + id2.String(), // ok (two addrs)
-		id3.String(),               // bare id -> ignored
-		"/ip4/127.0.0.1/tcp/13001", // invalid -> ignored
 	}
 
 	logger := log.TestLogger(t)
-	m := newPinnedPeersManager(t.Context(), logger, retry.BackoffConfig{}, 30*time.Second)
-	pins := parsePeers("pinned", entries, logger)
-	require.NoError(t, m.SeedPins(pins))
+	m := newPinnedPeersManager(t.Context(), logger)
+	pins, err := parsePeers("pinned", entries, logger)
+	require.NoError(t, err)
+	m.seedPinsFromConfig(pins)
 
-	// id1 and id2 should be pinned; id3 should be absent
+	// id1 and id2 should be pinned
 	list := m.ListPinned()
 	require.Len(t, list, 2)
 	// verify the two IDs exist and counts

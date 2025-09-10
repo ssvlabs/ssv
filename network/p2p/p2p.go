@@ -36,7 +36,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
-	"github.com/ssvlabs/ssv/utils/retry"
 	"github.com/ssvlabs/ssv/utils/tasks"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
@@ -58,11 +57,6 @@ const (
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute
 	topicsReportingInterval         = 60 * time.Second
-	// pinned redial backoff: start at 10s, double until 10m, then stay at 10m
-	pinnedRedialInitialBackoff = 10 * time.Second
-	pinnedRedialMaxBackoff     = 10 * time.Minute
-	// stabilization window: connection must survive this long before we reset backoff
-	pinnedStabilizeWindow = 30 * time.Second
 )
 
 // PeersIndexProvider holds peers index instance
@@ -157,8 +151,6 @@ func New(
 		pinned: newPinnedPeersManager(
 			ctx,
 			logger,
-			retry.BackoffConfig{Initial: pinnedRedialInitialBackoff, Max: pinnedRedialMaxBackoff, Jitter: time.Second},
-			pinnedStabilizeWindow,
 		),
 	}
 
@@ -175,7 +167,10 @@ func (n *p2pNetwork) parseTrustedPeers() error {
 	if len(n.cfg.TrustedPeers) == 0 {
 		return nil
 	}
-	parsed := parsePeers("trusted", n.cfg.TrustedPeers, n.logger)
+	parsed, err := parsePeers("trusted", n.cfg.TrustedPeers, n.logger)
+	if err != nil {
+		return err
+	}
 	for i := range parsed {
 		ai := parsed[i]
 		n.trustedPeers = append(n.trustedPeers, &peer.AddrInfo{ID: ai.ID, Addrs: ai.Addrs})
@@ -188,14 +183,18 @@ func (n *p2pNetwork) parsePinnedPeers() error {
 	if len(n.cfg.PinnedPeers) == 0 {
 		return nil
 	}
-	pins := parsePeers("pinned", n.cfg.PinnedPeers, n.logger)
-	return n.pinned.SeedPins(pins)
+	pins, err := parsePeers("pinned", n.cfg.PinnedPeers, n.logger)
+	if err != nil {
+		return err
+	}
+	n.pinned.seedPinsFromConfig(pins)
+	return nil
 }
 
 // parsePeers converts textual peer entries (YAML list or comma-separated strings)
 // into a normalized, deduplicated []peer.AddrInfo, logging and skipping malformed
 // entries and bare IDs without multiaddrs.
-func parsePeers(kind string, entries []string, logger *zap.Logger) []peer.AddrInfo {
+func parsePeers(kind string, entries []string, logger *zap.Logger) ([]peer.AddrInfo, error) {
 	grouped := make(map[peer.ID][]ma.Multiaddr)
 	for _, listStr := range entries {
 		for _, entry := range strings.Split(listStr, ",") {
@@ -205,8 +204,7 @@ func parsePeers(kind string, entries []string, logger *zap.Logger) []peer.AddrIn
 			}
 			ai, err := peer.AddrInfoFromString(entry)
 			if err != nil {
-				logger.Warn("could not parse peer entry", zap.String("kind", kind), zap.String("entry", entry), zap.Error(err))
-				continue
+				return nil, fmt.Errorf("failed to parse %s peer entry %q: %w", kind, entry, err)
 			}
 			grouped[ai.ID] = append(grouped[ai.ID], ai.Addrs...)
 		}
@@ -215,13 +213,13 @@ func parsePeers(kind string, entries []string, logger *zap.Logger) []peer.AddrIn
 	for id, addrs := range grouped {
 		addrs = commons.DedupMultiaddrs(addrs)
 		if len(addrs) == 0 {
-			continue
+			return nil, fmt.Errorf("failed to parse %s peer entry for id=%s: no valid addresses found", kind, id)
 		}
 		out = append(out, peer.AddrInfo{ID: id, Addrs: addrs})
 	}
 	// deterministic order by peer ID
 	slices.SortFunc(out, func(a, b peer.AddrInfo) int { return strings.Compare(a.ID.String(), b.ID.String()) })
-	return out
+	return out, nil
 }
 
 // Host implements HostProvider
@@ -264,7 +262,7 @@ func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
-	n.pinned.Close()
+	n.pinned.close()
 
 	if err := n.libConnManager.Close(); err != nil {
 		n.logger.Warn("could not close discovery", zap.Error(err))
@@ -379,13 +377,13 @@ func (n *p2pNetwork) peersTrimming() func() {
 		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
 
 		// Never disconnect pinned peers when dropping bad peers.
-		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.pinned.FilterUnpinned(n.host.Network().Peers()))
+		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.pinned.filterUnpinned(n.host.Network().Peers()))
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
 			return
 		}
 
-		connectedPeers := n.pinned.FilterUnpinned(n.host.Network().Peers())
+		connectedPeers := n.pinned.filterUnpinned(n.host.Network().Peers())
 
 		const maximumIrrelevantPeersToDisconnect = 3
 		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(
@@ -411,7 +409,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
 		// enough to it - this ensures we don't skip trim iteration because of "random fluctuations"
 		// in currently connected peer count at that limit boundary
-		connectedPeers = n.pinned.FilterUnpinned(n.host.Network().Peers())
+		connectedPeers = n.pinned.filterUnpinned(n.host.Network().Peers())
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
 			// We probably don't want to trim outgoing connections then, but from time-to-time we want to
 			// trim (and rotate) some incoming connections when inbound limit is hit just to make sure
@@ -457,7 +455,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 	}
 
 	// Note: a pinned peer might not be in pubsub, but if it is, we must not trim it.
-	myPeers = n.pinned.FilterUnpinned(myPeers)
+	myPeers = n.pinned.filterUnpinned(myPeers)
 
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
 		// sort in asc order (peers with the lowest scores come first)
@@ -516,7 +514,7 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 				return
 			}
 			// If this is a pinned peer, persist/refresh its addrs and ensure protection.
-			n.pinned.OnDiscovered(e.AddrInfo)
+			n.pinned.onDiscovered(e.AddrInfo)
 			select {
 			case connector <- e.AddrInfo:
 			default:
