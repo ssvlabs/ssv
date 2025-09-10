@@ -17,6 +17,7 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
@@ -227,14 +228,14 @@ func (mv *messageValidator) validateQBFTLogic(
 				}
 			}
 		} else if len(signedSSVMessage.OperatorIDs) > 1 {
-			quorum := Quorum{
+			quorum := qbftstorage.Quorum{
 				Signers:   signedSSVMessage.OperatorIDs,
 				Committee: committeeInfo.committee,
 			}
 
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
 			if signerState.SeenSigners != nil {
-				if _, ok := signerState.SeenSigners[quorum.ToBitMask()]; ok {
+				if _, ok := signerState.SeenSigners[quorum.ToSignersBitMask()]; ok {
 					return ErrDecidedWithSameSigners
 				}
 			}
@@ -342,15 +343,15 @@ func (mv *messageValidator) processSignerState(
 
 	signerCount := len(signedSSVMessage.OperatorIDs)
 	if signerCount > 1 {
-		quorum := Quorum{
+		quorum := qbftstorage.Quorum{
 			Signers:   signedSSVMessage.OperatorIDs,
 			Committee: committee,
 		}
 
 		if signerState.SeenSigners == nil {
-			signerState.SeenSigners = make(map[SignersBitMask]struct{}) // lazy init on demand to reduce mem consumption
+			signerState.SeenSigners = make(map[qbftstorage.SignersBitMask]struct{}) // lazy init on demand to reduce mem consumption
 		}
-		signerState.SeenSigners[quorum.ToBitMask()] = struct{}{}
+		signerState.SeenSigners[quorum.ToSignersBitMask()] = struct{}{}
 	}
 
 	return signerState.SeenMsgTypes.RecordConsensusMessage(signedSSVMessage, consensusMessage)

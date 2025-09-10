@@ -26,7 +26,8 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 	require.NoError(t, err)
 
 	eh := &EventHandler{
-		nodeStorage: nodeStorage,
+		nodeStorage:   nodeStorage,
+		networkConfig: networkconfig.TestNetwork,
 	}
 
 	generateOperators := func(count uint64) []uint64 {

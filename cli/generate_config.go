@@ -43,6 +43,7 @@ var (
 	ssvRegistrySyncOffset   uint64
 	ssvRegistryContractAddr string
 	ssvBootnodes            string
+	ssvMaxF                 uint8
 	ssvDiscoveryProtocolID  string
 )
 
@@ -109,6 +110,7 @@ var generateConfigCmd = &cobra.Command{
 			RegistryContractAddr: ethcommon.HexToAddress(ssvRegistryContractAddr),
 			Bootnodes:            bootnodes,
 			DiscoveryProtocolID:  parsedDiscoveryProtocolIDArr,
+			MaxF:                 ssvMaxF,
 		}
 
 		data, err := yaml.Marshal(&config)
@@ -144,6 +146,7 @@ func init() {
 	generateConfigCmd.Flags().StringVar(&ssvRegistryContractAddr, "ssv-registry-contract-addr", defaultNetwork.RegistryContractAddr.String(), "SSV registry contract addr")
 	generateConfigCmd.Flags().StringVar(&ssvBootnodes, "ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")
 	ssvDiscoveryProtocolIDDefault := "0x" + hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:])
+	generateConfigCmd.Flags().Uint8Var(&ssvMaxF, "ssv-max-f", 4, "SSV max failed nodes")
 	generateConfigCmd.Flags().StringVar(&ssvDiscoveryProtocolID, "ssv-discovery-protocol-id", ssvDiscoveryProtocolIDDefault, "SSV discovery protocol ID")
 
 	RootCmd.AddCommand(generateConfigCmd)

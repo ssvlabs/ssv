@@ -20,11 +20,37 @@ const (
 
 type Handler struct {
 	logger *zap.Logger
+	store  *storage.ParticipantStores
+	domain spectypes.DomainType
 }
 
-func NewHandler(logger *zap.Logger) *Handler {
+func NewHandler(
+	logger *zap.Logger,
+	store *storage.ParticipantStores,
+	domain spectypes.DomainType,
+) *Handler {
 	return &Handler{
 		logger: logger,
+		store:  store,
+		domain: domain,
+	}
+}
+
+// HandleQueryRequests handles query requests
+func (h *Handler) HandleQueryRequests(nm *NetworkMessage) {
+	if nm.Err != nil {
+		nm.Msg = Message{Type: TypeError, Data: []string{"could not parse network message"}}
+	}
+	h.logger.Debug("got incoming export request",
+		zap.String("type", string(nm.Msg.Type)))
+
+	switch nm.Msg.Type {
+	case TypeDecided:
+		h.HandleParticipantsQuery(nm)
+	case TypeError:
+		h.HandleErrorQuery(nm)
+	default:
+		h.HandleUnknownQuery(nm)
 	}
 }
 
@@ -57,7 +83,7 @@ func (h *Handler) HandleUnknownQuery(nm *NetworkMessage) {
 }
 
 // HandleParticipantsQuery handles TypeParticipants queries.
-func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *NetworkMessage, domain spectypes.DomainType) {
+func (h *Handler) HandleParticipantsQuery(nm *NetworkMessage) {
 	h.logger.Debug("handles query request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -88,7 +114,7 @@ func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *
 		nm.Msg = res
 		return
 	}
-	roleStorage := store.Get(role)
+	roleStorage := h.store.Get(role)
 	if roleStorage == nil {
 		h.logger.Warn("role storage doesn't exist", fields.BeaconRole(role))
 		res.Data = []string{"internal error - role storage doesn't exist", role.String()}
@@ -104,7 +130,7 @@ func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *
 		res.Data = []string{"internal error - could not get participants messages"}
 	} else {
 		participations := toParticipations(role, spectypes.ValidatorPK(pkRaw), participantsList)
-		data, err := ParticipantsAPIData(domain, participations...)
+		data, err := ParticipantsAPIData(h.domain, participations...)
 		if err != nil {
 			res.Data = []string{err.Error()}
 		} else {

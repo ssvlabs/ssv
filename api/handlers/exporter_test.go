@@ -46,7 +46,7 @@ func (m *mockParticipantStore) CleanAllInstances() error {
 	return nil
 }
 
-func (m *mockParticipantStore) SaveParticipants(spectypes.ValidatorPK, phase0.Slot, []spectypes.OperatorID) (bool, error) {
+func (m *mockParticipantStore) SaveParticipants(spectypes.ValidatorPK, phase0.Slot, qbftstorage.Quorum) (bool, error) {
 	return true, nil
 }
 

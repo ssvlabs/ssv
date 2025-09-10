@@ -12,12 +12,10 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-const maxOperators = 13
-
 func (eh *EventHandler) validateOperators(txn basedb.Txn, operators []uint64) error {
 	operatorCount := len(operators)
 
-	if operatorCount > maxOperators {
+	if operatorCount > eh.networkConfig.MaxOperators() {
 		return fmt.Errorf("too many operators (%d)", operatorCount)
 	}
 

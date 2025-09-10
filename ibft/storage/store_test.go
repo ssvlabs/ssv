@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"crypto/rsa"
+	"encoding/binary"
 	"fmt"
 	"slices"
 	"sync"
@@ -19,11 +20,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -65,7 +68,10 @@ func TestRemoveSlot(t *testing.T) {
 		_, err := storage.SaveParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
 			phase0.Slot(d.State.Height),
-			d.DecidedMessage.OperatorIDs,
+			qbftstorage.Quorum{
+				Signers:   d.DecidedMessage.OperatorIDs,
+				Committee: oids,
+			},
 		)
 		require.NoError(t, err)
 	}
@@ -147,7 +153,10 @@ func TestSlotCleanupJob(t *testing.T) {
 		_, err := storage.SaveParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
 			phase0.Slot(d.State.Height),
-			d.DecidedMessage.OperatorIDs,
+			qbftstorage.Quorum{
+				Signers:   d.DecidedMessage.OperatorIDs,
+				Committee: oids,
+			},
 		)
 		require.NoError(t, err)
 	}
@@ -169,7 +178,10 @@ func TestSlotCleanupJob(t *testing.T) {
 		_, err := storage.SaveParticipants(
 			spectypes.ValidatorPK(pk.Serialize()),
 			phase0.Slot(d.State.Height),
-			d.DecidedMessage.OperatorIDs,
+			qbftstorage.Quorum{
+				Signers:   d.DecidedMessage.OperatorIDs,
+				Committee: oids,
+			},
 		)
 		require.NoError(t, err)
 	}
@@ -264,7 +276,16 @@ func TestEncodeDecodeOperators(t *testing.T) {
 	}
 }
 
-func Test_mergeQuorums(t *testing.T) {
+func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+	encoded := make([]byte, len(operators)*8)
+	for i, v := range operators {
+		binary.BigEndian.PutUint64(encoded[i*8:], v)
+	}
+
+	return encoded, nil
+}
+
+func Test_mergeParticipantsBitMask(t *testing.T) {
 	tests := []struct {
 		name          string
 		participants1 []spectypes.OperatorID
@@ -275,7 +296,7 @@ func Test_mergeQuorums(t *testing.T) {
 			name:          "Both participants empty",
 			participants1: []spectypes.OperatorID{},
 			participants2: []spectypes.OperatorID{},
-			expected:      nil,
+			expected:      []spectypes.OperatorID{},
 		},
 		{
 			name:          "First participants empty",
@@ -308,25 +329,120 @@ func Test_mergeQuorums(t *testing.T) {
 			expected:      []spectypes.OperatorID{1, 2, 3},
 		},
 		{
-			name:          "Unsorted input participants",
-			participants1: []spectypes.OperatorID{5, 1, 3},
-			participants2: []spectypes.OperatorID{4, 2, 6},
-			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6},
-		},
-		{
 			name:          "Large participants size",
 			participants1: []spectypes.OperatorID{1, 3, 5, 7, 9, 11, 13},
-			participants2: []spectypes.OperatorID{2, 4, 6, 8, 10, 12, 14},
-			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+			participants2: []spectypes.OperatorID{2, 4, 6, 8, 10, 12},
+			expected:      []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
 		},
 	}
 
 	for _, tt := range tests {
+		committee := []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+
 		t.Run(tt.name, func(t *testing.T) {
-			result := mergeParticipants(tt.participants1, tt.participants2)
-			require.Equal(t, tt.expected, result)
+			q1 := qbftstorage.Quorum{
+				Signers:   tt.participants1,
+				Committee: committee,
+			}
+
+			q2 := qbftstorage.Quorum{
+				Signers:   tt.participants2,
+				Committee: committee,
+			}
+
+			result := mergeParticipantsBitMask(q1.ToSignersBitMask(), q2.ToSignersBitMask())
+			signers, err := result.Signers(committee)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, signers)
 		})
 	}
+}
+
+// TestUpsertSlot validates the interval upsertion logic without any DB dependency.
+func TestUpsertSlot(t *testing.T) {
+	store := &participantStorage{} // no DB needed for in-memory logic
+	m := make(map[phase0.Slot][]spectypes.OperatorID)
+
+	// 1. Empty history: first insert
+	changed := store.upsertSlot(m, 5, []spectypes.OperatorID{1, 2, 3})
+	require.True(t, changed)
+	require.Equal(t, []spectypes.OperatorID{1, 2, 3}, m[5])
+
+	// 2. Insert same as existing predecessor: no change
+	changed = store.upsertSlot(m, 7, []spectypes.OperatorID{1, 2, 3})
+	require.False(t, changed)
+
+	// 3. Insert different after existing: new boundary
+	changed = store.upsertSlot(m, 10, []spectypes.OperatorID{4, 5})
+	require.True(t, changed)
+	require.Equal(t, []spectypes.OperatorID{4, 5}, m[10])
+
+	// 4. Insert matching next interval: should merge backward
+	// (the interval at start=10 has {4,5})
+	changed = store.upsertSlot(m, 8, []spectypes.OperatorID{4, 5})
+	require.True(t, changed)
+	require.Contains(t, m, phase0.Slot(8))
+	require.NotContains(t, m, phase0.Slot(10))
+
+	// 5. Insert in between different intervals: fresh boundary
+	changed = store.upsertSlot(m, 6, []spectypes.OperatorID{7})
+	require.True(t, changed)
+	require.Equal(t, []spectypes.OperatorID{7}, m[6])
+}
+
+// helper to create a new ibftStorage with an in-memory DB
+func newTestStorage(t *testing.T) *participantStorage {
+	db, err := kv.NewInMemory(log.TestLogger(t), basedb.Options{})
+	require.NoError(t, err)
+
+	store := &participantStorage{
+		prefix: []byte("test:"),
+		db:     db,
+	}
+	return store
+}
+
+func TestSaveAndGetCommittee(t *testing.T) {
+	store := newTestStorage(t)
+	pk := spectypes.ValidatorPK{1, 2, 3}
+
+	// Save committees at slots 10, 20, 30
+	req1 := []spectypes.OperatorID{11, 12}
+	req2 := []spectypes.OperatorID{21}
+	req3 := []spectypes.OperatorID{31, 32, 33}
+
+	err := store.saveCommittee(nil, pk, 10, req1)
+	require.NoError(t, err)
+	err = store.saveCommittee(nil, pk, 20, req2)
+	require.NoError(t, err)
+	err = store.saveCommittee(nil, pk, 30, req3)
+	require.NoError(t, err)
+
+	// Exact slot retrieval
+	op, err := store.getCommittee(nil, pk, 20)
+	require.NoError(t, err)
+	require.Equal(t, req2, op)
+
+	// Between slots: 25 → should get slot 20
+	op, err = store.getCommittee(nil, pk, 25)
+	require.NoError(t, err)
+	require.Equal(t, req2, op)
+
+	// After last: 100 → slot 30
+	op, err = store.getCommittee(nil, pk, 100)
+	require.NoError(t, err)
+	require.Equal(t, req3, op)
+
+	// Before first: 5 → error
+	op, err = store.getCommittee(nil, pk, 5)
+	require.Error(t, err)
+	require.Nil(t, op)
+
+	// No history for new pk
+	newPK := spectypes.ValidatorPK{4, 5, 6}
+	op, err = store.getCommittee(nil, newPK, 1)
+	require.NoError(t, err)
+	require.Nil(t, op)
 }
 
 // GenerateNodes generates randomly nodes
