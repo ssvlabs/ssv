@@ -87,6 +87,7 @@ var (
 	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
 	ErrUnknownOperator                  = Error{text: "operator is unknown"}
 	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
+	ErrRCShorterJustifications          = Error{text: "round change has less justifications than previous ones"}
 )
 
 // Rejected errors.
