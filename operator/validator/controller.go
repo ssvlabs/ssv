@@ -850,29 +850,48 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 }
 
 func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*spectypes.CommitteeMember, error) {
-	operators := make([]*spectypes.Operator, len(share.Committee))
-	for i, cm := range share.Committee {
+	operators := make([]*spectypes.Operator, 0, len(share.Committee))
+	var activeOperators uint64
+
+	for _, cm := range share.Committee {
 		opdata, found, err := c.operatorsStorage.GetOperatorData(nil, cm.Signer)
 		if err != nil {
 			return nil, fmt.Errorf("could not get operator data: %w", err)
 		}
+
+		operator := &spectypes.Operator{
+			OperatorID: cm.Signer,
+		}
+
 		if !found {
-			//TODO alan: support removed ops
-			return nil, fmt.Errorf("operator not found")
+			c.logger.Warn(
+				"operator data not found, validator will only start if the number of available operators is greater than or equal to the committee quorum",
+				fields.OperatorID(cm.Signer),
+				fields.CommitteeID(share.CommitteeID()),
+			)
+		} else {
+			activeOperators++
+
+			operatorPEM, err := base64.StdEncoding.DecodeString(opdata.PublicKey)
+			if err != nil {
+				return nil, fmt.Errorf("could not decode public key: %w", err)
+			}
+
+			operator.SSVOperatorPubKey = operatorPEM
 		}
 
-		operatorPEM, err := base64.StdEncoding.DecodeString(opdata.PublicKey)
-		if err != nil {
-			return nil, fmt.Errorf("could not decode public key: %w", err)
-		}
-
-		operators[i] = &spectypes.Operator{
-			OperatorID:        cm.Signer,
-			SSVOperatorPubKey: operatorPEM,
-		}
+		operators = append(operators, operator)
 	}
 
-	f := ssvtypes.ComputeF(uint64(len(share.Committee)))
+	// This check is needed in case not all operators are available in storage.
+	// It can happen after an operator is removed. In such a scenario, the committee should
+	// continue conducting duties, but the number of operators must still meet the quorum.
+	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
+	if activeOperators < quorum {
+		return nil, fmt.Errorf("insufficient active operators for quorum: %d available, %d required", activeOperators, quorum)
+	}
+
+	faultyNodeTolerance := ssvtypes.ComputeF(uint64(len(share.Committee)))
 
 	operatorPEM, err := base64.StdEncoding.DecodeString(c.operatorDataStore.GetOperatorData().PublicKey)
 	if err != nil {
@@ -883,7 +902,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		OperatorID:        c.operatorDataStore.GetOperatorID(),
 		CommitteeID:       share.CommitteeID(),
 		SSVOperatorPubKey: operatorPEM,
-		FaultyNodes:       f,
+		FaultyNodes:       faultyNodeTolerance,
 		Committee:         operators,
 	}, nil
 }
