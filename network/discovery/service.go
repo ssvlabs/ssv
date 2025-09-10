@@ -51,7 +51,9 @@ type Options struct {
 // Validate checks if the options are valid.
 func (o *Options) Validate() error {
 	if len(o.HostDNS) > 0 && len(o.HostAddress) > 0 {
-		return fmt.Errorf("only one of HostDNS or HostAddress may be set")
+		return fmt.Errorf("conflicting host configuration: both HostDNS (%q) and HostAddress (%q) are set,"+
+			" specify only one",
+			o.HostDNS, o.HostAddress)
 	}
 	return nil
 }
