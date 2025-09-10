@@ -26,8 +26,9 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -55,7 +56,6 @@ type LocalKeyManager struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
-	domain            spectypes.DomainType
 	operatorDecrypter keys.OperatorDecrypter
 	slashingProtector slashingProtector
 }
@@ -64,7 +64,7 @@ type LocalKeyManager struct {
 func NewLocalKeyManager(
 	logger *zap.Logger,
 	db basedb.Database,
-	network networkconfig.NetworkConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
 	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
@@ -72,7 +72,7 @@ func NewLocalKeyManager(
 		return nil, fmt.Errorf("get encryption key: %w", err)
 	}
 
-	signerStore := NewSignerStorage(db, network.Beacon, logger)
+	signerStore := NewSignerStorage(db, beaconConfig, logger)
 	signerStore.SetEncryptionKey(encryptionKey)
 
 	protection := slashingprotection.NewNormalProtection(signerStore)
@@ -96,15 +96,14 @@ func NewLocalKeyManager(
 		}
 	}
 
-	beaconSigner := signer.NewSimpleSigner(wallet, protection, core.Network(network.Beacon.GetBeaconNetwork()))
+	beaconSigner := signer.NewSimpleSigner(wallet, protection, beaconConfig)
 
 	return &LocalKeyManager{
 		logger:            logger,
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
-		domain:            network.DomainType,
-		slashingProtector: NewSlashingProtector(logger, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
 	}, nil
 }

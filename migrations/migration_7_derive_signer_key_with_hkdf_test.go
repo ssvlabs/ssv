@@ -12,13 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/operator/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
@@ -30,7 +31,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
@@ -42,7 +43,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		options := Options{
 			Db:              db,
-			NetworkConfig:   networkconfig.TestNetwork,
+			BeaconConfig:    networkconfig.TestNetwork.Beacon,
 			OperatorPrivKey: operatorPrivKey,
 		}
 
@@ -75,7 +76,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		options := Options{
 			Db:              db,
-			NetworkConfig:   networkconfig.TestNetwork,
+			BeaconConfig:    networkconfig.TestNetwork.Beacon,
 			OperatorPrivKey: operatorPrivKey,
 		}
 
@@ -97,7 +98,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
@@ -107,7 +108,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		options := Options{
 			Db:              db,
-			NetworkConfig:   networkconfig.TestNetwork,
+			BeaconConfig:    networkconfig.TestNetwork.Beacon,
 			OperatorPrivKey: operatorPrivKey,
 		}
 
@@ -129,7 +130,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
@@ -141,7 +142,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		options := Options{
 			Db:              db,
-			NetworkConfig:   networkconfig.TestNetwork,
+			BeaconConfig:    networkconfig.TestNetwork.Beacon,
 			OperatorPrivKey: operatorPrivKey,
 		}
 
@@ -159,7 +160,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 func setupTest(t *testing.T) (basedb.Database, *zap.Logger) {
 	t.Helper()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 

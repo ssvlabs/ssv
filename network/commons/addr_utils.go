@@ -3,7 +3,6 @@ package commons
 import (
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
@@ -18,18 +17,6 @@ func IPAddr() (net.IP, error) {
 		return nil, errors.Wrap(err, "could not get IPv4 address")
 	}
 	return net.ParseIP(ip), nil
-}
-
-// CheckAddress checks that some address is accessible and returns error accordingly
-func CheckAddress(addr string) error {
-	conn, err := net.DialTimeout("tcp", addr, time.Second*10)
-	if err != nil {
-		return errors.Wrap(err, "IP address is not accessible")
-	}
-	if err := conn.Close(); err != nil {
-		return errors.Wrap(err, "could not close connection")
-	}
-	return nil
 }
 
 // BuildMultiAddress creates a multiaddr from the given params

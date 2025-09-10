@@ -8,6 +8,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -22,8 +23,8 @@ func (b *BaseRunner) signBeaconObject(
 	slot spec.Slot,
 	signatureDomain spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
-	domain, err := runner.GetBeaconNode().DomainData(epoch, signatureDomain)
+	epoch := runner.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
+	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get beacon domain")
 	}
@@ -76,8 +77,8 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 		return errors.New("invalid partial sig slot")
 	}
 
-	// Get signer
-	msgSigner := psigMsgs.Messages[0].Signer // signer is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate())
+	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate())
+	msgSigner := psigMsgs.Messages[0].Signer
 
 	// Get committee (unique for runner)
 	var shareSample *spectypes.Share
@@ -121,7 +122,6 @@ func (b *BaseRunner) validateValidatorIndexInPartialSigMsg(
 
 func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, signature spectypes.Signature, root [32]byte,
 	committee []*spectypes.ShareMember) error {
-
 	for _, n := range committee {
 		if n.Signer == signer {
 			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
@@ -145,7 +145,6 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
-
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {

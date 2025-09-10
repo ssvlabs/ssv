@@ -11,12 +11,13 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/api"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -206,7 +207,6 @@ func TestByPubKeys(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -243,7 +243,6 @@ func TestByOperators(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -296,7 +295,6 @@ func TestByOwners(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -339,7 +337,6 @@ func TestByIndices(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(strings.ToLower(tt.name), func(t *testing.T) {
 			t.Parallel()
 
@@ -433,7 +430,6 @@ func TestRequestClustersBind(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -500,8 +496,8 @@ func (m *mockShares) Drop() error {
 	return nil
 }
 
-func (m *mockShares) UpdateValidatorsMetadata(_ map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	return nil
+func (m *mockShares) UpdateValidatorsMetadata(_ beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	return nil, nil
 }
 
 // TestValidatorsList tests the List method of the Validators handler.

@@ -12,8 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 const (
@@ -55,23 +54,21 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
-	networkConfig networkconfig.NetworkConfig
-	ctx           context.Context
-	added         chan addedEvent
-	ids           map[string]*msgIDEntry
-	locker        sync.Locker
-	ttl           time.Duration
+	ctx    context.Context
+	added  chan addedEvent
+	ids    map[string]*msgIDEntry
+	locker sync.Locker
+	ttl    time.Duration
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, networkConfig networkconfig.NetworkConfig, ttl time.Duration) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
 	handler := &msgIDHandler{
-		networkConfig: networkConfig,
-		ctx:           ctx,
-		added:         make(chan addedEvent, msgIDHandlerBufferSize),
-		ids:           make(map[string]*msgIDEntry),
-		locker:        &sync.Mutex{},
-		ttl:           ttl,
+		ctx:    ctx,
+		added:  make(chan addedEvent, msgIDHandlerBufferSize),
+		ids:    make(map[string]*msgIDEntry),
+		locker: &sync.Mutex{},
+		ttl:    ttl,
 	}
 	return handler
 }

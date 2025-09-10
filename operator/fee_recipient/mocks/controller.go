@@ -10,16 +10,17 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
-	zap "go.uber.org/zap"
 )
 
 // MockRecipientController is a mock of RecipientController interface.
 type MockRecipientController struct {
 	ctrl     *gomock.Controller
 	recorder *MockRecipientControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockRecipientControllerMockRecorder is the mock recorder for MockRecipientController.
@@ -40,13 +41,13 @@ func (m *MockRecipientController) EXPECT() *MockRecipientControllerMockRecorder 
 }
 
 // Start mocks base method.
-func (m *MockRecipientController) Start(logger *zap.Logger) {
+func (m *MockRecipientController) Start(ctx context.Context) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start", logger)
+	m.ctrl.Call(m, "Start", ctx)
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockRecipientControllerMockRecorder) Start(logger any) *gomock.Call {
+func (mr *MockRecipientControllerMockRecorder) Start(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start), ctx)
 }

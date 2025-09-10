@@ -7,8 +7,9 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -67,7 +68,6 @@ func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			require.Equal(t, tc.Result, tc.ShareMetadata.HasBeaconMetadata())
 		})
@@ -93,7 +93,6 @@ func TestValidCommitteeSize(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			for _, size := range tc.sizes {
 				require.Equal(t, tc.valid, ValidCommitteeSize(size))
@@ -125,6 +124,15 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 			Expected: true,
 		},
 		{
+			Name: "Is Attesting and Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateActiveOngoing,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
 			Name: "Pending Queued with Future Activation Epoch",
 			Share: &SSVShare{
 				Status:          eth2apiv1.ValidatorStatePendingQueued,
@@ -154,7 +162,6 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			result := tc.Share.IsAttesting(tc.Epoch)
 			require.Equal(t, tc.Expected, result)
@@ -211,10 +218,8 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-
-			result := tc.Share.IsParticipating(networkconfig.Mainnet, tc.Epoch)
+			result := tc.Share.IsParticipating(networkconfig.TestNetwork.Beacon, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}
@@ -304,12 +309,21 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 			Epoch:    currentEpoch,
 			Expected: false,
 		},
+		{
+			Name: "Exited Share Within Same Period and Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch:  epochSamePeriod,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsSyncCommitteeEligible(networkconfig.TestNetwork, tc.Epoch)
+			result := tc.Share.isSyncCommitteeEligible(networkconfig.TestNetwork.Beacon, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}

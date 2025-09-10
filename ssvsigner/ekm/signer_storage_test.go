@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -34,13 +34,13 @@ func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	if err != nil {
 		return nil, func() {}
 	}
 
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 	return s, func() {
 		db.Close()
 	}
@@ -355,25 +355,25 @@ func TestStorageUtilityFunctions(t *testing.T) {
 	t.Run("SetEncryptionKey", func(t *testing.T) {
 		t.Parallel()
 
-		logger := logging.TestLogger(t)
+		logger := log.TestLogger(t)
 
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
 	t.Run("DataEncryption", func(t *testing.T) {
 		t.Parallel()
 
-		logger := logging.TestLogger(t)
+		logger := log.TestLogger(t)
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 
 		// create a test account
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -525,9 +525,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("InvalidAttestationSSZ", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -542,9 +539,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyAttestationValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -657,9 +651,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyProposalValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 

@@ -15,7 +15,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 const (
@@ -36,7 +36,7 @@ type localDiscovery struct {
 // NewLocalDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
 func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
-	logger = logger.Named(logging.NameDiscoveryService)
+	logger = logger.Named(log.NameDiscoveryService)
 	logger.Debug("configuring mdns")
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
@@ -74,7 +74,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 }
 
 // Bootstrap starts to listen to new nodes
-func (md *localDiscovery) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
+func (md *localDiscovery) Bootstrap(handler HandleNewPeer) error {
 	err := md.svc.Start()
 	if err != nil {
 		return errors.Wrap(err, "could not start mdns service")
@@ -93,18 +93,18 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
+func (md *localDiscovery) RegisterSubnets(subnets ...uint64) (updated bool, err error) {
 	// TODO
 	return false, nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
+func (md *localDiscovery) DeregisterSubnets(subnets ...uint64) (updated bool, err error) {
 	// TODO
 	return false, nil
 }
 
-func (md *localDiscovery) PublishENR(logger *zap.Logger) {
+func (md *localDiscovery) PublishENR() {
 	// TODO
 }
 
@@ -112,6 +112,9 @@ func (md *localDiscovery) PublishENR(logger *zap.Logger) {
 type discoveryNotifee struct {
 	handler HandleNewPeer
 }
+
+// discoveryNotifee implements mdnsDiscover.Notifee
+var _ mdnsDiscover.Notifee = &discoveryNotifee{}
 
 // HandlePeerFound connects to peers discovered via mDNS. Once they're connected,
 // the PubSub system will automatically start interacting with them if they also
@@ -127,7 +130,7 @@ func (md *localDiscovery) Close() error {
 	return nil
 }
 
-func (dvs *localDiscovery) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
+func (dvs *localDiscovery) UpdateDomainType(domain spectypes.DomainType) error {
 	// TODO
 	return nil
 }

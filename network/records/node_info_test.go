@@ -20,7 +20,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			Subnets:       commons.AllSubnets,
+			Subnets:       commons.AllSubnets.String(),
 		},
 	}
 
@@ -42,7 +42,7 @@ func TestNodeInfo_Marshal_Unmarshal(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			Subnets:       commons.AllSubnets,
+			Subnets:       commons.AllSubnets.String(),
 		},
 	}
 

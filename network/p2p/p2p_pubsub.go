@@ -5,17 +5,18 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -69,13 +70,13 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	return nil
 }
 
-func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
+func (n *p2pNetwork) SubscribeAll() error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.fixedSubnets, _ = commons.FromString(commons.AllSubnets)
+	n.persistentSubnets = commons.AllSubnets
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
-		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
+		err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(subnet))
 		if err != nil {
 			return err
 		}
@@ -84,7 +85,8 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 }
 
 // SubscribeRandoms subscribes to random subnets. This method isn't thread-safe.
-func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+// #nosec G115 -- Perm slice is [0, n)
+func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -100,7 +102,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 		// check if any of subnets we've generated in this random set is already being used by us
 		randSubnetAlreadyInUse := false
 		for _, subnet := range randomSubnets {
-			if n.activeSubnets[subnet] == 1 {
+			if n.currentSubnets.IsSet(uint64(subnet)) {
 				randSubnetAlreadyInUse = true
 				break
 			}
@@ -112,33 +114,27 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	}
 
 	for _, subnet := range randomSubnets {
-		// #nosec G115
-		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(uint64(subnet))) // Perm slice is [0, n)
+		err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(uint64(subnet)))
 		if err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
 	}
 
-	// Update the subnets slice.
-	subnets := make([]byte, commons.SubnetsCount)
-	copy(subnets, n.fixedSubnets)
 	for _, subnet := range randomSubnets {
-		subnets[subnet] = byte(1)
+		n.persistentSubnets.Set(uint64(subnet))
 	}
-	n.fixedSubnets = subnets
 
 	return nil
 }
 
 // SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets and the active committees/validators.
-func (n *p2pNetwork) SubscribedSubnets() []byte {
+func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
-	updatedSubnets := make([]byte, commons.SubnetsCount)
-	copy(updatedSubnets, n.fixedSubnets)
+	updatedSubnets := n.persistentSubnets
 
 	n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
 		subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
-		updatedSubnets[subnet] = byte(1)
+		updatedSubnets.Set(subnet)
 		return true
 	})
 
@@ -173,7 +169,7 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	}
 
 	for _, topic := range commons.CommitteeTopicID(cid) {
-		if err := n.topicsCtrl.Subscribe(n.logger, topic); err != nil {
+		if err := n.topicsCtrl.Subscribe(topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
@@ -181,21 +177,21 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	return nil
 }
 
-func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint64) error {
+func (n *p2pNetwork) unsubscribeSubnet(subnet uint64) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	if subnet >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	if err := n.topicsCtrl.Unsubscribe(logger, commons.SubnetTopicID(subnet), false); err != nil {
+	if err := n.topicsCtrl.Unsubscribe(commons.SubnetTopicID(subnet), false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
 	}
 	return nil
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -208,7 +204,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	cmtid := share.CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
+		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			return err
 		}
 	}
@@ -217,10 +213,10 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 }
 
 // handlePubsubMessages reads messages from the given channel and calls the router, note that this function blocks.
-func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.Context, topic string, msg *pubsub.Message) error {
+func (n *p2pNetwork) handlePubsubMessages() func(ctx context.Context, topic string, msg *pubsub.Message) error {
 	return func(ctx context.Context, topic string, msg *pubsub.Message) error {
 		if n.msgRouter == nil {
-			logger.Debug("msg router is not configured")
+			n.logger.Debug("msg router is not configured")
 			return nil
 		}
 		if msg == nil {
@@ -244,23 +240,20 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 }
 
 // subscribeToFixedSubnets subscribes to all the node's subnets
-func (n *p2pNetwork) subscribeToFixedSubnets(logger *zap.Logger) error {
-	if !discovery.HasActiveSubnets(n.fixedSubnets) {
+func (n *p2pNetwork) subscribeToFixedSubnets() error {
+	if !n.persistentSubnets.HasActive() {
 		return nil
 	}
 
-	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
+	n.logger.Debug("subscribing to fixed subnets", fields.Subnets(n.persistentSubnets))
 
-	for i, val := range n.fixedSubnets {
-		if val > 0 {
-			subnet := fmt.Sprintf("%d", i)
-			if err := n.topicsCtrl.Subscribe(logger, subnet); err != nil {
-				logger.Warn("could not subscribe to subnet",
-					zap.String("subnet", subnet), zap.Error(err))
-				// TODO: handle error
-			}
+	subnetList := n.persistentSubnets.SubnetList()
+	for _, subnet := range subnetList {
+		if err := n.topicsCtrl.Subscribe(strconv.FormatUint(subnet, 10)); err != nil {
+			n.logger.Warn("could not subscribe to subnet",
+				zap.Uint64("subnet", subnet), zap.Error(err))
+			// TODO: handle error
 		}
 	}
-
 	return nil
 }

@@ -1,13 +1,16 @@
 package validation
 
 import (
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -32,7 +35,7 @@ type LoggerFields struct {
 func (d LoggerFields) AsZapFields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.DutyExecutorID(d.DutyExecutorID),
-		fields.Role(d.Role),
+		fields.RunnerRole(d.Role),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
 	}
@@ -43,7 +46,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 
 	if d.Consensus != nil {
 		result = append(result,
-			fields.Round(d.Consensus.Round),
+			fields.QBFTRound(d.Consensus.Round),
 			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType)),
 		)
 	}
@@ -52,9 +55,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 }
 
 func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) *LoggerFields {
-	descriptor := &LoggerFields{
-		Consensus: &ConsensusFields{},
-	}
+	descriptor := &LoggerFields{}
 
 	if decodedMessage == nil {
 		return descriptor
@@ -72,8 +73,10 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	case *specqbft.Message:
 		if m != nil {
 			descriptor.Slot = phase0.Slot(m.Height)
-			descriptor.Consensus.Round = m.Round
-			descriptor.Consensus.QBFTMessageType = m.MsgType
+			descriptor.Consensus = &ConsensusFields{
+				Round:           m.Round,
+				QBFTMessageType: m.MsgType,
+			}
 		}
 	case *spectypes.PartialSignatureMessages:
 		if m != nil {
@@ -92,13 +95,13 @@ func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	if lf.Role == spectypes.RoleCommittee {
 		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
 		if ok {
-			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
+			lf.DutyID = fields.BuildCommitteeDutyID(c.Operators, mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
 		}
 	} else {
 		// get the validator index from the msgid
 		v, ok := mv.validatorStore.Validator(lf.DutyExecutorID)
 		if ok {
-			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role.String(), v.ValidatorIndex)
+			lf.DutyID = fmt.Sprintf("%v-e%v-s%v-v%v", lf.Role.String(), mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot, v.ValidatorIndex)
 		}
 	}
 }

@@ -6,19 +6,20 @@ import (
 	"sync"
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestRouter(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	router := newMessageRouter(logger)
 

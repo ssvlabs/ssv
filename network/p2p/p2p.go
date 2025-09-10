@@ -20,8 +20,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -31,6 +29,8 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -75,7 +75,7 @@ type p2pNetwork struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	logger *zap.Logger // struct logger to log in interface methods that do not accept a logger
+	logger *zap.Logger
 	cfg    *Config
 
 	host         host.Host
@@ -97,8 +97,11 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
-	fixedSubnets  []byte
-	activeSubnets []byte
+	// persistentSubnets holds subnets on node startup,
+	// these subnets should not be unsubscribed from even if all validators associated with them are removed
+	persistentSubnets commons.Subnets
+	// currentSubnets holds current subnets which depend on current active validators and committees
+	currentSubnets commons.Subnets
 
 	libConnManager connmgrcore.ConnManager
 
@@ -123,19 +126,16 @@ func New(
 ) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
-	logger = logger.Named(logging.NameP2PNetwork)
-
 	n := &p2pNetwork{
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		logger:                  logger,
+		logger:                  logger.Named(log.NameP2PNetwork),
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
-		activeSubnets:           make([]byte, commons.SubnetsCount),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -180,7 +180,7 @@ func (n *p2pNetwork) PeersIndex() peers.Index {
 	return n.idx
 }
 
-// Peers returns all peers connected to the network
+// Peers returns all peers we are connected to
 func (n *p2pNetwork) Peers() []peer.ID {
 	allPeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
@@ -190,7 +190,7 @@ func (n *p2pNetwork) Peers() []peer.ID {
 	return allPeers
 }
 
-// PeersByTopic returns a map of peers grouped by topic
+// PeersByTopic returns topic->peers mapping for all peers we are connected to
 func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
 	tpcs := n.topicsCtrl.Topics()
 	peerz := make(map[string][]peer.ID, len(tpcs))
@@ -228,11 +228,17 @@ func (n *p2pNetwork) Close() error {
 func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 	connector := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
-		// Wait for own subnets to be subscribed to and updated.
-		// TODO: wait more intelligently with a channel.
-		time.Sleep(8 * time.Second)
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
+
+		// Wait for own subnets to be subscribed to and updated.
+		// TODO: wait more intelligently with a channel.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(8 * time.Second):
+		}
+
 		n.backoffConnector.Connect(ctx, connector)
 	}()
 
@@ -247,9 +253,7 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start(logger *zap.Logger) error {
-	logger = logger.Named(logging.NameP2PNetwork)
-
+func (n *p2pNetwork) Start() error {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
 		return nil
@@ -260,31 +264,31 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		Addrs: n.host.Addrs(),
 	})
 	if err != nil {
-		logger.Fatal("could not get my address", zap.Error(err))
+		n.logger.Fatal("could not get my address", zap.Error(err))
 	}
 	maStrs := make([]string, len(pAddrs))
 	for i, ima := range pAddrs {
 		maStrs[i] = ima.String()
 	}
-	logger.Info("starting p2p",
+	n.logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
-	err = n.startDiscovery(logger)
+	err = n.startDiscovery()
 	if err != nil {
 		return fmt.Errorf("could not start discovery: %w", err)
 	}
 
-	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming(logger))
+	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming())
 
-	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, logger, n.host))
+	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, n.logger, n.host))
 
 	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
 
-	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.logger, n.topicsCtrl, 2))
 
-	if err := n.subscribeToFixedSubnets(logger); err != nil {
+	if err := n.subscribeToFixedSubnets(); err != nil {
 		return err
 	}
 
@@ -292,11 +296,13 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 }
 
 // Returns a function that trims currently connected peers if necessary, namely:
-//   - Dropping peers with bad Gossip score.
-//   - Dropping irrelevant peers that don't have any subnet in common.
-//   - Tagging the best MaxPeers-N peers (according to subnets intersection) as Protected,
-//     and then removing the worst peers. But only if we are close to MaxPeers limit.
-func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
+//   - dropping peers with bad gossip score
+//   - dropping irrelevant peers that don't have any subnet in common with us
+//   - (when we are close to MaxPeers limit) dropping several peers with the worst score
+//     which is based on how many valuable (dead/solo/duo) subnets a peer contributes
+//   - (when Inbound peers are close to its limit) dropping several Inbound peers with
+//     the worst score
+func (n *p2pNetwork) peersTrimming() func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(n.ctx, 60*time.Second)
 		defer cancel()
@@ -304,9 +310,9 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			_ = n.idx.GetSubnetsStats() // collect metrics
 		}()
 
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx, n.trimmedRecently)
+		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
 
-		disconnectedCnt := connMgr.DisconnectFromBadPeers(logger, n.host.Network(), n.host.Network().Peers())
+		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.host.Network().Peers())
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
 			return
@@ -316,11 +322,10 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 
 		const maximumIrrelevantPeersToDisconnect = 3
 		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(
-			logger,
 			maximumIrrelevantPeersToDisconnect,
 			n.host.Network(),
 			connectedPeers,
-			n.activeSubnets,
+			n.currentSubnets,
 		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
@@ -333,7 +338,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// execution quality
 		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 
-		protectEveryOutbound := false
+		trimInboundOnly := false
 
 		// see if we can accept more peer connections already (no need to trim), note we trim not
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
@@ -341,95 +346,73 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// in currently connected peer count at that limit boundary
 		connectedPeers = n.host.Network().Peers()
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
-			// we probably don't want to trim then
-
-			// additionally, make sure incoming connections aren't at the limit - since if they are we
-			// actually might want to trim some of them to make sure we re-cycle incoming connections
-			// at least occasionally (note btw, with current implementation there is no guarantee incoming
-			// connections will be trimmed in this case, since we don't differentiate between incoming/outgoing
-			// when trimming)
+			// We probably don't want to trim outgoing connections then, but from time-to-time we want to
+			// trim (and rotate) some incoming connections when inbound limit is hit just to make sure
+			// inbound connections are rotated occasionally in reliable manner.
+			// Note, we don't want to trim incoming connections as often as outgoing connections (since
+			// trimming outgoing connections often helps us discover valuable peers, while it's not really
+			// the case with incoming connections - only slightly so) hence sometimes we randomly skip this
 			in, _ := n.connectionStats()
 			if in < n.inboundLimit() {
 				return // skip trim iteration
 			}
-			// we don't want to trim incoming connections as often as outgoing connections (since trimming
-			// outgoing connections often helps us discover valuable peers, while it's not really the case
-			// with incoming connections - only slightly so), hence we'll only do it 1/5 of the times
-			if rand.Intn(5) > 0 { // nolint: gosec
+			if rand.Intn(5) > 0 { //nolint: gosec
 				return // skip trim iteration
 			}
-
-			// we decided to trim then but only because we want to rotate some incoming connections, we'd
-			// want to protect all our outgoing connections then since we don't have enough of these
-			protectEveryOutbound = true
+			trimInboundOnly = true
 		}
 
-		// gotta trim some peers then
-		immunityQuota := len(connectedPeers) - maxPeersToDrop
-		protectedPeers := n.PeerProtection(immunityQuota, protectEveryOutbound)
-		for _, p := range connectedPeers {
-			if _, ok := protectedPeers[p]; ok {
-				n.libConnManager.Protect(p, peers.ProtectedTag)
-				continue
-			}
-			n.libConnManager.Unprotect(p, peers.ProtectedTag)
+		inboundBefore, outboundBefore := n.connectionStats()
+		peersToTrim := n.choosePeersToTrim(maxPeersToDrop, trimInboundOnly)
+		connMgr.TrimPeers(ctx, n.host.Network(), peersToTrim)
+		for pid := range peersToTrim {
+			n.trimmedRecently.Set(pid, struct{}{})
 		}
-		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxPeersToDrop) // trim up to maxPeersToDrop
+		inboundAfter, outboundAfter := n.connectionStats()
+		n.logger.Debug(
+			"trimmed peers",
+			zap.Int("inbound_peers_before_trim", inboundBefore),
+			zap.Int("outbound_peers_before_trim", outboundBefore),
+			zap.Int("inbound_peers_after_trim", inboundAfter),
+			zap.Int("outbound_peers_after_trim", outboundAfter),
+			zap.Any("trimmed_peers", maps.Keys(peersToTrim)),
+		)
 	}
 }
 
-// PeerProtection returns a map of protected peers based on how valuable those peers to us are,
-// peer value is proportional to how much of valuable subnets (dead/solo/duo) he contributes, as
-// defined by peerScore func.
-// Param immunityQuota limits how many peers can be protected at most, it is distributed evenly
-// between inbound and outbound connections to make sure we don't overly protect one connection
-// type (because if we do it can result in connections of other type not getting trimmed frequently
-// enough to be replaced by better connection-candidates).
-// Param protectEveryOutbound signals that we want to protect every outbound connection we have
-// disregarding immunityQuota entirely (when it comes to outbound connections).
-func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool) map[peer.ID]struct{} {
-	myPeersSet := make(map[peer.ID]struct{})
-	for _, tpc := range n.topicsCtrl.Topics() {
-		peerz, err := n.topicsCtrl.Peers(tpc)
-		if err != nil {
-			n.logger.Error(
-				"Cant get peers for topic, skipping to keep the network running",
-				zap.String("topic", tpc),
-				zap.Error(err),
-			)
-			continue
-		}
-		for _, p := range peerz {
-			myPeersSet[p] = struct{}{}
-		}
+// choosePeersToTrim returns a map of peers that are least-valuable to us based on how much
+// (dead/solo/duo) they contribute to us (as defined by peerScore func).
+func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[peer.ID]struct{} {
+	myPeers, err := n.topicsCtrl.Peers("")
+	if err != nil {
+		n.logger.Error("Cant get all of our peers", zap.Error(err))
+		return nil
 	}
 
-	myPeers := slices.Collect(maps.Keys(myPeersSet))
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
-		// sort in desc order (peers with the highest scores come first)
-		if n.peerScore(a) < n.peerScore(b) {
-			return 1
-		}
-		if n.peerScore(a) > n.peerScore(b) {
+		// sort in asc order (peers with the lowest scores come first)
+		aScore := n.peerScore(a)
+		bScore := n.peerScore(b)
+		if aScore < bScore {
 			return -1
+		}
+		if aScore > bScore {
+			return 1
 		}
 		return 0
 	})
 
-	immunityQuotaInbound := immunityQuota / 2
-	immunityQuotaOutbound := immunityQuota - immunityQuotaInbound
-
-	protectedPeers := make(map[peer.ID]struct{})
+	result := make(map[peer.ID]struct{}, trimCnt)
 	for _, p := range myPeers {
-		if immunityQuotaInbound == 0 && immunityQuotaOutbound == 0 {
-			break // can't protect any more peers since we reached our quotas
+		if trimCnt <= 0 {
+			break
 		}
 		pConns := n.host.Network().ConnsToPeer(p)
-		// we shouldn't have more than 1 connection per peer, but if we do we'd want
-		// a warning about it logged, and we'd want to handle it to the best of our ability
+		// we shouldn't have more than 1 connection per peer, but if we do we'd want a
+		// warning about it logged, and we'd want to handle it to the best of our ability
 		if len(pConns) > 1 {
 			n.logger.Error(
-				"PeerProtection: encountered peer we have multiple open connections with (expected 1 at most)",
+				"choosePeersToTrim: encountered peer we have multiple open connections with (expected 1 at most)",
 				zap.String("peer_id", p.String()),
 				zap.Int("connections_count", len(pConns)),
 			)
@@ -438,49 +421,39 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool
 			connDir := pConn.Stat().Direction
 			if connDir == p2pnet.DirUnknown {
 				n.logger.Error(
-					"PeerProtection: encountered peer connection with direction Unknown",
+					"choosePeersToTrim: encountered peer connection with direction Unknown",
 					zap.String("peer_id", p.String()),
 				)
+			}
+			if connDir == p2pnet.DirOutbound && trimInboundOnly {
 				continue
 			}
-			if connDir == p2pnet.DirInbound {
-				if immunityQuotaInbound > 0 {
-					protectedPeers[p] = struct{}{}
-					immunityQuotaInbound--
-				}
-			}
-			if connDir == p2pnet.DirOutbound {
-				if protectEveryOutbound {
-					protectedPeers[p] = struct{}{}
-				} else if immunityQuotaOutbound > 0 {
-					immunityQuotaOutbound--
-					protectedPeers[p] = struct{}{}
-				}
-			}
+			result[p] = struct{}{}
+			trimCnt--
 		}
 	}
-	return protectedPeers
+	return result
 }
 
 // bootstrapDiscovery starts the required services
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
-func (n *p2pNetwork) bootstrapDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
+func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 	err := tasks.Retry(func() error {
-		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
+		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 			if err := n.idx.CanConnect(e.AddrInfo.ID); err != nil {
-				logger.Debug("skipping new peer", fields.PeerID(e.AddrInfo.ID), zap.Error(err))
+				n.logger.Debug("skipping new peer", fields.PeerID(e.AddrInfo.ID), zap.Error(err))
 				return
 			}
 			select {
 			case connector <- e.AddrInfo:
 			default:
-				logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
+				n.logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
 			}
 		})
 	}, 3)
 	if err != nil {
-		logger.Panic("could not setup discovery", zap.Error(err))
+		n.logger.Panic("could not setup discovery", zap.Error(err))
 	}
 }
 
@@ -490,12 +463,11 @@ func (n *p2pNetwork) isReady() bool {
 
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToFixedSubnets for that)
-func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
+func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
-	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(time.Second)
-	registeredSubnets := make([]byte, commons.SubnetsCount)
+	registeredSubnets := commons.Subnets{}
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
@@ -503,21 +475,23 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		start := time.Now()
 
 		updatedSubnets := n.SubscribedSubnets()
-		n.activeSubnets = updatedSubnets
+		n.currentSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]uint64, 0)
-		for subnet, active := range updatedSubnets {
-			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				addedSubnets = append(addedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
+		subnetList := updatedSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !registeredSubnets.IsSet(subnet) {
+				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]uint64, 0)
-		for subnet, active := range registeredSubnets {
-			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
-				removedSubnets = append(removedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
+		subnetList = registeredSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !updatedSubnets.IsSet(subnet) {
+				removedSubnets = append(removedSubnets, subnet)
 			}
 		}
 
@@ -528,7 +502,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = commons.Subnets(n.activeSubnets).String()
+			self.Metadata.Subnets = n.currentSubnets.String()
 			return self
 		})
 
@@ -537,61 +511,58 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		var hasAdded, hasRemoved bool
 		if len(addedSubnets) > 0 {
 			var err error
-			hasAdded, err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+			hasAdded, err = n.disc.RegisterSubnets(addedSubnets...)
 			if err != nil {
-				logger.Debug("could not register subnets", zap.Error(err))
+				n.logger.Debug("could not register subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
 		}
 		if len(removedSubnets) > 0 {
 			var err error
-			hasRemoved, err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
+			hasRemoved, err = n.disc.DeregisterSubnets(removedSubnets...)
 			if err != nil {
-				logger.Debug("could not unregister subnets", zap.Error(err))
+				n.logger.Debug("could not unregister subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
 
 			// Unsubscribe from the removed subnets.
 			for _, removedSubnet := range removedSubnets {
-				if err := n.unsubscribeSubnet(logger, removedSubnet); err != nil {
-					logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
+				if err := n.unsubscribeSubnet(removedSubnet); err != nil {
+					n.logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
 					errs = errors.Join(errs, err)
 				} else {
-					logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
+					n.logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
 				}
 			}
 		}
 		if hasAdded || hasRemoved {
-			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
+			go n.disc.PublishENR()
 		}
 
-		allSubs, _ := commons.FromString(commons.AllSubnets)
-		subnetsList := commons.SharedSubnets(allSubs, n.activeSubnets, 0)
-		logger.Debug("updated subnets",
+		subnetsList := commons.AllSubnets.SharedSubnets(n.currentSubnets)
+		n.logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),
 			zap.Any("subnets", subnetsList),
 			zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
 			zap.Int("total_subnets", len(subnetsList)),
-			zap.Duration("took", time.Since(start)),
+			fields.Took(time.Since(start)),
 			zap.Error(errs),
 		)
 	}
 }
 
 // UpdateScoreParams updates the scoring parameters once per epoch through the call of n.topicsCtrl.UpdateScoreParams
-func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
+func (n *p2pNetwork) UpdateScoreParams() {
 	// TODO: this is a temporary solution to update the score parameters periodically.
 	// But, we should use an appropriate trigger for the UpdateScoreParams function that should be
 	// called once a validator is added or removed from the network
 
-	logger = logger.Named(logging.NameP2PNetwork)
-
 	// function to get the starting time of the next epoch
 	nextEpochStartingTime := func() time.Time {
-		currEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+		currEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
 		nextEpoch := currEpoch + 1
-		return n.cfg.Network.Beacon.EpochStartTime(nextEpoch)
+		return n.cfg.NetworkConfig.EpochStartTime(nextEpoch)
 	}
 
 	// Create timer that triggers on the beginning of the next epoch
@@ -600,13 +571,12 @@ func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
 
 	// Run immediately and then once every epoch
 	for ; true; <-timer.C {
-
 		// Update score parameters
-		err := n.topicsCtrl.UpdateScoreParams(logger)
+		err := n.topicsCtrl.UpdateScoreParams()
 		if err != nil {
-			logger.Debug("score parameters update failed", zap.Error(err))
+			n.logger.Debug("score parameters update failed", zap.Error(err))
 		} else {
-			logger.Debug("updated score parameters successfully")
+			n.logger.Debug("updated score parameters successfully")
 		}
 
 		// Reset to trigger on the beginning of the next epoch
@@ -622,57 +592,80 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	return n.cfg.TopicMaxPeers
 }
 
-// peerScore calculates a score for peerID based on how valuable this peer's contribution
-// to us assessing each subnet-contribution he makes (as estimated by score func).
+// peerScore calculates peer score based on how valuable this peer would have been if we didn't
+// have him, but then connected with.
 func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
-	result := 0.0
-
-	peerSubnets := n.idx.GetPeerSubnets(peerID)
-	sharedSubnets := commons.SharedSubnets(n.activeSubnets, peerSubnets, 0)
-	for _, subnet := range sharedSubnets {
-		result += n.score(peerID, subnet)
-	}
-
-	return result
-}
-
-// score assesses how valuable the contribution of peerID to specified subnet is by calculating
-// how valuable this peer would have been if we didn't have him, but then connected with.
-func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
-	topic := strconv.Itoa(subnet)
-	subnetPeers, err := n.topicsCtrl.Peers(topic)
-	if err != nil {
-		n.logger.Debug(
-			"cannot score peer with respect to this subnet, assuming zero contribution",
-			zap.String("topic", topic),
-			zap.Error(fmt.Errorf("could not get topic peers: %w", err)),
-		)
-		return 0.0
-	}
-	subnetPeersExcluding := 0
-	for _, p := range subnetPeers {
-		if p != peerID {
-			subnetPeersExcluding++
+	// Compute number of peers we're connected to for each subnet excluding peer with peerID.
+	subnetPeersExcluding := SubnetPeers{}
+	for topic, peers := range n.PeersByTopic() {
+		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
+		if err != nil {
+			n.logger.Error("failed to parse topic",
+				zap.String("topic", topic), zap.Error(err))
+			continue
+		}
+		if subnet < 0 || subnet >= commons.SubnetsCount {
+			n.logger.Error("invalid topic",
+				zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+			continue
+		}
+		for _, pID := range peers {
+			if pID == peerID {
+				continue
+			}
+			subnetPeersExcluding[subnet]++
 		}
 	}
 
-	const targetPeersPerSubnet = 3
-	return score(targetPeersPerSubnet, subnetPeersExcluding)
+	ownSubnets := n.SubscribedSubnets()
+	peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
+	return subnetPeersExcluding.Score(ownSubnets, peerSubnets)
 }
 
-func score(desired, actual int) float64 {
-	if actual > desired {
-		return float64(desired) / float64(actual) // is always less than 1.0
+// SubnetPeers contains the number of peers we are connected to for each subnet.
+type SubnetPeers [commons.SubnetsCount]uint16
+
+func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
+	var sum SubnetPeers
+	for i := range a {
+		sum[i] = a[i] + b[i]
 	}
-	if actual == desired {
-		return 2.0 // at least 2x better than when `actual > desired`
+	return sum
+}
+
+// Score estimates how many valuable subnets the given peer would contribute.
+// Param ours defines subnets we are interested in.
+// Param theirs defines subnets given peer has to offer.
+func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
+	const (
+		duoSubnetPriority  = 1
+		soloSubnetPriority = 4
+		deadSubnetPriority = 16
+	)
+	score := float64(0)
+
+	for i := range a {
+		// #nosec G115 -- subnet index is never negative
+		if ours.IsSet(uint64(i)) && theirs.IsSet(uint64(i)) {
+			switch a[i] {
+			case 0:
+				score += deadSubnetPriority
+			case 1:
+				score += soloSubnetPriority
+			case 2:
+				score += duoSubnetPriority
+			}
+		}
 	}
-	// make every unit of difference count, starting with the score of 2.0 (when `actual == desired`)
-	// and increasing exponentially
-	diff := desired - actual
-	result := 2.0
-	for i := 1; i <= diff; i++ {
-		result *= float64(2.0 + i)
+	return score
+}
+
+func (a SubnetPeers) String() string {
+	var b strings.Builder
+	for i, v := range a {
+		if v > 0 {
+			_, _ = fmt.Fprintf(&b, "%d:%d ", i, v)
+		}
 	}
-	return result
+	return b.String()
 }

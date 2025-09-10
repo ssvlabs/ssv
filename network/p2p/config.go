@@ -16,13 +16,14 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	uc "github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -40,8 +41,8 @@ type Config struct {
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for P2P transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
-	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (can be overridden by HostDNS)"`
-	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (overrides HostAddress if both are specified)"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (mutually exclusive with HostDNS)"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (mutually exclusive with HostAddress)"`
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s" env-description:"Timeout for P2P requests"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of objects returned in a batch response"`
@@ -73,8 +74,8 @@ type Config struct {
 	UserAgent string
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
-	// Network defines a network configuration.
-	Network networkconfig.NetworkConfig
+	// NetworkConfig defines a network configuration.
+	NetworkConfig *networkconfig.Network
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
 
@@ -150,8 +151,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// note, only one of (HostDNS, HostAddress) can be used with libp2p - if multiple of these
-	// are set we have to prioritize between them.
+	// NOTE: only one of (HostDNS, HostAddress) can be used with libp2p
 	if c.HostDNS != "" {
 		// AddrFactory for DNS address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
@@ -181,14 +181,13 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 
 // TransformBootnodes converts bootnodes string and convert it to slice
 func (c *Config) TransformBootnodes() []string {
-
 	if c.Bootnodes == "" {
-		return c.Network.Bootnodes
+		return c.NetworkConfig.Bootnodes
 	}
 
 	// extend additional bootnodes from config
 	extraBootnodes := strings.Split(c.Bootnodes, ";")
-	return append(extraBootnodes, c.Network.Bootnodes...)
+	return append(extraBootnodes, c.NetworkConfig.Bootnodes...)
 }
 
 func userAgent(fromCfg string) string {

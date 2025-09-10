@@ -271,10 +271,10 @@ func TestHashMap_parallel(t *testing.T) {
 
 	m := New[int, int](1*time.Hour, 1*time.Hour)
 
-	max := 10
+	maxCount := 10
 	dur := 2 * time.Second
 
-	do := func(t *testing.T, max int, d time.Duration, fn func(*testing.T, int)) <-chan error {
+	do := func(t *testing.T, count int, d time.Duration, fn func(*testing.T, int)) <-chan error {
 		t.Helper()
 		done := make(chan error)
 		var times int64
@@ -290,7 +290,7 @@ func TestHashMap_parallel(t *testing.T) {
 			timer := time.NewTimer(d)
 			defer timer.Stop()
 			for {
-				for i := 0; i < max; i++ {
+				for i := 0; i < count; i++ {
 					select {
 					case <-timer.C:
 						close(done)
@@ -313,15 +313,15 @@ func TestHashMap_parallel(t *testing.T) {
 	}
 
 	// Initial fill.
-	for i := 0; i < max; i++ {
+	for i := 0; i < maxCount; i++ {
 		m.Set(i, i)
 	}
 	t.Run("set_get", func(t *testing.T) {
-		doneSet := do(t, max, dur, func(t *testing.T, i int) {
+		doneSet := do(t, maxCount, dur, func(t *testing.T, i int) {
 			t.Helper()
 			m.Set(i, i)
 		})
-		doneGet := do(t, max, dur, func(t *testing.T, i int) {
+		doneGet := do(t, maxCount, dur, func(t *testing.T, i int) {
 			t.Helper()
 			if _, ok := m.Get(i); !ok {
 				t.Errorf("missing value for key: %d", i)
@@ -331,11 +331,11 @@ func TestHashMap_parallel(t *testing.T) {
 		wait(t, doneGet)
 	})
 	t.Run("get-or-insert-and-delete", func(t *testing.T) {
-		doneGetOrInsert := do(t, max, dur, func(t *testing.T, i int) {
+		doneGetOrInsert := do(t, maxCount, dur, func(t *testing.T, i int) {
 			t.Helper()
 			m.GetOrSet(i, i)
 		})
-		doneDel := do(t, max, dur, func(t *testing.T, i int) {
+		doneDel := do(t, maxCount, dur, func(t *testing.T, i int) {
 			t.Helper()
 			m.Delete(i)
 		})
@@ -473,7 +473,7 @@ func TestIssue1682(t *testing.T) {
 		"b9492d60036f93841da23f7ee49f987ace6cb7d07170b9e9aaa2be54f4fceaf7",
 		"e2394daed1f3bfc1714dea43d0aaf663a10af88ed985aed5564e3d027d961b89",
 	}
-	var cmtIDs []string
+	cmtIDs := make([]string, 0, len(cmtIDsHex))
 	for _, cmtIDHex := range cmtIDsHex {
 		cmtID, err := hex.DecodeString(cmtIDHex)
 		require.NoError(t, err)
@@ -491,7 +491,6 @@ func TestIssue1682(t *testing.T) {
 			m := New[string, validatorStatus](1*time.Hour, 1*time.Hour)
 			var wg sync.WaitGroup
 			for _, cmtID := range cmtIDs {
-				cmtID := cmtID
 				n := 50 + randSeed().Intn(200)
 				for j := 0; j < n; j++ {
 					wg.Add(1)

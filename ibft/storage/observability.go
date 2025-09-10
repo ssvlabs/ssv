@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -10,6 +9,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -20,17 +20,13 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	operationDurationHistogram = observability.NewMetric(
+	operationDurationHistogram = metrics.New(
 		meter.Float64Histogram(
-			metricName("operation.duration"),
+			observability.InstrumentName(observabilityNamespace, "operation.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("participants db ops duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordSaveDuration(name string, duration time.Duration) {
 	operationDurationHistogram.Record(
