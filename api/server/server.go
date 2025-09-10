@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/api/handlers"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -20,6 +21,7 @@ type Server struct {
 	addr   string
 
 	node       *handlers.Node
+	pinned     *pinnedpeers.Handler
 	validators *handlers.Validators
 	exporter   *handlers.Exporter
 	httpServer *http.Server
@@ -32,6 +34,7 @@ func New(
 	logger *zap.Logger,
 	addr string,
 	node *handlers.Node,
+	pinned *pinnedpeers.Handler,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
 	fullExporter bool,
@@ -40,6 +43,7 @@ func New(
 		logger:       logger,
 		addr:         addr,
 		node:         node,
+		pinned:       pinned,
 		validators:   validators,
 		exporter:     exporter,
 		fullExporter: fullExporter,
@@ -78,6 +82,24 @@ func (s *Server) Run() error {
 	// @Success 200 {object} handlers.TopicsResponse
 	// @Router /v1/node/topics [get]
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
+
+	// @Summary List pinned peers
+	// @Tags Node
+	// @Produce json
+	// @Router /v1/node/pinned-peers [get]
+	router.Get("/v1/node/pinned-peers", api.Handler(s.pinned.List))
+	// @Summary Add pinned peers
+	// @Tags Node
+	// @Accept json
+	// @Produce json
+	// @Router /v1/node/pinned-peers [post]
+	router.Post("/v1/node/pinned-peers", api.Handler(s.pinned.Add))
+	// @Summary Remove pinned peers
+	// @Tags Node
+	// @Accept json
+	// @Produce json
+	// @Router /v1/node/pinned-peers [delete]
+	router.Delete("/v1/node/pinned-peers", api.Handler(s.pinned.Remove))
 
 	// @Summary Get node health status
 	// @Description Returns the health status of the SSV node

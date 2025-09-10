@@ -20,6 +20,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/api/handlers"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -109,6 +110,21 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		}
 	}
 
+	pinnedListHandler := func(w http.ResponseWriter, r *http.Request) {
+		_ = api.Render(w, r, map[string]any{
+			"pinned": []map[string]any{{"id": "peerX", "addresses": []string{"/ip4/127.0.0.1/tcp/13001/p2p/12D3KooX"}}},
+		})
+	}
+
+	pinnedMutateHandler := func(w http.ResponseWriter, r *http.Request) {
+		// Render a minimal valid structure for POST/DELETE registration tests
+		// POST: includes "added"; DELETE: includes "removed". Keep both keys for simplicity.
+		_ = api.Render(w, r, map[string]any{
+			"added":   []string{"12D3KooX"},
+			"removed": []string{"12D3KooX"},
+		})
+	}
+
 	router.Get("/v1/node/identity", nodeIdentityHandler)
 	router.Get("/v1/node/peers", nodePeersHandler)
 	router.Get("/v1/node/topics", nodeTopicsHandler)
@@ -116,6 +132,9 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	router.Get("/v1/validators", validatorsListHandler)
 	router.Get("/v1/exporter/decideds", exporterDecidedsHandler)
 	router.Post("/v1/exporter/decideds", exporterDecidedsHandler)
+	router.Get("/v1/node/pinned-peers", pinnedListHandler)
+	router.Post("/v1/node/pinned-peers", pinnedMutateHandler)
+	router.Delete("/v1/node/pinned-peers", pinnedMutateHandler)
 
 	return httptest.NewServer(router)
 }
@@ -128,11 +147,13 @@ func TestNew(t *testing.T) {
 	node := &handlers.Node{}
 	validators := &handlers.Validators{}
 	exporter := &handlers.Exporter{}
+	pinned := &pinnedpeers.Handler{}
 
 	server := New(
 		logger,
 		":8080",
 		node,
+		pinned,
 		validators,
 		exporter,
 		false,
@@ -168,6 +189,7 @@ func TestRun_ActualExecution(t *testing.T) {
 		logger,
 		addr,
 		&handlers.Node{},
+		&pinnedpeers.Handler{},
 		&handlers.Validators{},
 		&handlers.Exporter{},
 		false,
@@ -233,6 +255,7 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 		logger,
 		addr,
 		&handlers.Node{},
+		&pinnedpeers.Handler{},
 		&handlers.Validators{},
 		&handlers.Exporter{},
 		true,
@@ -384,6 +407,30 @@ func TestRoutes(t *testing.T) {
 			expectedCode: http.StatusOK,
 			validateBody: func(t *testing.T, body string) {
 				require.Contains(t, body, "data")
+			},
+		},
+		{
+			method:       "GET",
+			path:         "/v1/node/pinned-peers",
+			expectedCode: http.StatusOK,
+			validateBody: func(t *testing.T, body string) {
+				require.Contains(t, body, "pinned")
+			},
+		},
+		{
+			method:       "POST",
+			path:         "/v1/node/pinned-peers",
+			expectedCode: http.StatusOK,
+			validateBody: func(t *testing.T, body string) {
+				require.Contains(t, body, "added")
+			},
+		},
+		{
+			method:       "DELETE",
+			path:         "/v1/node/pinned-peers",
+			expectedCode: http.StatusOK,
+			validateBody: func(t *testing.T, body string) {
+				require.Contains(t, body, "removed")
 			},
 		},
 	}
