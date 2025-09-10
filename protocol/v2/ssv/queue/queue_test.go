@@ -309,8 +309,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		totalDuration time.Duration
 	)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		start := time.Now()
 
 		// Stream messages to pushers.
