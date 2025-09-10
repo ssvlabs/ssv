@@ -1,16 +1,14 @@
 package goclient
 
 import (
-	"context"
 	"time"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 // Options defines beacon client options
 type Options struct {
-	Context                     context.Context
-	Network                     beacon.Network
+	BeaconConfig                *networkconfig.Beacon
 	BeaconNodeAddr              string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true" env-description:"Beacon node URL(s). Multiple nodes are supported via semicolon-separated URLs (e.g. 'http://localhost:5052;http://localhost:5053')"`
 	SyncDistanceTolerance       uint64 `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"Maximum number of slots behind head considered in-sync"`
 	WithWeightedAttestationData bool   `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`

@@ -11,8 +11,8 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func Test_verifyConfig(t *testing.T) {
@@ -21,11 +21,11 @@ func Test_verifyConfig(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	network := networkconfig.TestNetwork
-	nodeStorage, err := operatorstorage.NewNodeStorage(network, logger, db)
+	netCfg := networkconfig.TestNetwork
+	nodeStorage, err := operatorstorage.NewNodeStorage(netCfg.Beacon, logger, db)
 	require.NoError(t, err)
 
-	testNetworkName := network.NetworkName()
+	testNetworkName := netCfg.StorageName()
 
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{

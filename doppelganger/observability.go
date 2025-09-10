@@ -1,13 +1,12 @@
 package doppelganger
 
 import (
-	"fmt"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -18,18 +17,14 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	validatorsStateGauge = observability.NewMetric(
+	validatorsStateGauge = metrics.New(
 		meter.Int64Gauge(
-			metricName("validators.state"),
+			observability.InstrumentName(observabilityNamespace, "validators.state"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("Tracks the current number of validators in Doppelganger state, categorized by safety"),
 		),
 	)
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func unsafeAttribute(isUnsafe bool) attribute.KeyValue {
 	const attrName = observabilityNamespace + ".validators.unsafe"

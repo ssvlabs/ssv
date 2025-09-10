@@ -6,6 +6,8 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -17,10 +19,9 @@ const (
 	opportunisticGraftThreshold = 5
 
 	// Overall parameters
-	topicScoreCap = 32.72
-	decayInterval = 32 * (time.Second * 12) // One epoch
-	decayToZero   = 0.01
-	retainScore   = 100 * 32 * 12 * time.Second
+	topicScoreCap              = 32.72
+	decayToZero                = 0.01
+	retainScoreEpochMultiplier = 100
 
 	// P5
 	appSpecificWeight = 0
@@ -30,7 +31,7 @@ const (
 	ipColocationFactorWeight    = -topicScoreCap
 
 	// P7
-	behaviourPenaltyThreshold = 6
+	behaviorPenaltyThreshold = 6
 )
 
 // PeerScoreThresholds returns the thresholds to use for peer scoring
@@ -45,17 +46,13 @@ func PeerScoreThresholds() *pubsub.PeerScoreThresholds {
 }
 
 // PeerScoreParams returns peer score params according to the given options
-func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableColocation bool, ipWhilelist ...*net.IPNet) *pubsub.PeerScoreParams {
-	if oneEpoch == 0 {
-		oneEpoch = oneEpochDuration
-	}
-
+func PeerScoreParams(netCfg *networkconfig.Network, msgIDCacheTTL time.Duration, disableColocation bool, ipWhitelist ...*net.IPNet) *pubsub.PeerScoreParams {
 	// P7 calculation
-	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, decayInterval)
+	behaviorPenaltyDecay := scoreDecay(netCfg.EpochDuration()*10, netCfg.EpochDuration())
 	maxAllowedRatePerDecayInterval := 10.0
-	targetVal, _ := decayConvergence(behaviourPenaltyDecay, maxAllowedRatePerDecayInterval)
-	targetVal = targetVal - behaviourPenaltyThreshold
-	behaviourPenaltyWeight := gossipThreshold / (targetVal * targetVal)
+	targetVal, _ := decayConvergence(behaviorPenaltyDecay, maxAllowedRatePerDecayInterval)
+	targetVal = targetVal - behaviorPenaltyThreshold
+	behaviorPenaltyWeight := gossipThreshold / (targetVal * targetVal)
 
 	finalIPColocationFactorWeight := ipColocationFactorWeight
 	if disableColocation {
@@ -66,9 +63,9 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableColocation bo
 		Topics: make(map[string]*pubsub.TopicScoreParams),
 		// Overall parameters
 		TopicScoreCap: topicScoreCap,
-		DecayInterval: decayInterval,
+		DecayInterval: netCfg.EpochDuration(),
 		DecayToZero:   decayToZero,
-		RetainScore:   retainScore,
+		RetainScore:   retainScoreEpochMultiplier * netCfg.EpochDuration(),
 		SeenMsgTTL:    msgIDCacheTTL,
 
 		// P5
@@ -80,11 +77,11 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableColocation bo
 		// P6
 		IPColocationFactorWeight:    finalIPColocationFactorWeight,
 		IPColocationFactorThreshold: ipColocationFactorThreshold,
-		IPColocationFactorWhitelist: ipWhilelist,
+		IPColocationFactorWhitelist: ipWhitelist,
 
 		// P7
-		BehaviourPenaltyWeight:    behaviourPenaltyWeight,
-		BehaviourPenaltyThreshold: behaviourPenaltyThreshold,
-		BehaviourPenaltyDecay:     behaviourPenaltyDecay,
+		BehaviourPenaltyWeight:    behaviorPenaltyWeight,
+		BehaviourPenaltyThreshold: behaviorPenaltyThreshold,
+		BehaviourPenaltyDecay:     behaviorPenaltyDecay,
 	}
 }

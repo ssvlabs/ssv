@@ -6,7 +6,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate sszgen -path ./migration_6_model.go --objs migration_6_OldStorageShare
+//go:generate go tool -modfile=../tool.mod sszgen -path ./migration_6_model.go --objs migration_6_OldStorageShare
 
 var oldSharesPrefix = []byte("shares_ssz/")
 
@@ -31,15 +31,6 @@ type migration_6_OldStorageShare struct {
 	ActivationEpoch uint64
 	OwnerAddress    [addressLength]byte
 	Liquidated      bool
-}
-
-// Encode encodes Share using ssz.
-func (s *migration_6_OldStorageShare) Encode() ([]byte, error) {
-	result, err := s.MarshalSSZ()
-	if err != nil {
-		return nil, fmt.Errorf("marshal ssz: %w", err)
-	}
-	return result, nil
 }
 
 // Decode decodes Share using ssz.

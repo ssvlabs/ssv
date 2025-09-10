@@ -1,11 +1,14 @@
 package tests
 
 import (
+	"context"
+
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -29,55 +32,66 @@ func (bn *TestingBeaconNodeWrapped) GetBeaconNode() *spectestingutils.TestingBea
 	return bn.Bn
 }
 
-func (bn *TestingBeaconNodeWrapped) GetAttestationData(slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
+func (bn *TestingBeaconNodeWrapped) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	return bn.Bn.GetAttestationData(slot)
 }
-func (bn *TestingBeaconNodeWrapped) DataVersion(epoch phase0.Epoch) spec.DataVersion {
-	return bn.Bn.DataVersion(epoch)
-}
-func (bn *TestingBeaconNodeWrapped) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+func (bn *TestingBeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return bn.Bn.DomainData(epoch, domain)
 }
-func (bn *TestingBeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
-	return bn.Bn.SyncCommitteeSubnetID(index)
+func (bn *TestingBeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
+	v, err := bn.Bn.SyncCommitteeSubnetID(index)
+	if err != nil {
+		panic("unexpected error from SyncCommitteeSubnetID")
+	}
+	return v
 }
-func (bn *TestingBeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
-	return bn.Bn.IsSyncCommitteeAggregator(proof)
+func (bn *TestingBeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
+	v, err := bn.Bn.IsSyncCommitteeAggregator(proof)
+	if err != nil {
+		panic("unexpected error from IsSyncCommitteeAggregator")
+	}
+	return v
 }
-func (bn *TestingBeaconNodeWrapped) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
+func (bn *TestingBeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (bn *TestingBeaconNodeWrapped) SubmitAggregateSelectionProof(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.SubmitAggregateSelectionProof(slot, committeeIndex, committeeLength, index, slotSig)
 }
 func (bn *TestingBeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return bn.Bn.GetBeaconNetwork()
 }
-func (bn *TestingBeaconNodeWrapped) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (bn *TestingBeaconNodeWrapped) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
-	return bn.Bn.SubmitValidatorRegistration(registration)
+func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
+	for _, registration := range registrations {
+		err := bn.Bn.SubmitValidatorRegistration(registration)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
-func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
+func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(ctx context.Context, voluntaryExit *phase0.SignedVoluntaryExit) error {
 	return bn.Bn.SubmitVoluntaryExit(voluntaryExit)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
+func (bn *TestingBeaconNodeWrapped) SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error {
 	return bn.Bn.SubmitAttestations(attestations)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(msgs []*altair.SyncCommitteeMessage) error {
+func (bn *TestingBeaconNodeWrapped) SubmitSyncMessages(ctx context.Context, msgs []*altair.SyncCommitteeMessage) error {
 	return bn.Bn.SubmitSyncMessages(msgs)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
+func (bn *TestingBeaconNodeWrapped) SubmitBlindedBeaconBlock(ctx context.Context, block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
 	return bn.Bn.SubmitBlindedBeaconBlock(block, sig)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
+func (bn *TestingBeaconNodeWrapped) SubmitSignedContributionAndProof(ctx context.Context, contribution *altair.SignedContributionAndProof) error {
 	return bn.Bn.SubmitSignedContributionAndProof(contribution)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitSignedAggregateSelectionProof(msg *spec.VersionedSignedAggregateAndProof) error {
+func (bn *TestingBeaconNodeWrapped) SubmitSignedAggregateSelectionProof(ctx context.Context, msg *spec.VersionedSignedAggregateAndProof) error {
 	return bn.Bn.SubmitSignedAggregateSelectionProof(msg)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
+func (bn *TestingBeaconNodeWrapped) SubmitBeaconBlock(ctx context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	return bn.Bn.SubmitBeaconBlock(block, sig)
 }
 

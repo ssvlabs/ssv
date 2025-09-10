@@ -2,7 +2,6 @@ package ssvsigner
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -215,7 +214,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.resetMux()
-			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(PathValidators, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodPost, r.Method)
 				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -237,7 +236,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			statuses, err := s.client.AddValidators(context.Background(), tc.shares...)
+			statuses, err := s.client.AddValidators(t.Context(), tc.shares...)
 			s.assertErrorResult(err, tc.expectError, tc.expectNoRequest, t)
 			if tc.isDecryptionError {
 				var decryptErr ShareDecryptionError
@@ -300,7 +299,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.resetMux()
-			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(PathValidators, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodDelete, r.Method)
 				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -321,7 +320,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			statuses, err := s.client.RemoveValidators(context.Background(), tc.pubKeys...)
+			statuses, err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
 			s.assertErrorResult(err, tc.expectError, false, t)
 			assert.Equal(t, tc.expectStatuses, statuses)
 		})
@@ -370,12 +369,12 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.resetMux()
-			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(PathValidators, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			result, err := s.client.ListValidators(context.Background())
+			result, err := s.client.ListValidators(t.Context())
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -456,7 +455,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.resetMux()
-			s.mux.HandleFunc(pathValidatorsSign+tc.pubKey.String(), func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(PathValidatorsSign+tc.pubKey.String(), func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodPost, r.Method)
 				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -472,7 +471,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 				w.Write([]byte(tc.responseBody))
 			})
 
-			result, err := s.client.Sign(context.Background(), tc.pubKey, tc.payload)
+			result, err := s.client.Sign(t.Context(), tc.pubKey, tc.payload)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -512,7 +511,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.resetMux()
-			s.mux.HandleFunc(pathOperatorIdentity, func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(PathOperatorIdentity, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
@@ -523,7 +522,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 				}
 			})
 
-			result, err := s.client.OperatorIdentity(context.Background())
+			result, err := s.client.OperatorIdentity(t.Context())
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -567,7 +566,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.resetMux()
-			s.mux.HandleFunc(pathOperatorSign, func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(PathOperatorSign, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodPost, r.Method)
 
 				body, err := io.ReadAll(r.Body)
@@ -584,7 +583,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 				}
 			})
 
-			result, err := s.client.OperatorSign(context.Background(), tc.payload)
+			result, err := s.client.OperatorSign(t.Context(), tc.payload)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -697,7 +696,7 @@ func (s *SSVSignerClientSuite) TestMissingKeys() {
 		t.Run(tc.name, func(t *testing.T) {
 			s.resetMux()
 
-			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(PathValidators, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
 
 				if tc.listError {
@@ -712,7 +711,7 @@ func (s *SSVSignerClientSuite) TestMissingKeys() {
 				w.Write(respBytes)
 			})
 
-			result, err := s.client.MissingKeys(context.Background(), tc.localKeys)
+			result, err := s.client.MissingKeys(t.Context(), tc.localKeys)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -823,22 +822,22 @@ func TestRequestErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	_, err := client.AddValidators(context.Background(), ShareKeys{
+	_, err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	_, err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
+	_, err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 
-	_, err = client.Sign(context.Background(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
+	_, err = client.Sign(t.Context(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
 	assert.Error(t, err)
 
-	_, err = client.OperatorIdentity(context.Background())
+	_, err = client.OperatorIdentity(t.Context())
 	assert.Error(t, err)
 
-	_, err = client.OperatorSign(context.Background(), []byte{1, 1, 1})
+	_, err = client.OperatorSign(t.Context(), []byte{1, 1, 1})
 	assert.Error(t, err)
 }
 
@@ -855,13 +854,13 @@ func TestResponseHandlingErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	_, err := client.AddValidators(context.Background(), ShareKeys{
+	_, err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	_, err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
+	_, err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 }
 

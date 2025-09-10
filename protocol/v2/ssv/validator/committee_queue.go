@@ -4,34 +4,63 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// HandleMessage handles a spectypes.SSVMessage.
+// EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
-// TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
+	msgType := msg.GetType()
+	msgID := msg.GetID()
+
+	logger := c.logger.
+		With(fields.MessageType(msgType)).
+		With(fields.MessageID(msgID)).
+		With(fields.RunnerRole(msgID.GetRoleType()))
+
 	slot, err := msg.Slot()
 	if err != nil {
-		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+		logger.Error("❌ couldn't get message slot", zap.Error(err))
 		return
 	}
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+
+	logger = logger.
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID))
+
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "enqueue_committee_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.ValidatorMsgIDAttribute(msgID),
+			observability.RunnerRoleAttribute(msgID.GetRoleType()),
+			observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
+			observability.BeaconSlotAttribute(slot),
+			observability.DutyIDAttribute(dutyID)))
+	defer span.End()
+
+	msg.TraceContext = ctx
 
 	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
 	q, ok := c.Queues[slot]
 	if !ok {
-		q = queueContainer{
+		q = QueueContainer{
 			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
@@ -41,20 +70,26 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 			},
 		}
 		c.Queues[slot] = q
-		logger.Debug("missing queue for slot created", fields.Slot(slot))
+		const eventMsg = "missing queue for slot created"
+		logger.Debug(eventMsg, fields.Slot(slot))
+		span.AddEvent(eventMsg)
 	}
 	c.mtx.Unlock()
 
-	// Push the message.
+	span.AddEvent("pushing message to the queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
-		msgID := msg.MsgID.String()
-		logger.Warn("❗ dropping message because the queue is full",
+		const errMsg = "❗ dropping message because the queue is full"
+		logger.Warn(errMsg,
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msgID))
+			zap.String("msg_id", msg.MsgID.String()))
+		span.SetStatus(codes.Error, errMsg)
+		return
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
-func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -66,11 +101,11 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
-		return fmt.Errorf("no runner found for message's slot")
+		return fmt.Errorf("no runner found for slot %d", duty.Slot)
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 
 	go func() {
 		defer cancelF()
@@ -78,6 +113,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
 		}
 	}()
+
 	return nil
 }
 
@@ -85,7 +121,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 // it checks for current state
 func (c *Committee) ConsumeQueue(
 	ctx context.Context,
-	q queueContainer,
+	q QueueContainer,
 	logger *zap.Logger,
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,
@@ -148,7 +184,7 @@ func (c *Committee) ConsumeQueue(
 		}
 
 		// Handle the message.
-		if err := handler(ctx, logger, msg); err != nil {
+		if err := handler(ctx, msg); err != nil {
 			c.logMsg(logger, msg, "❗ could not handle message",
 				fields.MessageType(msg.MsgType),
 				zap.Error(err))
@@ -165,8 +201,7 @@ func (c *Committee) ConsumeQueue(
 
 func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
 			zap.Uint64("msg_height", uint64(sm.Height)),
@@ -174,40 +209,15 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
+		signer := psm.Messages[0].Signer
 		baseFields = []zap.Field{
-			zap.Uint64("signer", psm.Messages[0].Signer),
+			zap.Uint64("signer", signer),
 			fields.Slot(psm.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
-
-//
-//// GetLastHeight returns the last height for the given identifier
-//func (v *Committee) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Height(0)
-//	}
-//	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-//		return ctrl.Height
-//	}
-//	return specqbft.Height(0)
-//}
-//
-//// GetLastRound returns the last height for the given identifier
-//func (v *Committee) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Round(1)
-//	}
-//	if r != nil && r.HasRunningDuty() {
-//		inst := r.GetBaseRunner().State.RunningInstance
-//		if inst != nil {
-//			return inst.State.Round
-//		}
-//	}
-//	return specqbft.Round(1)
-//}

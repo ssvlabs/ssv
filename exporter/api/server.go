@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
@@ -21,14 +21,15 @@ const (
 
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
-	Start(logger *zap.Logger, addr string) error
+	Start(addr string) error
 	BroadcastFeed() *event.Feed
 	UseQueryHandler(handler QueryMessageHandler)
 }
 
 // wsServer is an implementation of WebSocketServer
 type wsServer struct {
-	ctx context.Context
+	logger *zap.Logger
+	ctx    context.Context
 
 	handler QueryMessageHandler
 
@@ -41,12 +42,13 @@ type wsServer struct {
 }
 
 // NewWsServer creates a new instance
-func NewWsServer(ctx context.Context, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
+func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
 	ws := wsServer{
 		ctx:         ctx,
+		logger:      logger.Named(log.NameWSServer),
 		handler:     handler,
 		router:      mux,
-		broadcaster: newBroadcaster(),
+		broadcaster: newBroadcaster(logger),
 		out:         new(event.Feed),
 		withPing:    withPing,
 	}
@@ -58,19 +60,17 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 }
 
 // Start starts the websocket server and the broadcaster
-func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
-	logger = logger.Named(logging.NameWSServer)
-
-	ws.RegisterHandler(logger, "query", "/query", ws.handleQuery)
-	ws.RegisterHandler(logger, "stream", "/stream", ws.handleStream)
+func (ws *wsServer) Start(addr string) error {
+	ws.RegisterHandler("query", "/query", ws.handleQuery)
+	ws.RegisterHandler("stream", "/stream", ws.handleStream)
 
 	go func() {
-		if err := ws.broadcaster.FromFeed(logger, ws.out); err != nil {
-			logger.Debug("failed to pull messages from feed")
+		if err := ws.broadcaster.FromFeed(ws.out); err != nil {
+			ws.logger.Debug("failed to pull messages from feed")
 		}
 	}()
 
-	logger.Info("starting", fields.Address(addr), zap.Strings("endPoints", []string{"/query", "/stream"}))
+	ws.logger.Info("starting", fields.Address(addr), zap.Strings("endPoints", []string{"/query", "/stream"}))
 
 	const timeout = 3 * time.Second
 
@@ -83,7 +83,7 @@ func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
 
 	err := httpServer.ListenAndServe()
 	if err != nil {
-		logger.Warn("could not start", zap.Error(err))
+		ws.logger.Warn("could not start", zap.Error(err))
 	}
 	return err
 }
@@ -94,23 +94,22 @@ func (ws *wsServer) BroadcastFeed() *event.Feed {
 }
 
 // RegisterHandler registers an end point
-func (ws *wsServer) RegisterHandler(logger *zap.Logger, name, endPoint string, handler func(logger *zap.Logger, conn *websocket.Conn)) {
+func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(conn *websocket.Conn)) {
 	wrappedHandler := func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, w.Header())
-		logger := logger.With(zap.String("remote addr", conn.RemoteAddr().String()))
 		if err != nil {
-			logger.Error("could not upgrade connection", zap.Error(err))
+			ws.logger.Error("could not upgrade connection", zap.Error(err))
 			return
 		}
-		logger.Debug("new websocket connection")
+		ws.logger.Debug("new websocket connection")
 		defer func() {
-			logger.Debug("closing connection")
+			ws.logger.Debug("closing connection")
 			err := conn.Close()
 			if err != nil {
-				logger.Error("could not close connection", zap.Error(err))
+				ws.logger.Error("could not close connection", zap.Error(err))
 			}
 		}()
-		handler(logger, conn)
+		handler(conn)
 	}
 
 	otelHandler := otelhttp.NewHandler(http.HandlerFunc(wrappedHandler), name)
@@ -118,12 +117,14 @@ func (ws *wsServer) RegisterHandler(logger *zap.Logger, name, endPoint string, h
 }
 
 // handleQuery receives query message and respond async
-func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
+func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	if ws.handler == nil {
 		return
 	}
 	cid := ConnectionID(conn)
-	logger = logger.With(fields.ConnectionID(cid))
+	logger := ws.logger.
+		With(fields.ConnectionID(cid)).
+		With(zap.String("remote addr", conn.RemoteAddr().String()))
 	logger.Debug("handles query requests")
 
 	for {
@@ -144,7 +145,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 			networkMessage = NetworkMessage{incoming, nil, conn}
 		}
 		// handler is processing the request and updates msg
-		ws.handler(logger, &networkMessage)
+		ws.handler(&networkMessage)
 
 		err = tasks.Retry(func() error {
 			return conn.WriteJSON(&networkMessage.Msg)
@@ -157,9 +158,11 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 }
 
 // handleStream registers the connection for broadcasting of stream messages
-func (ws *wsServer) handleStream(logger *zap.Logger, wsc *websocket.Conn) {
+func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 	cid := ConnectionID(wsc)
-	logger = logger.With(fields.ConnectionID(cid))
+	logger := ws.logger.
+		With(fields.ConnectionID(cid)).
+		With(zap.String("remote addr", wsc.RemoteAddr().String()))
 	defer logger.Debug("stream handler done")
 
 	ctx, cancel := context.WithCancel(ws.ctx)

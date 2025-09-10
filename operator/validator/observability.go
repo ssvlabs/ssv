@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 type validatorStatus string
 
 const (
+	statusAttesting     validatorStatus = "attesting"
 	statusParticipating validatorStatus = "participating"
 	statusNotFound      validatorStatus = "not_found"
 	statusActive        validatorStatus = "active"
@@ -31,29 +33,26 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
+	meter  = otel.Meter(observabilityName)
 
-	validatorStatusGauge = observability.NewMetric(
+	validatorStatusGauge = metrics.New(
 		meter.Int64Gauge(
-			metricName("validators.per_status"),
+			observability.InstrumentName(observabilityNamespace, "validators.per_status"),
 			metric.WithDescription("total number of validators by status")))
 
-	validatorsRemovedCounter = observability.NewMetric(
+	validatorsRemovedCounter = metrics.New(
 		meter.Int64Counter(
-			metricName("validators.removed"),
+			observability.InstrumentName(observabilityNamespace, "validators.removed"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
 
-	validatorErrorsCounter = observability.NewMetric(
+	validatorErrorsCounter = metrics.New(
 		meter.Int64Counter(
-			metricName("errors"),
+			observability.InstrumentName(observabilityNamespace, "errors"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
 	attrName := fmt.Sprintf("%s.status", observabilityNamespace)

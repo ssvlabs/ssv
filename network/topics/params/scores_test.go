@@ -9,6 +9,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -22,7 +23,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 0 validators",
 			func() *Options {
 				validators := uint64(0)
-				opts := NewSubnetTopicOpts(validators, 128, []*storage.Committee{})
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, []*storage.Committee{})
 				return opts
 			},
 			nil,
@@ -31,7 +32,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 1k validators",
 			func() *Options {
 				validators := uint64(1000)
-				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -40,7 +41,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 10k validators",
 			func() *Options {
 				validators := uint64(10_000)
-				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -49,7 +50,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 51k validators",
 			func() *Options {
 				validators := uint64(51_000)
-				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -57,7 +58,6 @@ func TestTopicScoreParams(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			opts := test.opts()
 			// raw, err := json.MarshalIndent(&opts, "", "\t")
@@ -77,7 +77,7 @@ func TestTopicScoreParams(t *testing.T) {
 }
 
 func TestPeerScoreParams(t *testing.T) {
-	peerScoreParams := PeerScoreParams(oneEpochDuration, 550*(time.Millisecond*700), false)
+	peerScoreParams := PeerScoreParams(networkconfig.TestNetwork, 550*(time.Millisecond*700), false)
 	raw, err := peerScoreParamsString(peerScoreParams)
 	require.NoError(t, err)
 	require.NotNil(t, raw)
@@ -91,9 +91,9 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 		IPColocationFactorWeight:    psp.IPColocationFactorWeight,
 		IPColocationFactorThreshold: psp.IPColocationFactorThreshold,
 		IPColocationFactorWhitelist: psp.IPColocationFactorWhitelist,
-		BehaviourPenaltyWeight:      psp.BehaviourPenaltyWeight,
-		BehaviourPenaltyThreshold:   psp.BehaviourPenaltyThreshold,
-		BehaviourPenaltyDecay:       psp.BehaviourPenaltyDecay,
+		BehaviorPenaltyWeight:       psp.BehaviourPenaltyWeight,
+		BehaviorPenaltyThreshold:    psp.BehaviourPenaltyThreshold,
+		BehaviorPenaltyDecay:        psp.BehaviourPenaltyDecay,
 		DecayInterval:               psp.DecayInterval,
 		DecayToZero:                 psp.DecayToZero,
 		RetainScore:                 psp.RetainScore,
@@ -109,14 +109,14 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 
 type peerScoreParamsSerializable struct {
 	// Topics map[string]*TopicScoreParams
-	TopicScoreCap                                                            float64
-	AppSpecificWeight                                                        float64
-	IPColocationFactorWeight                                                 float64
-	IPColocationFactorThreshold                                              int
-	IPColocationFactorWhitelist                                              []*net.IPNet
-	BehaviourPenaltyWeight, BehaviourPenaltyThreshold, BehaviourPenaltyDecay float64
-	DecayInterval                                                            time.Duration
-	DecayToZero                                                              float64
-	RetainScore                                                              time.Duration
-	SeenMsgTTL                                                               time.Duration
+	TopicScoreCap                                                         float64
+	AppSpecificWeight                                                     float64
+	IPColocationFactorWeight                                              float64
+	IPColocationFactorThreshold                                           int
+	IPColocationFactorWhitelist                                           []*net.IPNet
+	BehaviorPenaltyWeight, BehaviorPenaltyThreshold, BehaviorPenaltyDecay float64
+	DecayInterval                                                         time.Duration
+	DecayToZero                                                           float64
+	RetainScore                                                           time.Duration
+	SeenMsgTTL                                                            time.Duration
 }

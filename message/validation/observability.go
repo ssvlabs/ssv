@@ -2,7 +2,6 @@ package validation
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
@@ -10,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -20,41 +20,37 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	messageValidationsCounter = observability.NewMetric(
+	messageValidationsCounter = metrics.New(
 		meter.Int64Counter(
 			observabilityNamespace,
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages validated")))
 
-	messageValidationsAcceptedCounter = observability.NewMetric(
+	messageValidationsAcceptedCounter = metrics.New(
 		meter.Int64Counter(
-			metricName("accepted"),
+			observability.InstrumentName(observabilityNamespace, "accepted"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages successfully validated and accepted")))
 
-	messageValidationsIgnoredCounter = observability.NewMetric(
+	messageValidationsIgnoredCounter = metrics.New(
 		meter.Int64Counter(
-			metricName("ignored"),
+			observability.InstrumentName(observabilityNamespace, "ignored"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages that failed validation and were ignored")))
 
-	messageValidationsRejectedCounter = observability.NewMetric(
+	messageValidationsRejectedCounter = metrics.New(
 		meter.Int64Counter(
-			metricName("rejected"),
+			observability.InstrumentName(observabilityNamespace, "rejected"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages that failed validation and were rejected")))
 
-	messageValidationDurationHistogram = observability.NewMetric(
+	messageValidationDurationHistogram = metrics.New(
 		meter.Float64Histogram(
-			metricName("duration"),
+			observability.InstrumentName(observabilityNamespace, "duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("message validation duration"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func reasonAttribute(reason string) attribute.KeyValue {
 	return attribute.String("ssv.p2p.message.validation.discard_reason", reason)

@@ -10,22 +10,23 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
 type ConnHandler interface {
-	Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle
+	Handle() *libp2pnetwork.NotifyBundle
 }
 
 // connHandler implements ConnHandler
 type connHandler struct {
-	ctx context.Context
+	ctx    context.Context
+	logger *zap.Logger
 
 	handshaker          Handshaker
 	subnetsProvider     SubnetsProvider
@@ -38,6 +39,7 @@ type connHandler struct {
 // NewConnHandler creates a new connection handler
 func NewConnHandler(
 	ctx context.Context,
+	logger *zap.Logger,
 	handshaker Handshaker,
 	subnetsProvider SubnetsProvider,
 	subnetsIndex peers.SubnetsIndex,
@@ -47,6 +49,7 @@ func NewConnHandler(
 ) ConnHandler {
 	return &connHandler{
 		ctx:                 ctx,
+		logger:              logger,
 		handshaker:          handshaker,
 		subnetsProvider:     subnetsProvider,
 		subnetsIndex:        subnetsIndex,
@@ -57,7 +60,7 @@ func NewConnHandler(
 }
 
 // Handle configures a network notifications handler that handshakes and tracks all p2p connections
-func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
+func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 	disconnect := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
@@ -142,7 +145,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				}
 			}
 
-			if !ch.sharesEnoughSubnets(logger, conn) {
+			if !ch.sharesEnoughSubnets(conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
 
@@ -159,7 +162,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 	}
 
 	connLogger := func(conn libp2pnetwork.Conn) *zap.Logger {
-		return logger.Named(logging.NameConnHandler).
+		return ch.logger.Named(log.NameConnHandler).
 			With(
 				fields.PeerID(conn.RemotePeer()),
 				zap.String("remote_addr", conn.RemoteMultiaddr().String()),
@@ -225,22 +228,22 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 	}
 }
 
-func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
+func (ch *connHandler) sharesEnoughSubnets(conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
-	subnets := ch.subnetsIndex.GetPeerSubnets(pid)
-	if len(subnets) == 0 {
+	subnets, ok := ch.subnetsIndex.GetPeerSubnets(pid)
+	if !ok {
 		// no subnets for this peer
 		return false
 	}
+
 	mySubnets := ch.subnetsProvider()
+	logger := ch.logger.With(fields.Subnets(subnets), zap.String("my_subnets", mySubnets.String()))
 
-	logger = logger.With(fields.Subnets(subnets), zap.String("my_subnets", mySubnets.String()))
-
-	if mySubnets.String() == commons.ZeroSubnets { // this node has no subnets
+	if mySubnets == commons.ZeroSubnets { // this node has no subnets
 		return true
 	}
-	shared := commons.SharedSubnets(mySubnets, subnets, 1)
-	logger.Debug("checking subnets", zap.Ints("shared", shared))
+	shared := mySubnets.SharedSubnetsN(subnets, 1)
+	logger.Debug("checking subnets", zap.Uint64s("shared", shared))
 
 	return len(shared) == 1
 }

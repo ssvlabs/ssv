@@ -10,23 +10,23 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 func TestCheckPeer(t *testing.T) {
 	var (
-		ctx          = context.Background()
+		ctx          = t.Context()
 		logger       = zap.NewNop()
 		myDomainType = spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
 		mySubnets    = mockSubnets(1, 2, 3)
@@ -50,10 +50,11 @@ func TestCheckPeer(t *testing.T) {
 				expectedError: errors.New("domain type 01020305 doesn't match 01020304"),
 			},
 			{
-				name:          "missing subnets",
-				domainType:    &myDomainType,
-				subnets:       nil,
-				expectedError: errors.New("could not read subnets"),
+				name:           "missing subnets",
+				domainType:     &myDomainType,
+				subnets:        commons.Subnets{},
+				missingSubnets: true,
+				expectedError:  errors.New("could not read subnets"),
 			},
 			{
 				name:          "inactive subnets",
@@ -82,18 +83,12 @@ func TestCheckPeer(t *testing.T) {
 		}
 	)
 
-	var checkPeerTestNetwork = networkconfig.NetworkConfig{
-		BeaconConfig: networkconfig.BeaconConfig{
-			Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
-		},
-		SSVConfig: networkconfig.SSVConfig{
-			DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-		},
+	var checkPeerTestSSVConfig = &networkconfig.SSV{
+		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 	}
 
 	// Create the LocalNode instances for the tests.
 	for _, test := range tests {
-		test := test
 		t.Run(test.name+":setup", func(t *testing.T) {
 			// Create a random network key.
 			priv, err := utils.ECDSAPrivateKey(logger, "")
@@ -110,7 +105,7 @@ func TestCheckPeer(t *testing.T) {
 				err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
 				require.NoError(t, err)
 			}
-			if test.subnets != nil {
+			if !test.missingSubnets {
 				err := records.SetSubnetsEntry(localNode, test.subnets)
 				require.NoError(t, err)
 			}
@@ -120,21 +115,20 @@ func TestCheckPeer(t *testing.T) {
 	}
 
 	// Run the tests.
-	subnetIndex := peers.NewSubnetsIndex(commons.SubnetsCount)
+	subnetIndex := peers.NewSubnetsIndex()
 	dvs := &DiscV5Service{
 		ctx:                 ctx,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
 		subnetsIdx:          subnetIndex,
-		networkConfig:       checkPeerTestNetwork,
+		ssvConfig:           checkPeerTestSSVConfig,
 		subnets:             mySubnets,
 		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
 		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name+":run", func(t *testing.T) {
-			err := dvs.checkPeer(context.TODO(), logger, PeerEvent{
+			err := dvs.checkPeer(context.TODO(), PeerEvent{
 				Node: test.localNode.Node(),
 			})
 			if test.expectedError != nil {
@@ -147,17 +141,18 @@ func TestCheckPeer(t *testing.T) {
 }
 
 type checkPeerTest struct {
-	name          string
-	domainType    *spectypes.DomainType
-	subnets       []byte
-	localNode     *enode.LocalNode
-	expectedError error
+	name           string
+	domainType     *spectypes.DomainType
+	subnets        commons.Subnets
+	missingSubnets bool
+	localNode      *enode.LocalNode
+	expectedError  error
 }
 
-func mockSubnets(active ...int) []byte {
-	subnets := make([]byte, commons.SubnetsCount)
+func mockSubnets(active ...uint64) commons.Subnets {
+	subnets := commons.Subnets{}
 	for _, subnet := range active {
-		subnets[subnet] = 1
+		subnets.Set(subnet)
 	}
 	return subnets
 }

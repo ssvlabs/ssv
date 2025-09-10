@@ -14,9 +14,10 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/network"
@@ -145,7 +146,7 @@ type allPeersAndTopics = AllPeersAndTopicsJSON
 // TestNodeHandlers verifies the endpoints of the Node (identity, peers, health, topics).
 func TestNodeHandlers(t *testing.T) {
 	n := 4
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	defer cancel()
 

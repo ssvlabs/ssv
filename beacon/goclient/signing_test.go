@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -11,31 +10,30 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func Test_computeVoluntaryExitDomain(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(nil)
+		mockServer := mocks.NewServer(nil)
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
-				Network:        beacon.NewNetwork(spectypes.MainNetwork),
+				BeaconConfig:   networkconfig.TestNetwork.Beacon,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
-		domain, err := client.computeVoluntaryExitDomain(ctx)
+		domain, err := client.computeVoluntaryExitDomain()
 		require.NoError(t, err)
 		require.NotNil(t, domain)
 

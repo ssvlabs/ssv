@@ -2,17 +2,20 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"gopkg.in/yaml.v3"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -42,11 +45,11 @@ func TestHandleLocalEvent(t *testing.T) {
 		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", eventData.Owner.String())
 		require.Equal(t, []byte("LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"), eventData.PublicKey)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
+		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,18 +72,18 @@ func TestHandleLocalEvent(t *testing.T) {
 		var parsedData []localevents.Event
 		require.NoError(t, yaml.Unmarshal(input, &parsedData))
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
+		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 			od := &storage.OperatorData{
-				PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+				PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
 				OwnerAddress: common.Address{},
 				ID:           id,
 			}

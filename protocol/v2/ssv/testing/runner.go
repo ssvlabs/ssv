@@ -2,15 +2,14 @@ package testing
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
+	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
@@ -19,7 +18,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -84,13 +85,13 @@ var ConstructBaseRunner = func(
 		valCheck = ssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
 			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch)
 	case spectypes.RoleProposer:
-		valCheck = ssv.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = ssv.ProposerValueCheckF(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
 	case spectypes.RoleAggregator:
-		valCheck = ssv.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = ssv.AggregatorValueCheckF(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	case spectypes.RoleSyncCommitteeContribution:
-		valCheck = ssv.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
+		valCheck = ssv.SyncCommitteeContributionValueCheckF(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	default:
 		valCheck = nil
@@ -116,6 +117,9 @@ var ConstructBaseRunner = func(
 	shareMap[share.ValidatorIndex] = share
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
+	rStorage := mocks.NewMockrecipientsStorage()
+	rStorage.FeeRecipient = share.FeeRecipientAddress
+
 	var r runner.Runner
 	var err error
 
@@ -134,9 +138,8 @@ var ConstructBaseRunner = func(
 			dgHandler,
 		)
 	case spectypes.RoleAggregator:
-		r, err = runner.NewAggregatorRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+		rnr, err := runner.NewAggregatorRunner(
+			networkconfig.TestNetwork,
 			shareMap,
 			contr,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -146,11 +149,17 @@ var ConstructBaseRunner = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
 			logger,
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
 			contr,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -165,8 +174,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
 			contr,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -177,21 +185,22 @@ var ConstructBaseRunner = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
+		beaconNode := tests.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			common.Address{},
+			beaconNode,
 			net,
 			km,
 			opSigner,
+			rStorage,
+			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			runner.DefaultGasLimitOld,
-			0,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
 			net,
@@ -213,7 +222,7 @@ var ConstructBaseRunner = func(
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
-		return nil, errors.New("unknown role type")
+		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
 	return r, err
 }
@@ -347,13 +356,13 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = ssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
 				sharePubKeys, spectestingutils.TestingDutyEpoch)
 		case spectypes.RoleProposer:
-			valCheck = ssv.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
+			valCheck = ssv.ProposerValueCheckF(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
 		case spectypes.RoleAggregator:
-			valCheck = ssv.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
+			valCheck = ssv.AggregatorValueCheckF(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 		case spectypes.RoleSyncCommitteeContribution:
-			valCheck = ssv.SyncCommitteeContributionValueCheckF(km, spectypes.BeaconTestNetwork,
+			valCheck = ssv.SyncCommitteeContributionValueCheckF(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 		default:
 			valCheck = nil
@@ -392,9 +401,8 @@ var ConstructBaseRunnerWithShareMap = func(
 			dgHandler,
 		)
 	case spectypes.RoleAggregator:
-		r, err = runner.NewAggregatorRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+		rnr, err := runner.NewAggregatorRunner(
+			networkconfig.TestNetwork,
 			shareMap,
 			contr,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -404,11 +412,17 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
 			logger,
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
 			contr,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -423,8 +437,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
 			contr,
 			tests.NewTestingBeaconNodeWrapped(),
@@ -435,21 +448,22 @@ var ConstructBaseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
+		beaconNode := tests.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			common.Address{},
+			beaconNode,
 			net,
 			km,
 			opSigner,
+			nil, // recipientStorage is unused in these tests
+			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			runner.DefaultGasLimitOld,
-			0,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
+			networkconfig.TestNetwork,
 			shareMap,
 			tests.NewTestingBeaconNodeWrapped(),
 			net,
@@ -473,7 +487,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 		}
 	default:
-		return nil, errors.New("unknown role type")
+		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
 	return r, err
 }

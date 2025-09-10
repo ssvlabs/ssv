@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -12,10 +11,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -26,34 +26,30 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	peersConnectedGauge = observability.NewMetric(
+	peersConnectedGauge = metrics.New(
 		meter.Int64Gauge(
-			metricName("peers.connected"),
+			observability.InstrumentName(observabilityNamespace, "peers.connected"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers")))
 
-	connectionsGauge = observability.NewMetric(
+	connectionsGauge = metrics.New(
 		meter.Int64Gauge(
-			metricName("connections.active"),
+			observability.InstrumentName(observabilityNamespace, "connections.active"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("number of active connections")))
 
-	peersPerTopicGauge = observability.NewMetric(
+	peersPerTopicGauge = metrics.New(
 		meter.Int64Gauge(
-			metricName("peers.per_topic"),
+			observability.InstrumentName(observabilityNamespace, "peers.per_topic"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers per topic")))
 
-	peerIdentityGauge = observability.NewMetric(
+	peerIdentityGauge = metrics.New(
 		meter.Int64Gauge(
-			metricName("peers.per_version"),
+			observability.InstrumentName(observabilityNamespace, "peers.per_version"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers per node version")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordPeerCount(ctx context.Context, logger *zap.Logger, h host.Host) func() {
 	return func() {
@@ -108,18 +104,18 @@ func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topic
 		// Calculate min, median, max
 		if shouldLog {
 			sort.Ints(subnetPeerCounts)
-			var min, median, max int
+			var minCount, medianCount, maxCount int
 			if len(subnetPeerCounts) > 0 {
-				min = subnetPeerCounts[0]
-				median = subnetPeerCounts[len(subnetPeerCounts)/2]
-				max = subnetPeerCounts[len(subnetPeerCounts)-1]
+				minCount = subnetPeerCounts[0]
+				medianCount = subnetPeerCounts[len(subnetPeerCounts)/2]
+				maxCount = subnetPeerCounts[len(subnetPeerCounts)-1]
 			}
 			logger.Debug(
 				"topic peers distribution",
 				zap.Int("subnets_subscribed_total", len(ctrl.Topics())),
-				zap.Int("min", min),
-				zap.Int("median", median),
-				zap.Int("max", max),
+				zap.Int("min", minCount),
+				zap.Int("median", medianCount),
+				zap.Int("max", maxCount),
 				zap.Int("dead_subnets", deadSubnets),
 				zap.Int("unhealthy_subnets", unhealthySubnets),
 			)

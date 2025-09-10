@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 // Option defines an ExecutionClient configuration option.
@@ -15,14 +17,14 @@ type OptionMulti func(client *MultiClient)
 // WithLogger enables logging.
 func WithLogger(logger *zap.Logger) Option {
 	return func(s *ExecutionClient) {
-		s.logger = logger.Named("execution_client")
+		s.logger = logger.Named(log.NameExecutionClient)
 	}
 }
 
 // WithLoggerMulti enables logging.
 func WithLoggerMulti(logger *zap.Logger) OptionMulti {
 	return func(s *MultiClient) {
-		s.logger = logger.Named("execution_client_multi")
+		s.logger = logger.Named(log.NameExecutionClientMulti)
 	}
 }
 
@@ -42,17 +44,21 @@ func WithFollowDistanceMulti(offset uint64) OptionMulti {
 	}
 }
 
-// WithConnectionTimeout sets timeout for network connection to eth1 node.
-func WithConnectionTimeout(timeout time.Duration) Option {
+// WithReqTimeout sets timeout for RPC requests to eth1 node.
+func WithReqTimeout(timeout time.Duration) Option {
 	return func(s *ExecutionClient) {
-		s.connectionTimeout = timeout
+		if timeout > 0 {
+			s.reqTimeout = timeout
+		}
 	}
 }
 
-// WithConnectionTimeoutMulti sets timeout for network connection to eth1 node.
-func WithConnectionTimeoutMulti(timeout time.Duration) OptionMulti {
+// WithReqTimeoutMulti sets timeout for RPC requests to eth1 node.
+func WithReqTimeoutMulti(timeout time.Duration) OptionMulti {
 	return func(s *MultiClient) {
-		s.connectionTimeout = timeout
+		if timeout > 0 {
+			s.reqTimeout = timeout
+		}
 	}
 }
 
@@ -95,20 +101,6 @@ func WithHealthInvalidationInterval(interval time.Duration) Option {
 func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
 	return func(s *MultiClient) {
 		s.healthInvalidationInterval = interval
-	}
-}
-
-// WithLogBatchSize sets log batch size.
-func WithLogBatchSize(size uint64) Option {
-	return func(s *ExecutionClient) {
-		s.logBatchSize = size
-	}
-}
-
-// WithLogBatchSizeMulti sets log batch size.
-func WithLogBatchSizeMulti(size uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.logBatchSize = size
 	}
 }
 

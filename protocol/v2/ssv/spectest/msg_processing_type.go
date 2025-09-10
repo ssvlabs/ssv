@@ -11,23 +11,25 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type MsgProcessingSpecTest struct {
@@ -55,7 +57,7 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
 }
@@ -115,7 +117,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.ProcessMessage(ctx, logger, dmsg)
+			err = c.ProcessMessage(ctx, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -125,7 +127,6 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				}
 			}
 		}
-
 	default:
 		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
 		v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
@@ -140,7 +141,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = v.ProcessMessage(ctx, logger, dmsg)
+			err = v.ProcessMessage(ctx, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -239,6 +240,8 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
+	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
+
 	// override
 	test.PostDutyRunnerState = r
 
@@ -294,7 +297,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().BeaconNetwork,
+		runnerSample.GetBaseRunner().NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

@@ -12,25 +12,25 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
-	"go.uber.org/zap"
+	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/logging"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestSubmitProposal(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -42,12 +42,13 @@ func TestSubmitProposal(t *testing.T) {
 
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
-	network := networkconfig.TestNetwork
-	populateStorage(t, logger, shareStorage, operatorData)
 
-	frCtrl := NewController(&ControllerOptions{
+	beaconConfig := networkconfig.TestNetwork.Beacon
+	populateStorage(t, shareStorage, operatorData)
+
+	frCtrl := NewController(logger, &ControllerOptions{
 		Ctx:               context.TODO(),
-		Network:           network,
+		BeaconConfig:      beaconConfig,
 		ShareStorage:      shareStorage,
 		RecipientStorage:  recipientStorage,
 		OperatorDataStore: operatorDataStore,
@@ -59,7 +60,7 @@ func TestSubmitProposal(t *testing.T) {
 		wg.Add(numberOfRequests) // Set up the wait group before starting goroutines
 
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return nil
 		}).Times(numberOfRequests)
@@ -77,14 +78,14 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start(t.Context())
 
 		slots := []phase0.Slot{
-			1,                                        // first time
-			2,                                        // should not call submit
-			20,                                       // should not call submit
-			phase0.Slot(network.SlotsPerEpoch()) / 2, // halfway through epoch
-			63,                                       // should not call submit
+			1,  // first time
+			2,  // should not call submit
+			20, // should not call submit
+			phase0.Slot(beaconConfig.SlotsPerEpoch / 2), // halfway through epoch
+			63, // should not call submit
 		}
 
 		for _, s := range slots {
@@ -102,7 +103,7 @@ func TestSubmitProposal(t *testing.T) {
 	t.Run("error handling", func(t *testing.T) {
 		var wg sync.WaitGroup
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return errors.New("failed to submit")
 		}).MinTimes(2).MaxTimes(2)
@@ -117,7 +118,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start(t.Context())
 		mockTimeChan <- time.Now()
 		wg.Add(2)
 		wg.Wait()
@@ -126,18 +127,18 @@ func TestSubmitProposal(t *testing.T) {
 }
 
 func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return db, shareStorage, registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
 }
 
-func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
+func populateStorage(t *testing.T, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
 	createShare := func(index int, operatorID spectypes.OperatorID) *types.SSVShare {
 		ownerAddr := fmt.Sprintf("%d", index)
 		ownerAddrByte := [20]byte{}
@@ -159,7 +160,7 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 		require.NoError(t, storage.Save(nil, createShare(i, operatorData.ID)))
 	}
 
-	// add none committee share
+	// add non-committee share
 	require.NoError(t, storage.Save(nil, createShare(2000, spectypes.OperatorID(1))))
 
 	all := storage.List(nil, registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())

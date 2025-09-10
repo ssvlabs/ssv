@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -15,23 +16,23 @@ import (
 	"testing"
 	"time"
 
-	"math/rand"
-
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -81,7 +82,7 @@ func TestMaxPossibleShareSize(t *testing.T) {
 }
 
 func TestSharesStorage(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
 	defer storage.Close()
@@ -96,7 +97,7 @@ func TestSharesStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	for operatorID := range splitKeys {
-		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
+		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: strconv.FormatUint(operatorID, 10)})
 		require.NoError(t, err)
 	}
 
@@ -130,13 +131,13 @@ func TestSharesStorage(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateValidatorMetadata_updatesMetadata", func(t *testing.T) {
+	t.Run("UpdateValidatorMetadata_updatesMetadata_whenMetadataChanged", func(t *testing.T) {
 		for _, share := range persistedActiveValidatorShares {
 			updatedIndex := phase0.ValidatorIndex(rand.Uint64())
 			updatedActivationEpoch, updatedExitEpoch := phase0.Epoch(5), phase0.Epoch(6)
 			updatedStatus := v1.ValidatorStateActiveOngoing
 
-			err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+			updatedShares, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 				share.ValidatorPubKey: {
 					Index:           updatedIndex,
 					Status:          updatedStatus,
@@ -144,6 +145,7 @@ func TestSharesStorage(t *testing.T) {
 					ExitEpoch:       updatedExitEpoch,
 				}})
 			require.NoError(t, err)
+			require.NotNil(t, updatedShares)
 
 			fetchedShare, exists := storage.Shares.Get(nil, share.ValidatorPubKey[:])
 			require.True(t, exists)
@@ -152,6 +154,21 @@ func TestSharesStorage(t *testing.T) {
 			require.Equal(t, updatedActivationEpoch, fetchedShare.ActivationEpoch)
 			require.Equal(t, updatedExitEpoch, fetchedShare.ExitEpoch)
 			require.Equal(t, updatedStatus, fetchedShare.Status)
+			require.WithinDuration(t, time.Now(), fetchedShare.BeaconMetadataLastUpdated, time.Second)
+		}
+	})
+
+	t.Run("UpdateValidatorMetadata_updatesMetadata_whenMetadataUnchanged", func(t *testing.T) {
+		for _, share := range persistedActiveValidatorShares {
+			updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+				map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{share.ValidatorPubKey: share.BeaconMetadata()})
+			require.NoError(t, err)
+			require.Nil(t, updatedShares)
+
+			fetchedShare, exists := storage.Shares.Get(nil, share.ValidatorPubKey[:])
+			require.True(t, exists)
+			require.NotNil(t, fetchedShare)
+			require.WithinDuration(t, time.Now(), fetchedShare.BeaconMetadataLastUpdated, time.Second)
 		}
 	})
 
@@ -190,20 +207,8 @@ func TestSharesStorage(t *testing.T) {
 		require.Equal(t, 1, len(validators))
 	})
 
-	t.Run("List_Filter_ByAttesting", func(t *testing.T) {
-		const epoch = 1
-		var attestingShares int
-		for _, shares := range persistedActiveValidatorShares {
-			if shares.IsAttesting(epoch) {
-				attestingShares++
-			}
-		}
-		validators := storage.Shares.List(nil, ByAttesting(epoch))
-		require.Equal(t, attestingShares, len(validators))
-	})
-
 	t.Run("KV_reuse_works", func(t *testing.T) {
-		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork, storage.db, []byte("test"))
+		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork.Beacon, storage.db, []byte("test"))
 		require.NoError(t, err)
 		existingValidators := storageDuplicate.List(nil)
 
@@ -211,8 +216,54 @@ func TestSharesStorage(t *testing.T) {
 	})
 }
 
+func TestValidatorPubkeysToIndicesMapping(t *testing.T) {
+	logger := log.TestLogger(t)
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	threshold.Init()
+	const keysCount = 4
+
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	for operatorID := range splitKeys {
+		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: strconv.FormatUint(operatorID, 10)})
+		require.NoError(t, err)
+	}
+
+	validatorShare := generateRandomShare(splitKeys, v1.ValidatorStateActiveOngoing, false)
+	validatorShare.ValidatorIndex = 3
+	validatorShare.ActivationEpoch = 4
+	validatorShare.OwnerAddress = common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e")
+	validatorShare.Liquidated = false
+	require.NoError(t, storage.Shares.Save(nil, validatorShare))
+
+	validatorShare2 := generateRandomShare(splitKeys, v1.ValidatorStateActiveOngoing, false)
+	validatorShare2.ValidatorIndex = 55
+	require.NoError(t, storage.Shares.Save(nil, validatorShare2))
+
+	m, err := storage.Shares.(*sharesStorage).loadPubkeyToIndexMappings()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(m))
+	require.Equal(t, validatorShare.ValidatorIndex, m[validatorShare.ValidatorPubKey])
+	require.Equal(t, validatorShare2.ValidatorIndex, m[validatorShare2.ValidatorPubKey])
+
+	pubkeys := []spectypes.ValidatorPK{validatorShare.ValidatorPubKey, validatorShare2.ValidatorPubKey}
+	indices, err := storage.Shares.(*sharesStorage).GetValidatorIndicesByPubkeys(pubkeys)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(indices))
+	// should maintain order
+	assert.Equal(t, validatorShare.ValidatorIndex, indices[0])
+	assert.Equal(t, validatorShare2.ValidatorIndex, indices[1])
+}
+
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	// Test share deletion with and without reopening the database.
 	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
@@ -313,16 +364,19 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 
 		// Now update the share
 		updatedMetadata := &beaconprotocol.ValidatorMetadata{
-			Status:          v1.ValidatorStateActiveOngoing,
-			Index:           3,
-			ActivationEpoch: 5,
+			Status:          v1.ValidatorStateActiveExiting,
+			Index:           1,
+			ActivationEpoch: 4,
 			ExitEpoch:       goclient.FarFutureEpoch,
 		}
 
 		// Update the share with new metadata
-		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-			testShare.ValidatorPubKey: updatedMetadata,
-		}))
+		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+			map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+				testShare.ValidatorPubKey: updatedMetadata,
+			})
+		require.NoError(t, err)
+		require.NotNil(t, updatedShares)
 		reopen(t)
 
 		// Ensure the updated share is reflected in validatorStore
@@ -400,7 +454,7 @@ func TestShareStorage_MultipleCommittees(t *testing.T) {
 }
 
 func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
 	defer storage.Close()
@@ -412,7 +466,7 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 
 	// High contention test with concurrent read, add, update, and remove
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 	for i := 0; i < 100; i++ {
 		for _, op := range []string{"add", "update", "remove1", "remove4", "read"} {
@@ -424,14 +478,15 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 					case "add":
 						require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
 					case "update":
-						require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-							share2.ValidatorPubKey: {
-								Status:          updatedShare2.Status,
-								Index:           updatedShare2.ValidatorIndex,
-								ActivationEpoch: updatedShare2.ActivationEpoch,
-								ExitEpoch:       updatedShare2.ExitEpoch,
-							},
-						}))
+						_, err := storage.Shares.UpdateValidatorsMetadata(
+							map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+								share2.ValidatorPubKey: {
+									Status:          updatedShare2.Status,
+									Index:           updatedShare2.ValidatorIndex,
+									ActivationEpoch: updatedShare2.ActivationEpoch,
+									ExitEpoch:       updatedShare2.ExitEpoch},
+							})
+						require.NoError(t, err)
 					case "remove1":
 						require.NoError(t, storage.Shares.Delete(nil, share1.ValidatorPubKey[:]))
 					case "remove4":
@@ -476,9 +531,8 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 // Runs the given function as a test with and without storage reopen.
 func testWithStorageReopen(t *testing.T, f func(t *testing.T, storage *testStorage, reopen func(t *testing.T))) {
 	for _, withReopen := range []bool{false, true} {
-		withReopen := withReopen
 		t.Run(fmt.Sprintf("withReopen=%t", withReopen), func(t *testing.T) {
-			logger := logging.TestLogger(t)
+			logger := log.TestLogger(t)
 			storage, err := newTestStorage(logger)
 			require.NoError(t, err)
 			defer storage.Close()
@@ -530,7 +584,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 	sk2 := bls.SecretKey{}
 	sk2.SetByCSPRNG()
 
-	var ibftCommittee []*storageOperator
+	ibftCommittee := make([]*storageOperator, 0, len(splitKeys))
 	for operatorID, sk := range splitKeys {
 		ibftCommittee = append(ibftCommittee, &storageOperator{
 			OperatorID: operatorID,
@@ -564,7 +618,7 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey, state v1.Validator
 	sk2 := bls.SecretKey{}
 	sk2.SetByCSPRNG()
 
-	var ibftCommittee []*spectypes.ShareMember
+	ibftCommittee := make([]*spectypes.ShareMember, 0, len(splitKeys))
 	for operatorID, sk := range splitKeys {
 		ibftCommittee = append(ibftCommittee, &spectypes.ShareMember{
 			Signer:      operatorID,
@@ -647,7 +701,7 @@ func generateMaxPossibleShare() (*Share, error) {
 }
 
 type testStorage struct {
-	db             *kv.BadgerDB
+	db             *kv.DB
 	Operators      Operators
 	Shares         Shares
 	ValidatorStore ValidatorStore
@@ -667,7 +721,7 @@ func newTestStorage(logger *zap.Logger) (*testStorage, error) {
 
 func (t *testStorage) open(logger *zap.Logger) error {
 	var err error
-	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork, t.db, []byte("test"))
+	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork.Beacon, t.db, []byte("test"))
 	if err != nil {
 		return err
 	}

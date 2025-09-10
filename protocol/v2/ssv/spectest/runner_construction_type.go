@@ -7,7 +7,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	runnertesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 )
 
@@ -22,7 +22,7 @@ func (test *RunnerConstructionSpecTest) TestName() string {
 }
 
 func (test *RunnerConstructionSpecTest) Run(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	if len(test.RoleError) == 0 {
 		panic("no roles")
 	}
