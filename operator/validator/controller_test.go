@@ -12,7 +12,6 @@ import (
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -251,7 +250,6 @@ func TestSetupValidators(t *testing.T) {
 	)
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, ownerAddr))
-	recipientData := buildFeeRecipient(ownerAddr, feeRecipient)
 	ownerAddressBytes := decodeHex(t, ownerAddr, "Failed to decode owner address")
 	testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
 
@@ -277,7 +275,6 @@ func TestSetupValidators(t *testing.T) {
 		started            int
 		name               string
 		shares             []*types.SSVShare
-		recipientData      *registrystorage.RecipientData
 		bcResponse         map[phase0.ValidatorIndex]*v1.Validator
 		validatorStartFunc func(validator *validator.Validator) (bool, error)
 		operatorData       []*registrystorage.OperatorData
@@ -285,7 +282,6 @@ func TestSetupValidators(t *testing.T) {
 		{
 			name:             "setting fee recipient to storage data",
 			shares:           []*types.SSVShare{shareWithMetaData, shareWithoutMetaData},
-			recipientData:    recipientData,
 			recipientFound:   true,
 			bcResponse:       bcResponse,
 			initedValidators: 1,
@@ -299,7 +295,6 @@ func TestSetupValidators(t *testing.T) {
 		{
 			name:             "setting fee recipient to owner address",
 			shares:           []*types.SSVShare{shareWithMetaData, shareWithoutMetaData},
-			recipientData:    nil,
 			recipientFound:   false,
 			bcResponse:       bcResponse,
 			initedValidators: 1,
@@ -313,7 +308,6 @@ func TestSetupValidators(t *testing.T) {
 		{
 			name:             "start share with metadata",
 			shares:           []*types.SSVShare{shareWithMetaData},
-			recipientData:    nil,
 			recipientFound:   false,
 			bcResponse:       bcResponse,
 			initedValidators: 1,
@@ -329,7 +323,6 @@ func TestSetupValidators(t *testing.T) {
 			bcMockTimes:      1,
 			initedValidators: 0,
 			started:          0,
-			recipientData:    nil,
 			recipientFound:   false,
 			bcResponse:       bcResponse,
 			shares:           []*types.SSVShare{shareWithoutMetaData},
@@ -341,7 +334,6 @@ func TestSetupValidators(t *testing.T) {
 		{
 			name:             "failed to get GetValidatorData",
 			bcMockTimes:      1,
-			recipientData:    nil,
 			bcResponse:       nil,
 			recipientFound:   false,
 			initedValidators: 0,
@@ -355,7 +347,6 @@ func TestSetupValidators(t *testing.T) {
 		{
 			name:             "failed to start validator",
 			shares:           []*types.SSVShare{shareWithMetaData},
-			recipientData:    nil,
 			recipientFound:   false,
 			bcResponse:       bcResponse,
 			initedValidators: 1,
@@ -382,7 +373,6 @@ func TestSetupValidators(t *testing.T) {
 					BeaconMetadataLastUpdated: time.Now(),
 				},
 			},
-			recipientData:    nil,
 			recipientFound:   false,
 			bcResponse:       bcResponse,
 			initedValidators: 1,
@@ -413,7 +403,6 @@ func TestSetupValidators(t *testing.T) {
 					BeaconMetadataLastUpdated: time.Now(),
 				},
 			},
-			recipientData:    nil,
 			recipientFound:   false,
 			bcResponse:       bcResponse,
 			initedValidators: 0,
@@ -914,17 +903,6 @@ func buildOperatorData(id uint64, ownerAddress string) *registrystorage.Operator
 		ID:           id,
 		PublicKey:    base64.StdEncoding.EncodeToString([]byte("samplePublicKey")),
 		OwnerAddress: common.BytesToAddress([]byte(ownerAddress)),
-	}
-}
-
-func buildFeeRecipient(owner string, feeRecipient string) *registrystorage.RecipientData {
-	feeRecipientSlice := []byte(feeRecipient) // Assuming FeeRecipient is a string or similar
-	var executionAddress bellatrix.ExecutionAddress
-	copy(executionAddress[:], feeRecipientSlice)
-	return &registrystorage.RecipientData{
-		Owner:        common.BytesToAddress([]byte(owner)),
-		FeeRecipient: executionAddress,
-		Nonce:        nil,
 	}
 }
 
