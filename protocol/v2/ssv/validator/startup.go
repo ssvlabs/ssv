@@ -19,6 +19,11 @@ func (v *Validator) Start() (started bool, err error) {
 	v.startedMtx.Lock()
 	defer v.startedMtx.Unlock()
 
+	started = v.started.Load()
+	if started {
+		return false, nil
+	}
+
 	n, ok := v.Network.(p2p.Subscriber)
 	if !ok {
 		return false, fmt.Errorf("network does not support subscription")
@@ -38,6 +43,9 @@ func (v *Validator) Start() (started bool, err error) {
 
 // Stop stops Validator.
 func (v *Validator) Stop() {
+	v.startedMtx.Lock()
+	defer v.startedMtx.Unlock()
+
 	justStopped := v.started.CompareAndSwap(true, false)
 	if !justStopped {
 		return
