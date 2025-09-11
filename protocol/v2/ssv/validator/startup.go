@@ -5,22 +5,14 @@ import (
 
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // Start starts Validator.
 func (v *Validator) Start() (started bool, err error) {
-	started = v.started.Load()
-	if started {
-		return false, nil
-	}
-
 	v.startedMtx.Lock()
 	defer v.startedMtx.Unlock()
 
-	started = v.started.Load()
-	if started {
+	if v.started {
 		return false, nil
 	}
 
@@ -36,7 +28,7 @@ func (v *Validator) Start() (started bool, err error) {
 		go v.StartQueueConsumer(identifier, v.ProcessMessage)
 	}
 
-	v.started.Store(true)
+	v.started = true
 
 	return true, nil
 }
@@ -46,17 +38,11 @@ func (v *Validator) Stop() {
 	v.startedMtx.Lock()
 	defer v.startedMtx.Unlock()
 
-	started := v.started.Load()
-	if !started {
+	if !v.started {
 		return
 	}
 
 	v.cancel()
 
-	// Clear the message queues, write-lock for v.Queues
-	v.mtx.Lock()
-	v.Queues = make(map[spectypes.RunnerRole]queue.Queue)
-	v.mtx.Unlock()
-
-	v.started.Store(false)
+	v.started = false
 }

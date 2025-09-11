@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -56,7 +55,7 @@ type Validator struct {
 	// Started reflects whether this validator has already been started. Note, Validator struct can still be used
 	// for various purposes even if it hasn't been started, or has already been stopped - this shouldn't result into
 	// fatal inconsistencies, but we might want to fix that in the future.
-	started atomic.Bool
+	started bool
 
 	messageValidator validation.MessageValidator
 }
