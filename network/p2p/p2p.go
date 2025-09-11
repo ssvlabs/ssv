@@ -455,7 +455,7 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
-		n.logger.Panic("could not setup discovery", zap.Error(err))
+		n.logger.Fatal("could not setup discovery", zap.Error(err))
 	}
 }
 

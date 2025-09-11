@@ -222,14 +222,14 @@ func (n *Node) startWSServer() error {
 }
 
 func (n *Node) reportOperators() {
-	operators, err := n.storage.ListOperators(nil, 0, 1000) // TODO more than 1000?
+	operators, err := n.storage.ListOperatorsAll(nil)
 	if err != nil {
-		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		n.logger.Warn("(reporting) couldn't fetch all operators from DB", zap.Error(err))
 		return
 	}
-	n.logger.Debug("reporting operators", zap.Int("count", len(operators)))
+	n.logger.Debug("(reporting) fetched all stored operators from DB", zap.Int("count", len(operators)))
 	for i := range operators {
-		n.logger.Debug("report operator public key",
+		n.logger.Debug("(reporting) operator fetched from DB",
 			fields.OperatorID(operators[i].ID),
 			fields.OperatorPubKey(operators[i].PublicKey))
 	}

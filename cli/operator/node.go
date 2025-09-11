@@ -97,7 +97,7 @@ type SSVSignerConfig struct {
 }
 
 type config struct {
-	global_config.GlobalConfig   `yaml:"global"`
+	global_config.Global         `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExporterOptions              exporter.Options        `yaml:"exporter"`
@@ -561,7 +561,7 @@ var StartNodeCmd = &cobra.Command{
 			go func() {
 				metricsHandler := metrics.NewHandler(logger, db, cfg.EnableProfile, operatorNode)
 				if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", cfg.MetricsAPIPort)); err != nil {
-					logger.Panic("failed to serve metrics", zap.Error(err))
+					logger.Fatal("failed to serve metrics", zap.Error(err))
 				}
 			}()
 		}
@@ -1141,7 +1141,7 @@ func syncContractEvents(
 
 		// Print registry stats.
 		shares := nodeStorage.Shares().List(nil)
-		operators, err := nodeStorage.ListOperators(nil, 0, 0)
+		operators, err := nodeStorage.ListOperatorsAll(nil)
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}
