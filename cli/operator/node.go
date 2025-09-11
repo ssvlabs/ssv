@@ -33,7 +33,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
-	"github.com/ssvlabs/ssv/api/handlers"
+	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
+	hnode "github.com/ssvlabs/ssv/api/handlers/node"
+	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
@@ -646,21 +648,21 @@ var StartNodeCmd = &cobra.Command{
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
-				handlers.NewNode(
+				hnode.NewNode(
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
 					[]string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
 					p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					p2pNetwork.(handlers.TopicIndex),
+					p2pNetwork.(hnode.TopicIndex),
 					nodeProber,
 					clNodeName,
 					elNodeName,
 					eventSyncerNodeName,
 				),
-				&handlers.Validators{
+				&hvalidators.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
