@@ -46,8 +46,8 @@ func (v *Validator) Stop() {
 	v.startedMtx.Lock()
 	defer v.startedMtx.Unlock()
 
-	justStopped := v.started.CompareAndSwap(true, false)
-	if !justStopped {
+	started := v.started.Load()
+	if !started {
 		return
 	}
 
@@ -57,4 +57,6 @@ func (v *Validator) Stop() {
 	v.mtx.Lock()
 	v.Queues = make(map[spectypes.RunnerRole]queue.Queue)
 	v.mtx.Unlock()
+
+	v.started.Store(false)
 }
