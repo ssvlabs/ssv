@@ -44,16 +44,17 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	// mtx protects access to Queues
+	// mtx protects access to Queues.
 	mtx    *sync.RWMutex
 	Queues map[spectypes.RunnerRole]queue.Queue
 
 	DutyRunners runner.ValidatorDutyRunners
 
-	// started reflects whether this validator has already been started
-	started atomic.Bool
-	// startedMtx makes sure validator will be started only once
+	// startedMtx together with started flag ensures that Validator can be started only once until it is stopped,
+	// after Validator has been stopped it can be started again.
 	startedMtx sync.Mutex
+	// started reflects whether this validator has already been started.
+	started atomic.Bool
 
 	messageValidator validation.MessageValidator
 }
