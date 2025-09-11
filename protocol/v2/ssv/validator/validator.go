@@ -53,7 +53,9 @@ type Validator struct {
 	// startedMtx together with started flag ensures that Validator can be started only once until it is stopped,
 	// after Validator has been stopped it can be started again.
 	startedMtx sync.Mutex
-	// started reflects whether this validator has already been started.
+	// Started reflects whether this validator has already been started. Note, Validator struct can still be used
+	// for various purposes even if it hasn't been started, or has already been stopped - this shouldn't result into
+	// fatal inconsistencies, but we might want to fix that in the future.
 	started atomic.Bool
 
 	messageValidator validation.MessageValidator
