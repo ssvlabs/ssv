@@ -2,6 +2,8 @@ package exporter
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -65,4 +67,54 @@ func toStrings(errs []error) []string {
 
 func isNotFoundError(e error) bool {
 	return errors.Is(e, store.ErrNotFound) || errors.Is(e, dutytracer.ErrNotFound)
+}
+
+// hasErrorsOtherThanNotFound checks if the multierror contains at least one error that is not a not-found error.
+// It is used to determine if we should return an error response when we have no valid results.
+// -> If empty or all errors are not-found errors, we consider that as a valid case of "no data" and return an empty result instead of an error.
+func hasErrorsOtherThanNotFound(errs *multierror.Error) bool {
+	if errs == nil || errs.ErrorOrNil() == nil {
+		return false
+	}
+	for _, err := range errs.Errors {
+		if !isNotFoundError(err) {
+			return true
+		}
+	}
+	return false
+}
+
+func parsePubkeysSlice(hexSlice api.HexSlice) []spectypes.ValidatorPK {
+	pubkeys := make([]spectypes.ValidatorPK, 0, len(hexSlice))
+	for _, pk := range hexSlice {
+		var key spectypes.ValidatorPK
+		copy(key[:], pk)
+		pubkeys = append(pubkeys, key)
+	}
+	return pubkeys
+}
+
+func (e *Exporter) extractIndices(req filterRequest) ([]phase0.ValidatorIndex, error) {
+	reqIdxs := req.indices()
+	reqPks := req.pubKeys()
+
+	indices := make([]phase0.ValidatorIndex, 0, len(reqIdxs)+len(reqPks))
+	var errs *multierror.Error
+
+	for _, idx := range reqIdxs {
+		indices = append(indices, phase0.ValidatorIndex(idx))
+	}
+	for _, pk := range reqPks {
+		idx, ok := e.validators.ValidatorIndex(pk)
+		if !ok {
+			errs = multierror.Append(errs, fmt.Errorf("validator not found for pubkey: %x", pk))
+			continue
+		}
+		indices = append(indices, idx)
+	}
+
+	slices.Sort(indices)
+	indices = slices.Compact(indices)
+
+	return indices, errs.ErrorOrNil()
 }
