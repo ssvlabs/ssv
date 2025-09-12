@@ -1,4 +1,4 @@
-package pinned_peers
+package p2p
 
 import (
 	"net/http"

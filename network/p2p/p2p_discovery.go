@@ -65,7 +65,7 @@ func (n *p2pNetwork) startDiscovery() error {
 			return
 		}
 
-		// Compute number of peers we're connected to for each subnet.
+		// Compute the number of peers we're connected to for each subnet.
 		ownSubnets := n.SubscribedSubnets()
 		currentSubnetPeers := SubnetPeers{}
 		for topic, peers := range n.PeersByTopic() {

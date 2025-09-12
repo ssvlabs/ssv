@@ -20,6 +20,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ilyakaznacheev/cleanenv"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -34,7 +36,7 @@ import (
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
 	"github.com/ssvlabs/ssv/api/handlers"
-	pinned_peers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
+	hp2p "github.com/ssvlabs/ssv/api/handlers/p2p"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
@@ -658,9 +660,11 @@ var StartNodeCmd = &cobra.Command{
 					elNodeName,
 					eventSyncerNodeName,
 				),
-				pinned_peers.New(
+				hp2p.New(
 					p2pNetwork.Pinned(),
-					pinned_peers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),
+					func(id peer.ID) bool {
+						return p2pNetwork.(p2pv1.HostProvider).Host().Network().Connectedness(id) == libp2pnetwork.Connected
+					},
 				),
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
