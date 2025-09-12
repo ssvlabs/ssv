@@ -21,7 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
-	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/p2p"
 	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	"github.com/ssvlabs/ssv/utils/commons"
 )

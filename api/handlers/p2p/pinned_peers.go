@@ -1,10 +1,9 @@
-package pinned_peers
+package p2p
 
 import (
 	"fmt"
 	"net/http"
 
-	p2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ssvlabs/ssv/api"
@@ -13,13 +12,16 @@ import (
 
 // Handler exposes HTTP handlers to manage pinned peers at runtime.
 type Handler struct {
-	provider ssvnetwork.PinnedPeers
-	conn     connChecker
+	provider            ssvnetwork.PinnedPeers
+	checkPeerConnection peerConnectionCheckFn
 }
 
 // New creates a pinned peers HTTP handler.
-func New(provider ssvnetwork.PinnedPeers, conn connChecker) *Handler {
-	return &Handler{provider: provider, conn: conn}
+func New(provider ssvnetwork.PinnedPeers, connCheckFn peerConnectionCheckFn) *Handler {
+	return &Handler{
+		provider:            provider,
+		checkPeerConnection: connCheckFn,
+	}
 }
 
 // List returns the current pinned peers.
@@ -31,7 +33,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) error {
 		for _, addr := range ai.Addrs {
 			pp.Addresses = append(pp.Addresses, addr.String())
 		}
-		pp.Connected = h.conn.IsConnected(ai.ID)
+		pp.Connected = h.checkPeerConnection(ai.ID)
 		resp.Pinned = append(resp.Pinned, pp)
 	}
 	return api.Render(w, r, resp)
@@ -96,22 +98,8 @@ func (h *Handler) Remove(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, resp)
 }
 
-// connChecker provides a minimal, testable interface for connection checks.
-type connChecker interface {
-	IsConnected(peer.ID) bool
-}
-
-// libp2pConnChecker adapts libp2p p2pnetwork.Network to ConnChecker.
-type libp2pConnChecker struct{ net p2pnetwork.Network }
-
-// NewLibp2pConnChecker wraps a libp2p network with a connection checker.
-func NewLibp2pConnChecker(net p2pnetwork.Network) *libp2pConnChecker {
-	return &libp2pConnChecker{net: net}
-}
-
-func (c *libp2pConnChecker) IsConnected(id peer.ID) bool {
-	return c.net.Connectedness(id) == p2pnetwork.Connected
-}
+// peerConnectionCheckFn provides a minimal, testable interface for connection checks.
+type peerConnectionCheckFn func(peer.ID) bool
 
 // validatePeers parses and validates raw peer strings. On success returns a list
 // of AddrInfo; on failure returns invalid items with reasons. No side-effects.

@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	exporterHandlers "github.com/ssvlabs/ssv/api/handlers/exporter"
 	nodeHandlers "github.com/ssvlabs/ssv/api/handlers/node"
-	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/p2p"
 	validatorsHandlers "github.com/ssvlabs/ssv/api/handlers/validators"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
