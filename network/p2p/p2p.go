@@ -20,6 +20,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -33,7 +35,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
@@ -154,16 +155,16 @@ func New(
 		),
 	}
 
-	if err := n.parsePinnedPeers(); err != nil {
+	if err := n.initPinnedPeers(); err != nil {
 		return nil, err
 	}
-	if err := n.parseTrustedPeers(); err != nil {
+	if err := n.initTrustedPeers(); err != nil {
 		return nil, err
 	}
 	return n, nil
 }
 
-func (n *p2pNetwork) parseTrustedPeers() error {
+func (n *p2pNetwork) initTrustedPeers() error {
 	if len(n.cfg.TrustedPeers) == 0 {
 		return nil
 	}
@@ -171,15 +172,14 @@ func (n *p2pNetwork) parseTrustedPeers() error {
 	if err != nil {
 		return err
 	}
-	for i := range parsed {
-		ai := parsed[i]
-		n.trustedPeers = append(n.trustedPeers, &peer.AddrInfo{ID: ai.ID, Addrs: ai.Addrs})
+	for _, tp := range parsed {
+		n.trustedPeers = append(n.trustedPeers, &peer.AddrInfo{ID: tp.ID, Addrs: tp.Addrs})
 	}
 	return nil
 }
 
-// parsePinnedPeers parses pinned peers from config and seeds the manager.
-func (n *p2pNetwork) parsePinnedPeers() error {
+// initPinnedPeers parses pinned peers from config and seeds the manager.
+func (n *p2pNetwork) initPinnedPeers() error {
 	if len(n.cfg.PinnedPeers) == 0 {
 		return nil
 	}
@@ -332,11 +332,10 @@ func (n *p2pNetwork) Start() error {
 	for i, ima := range pAddrs {
 		maStrs[i] = ima.String()
 	}
-	pinnedCount := len(n.pinned.ListPinned())
 	n.logger.Info("starting p2p",
 		zap.String("my_address", strings.Join(maStrs, ",")),
 		zap.Int("trusted_peers", len(n.trustedPeers)),
-		zap.Int("pinned_peers", pinnedCount),
+		zap.Int("pinned_peers", len(n.pinned.ListPinned())),
 	)
 
 	err = n.startDiscovery()

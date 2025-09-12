@@ -1,15 +1,14 @@
-package pinned_peers
+package p2p
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	crand "crypto/rand"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -69,11 +68,6 @@ func (m *mockPinnedProvider) UnpinPeer(id peer.ID) error {
 	return nil
 }
 
-// mockConnChecker implements ConnChecker for testing.
-type mockConnChecker struct{ connected map[peer.ID]bool }
-
-func (m *mockConnChecker) IsConnected(id peer.ID) bool { return m.connected[id] }
-
 // helper to generate a libp2p peer ID
 func genPeerID(t *testing.T) peer.ID {
 	t.Helper()
@@ -100,7 +94,9 @@ func idsAndAddrs(t *testing.T, n int) ([]peer.ID, []ma.Multiaddr) {
 
 // test helpers to reduce duplication
 func newPinnedHandler(prov *mockPinnedProvider) *Handler {
-	return New(prov, &mockConnChecker{connected: map[peer.ID]bool{}})
+	return New(prov, func(id peer.ID) bool {
+		return false
+	})
 }
 
 func doJSON(t *testing.T, method string, handler api.HandlerFunc, body any) *httptest.ResponseRecorder {
@@ -132,9 +128,9 @@ func TestPinned_List(t *testing.T) {
 			{ID: ids[1]},
 		},
 	}
-	conn := &mockConnChecker{connected: map[peer.ID]bool{ids[0]: true, ids[1]: false}}
-
-	h := New(prov, conn)
+	h := New(prov, func(id peer.ID) bool {
+		return id == ids[0]
+	})
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/node/pinned-peers", nil)

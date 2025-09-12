@@ -11,7 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/api/handlers"
-	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/p2p"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
