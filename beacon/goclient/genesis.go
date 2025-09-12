@@ -27,5 +27,5 @@ func (gc *GoClient) genesisForClient(ctx context.Context, provider client.Servic
 		return nil, errSingleClient(fmt.Errorf("genesis response data is nil"), provider.Address(), "Genesis")
 	}
 
-	return genesisResp.Data, err
+	return genesisResp.Data, nil
 }

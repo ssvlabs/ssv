@@ -287,72 +287,315 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 	require.Nil(t, errs)
 }
 
-func TestMultiClient_StreamLogs(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+func TestMultiClient_StreamLogs_Failover(t *testing.T) {
+	t.Run("always progress, nil error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
 
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
+		mockClient1 := NewMockSingleClientProvider(ctrl)
+		mockClient2 := NewMockSingleClientProvider(ctrl)
 
-	mockClient1.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
-			out <- BlockLogs{BlockNumber: 200}
-			out <- BlockLogs{BlockNumber: 201}
-			return 201, true, nil // Success
-		}).
-		Times(1)
+		mockClient1.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+				out <- BlockLogs{BlockNumber: 200}
+				out <- BlockLogs{BlockNumber: 201}
+				return 201, true, nil
+			}).
+			Times(1)
 
-	mockClient1.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
 
-	mockClient2.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)). // fromBlock=202
-		Return(uint64(202), true, nil).                            // Should not be called
-		Times(1)
+		mockClient2.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
+			Return(uint64(202), true, nil).
+			Times(1)
 
-	mockClient2.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
 
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
-
-	logsCh, errsCh := mc.StreamLogs(ctx, 200)
-
-	// Expecting two logs: 200, 201, and then logsCh and errsCh should be closed (with no errors on errsCh).
-	receivedLogs := make([]BlockLogs, 0, 2)
-	for blk := range logsCh {
-		receivedLogs = append(receivedLogs, blk)
-		if len(receivedLogs) == 2 {
-			cancel()
+		mc := &MultiClient{
+			clientAddrs: []string{"mockNode1", "mockNode2"},
+			clients:     []SingleClientProvider{mockClient1, mockClient2},
+			clientsMu:   make([]sync.Mutex, 2),
+			logger:      log.TestLogger(t),
+			closed:      make(chan struct{}),
 		}
-	}
-	require.Len(t, receivedLogs, 2, "expected to receive two logs")
-	require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
-	require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
-	for err := range errsCh {
-		require.Failf(t, err.Error(), "got unexpected error on errsCh")
-	}
+
+		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+
+		// Expecting two logs: 200, 201, and then logsCh and errsCh should be closed (with no errors on errsCh).
+		receivedLogs := make([]BlockLogs, 0, 2)
+		for blk := range logsCh {
+			receivedLogs = append(receivedLogs, blk)
+			if len(receivedLogs) == 2 {
+				cancel()
+			}
+		}
+		require.Len(t, receivedLogs, 2, "expected to receive two logs")
+		require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
+		require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
+		for err := range errsCh {
+			require.Failf(t, err.Error(), "got unexpected error on errsCh")
+		}
+	})
+	t.Run("occasional no-progress, nil error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		mockClient1 := NewMockSingleClientProvider(ctrl)
+		mockClient2 := NewMockSingleClientProvider(ctrl)
+
+		// Setup mockClient1 to return without progress on the 1st call, and then progress on the 2nd call
+		gomock.InOrder(
+			mockClient1.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+					return 0, false, nil // nil error results into failover
+				}).
+				Times(1),
+			mockClient1.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+					out <- BlockLogs{BlockNumber: 200}
+					return 200, true, ErrClosed // Prevents StreamLogs retries (terminates test)
+				}).
+				Times(1),
+		)
+
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		// Setup mockClient2 to not be called in a failover attempt, but return no progress to initiate
+		// a retry in StreamLogs
+		mockClient2.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+				return 0, false, nil // nil error results into failover
+			}).
+			Times(1)
+
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		mc := &MultiClient{
+			clientAddrs: []string{"mockNode1", "mockNode2"},
+			clients:     []SingleClientProvider{mockClient1, mockClient2},
+			clientsMu:   make([]sync.Mutex, 2),
+			logger:      log.TestLogger(t),
+			closed:      make(chan struct{}),
+		}
+
+		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+
+		blk1, ok1 := <-logsCh
+		require.True(t, ok1, "expected to receive the first log from channel")
+		require.Equal(t, uint64(200), blk1.BlockNumber)
+
+		_, open := <-logsCh
+		require.False(t, open, "logs channel should be closed after all logs are received")
+
+		for err := range errsCh {
+			require.NoError(t, err, "unexpected error received")
+		}
+	})
+	t.Run("failover due to error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		mockClient1 := NewMockSingleClientProvider(ctrl)
+		mockClient2 := NewMockSingleClientProvider(ctrl)
+
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		gomock.InOrder(
+			// First client: mockClient1 with fromBlock=200
+			mockClient1.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+					out <- BlockLogs{BlockNumber: 200}
+					out <- BlockLogs{BlockNumber: 201}
+					return 201, true, errors.New("network error") // Triggers failover
+				}).
+				Times(1),
+
+			// Second client: mockClient2 with fromBlock=202
+			mockClient2.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
+				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+					out <- BlockLogs{BlockNumber: 202}
+					return 202, true, ErrClosed // Prevents StreamLogs retries (terminates test)
+				}).
+				Times(1),
+		)
+
+		mc := &MultiClient{
+			clientAddrs: []string{"mockNode1", "mockClient2"},
+			clients:     []SingleClientProvider{mockClient1, mockClient2},
+			clientsMu:   make([]sync.Mutex, 2),
+			logger:      log.TestLogger(t),
+			closed:      make(chan struct{}),
+		}
+
+		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+
+		receivedLogs := make([]BlockLogs, 0, 2)
+		var wg sync.WaitGroup
+		wg.Add(3) // Expecting three logs: 200, 201, 202
+		go func() {
+			for blk := range logsCh {
+				receivedLogs = append(receivedLogs, blk)
+				wg.Done()
+			}
+		}()
+		wg.Wait()
+
+		require.Len(t, receivedLogs, 3, "expected to receive three logs")
+		require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
+		require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
+		require.Equal(t, uint64(202), receivedLogs[2].BlockNumber)
+
+		_, open := <-logsCh
+		require.False(t, open, "logs channel should be closed after all logs are received")
+
+		for err := range errsCh {
+			require.NoError(t, err, "unexpected error received")
+		}
+	})
+	t.Run("multiple failover attempts", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		mockClient1 := NewMockSingleClientProvider(ctrl)
+		mockClient2 := NewMockSingleClientProvider(ctrl)
+		mockClient3 := NewMockSingleClientProvider(ctrl)
+
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		mockClient3.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		gomock.InOrder(
+			// Setup mockClient1 to fail with fromBlock=200
+			mockClient1.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				// Incorrect last streamed block 200 should be ignored (since progressed=false)
+				Return(uint64(200), false, errors.New("network error")).
+				Times(1),
+
+			// Setup mockClient2 to fail with fromBlock=200
+			mockClient2.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				Return(uint64(0), false, errors.New("network error")).
+				Times(1),
+
+			// Setup mockClient3 to handle fromBlock=200
+			mockClient3.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+					out <- BlockLogs{BlockNumber: 200}
+					return 200, true, ErrClosed // Prevents StreamLogs retries (terminates test)
+				}).
+				Times(1),
+		)
+
+		mc := &MultiClient{
+			clientAddrs: []string{"mockNode1", "mockNode2", "mockNode3"},
+			clients:     []SingleClientProvider{mockClient1, mockClient2, mockClient3},
+			clientsMu:   make([]sync.Mutex, 3),
+			logger:      log.TestLogger(t),
+			closed:      make(chan struct{}),
+		}
+
+		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+
+		blk1, ok1 := <-logsCh
+		require.True(t, ok1, "expected to receive the first log from channel")
+		require.Equal(t, uint64(200), blk1.BlockNumber)
+
+		_, open := <-logsCh
+		require.False(t, open, "logs channel should be closed after all logs are received")
+
+		for err := range errsCh {
+			require.NoError(t, err, "unexpected error received")
+		}
+	})
 }
 
 func TestMultiClient_StreamLogs_Success(t *testing.T) {
@@ -419,7 +662,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 		mockClient1 := NewMockSingleClientProvider(ctrl)
 		mockClient2 := NewMockSingleClientProvider(ctrl)
 
-		// Setup mockClient1 to return interrupt-error
+		// Setup mockClient1 to return isMultiClientInterruptedError
 		mockClient1.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
@@ -474,7 +717,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 		mockClient1 := NewMockSingleClientProvider(ctrl)
 		mockClient2 := NewMockSingleClientProvider(ctrl)
 
-		// Setup mockClient1 to return rpc.ErrClientQuit
+		// Setup mockClient1 to return a non-isMultiClientInterruptedError
 		mockClient1.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
@@ -491,7 +734,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			}).
 			AnyTimes()
 
-		// Setup mockClient2 we are gonna fail over to (due to rpc.ErrClientQuit error)
+		// Setup mockClient2 we are gonna fail over to (due to rpc.ErrClientQuit error being non-isMultiClientInterruptedError)
 		mockClient2.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
@@ -532,7 +775,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 		mockClient1 := NewMockSingleClientProvider(ctrl)
 		mockClient2 := NewMockSingleClientProvider(ctrl)
 
-		// Setup mockClient1 to return interrupt-error
+		// Setup mockClient1 to return isMultiClientInterruptedError
 		mockClient1.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
@@ -577,237 +820,6 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			require.FailNow(t, "expected to receive no logs")
 		}
 	})
-}
-
-func TestMultiClient_StreamLogs_Failover(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-
-	mockClient1.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	gomock.InOrder(
-		// First client: mockClient1 with fromBlock=200
-		mockClient1.
-			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
-				out <- BlockLogs{BlockNumber: 200}
-				out <- BlockLogs{BlockNumber: 201}
-				return 201, true, errors.New("network error") // Triggers failover
-			}).
-			Times(1),
-
-		// Second client: mockClient2 with fromBlock=202
-		mockClient2.
-			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
-			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
-				out <- BlockLogs{BlockNumber: 202}
-				return 202, true, ErrClosed // Prevents StreamLogs retries (terminates test)
-			}).
-			Times(1),
-	)
-
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockClient2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
-
-	logsCh, errsCh := mc.StreamLogs(ctx, 200)
-
-	receivedLogs := make([]BlockLogs, 0, 2)
-	var wg sync.WaitGroup
-	wg.Add(3) // Expecting three logs: 200, 201, 202
-	go func() {
-		for blk := range logsCh {
-			receivedLogs = append(receivedLogs, blk)
-			wg.Done()
-		}
-	}()
-	wg.Wait()
-
-	require.Len(t, receivedLogs, 3, "expected to receive three logs")
-	require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
-	require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
-	require.Equal(t, uint64(202), receivedLogs[2].BlockNumber)
-
-	_, open := <-logsCh
-	require.False(t, open, "logs channel should be closed after all logs are received")
-
-	for err := range errsCh {
-		require.NoError(t, err, "unexpected error received")
-	}
-}
-
-func TestMultiClient_StreamLogs_SameFromBlock(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-
-	// Setup mockClient1 to return lastBlock=200 without errors
-	mockClient1.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
-			out <- BlockLogs{BlockNumber: 200}
-			return 200, true, ErrClosed // Prevents StreamLogs retries (terminates test)
-		}).
-		Times(1)
-
-	mockClient1.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	// Setup mockClient2 to not be called
-	mockClient2.
-		EXPECT().
-		streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(0)
-
-	mockClient2.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2},
-		clientsMu:   make([]sync.Mutex, 2),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
-
-	logsCh, errsCh := mc.StreamLogs(ctx, 200)
-
-	blk1, ok1 := <-logsCh
-	require.True(t, ok1, "expected to receive the first log from channel")
-	require.Equal(t, uint64(200), blk1.BlockNumber)
-
-	_, open := <-logsCh
-	require.False(t, open, "logs channel should be closed after all logs are received")
-
-	for err := range errsCh {
-		require.NoError(t, err, "unexpected error received")
-	}
-}
-
-func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	mockClient1 := NewMockSingleClientProvider(ctrl)
-	mockClient2 := NewMockSingleClientProvider(ctrl)
-	mockClient3 := NewMockSingleClientProvider(ctrl)
-
-	mockClient1.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	mockClient2.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	mockClient3.
-		EXPECT().
-		Healthy(gomock.Any()).
-		DoAndReturn(func(ctx context.Context) error {
-			return nil
-		}).
-		AnyTimes()
-
-	gomock.InOrder(
-		// Setup mockClient1 to fail with fromBlock=200
-		mockClient1.
-			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			// Incorrect last streamed block 200 should be ignored (since progressed=false)
-			Return(uint64(200), false, errors.New("network error")).
-			Times(1),
-
-		// Setup mockClient2 to fail with fromBlock=200
-		mockClient2.
-			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			Return(uint64(0), false, errors.New("network error")).
-			Times(1),
-
-		// Setup mockClient3 to handle fromBlock=200
-		mockClient3.
-			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
-				out <- BlockLogs{BlockNumber: 200}
-				return 200, true, ErrClosed // Prevents StreamLogs retries (terminates test)
-			}).
-			Times(1),
-	)
-
-	mc := &MultiClient{
-		clientAddrs: []string{"mockNode1", "mockNode2", "mockNode3"},
-		clients:     []SingleClientProvider{mockClient1, mockClient2, mockClient3},
-		clientsMu:   make([]sync.Mutex, 3),
-		logger:      log.TestLogger(t),
-		closed:      make(chan struct{}),
-	}
-
-	logsCh, errsCh := mc.StreamLogs(ctx, 200)
-
-	blk1, ok1 := <-logsCh
-	require.True(t, ok1, "expected to receive the first log from channel")
-	require.Equal(t, uint64(200), blk1.BlockNumber)
-
-	_, open := <-logsCh
-	require.False(t, open, "logs channel should be closed after all logs are received")
-
-	for err := range errsCh {
-		require.NoError(t, err, "unexpected error received")
-	}
 }
 
 func TestMultiClient_Healthy(t *testing.T) {

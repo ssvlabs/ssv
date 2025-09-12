@@ -46,8 +46,8 @@ func isSingleClientInterruptedError(err error) bool {
 // isMultiClientInterruptedError checks if the provided error represents some sort of interruption
 // a MultiClient experienced.
 func isMultiClientInterruptedError(err error) bool {
-	// Note, if multi-client encountered ErrClosed (it can only come from ExecutionClient) it's safe to
-	// assume we are in some sort of shutdown process when thre is no need to use multi-client failover
+	// Note, if multi-client encountered ErrClosed (it can only come from ExecutionClient), it is safe to
+	// assume we are in some sort of shutdown process when there is no need to use multi-client failover
 	// to try and recover from it.
 	return errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled)
 }
