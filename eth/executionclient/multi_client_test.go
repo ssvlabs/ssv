@@ -365,9 +365,34 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 		mockClient1 := NewMockSingleClientProvider(ctrl)
 		mockClient2 := NewMockSingleClientProvider(ctrl)
 
-		// Setup mockClient1 to return without progress on the 1st call, and then progress on the 2nd call
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		// Setup mockClient1 to return without progress on the 1st call to fail over to mockClient2 that also
+		// returns with no progress, which should trigger a retry in StreamLogs to call mockClient1 again to
+		// process block 200 and terminate the test.
 		gomock.InOrder(
 			mockClient1.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+					return 0, false, nil // nil error results into failover
+				}).
+				Times(1),
+			mockClient2.
 				EXPECT().
 				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
@@ -383,32 +408,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				}).
 				Times(1),
 		)
-
-		mockClient1.
-			EXPECT().
-			Healthy(gomock.Any()).
-			DoAndReturn(func(ctx context.Context) error {
-				return nil
-			}).
-			AnyTimes()
-
-		// Setup mockClient2 to not be called in a failover attempt, but return no progress to initiate
-		// a retry in StreamLogs
-		mockClient2.
-			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
-				return 0, false, nil // nil error results into failover
-			}).
-			Times(1)
-
-		mockClient2.
-			EXPECT().
-			Healthy(gomock.Any()).
-			DoAndReturn(func(ctx context.Context) error {
-				return nil
-			}).
-			AnyTimes()
 
 		mc := &MultiClient{
 			clientAddrs: []string{"mockNode1", "mockNode2"},
