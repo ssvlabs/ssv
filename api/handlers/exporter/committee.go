@@ -29,11 +29,16 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 
 	var all []*exporter.CommitteeDutyTrace
 	var errs *multierror.Error
+	cids := request.parseCommitteeIds()
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
-		duties, err := e.getCommitteeDutiesForSlot(slot, request.parseCommitteeIds())
+		duties, err := e.getCommitteeDutiesForSlot(slot, cids)
 		all = append(all, duties...)
 		errs = multierror.Append(errs, err)
+	}
+	// if we don't have a single valid result and we have at least one meaningful error, return an error
+	if len(all) == 0 && hasErrorsOtherThanNotFound(errs) {
+		return toApiError(errs)
 	}
 	return api.Render(w, r, toCommitteeTraceResponse(all, errs))
 }
@@ -64,12 +69,8 @@ func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []sp
 	for _, cmtID := range committeeIDs {
 		duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID)
 		if err != nil {
-			// if error is not found, nothing to report as we might not have a duty for this role
-			// otherwise report it:
-			if !isNotFoundError(err) {
-				e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
-				errs = multierror.Append(errs, err)
-			}
+			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
+			errs = multierror.Append(errs, err)
 			continue
 		}
 		duties = append(duties, duty)
