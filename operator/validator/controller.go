@@ -173,7 +173,7 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized committeeObserver instances
+	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
 	committeesObserversMutex sync.Mutex
 
@@ -192,7 +192,7 @@ type controller struct {
 }
 
 // NewController creates a new validator controller instance
-func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.Options) Controller {
+func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.Options) *controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -224,7 +224,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
-	ctrl := controller{
+	ctrl := &controller{
 		logger:                         logger.Named(log.NameController),
 		networkConfig:                  options.NetworkConfig,
 		sharesStorage:                  options.RegistryStorage.Shares(),
@@ -282,7 +282,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 
-	return &ctrl
+	return ctrl
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
@@ -1147,7 +1147,7 @@ func SetupRunners(
 		return qbftCtrl
 	}
 
-	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share) // TODO: fill the map
+	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[share.ValidatorIndex] = &share.Share
 
 	runners := runner.ValidatorDutyRunners{}

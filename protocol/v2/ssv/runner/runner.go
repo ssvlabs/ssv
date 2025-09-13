@@ -8,12 +8,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -22,23 +21,37 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type Getters interface {
-	GetBaseRunner() *BaseRunner
+	HasRunningQBFTInstance() bool
+	HasAcceptedProposalForCurrentRound() bool
+	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
+	GetRole() spectypes.RunnerRole
+	GetLastHeight() specqbft.Height
+	GetLastRound() specqbft.Round
+	GetStateRoot() ([32]byte, error)
 	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
+	GetNetworkConfig() *networkconfig.Network
+}
+
+type Setters interface {
+	SetTimeoutFunc(TimeoutF)
 }
 
 type Runner interface {
 	spectypes.Encoder
 	spectypes.Root
+
 	Getters
+	Setters
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
 	StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error
@@ -50,6 +63,9 @@ type Runner interface {
 	ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error
+	// OnTimeoutQBFT processes timeout event that can arrive during QBFT consensus phase
+	OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error
+
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
@@ -79,6 +95,62 @@ type BaseRunner struct {
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
+}
+
+func (b *BaseRunner) HasRunningQBFTInstance() bool {
+	var runningInstance *instance.Instance
+	if b.hasRunningDuty() {
+		runningInstance = b.State.RunningInstance
+		if runningInstance != nil {
+			decided, _ := runningInstance.IsDecided()
+			return !decided
+		}
+	}
+	return false
+}
+
+func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
+	var runningInstance *instance.Instance
+	if b.hasRunningDuty() {
+		runningInstance = b.State.RunningInstance
+		if runningInstance != nil {
+			return runningInstance.State.ProposalAcceptedForCurrentRound != nil
+		}
+	}
+	return false
+}
+
+func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return b.Share
+}
+
+func (b *BaseRunner) GetRole() spectypes.RunnerRole {
+	return b.RunnerRoleType
+}
+
+func (b *BaseRunner) GetLastHeight() specqbft.Height {
+	if ctrl := b.QBFTController; ctrl != nil {
+		return ctrl.Height
+	}
+	return specqbft.Height(0)
+}
+
+func (b *BaseRunner) GetLastRound() specqbft.Round {
+	if b.hasRunningDuty() {
+		inst := b.State.RunningInstance
+		if inst != nil {
+			return inst.State.Round
+		}
+	}
+	return specqbft.Round(1)
+}
+
+func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
+	return b.State.GetRoot()
+}
+
+func (b *BaseRunner) SetTimeoutFunc(fn TimeoutF) {
+	b.TimeoutF = fn
 }
 
 func (b *BaseRunner) Encode() ([]byte, error) {
@@ -212,7 +284,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.Wrap(err, "decided ValidatorConsensusData invalid")
 	}
 
-	runner.GetBaseRunner().State.DecidedValue, err = decidedValue.Encode()
+	b.State.DecidedValue, err = decidedValue.Encode()
 	if err != nil {
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
@@ -302,7 +374,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(runner.GetBaseRunner().RunnerRoleType),
+			observability.RunnerRoleAttribute(runner.GetRole()),
 			observability.BeaconSlotAttribute(slot)))
 	defer span.End()
 
@@ -316,7 +388,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 	}
 
 	span.AddEvent("start new instance")
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
+	if err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
 		specqbft.Height(slot),
@@ -324,16 +396,15 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 	); err != nil {
 		return traces.Errorf(span, "could not start new QBFT instance: %w", err)
 	}
-
-	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
+	newInstance := b.QBFTController.StoredInstances.FindInstance(b.QBFTController.Height)
 	if newInstance == nil {
 		return traces.Errorf(span, "could not find newly created QBFT instance")
 	}
 
-	runner.GetBaseRunner().State.RunningInstance = newInstance
+	b.State.RunningInstance = newInstance
 
 	span.AddEvent("register timeout handler")
-	b.registerTimeoutHandler(ctx, logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
+	b.registerTimeoutHandler(ctx, logger, newInstance, b.QBFTController.Height)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -365,4 +436,8 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 			b.State.StartingDuty.DutySlot())
 	}
 	return nil
+}
+
+func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return b.QBFTController.OnTimeout(ctx, logger, msg)
 }

@@ -43,7 +43,7 @@ type Committee struct {
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
-	Queues  map[phase0.Slot]QueueContainer
+	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
 	Shares  map[phase0.ValidatorIndex]*spectypes.Share
 
@@ -77,7 +77,7 @@ func NewCommittee(
 		networkConfig:   networkConfig,
 		ctx:             ctx,
 		cancel:          cancel,
-		Queues:          make(map[phase0.Slot]QueueContainer),
+		Queues:          make(map[phase0.Slot]queueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		Shares:          shares,
 		CommitteeMember: operator,
@@ -156,13 +156,12 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	if err != nil {
 		return nil, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
-
-	// Set timeout function.
-	r.GetBaseRunner().TimeoutF = c.onTimeout
+	r.SetTimeoutFunc(c.onTimeout)
 	c.Runners[duty.Slot] = r
+
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
-		c.Queues[duty.Slot] = QueueContainer{
+		c.Queues[duty.Slot] = queueContainer{
 			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,

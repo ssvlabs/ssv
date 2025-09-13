@@ -15,11 +15,16 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+// queueContainer wraps a queue with its corresponding state
+type queueContainer struct {
+	Q          queue.Queue
+	queueState *queue.State
+}
 
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
@@ -60,7 +65,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	c.mtx.Lock()
 	q, ok := c.Queues[slot]
 	if !ok {
-		q = QueueContainer{
+		q = queueContainer{
 			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
@@ -121,29 +126,22 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 // it checks for current state
 func (c *Committee) ConsumeQueue(
 	ctx context.Context,
-	q QueueContainer,
+	q queueContainer,
 	logger *zap.Logger,
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,
 ) error {
+	// Construct a representation of the current state.
 	state := *q.queueState
 
 	logger.Debug("📬 queue consumer is running")
 	lens := make([]int, 0, 10)
 
 	for ctx.Err() == nil {
-		// Construct a representation of the current state.
-		var runningInstance *instance.Instance
-		if rnr.HasRunningDuty() {
-			runningInstance = rnr.GetBaseRunner().State.RunningInstance
-			if runningInstance != nil {
-				decided, _ := runningInstance.IsDecided()
-				state.HasRunningInstance = !decided
-			}
-		}
+		state.HasRunningInstance = rnr.HasRunningQBFTInstance()
 
 		filter := queue.FilterAny
-		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		if state.HasRunningInstance && !rnr.HasAcceptedProposalForCurrentRound() {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
@@ -158,7 +156,7 @@ func (c *Committee) ConsumeQueue(
 
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
-		} else if runningInstance != nil && !runningInstance.State.Decided {
+		} else if state.HasRunningInstance {
 			filter = func(ssvMessage *queue.SSVMessage) bool {
 				// don't read post consensus until decided
 				return ssvMessage.MsgType != spectypes.SSVPartialSignatureMsgType
