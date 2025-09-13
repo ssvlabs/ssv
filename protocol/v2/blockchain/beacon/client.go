@@ -36,7 +36,12 @@ type ProposerCalls interface {
 
 // AggregatorCalls interface has all attestation aggregator duty specific calls
 type AggregatorCalls interface {
+	// IsAggregator returns true if the validator is selected as an aggregator
+	IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool
+	// GetAggregateAttestation returns the aggregate attestation for the given slot and committee
+	GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, error)
 	// SubmitAggregateSelectionProof returns an AggregateAndProof object
+	// Deprecated: Use IsAggregator and GetAggregateAttestation instead. Kept for backward compatibility.
 	SubmitAggregateSelectionProof(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error)
 	// SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 	SubmitSignedAggregateSelectionProof(ctx context.Context, msg *spec.VersionedSignedAggregateAndProof) error
