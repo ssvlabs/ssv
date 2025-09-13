@@ -84,7 +84,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		opt(client)
 	}
 
-	client.logger.Info("execution client: connecting", fields.Address(nodeAddr))
+	client.logger.Debug("connecting")
 
 	err := client.connect(ctx)
 	if err != nil {

@@ -161,18 +161,7 @@ type GoClient struct {
 	activatedClients *hashmap.Map[string, struct{}]
 }
 
-// New init new client and go-client instance
-func New(
-	ctx context.Context,
-	logger *zap.Logger,
-	opt Options,
-) (*GoClient, error) {
-	logger.Info("consensus client: connecting",
-		fields.Address(opt.BeaconNodeAddr),
-		zap.Bool("with_weighted_attestation_data", opt.WithWeightedAttestationData),
-		zap.Bool("with_parallel_submissions", opt.WithParallelSubmissions),
-	)
-
+func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error) {
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
 		commonTimeout = DefaultCommonTimeout
@@ -207,14 +196,11 @@ func New(
 		}
 	}
 
+	client.log.Debug("connecting")
+
 	err := client.initMultiClient(ctx)
 	if err != nil {
-		logger.Error("Consensus multi client initialization failed",
-			zap.String("address", opt.BeaconNodeAddr),
-			zap.Error(err),
-		)
-
-		return nil, err
+		return nil, fmt.Errorf("initialize consensus client(s), address(es)=%s: %w", opt.BeaconNodeAddr, err)
 	}
 
 	initCtx, initCtxCancel := context.WithTimeout(ctx, client.longTimeout)
@@ -222,11 +208,7 @@ func New(
 
 	select {
 	case <-initCtx.Done():
-		logger.Warn("timeout occurred while waiting for beacon config initialization",
-			zap.Duration("timeout", client.longTimeout),
-			zap.Error(initCtx.Err()),
-		)
-		return nil, fmt.Errorf("timed out awaiting config initialization: %w", initCtx.Err())
+		return nil, fmt.Errorf("timed out awaiting Beacon config initialization, timeout=%s: %w", client.longTimeout, initCtx.Err())
 	case <-client.beaconConfigInit:
 	}
 
@@ -248,7 +230,8 @@ func New(
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
-	logger.Info("starting event listener")
+	client.log.Debug("starting event listener")
+
 	if err := client.startEventListener(ctx); err != nil {
 		return nil, fmt.Errorf("failed to launch event listener: %w", err)
 	}

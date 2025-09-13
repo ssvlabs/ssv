@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 var _ Provider = &MultiClient{}
@@ -99,10 +98,9 @@ func NewMulti(
 		opt(multiClient)
 	}
 
-	multiClient.logger.Info("execution client: connecting (multi client)", fields.Addresses(nodeAddrs))
+	multiClient.logger.Debug("connecting")
 
 	var connected bool
-
 	var multiErr error
 	for clientIndex, clientAddr := range nodeAddrs {
 		c, err := multiClient.connect(ctx, clientAddr)
