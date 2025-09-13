@@ -299,7 +299,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 	go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
-		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+		subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
 		defer cancel()
 
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {

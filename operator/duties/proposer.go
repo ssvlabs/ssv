@@ -131,9 +131,6 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		))
 	defer span.End()
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	span.AddEvent("fetching duties")
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
 		// Set empty duties to inform DutyStore that fetch for this epoch is done.

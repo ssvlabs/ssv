@@ -42,7 +42,9 @@ func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) 
 }
 
 // EncryptKeystore encrypts a private key using the provided password, adds in the public key and returns the encrypted keystore JSON data.
-func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, error) {
+// Initially, it used to save the public key as `pubKey`, which was changed to `pubkey` afterwards.
+// The `legacyPubkey` parameter makes the function use `pubKey` instead of `pubkey`.
+func EncryptKeystore(privkey []byte, pubKeyBase64, password string, legacyPubkey bool) ([]byte, error) {
 	if strings.TrimSpace(password) == "" {
 		return nil, errors.New("password required for encrypting keystore")
 	}
@@ -53,7 +55,11 @@ func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, err
 		return nil, fmt.Errorf("encrypt private key: %w", err)
 	}
 
-	encryptedKeystoreJSON["pubkey"] = pubKeyBase64
+	if legacyPubkey {
+		encryptedKeystoreJSON["pubKey"] = pubKeyBase64
+	} else {
+		encryptedKeystoreJSON["pubkey"] = pubKeyBase64
+	}
 
 	encryptedData, err := json.Marshal(encryptedKeystoreJSON)
 	if err != nil {

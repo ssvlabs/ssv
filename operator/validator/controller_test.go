@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -46,10 +46,12 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-const (
-	sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	sk2Str = "3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-)
+var secretKeyStrings = []string{
+	"3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+	"3648db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+	"3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+	"3848db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f",
+}
 
 // TODO: increase test coverage, add more tests, e.g.:
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
@@ -227,7 +229,7 @@ func TestSetupValidators(t *testing.T) {
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
 			SharePubKey:     shareKey,
 		},
-		Status:                    eth2apiv1.ValidatorStateActiveOngoing,
+		Status:                    v1.ValidatorStateActiveOngoing,
 		ActivationEpoch:           activationEpoch,
 		ExitEpoch:                 exitEpoch,
 		BeaconMetadataLastUpdated: time.Now(),
@@ -242,18 +244,21 @@ func TestSetupValidators(t *testing.T) {
 		OwnerAddress: common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 	}
 
-	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
+	const (
+		ownerAddr    = "67Ce5c69260bd819B4e0AD13f4b873074D479811"
+		feeRecipient = "45E668aba4b7fc8761331EC3CE77584B7A99A51A"
+	)
+
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, ownerAddr))
+	ownerAddressBytes := decodeHex(t, ownerAddr, "Failed to decode owner address")
 	testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
 
 	opStorage, done := newOperatorStorageForTest(logger)
 	defer done()
 
-	opStorage.SaveOperatorData(nil, buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-
-	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
+	bcResponse := map[phase0.ValidatorIndex]*v1.Validator{
 		0: {
-			Status: eth2apiv1.ValidatorStateActiveOngoing,
+			Status: v1.ValidatorStateActiveOngoing,
 			Index:  2,
 			Validator: &phase0.Validator{
 				ActivationEpoch: activationEpoch,
@@ -265,55 +270,150 @@ func TestSetupValidators(t *testing.T) {
 
 	testCases := []struct {
 		bcMockTimes        int
-		inited             int
+		recipientFound     bool
+		initedValidators   int
 		started            int
 		name               string
 		shares             []*types.SSVShare
-		bcResponse         map[phase0.ValidatorIndex]*eth2apiv1.Validator
+		bcResponse         map[phase0.ValidatorIndex]*v1.Validator
 		validatorStartFunc func(validator *validator.Validator) (bool, error)
+		operatorData       []*registrystorage.OperatorData
 	}{
 		{
-			name:        "start share with metadata",
-			shares:      []*types.SSVShare{shareWithMetaData},
-			bcResponse:  bcResponse,
-			inited:      1,
-			started:     1,
-			bcMockTimes: 0,
+			name:             "setting fee recipient to storage data",
+			shares:           []*types.SSVShare{shareWithMetaData, shareWithoutMetaData},
+			recipientFound:   true,
+			bcResponse:       bcResponse,
+			initedValidators: 1,
+			started:          1,
+			bcMockTimes:      1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
-			name:        "start share without metadata",
-			bcMockTimes: 1,
-			inited:      0,
-			started:     0,
-			bcResponse:  bcResponse,
-			shares:      []*types.SSVShare{shareWithoutMetaData},
+			name:             "setting fee recipient to owner address",
+			shares:           []*types.SSVShare{shareWithMetaData, shareWithoutMetaData},
+			recipientFound:   false,
+			bcResponse:       bcResponse,
+			initedValidators: 1,
+			started:          1,
+			bcMockTimes:      1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
-			name:        "failed to get GetValidatorData",
-			bcMockTimes: 1,
-			bcResponse:  nil,
-			inited:      0,
-			started:     0,
-			shares:      []*types.SSVShare{shareWithoutMetaData},
+			name:             "start share with metadata",
+			shares:           []*types.SSVShare{shareWithMetaData},
+			recipientFound:   false,
+			bcResponse:       bcResponse,
+			initedValidators: 1,
+			started:          1,
+			bcMockTimes:      0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, nil
 			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
 		},
 		{
-			name:        "failed to start validator",
-			shares:      []*types.SSVShare{shareWithMetaData},
-			bcResponse:  bcResponse,
-			inited:      1,
-			started:     0,
-			bcMockTimes: 0,
+			name:             "start share without metadata",
+			bcMockTimes:      1,
+			initedValidators: 0,
+			started:          0,
+			recipientFound:   false,
+			bcResponse:       bcResponse,
+			shares:           []*types.SSVShare{shareWithoutMetaData},
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+		},
+		{
+			name:             "failed to get GetValidatorData",
+			bcMockTimes:      1,
+			bcResponse:       nil,
+			recipientFound:   false,
+			initedValidators: 0,
+			started:          0,
+			shares:           []*types.SSVShare{shareWithoutMetaData},
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+		},
+		{
+			name:             "failed to start validator",
+			shares:           []*types.SSVShare{shareWithMetaData},
+			recipientFound:   false,
+			bcResponse:       bcResponse,
+			initedValidators: 1,
+			started:          0,
+			bcMockTimes:      0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 				return true, errors.New("some error")
+			},
+			operatorData: []*registrystorage.OperatorData{buildOperatorData(1, ownerAddr)},
+		},
+		{
+			name: "operator data removed - enough for quorum committee members",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       operators[:],
+						ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientFound:   false,
+			bcResponse:       bcResponse,
+			initedValidators: 1,
+			started:          1,
+			bcMockTimes:      0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{
+				buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+				buildOperatorData(2, "67Ce5c69260bd819B4e0AD13f4b873074D479812"),
+				buildOperatorData(3, "67Ce5c69260bd819B4e0AD13f4b873074D479813"),
+			},
+		},
+		{
+			name: "operator data removed - not enough for quorum committee members",
+			shares: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						ValidatorIndex:  1,
+						Committee:       operators[:],
+						ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+						SharePubKey:     shareKey,
+					},
+					Status:                    v1.ValidatorStateActiveOngoing,
+					ActivationEpoch:           activationEpoch,
+					ExitEpoch:                 exitEpoch,
+					BeaconMetadataLastUpdated: time.Now(),
+				},
+			},
+			recipientFound:   false,
+			bcResponse:       bcResponse,
+			initedValidators: 0,
+			started:          0,
+			bcMockTimes:      0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+			operatorData: []*registrystorage.OperatorData{
+				buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+				buildOperatorData(2, "67Ce5c69260bd819B4e0AD13f4b873074D479812"),
 			},
 		},
 	}
@@ -336,6 +436,11 @@ func TestSetupValidators(t *testing.T) {
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
 			mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
+			opStorage.DropOperators()
+			for _, data := range tc.operatorData {
+				opStorage.SaveOperatorData(nil, data)
+			}
+
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
@@ -353,11 +458,14 @@ func TestSetupValidators(t *testing.T) {
 
 			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
-			inited, _ := ctr.setupValidators(tc.shares)
-			require.Len(t, inited, tc.inited)
+
+			initedValidators, _ := ctr.setupValidators(tc.shares)
+			require.Len(t, initedValidators, tc.initedValidators, "%s", tc.name)
+
 			// TODO: Alan, should we check for committee too?
-			started := ctr.startValidators(inited, nil)
-			require.Equal(t, tc.started, started)
+			started := ctr.startValidators(initedValidators, nil)
+
+			require.Equal(t, tc.started, started, "%s", tc.name)
 
 			//Add any assertions here to validate the behavior
 		})
@@ -411,7 +519,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				Status:          v1.ValidatorStateActiveOngoing,
 				ActivationEpoch: activationEpoch,
 				ExitEpoch:       exitEpoch,
 			},
@@ -419,7 +527,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators[1:],
 				},
-				Status: eth2apiv1.ValidatorStatePendingInitialized, // Some other status
+				Status: v1.ValidatorStatePendingInitialized, // Some other status
 			},
 		}
 
@@ -455,7 +563,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -483,7 +591,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: nil,
 				},
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -518,13 +626,13 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status: eth2apiv1.ValidatorStatePendingInitialized,
+				Status: v1.ValidatorStatePendingInitialized,
 			},
 		}
 
@@ -864,13 +972,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			name: "report indices change (Unknown → ActiveOngoing)",
 			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
-					Status: eth2apiv1.ValidatorStateUnknown,
+					Status: v1.ValidatorStateUnknown,
 				},
 			},
 			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Status: v1.ValidatorStateActiveOngoing,
 				},
 			},
 			expectIndicesChange: true,
@@ -880,14 +988,14 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:           1,
-					Status:          eth2apiv1.ValidatorStatePendingQueued,
+					Status:          v1.ValidatorStatePendingQueued,
 					ActivationEpoch: goclient.FarFutureEpoch,
 				},
 			},
 			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Status: v1.ValidatorStateActiveOngoing,
 				},
 			},
 			expectIndicesChange: false,
@@ -897,13 +1005,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Status: v1.ValidatorStateActiveOngoing,
 				},
 			},
 			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Status: v1.ValidatorStateActiveOngoing,
 				},
 			},
 			expectIndicesChange: false,
@@ -913,13 +1021,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Status: v1.ValidatorStateActiveOngoing,
 				},
 			},
 			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveExiting,
+					Status: v1.ValidatorStateActiveExiting,
 				},
 			},
 			expectIndicesChange: false,
@@ -929,13 +1037,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveExiting,
+					Status: v1.ValidatorStateActiveExiting,
 				},
 			},
 			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateExitedUnslashed,
+					Status: v1.ValidatorStateExitedUnslashed,
 				},
 			},
 			expectIndicesChange: false,
@@ -945,13 +1053,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Status: v1.ValidatorStateActiveOngoing,
 				},
 			},
 			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveSlashed,
+					Status: v1.ValidatorStateActiveSlashed,
 				},
 			},
 			expectIndicesChange: false,
@@ -960,13 +1068,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			name: "no report indices change - validator not found before starting (Unknown → ActiveOngoing)",
 			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
-					Status: eth2apiv1.ValidatorStateUnknown,
+					Status: v1.ValidatorStateUnknown,
 				},
 			},
 			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
+					Status: v1.ValidatorStateActiveOngoing,
 				},
 			},
 			expectIndicesChange: false,
@@ -988,6 +1096,20 @@ func TestHandleMetadataUpdates(t *testing.T) {
 					share := &types.SSVShare{}
 					share.SharePubKey = make([]byte, 48)
 					share.SetBeaconMetadata(metadata)
+					share.Committee = []*spectypes.ShareMember{
+						{
+							Signer: 1,
+						},
+						{
+							Signer: 2,
+						},
+						{
+							Signer: 3,
+						},
+						{
+							Signer: 4,
+						},
+					}
 					shares = append(shares, share)
 				}
 				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shares).AnyTimes()
