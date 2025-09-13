@@ -45,6 +45,7 @@ func WithFollowDistanceMulti(offset uint64) OptionMulti {
 }
 
 // WithConnectionTimeout sets timeout for network connection to eth1 node.
+// The timeout must be positive, otherwise the default value will be used.
 func WithConnectionTimeout(timeout time.Duration) Option {
 	return func(s *ExecutionClient) {
 		s.connectionTimeout = timeout
@@ -52,6 +53,7 @@ func WithConnectionTimeout(timeout time.Duration) Option {
 }
 
 // WithConnectionTimeoutMulti sets timeout for network connection to eth1 node.
+// The timeout must be positive, otherwise the default value will be used.
 func WithConnectionTimeoutMulti(timeout time.Duration) OptionMulti {
 	return func(s *MultiClient) {
 		s.connectionTimeout = timeout

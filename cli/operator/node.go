@@ -185,10 +185,17 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
+		logger.Info("connecting CL(s)",
+			fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			zap.Bool("with_weighted_attestation_data", cfg.ConsensusClient.WithWeightedAttestationData),
+			zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
+		)
 		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
 		if err != nil {
-			logger.Fatal("failed to create beacon go-client", zap.Error(err),
-				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+			logger.Fatal("failed to create beacon go-client",
+				zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			)
 		}
 
 		networkConfig := &networkconfig.Network{
@@ -337,8 +344,13 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("no execution node address provided")
 		}
 
-		var executionClient executionclient.Provider
+		logger.Info("connecting EL(s)",
+			fields.Addresses(executionAddrList),
+			zap.Duration("request_timeout", cfg.ExecutionClient.ConnectionTimeout),
+			zap.Uint64("sync_distance_tolerance", cfg.ExecutionClient.SyncDistanceTolerance),
+		)
 
+		var executionClient executionclient.Provider
 		if len(executionAddrList) == 1 {
 			ec, err := executionclient.New(
 				cmd.Context(),
@@ -1167,14 +1179,16 @@ func syncContractEvents(
 			zap.Int("my_validators", operatorValidators),
 		)
 
-		// Sync ongoing registry events in the background.
+		// Sync ongoing registry events in the background, crash if ongoing sync has stopped because
+		// the SSV node cannot work without being up to date with Ethereum events.
 		go func() {
-			err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
-
-			// Crash if ongoing sync has stopped, regardless of the reason.
-			logger.Fatal("failed syncing ongoing registry events",
-				zap.Uint64("last_processed_block", lastProcessedBlock),
-				zap.Error(err))
+			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+			if !errors.Is(err, context.Canceled) {
+				logger.Fatal("failed syncing ongoing registry events",
+					zap.Uint64("last_processed_block", lastProcessedBlock),
+					zap.Error(err),
+				)
+			}
 		}()
 	}
 

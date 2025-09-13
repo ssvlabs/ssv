@@ -30,7 +30,7 @@ func Test_specForClient(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		spec, err := specForClient(ctx, client.log, client.multiClient)
+		spec, err := client.specForClient(ctx, client.multiClient)
 		require.NoError(t, err)
 		require.NotNil(t, spec)
 

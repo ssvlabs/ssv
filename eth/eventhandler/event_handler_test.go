@@ -79,9 +79,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	}
 
 	eh, _, err := setupEventHandler(t, ctx, logger, netCfgVarEpoch, ops[0], false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Just creating one more key -> address for testing
 	wrongPk, err := crypto.HexToECDSA("42e14d227125f411d6d3285bb4a2e07c2dba2e210bd2f3f4e2a36633bd61bfe6")
@@ -128,7 +126,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	err = client.Healthy(ctx)
 	require.NoError(t, err)
 
-	logs := client.StreamLogs(ctx, 0)
+	logs, errs := client.StreamLogs(ctx, 0)
+	go func() {
+		for err := range errs {
+			if err != nil {
+				panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
+			}
+		}
+	}()
 
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
 	require.NoError(t, err)
@@ -173,6 +178,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			defer close(eventsCh)
 			eventsCh <- block
 		}()
+		errsCh := make(chan error)
+		go func() {
+			defer close(errsCh)
+		}()
 
 		// Check that there is no registered operators
 		operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -180,7 +189,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, 0, len(operators))
 
 		// Handle the event
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -295,8 +304,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			defer close(eventsCh)
 			eventsCh <- block
 		}()
+		errsCh := make(chan error)
+		go func() {
+			defer close(errsCh)
+		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 		require.NoError(t, err)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		blockNum++
@@ -346,8 +359,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -396,8 +413,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -451,8 +472,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -500,8 +525,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -550,8 +579,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
@@ -593,8 +626,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -620,8 +657,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -660,8 +701,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -705,8 +750,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -743,8 +792,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -789,8 +842,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -831,6 +888,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			defer close(eventsCh)
 			eventsCh <- block
 		}()
+		errsCh := make(chan error)
+		go func() {
+			defer close(errsCh)
+		}()
 
 		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests. This one has to be in the state
 		valPubKey := validatorData2.masterPubKey.Serialize()
@@ -840,7 +901,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NotNil(t, share)
 		require.False(t, share.Liquidated)
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -892,10 +953,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			defer close(eventsCh)
 			eventsCh <- block
 		}()
+		errsCh := make(chan error)
+		go func() {
+			defer close(errsCh)
+		}()
 
 		netCfgVarEpoch.GenesisTime = time.Now().Add(-1000 * netCfgVarEpoch.SlotDuration)
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -942,8 +1007,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			defer close(eventsCh)
 			eventsCh <- block
 		}()
+		errsCh := make(chan error)
+		go func() {
+			defer close(errsCh)
+		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -976,6 +1045,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			defer close(eventsCh)
 			eventsCh <- block
 		}()
+		errsCh := make(chan error)
+		go func() {
+			defer close(errsCh)
+		}()
 
 		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests
 		valPubKey := validatorData2.masterPubKey.Serialize()
@@ -986,7 +1059,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, share.Liquidated)
 		netCfgVarEpoch.GenesisTime = time.Now().Add(-100 * netCfgVarEpoch.SlotDuration)
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -1030,8 +1103,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			defer close(eventsCh)
 			eventsCh <- block
 		}()
+		errsCh := make(chan error)
+		go func() {
+			defer close(errsCh)
+		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
@@ -1080,9 +1157,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
 			// Handle the event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1158,8 +1239,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1222,8 +1307,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1252,6 +1341,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
 			// Check that there is 1 registered operator
 			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -1259,7 +1352,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			// Handle the event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1297,6 +1390,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh := make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
 			// Check that there is no registered operators
 			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -1304,7 +1401,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, len(ops), len(operators))
 
 			// Handle OperatorAdded event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++
@@ -1328,13 +1425,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
+			errsCh = make(chan error)
+			go func() {
+				defer close(errsCh)
+			}()
 
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, len(ops)+1, len(operators))
 
 			// Handle OperatorRemoved event
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
 			blockNum++

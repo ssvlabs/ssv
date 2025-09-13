@@ -163,7 +163,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully fetches historical logs within follow distance", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		contract, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -202,7 +202,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when currentBlock < followDistance", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -223,7 +223,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when toBlock < fromBlock", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		contract, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -254,7 +254,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 
 	t.Run("error when BlockNumber fails", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -418,7 +418,7 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, 2*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -429,7 +429,7 @@ func TestStreamLogs(t *testing.T) {
 		err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance))
 		require.NoError(t, err)
 
-		logs := env.client.StreamLogs(env.ctx, 0)
+		logs, errsCh := env.client.StreamLogs(env.ctx, 0)
 		var streamedLogs []ethtypes.Log
 		var streamedLogsCount atomic.Int64
 		go func() {
@@ -437,6 +437,13 @@ func TestStreamLogs(t *testing.T) {
 			for block := range logs {
 				streamedLogs = append(streamedLogs, block.Logs...)
 				streamedLogsCount.Add(int64(len(block.Logs)))
+			}
+		}()
+		go func() {
+			for err := range errsCh {
+				if err != nil {
+					panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
+				}
 			}
 		}()
 
@@ -484,7 +491,7 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, 2*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 
 		// Deploy the contract
 		_, err = env.deployCallableContract()
@@ -499,14 +506,19 @@ func TestStreamLogs(t *testing.T) {
 		defer cancel()
 
 		// Start streaming logs
-		logs := env.client.StreamLogs(ctx, 0)
+		logsCh, errsCh := env.client.StreamLogs(ctx, 0)
 
 		// Set up a channel to detect when the log channel is closed
 		done := make(chan struct{})
 		go func() {
 			// This goroutine should exit when the log channel is closed
-			for range logs {
-				// Just consume logs
+			for range logsCh {
+				// Just consume logsCh
+			}
+			for err := range errsCh {
+				if err != nil {
+					panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
+				}
 			}
 			close(done)
 		}()
@@ -527,26 +539,31 @@ func TestStreamLogs(t *testing.T) {
 		logger, err := zap.NewDevelopment()
 		require.NoError(t, err)
 
-		env := setupTestEnv(t, 2*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 
 		// Deploy the contract
 		_, err = env.deployCallableContract()
 		require.NoError(t, err)
 
-		// Create a client and connect to the simulator
-		// Don't register cleanup since we'll explicitly close the client in this test
+		// Create a client and connect to the simulator.
+		// Don't register cleanup since we'll explicitly close the client in this test.
 		err = env.createClientWithCleanup(false, WithLogger(logger))
 		require.NoError(t, err)
 
 		// Start streaming logs
-		logs := env.client.StreamLogs(env.ctx, 0)
+		logsCh, errsCh := env.client.StreamLogs(env.ctx, 0)
 
 		// Set up a channel to detect when the log channel is closed
 		done := make(chan struct{})
 		go func() {
 			// This goroutine should exit when the log channel is closed
-			for range logs {
-				// Just consume logs
+			for range logsCh {
+				// Just consume logsCh
+			}
+			for err := range errsCh {
+				if err != nil {
+					panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
+				}
 			}
 			close(done)
 		}()
@@ -567,7 +584,7 @@ func TestStreamLogs(t *testing.T) {
 // TestFetchLogsInBatches tests the fetchLogsInBatches function of the client.
 func TestFetchLogsInBatches(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, 1*time.Second)
+	env := setupTestEnv(t, 5*time.Second)
 
 	// Deploy the contract
 	contract, err := env.deployCallableContract()
@@ -583,8 +600,10 @@ func TestFetchLogsInBatches(t *testing.T) {
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
 		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5)
 		select {
-		case <-logChan:
-			require.Fail(t, "Should not receive log when startBlock > endBlock")
+		case log, ok := <-logChan:
+			if ok {
+				require.Fail(t, "Should not receive log when startBlock > endBlock, received log with block number: %d", log.BlockNumber)
+			}
 		case err := <-errChan:
 			require.ErrorIs(t, err, ErrBadInput)
 		case <-env.ctx.Done():
@@ -684,7 +703,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// require.NoError(t, err)
 	// require.True(t, isReady)
 	// // 2.
-	// logs := client.StreamLogs(ctx, 0)
+	// logs, _ := client.StreamLogs(ctx, 0)
 	// // 3.
 	// var parent *ethtypes.Header
 	// var goodTransactions []ethcommon.Hash
@@ -773,7 +792,7 @@ func TestSimSSV(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	env := setupTestEnv(t, 1*time.Second)
+	env := setupTestEnv(t, 5*time.Second)
 
 	// Deploy the SSV contract
 	boundContract, err := env.deploySimContract()
@@ -783,7 +802,14 @@ func TestSimSSV(t *testing.T) {
 	err = env.createClient(WithLogger(logger), WithFollowDistance(0))
 	require.NoError(t, err)
 
-	logs := env.client.StreamLogs(env.ctx, 0)
+	logs, errsCh := env.client.StreamLogs(env.ctx, 0)
+	go func() {
+		for err := range errsCh {
+			if err != nil {
+				panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
+			}
+		}
+	}()
 
 	// Emit event OperatorAdded
 	tx, err := boundContract.RegisterOperator(env.auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
@@ -926,7 +952,7 @@ func TestFilterLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully filters logs", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -958,7 +984,7 @@ func TestFilterLogs(t *testing.T) {
 	})
 
 	t.Run("error when FilterLogs fails", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -989,7 +1015,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully subscribes to filter logs", func(t *testing.T) {
-		env := setupTestEnv(t, 2*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 
 		// Deploy the contract
 		contract, err := env.deployCallableContract()
@@ -1048,7 +1074,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 	})
 
 	t.Run("error when SubscribeFilterLogs fails", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -1081,7 +1107,7 @@ func TestHeaderByNumber(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully gets header by number", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 
 		// Deploy the contract
 		_, err := env.deployCallableContract()
@@ -1110,7 +1136,7 @@ func TestHeaderByNumber(t *testing.T) {
 	})
 
 	t.Run("error when HeaderByNumber fails", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
@@ -1135,7 +1161,7 @@ func TestHeaderByNumber(t *testing.T) {
 // TestFilterer tests the Filterer method of the client.
 func TestFilterer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, 1*time.Second)
+	env := setupTestEnv(t, 5*time.Second)
 
 	// Deploy the contract
 	_, err := env.deployCallableContract()
@@ -1153,7 +1179,7 @@ func TestFilterer(t *testing.T) {
 
 // TestSyncProgress tests the sync progress of the client.
 func TestSyncProgress(t *testing.T) {
-	env := setupTestEnv(t, 1*time.Second)
+	env := setupTestEnv(t, 5*time.Second)
 
 	// Deploy the contract
 	_, err := env.deploySimContract()
@@ -1201,11 +1227,12 @@ func TestSyncProgress(t *testing.T) {
 // TestHealthy tests the Healthy method of the client.
 func TestHealthy(t *testing.T) {
 	t.Run("returns ErrClosed when client is closed", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deploySimContract()
 		require.NoError(t, err)
 
-		// Create a client and connect to the simulator
+		// Create a client and connect to the simulator.
+		// Don't register cleanup since we'll explicitly close the client in this test.
 		err = env.createClientWithCleanup(false)
 		require.NoError(t, err)
 
@@ -1218,7 +1245,7 @@ func TestHealthy(t *testing.T) {
 	})
 
 	t.Run("returns nil when health check was recently performed", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
+		env := setupTestEnv(t, 5*time.Second)
 		_, err := env.deploySimContract()
 		require.NoError(t, err)
 

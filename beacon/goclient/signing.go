@@ -10,8 +10,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -65,7 +63,7 @@ func (gc *GoClient) DomainData(
 		}
 		root, err := forkData.HashTreeRoot()
 		if err != nil {
-			return phase0.Domain{}, errors.Wrap(err, "failed to get fork data root")
+			return phase0.Domain{}, fmt.Errorf("calculate fork data root: %w", err)
 		}
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
@@ -78,13 +76,9 @@ func (gc *GoClient) DomainData(
 
 	start := time.Now()
 	data, err := gc.multiClient.Domain(ctx, domain, epoch)
-	recordRequestDuration(ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	recordMultiClientRequest(ctx, gc.log, "Domain", http.MethodGet, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Domain"),
-			zap.Error(err),
-		)
-		return phase0.Domain{}, err
+		return phase0.Domain{}, errMultiClient(fmt.Errorf("fetch domain: %w", err), "Domain")
 	}
 
 	return data, nil

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -105,10 +107,11 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 	// periodically resubscribes to Events).
 	// There is no need to issue these calls asynchronously since they spawn their own go-routines and return fast.
 	subscribeToEvents := func() error {
+		reqStart := time.Now()
 		err := gc.multiClient.Events(ctx, opts)
+		recordMultiClientRequest(ctx, logger, "Events", http.MethodGet, time.Since(reqStart), err)
 		if err != nil {
-			logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
-			return err
+			return errMultiClient(fmt.Errorf("request events: %w", err), "Events")
 		}
 		return nil
 	}
@@ -118,17 +121,18 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 			success := false
 
 			for _, client := range gc.clients {
+				reqStart := time.Now()
 				err := client.Events(ctx, opts)
+				recordSingleClientRequest(ctx, logger, "Events", client.Address(), http.MethodGet, time.Since(reqStart), err)
 				if err != nil {
-					errs = errors.Join(errs, err)
-					logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
+					errs = errors.Join(errs, errSingleClient(fmt.Errorf("request events: %w", err), client.Address(), "Events"))
 					continue
 				}
 				success = true
 			}
 
 			if !success {
-				return errs
+				return fmt.Errorf("couldn't subscribe to `Events` with at least 1 client: %w", errs)
 			}
 
 			return nil
