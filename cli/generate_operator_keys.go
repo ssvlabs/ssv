@@ -5,9 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	ssvlog "github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -24,6 +25,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 		logger := zap.L().Named(ssvlog.NameExportKeys)
 		passwordFilePath, _ := cmd.Flags().GetString("password-file")
 		privateKeyFilePath, _ := cmd.Flags().GetString("operator-key-file")
+		legacyPubkey, _ := cmd.Flags().GetBool("legacy-pubkey")
 
 		privKey, err := keys.GeneratePrivateKey()
 		if err != nil {
@@ -53,9 +55,9 @@ var generateOperatorKeysCmd = &cobra.Command{
 				logger.Fatal("Failed to read password file", zap.Error(err))
 			}
 
-			encryptedJSON, encryptedJSONErr := keystore.EncryptKeystore(privKey.Bytes(), pubKeyBase64, string(passwordBytes))
+			encryptedJSON, encryptedJSONErr := keystore.EncryptKeystore(privKey.Bytes(), pubKeyBase64, string(passwordBytes), legacyPubkey)
 			if encryptedJSONErr != nil {
-				logger.Fatal("Failed to encrypt private key", zap.Error(err))
+				logger.Fatal("Failed to encrypt private key", zap.Error(encryptedJSONErr))
 			}
 
 			err = writeFile("encrypted_private_key.json", encryptedJSON)
@@ -88,5 +90,6 @@ func readFile(filePath string) ([]byte, error) {
 func init() {
 	generateOperatorKeysCmd.Flags().StringP("password-file", "p", "", "File path to the password used to encrypt the private key")
 	generateOperatorKeysCmd.Flags().StringP("operator-key-file", "o", "", "File path to the operator private key")
+	generateOperatorKeysCmd.Flags().BoolP("legacy-pubkey", "l", false, `Store public key in keystore in legacy format ("pubKey" instead of "pubkey")`)
 	RootCmd.AddCommand(generateOperatorKeysCmd)
 }
