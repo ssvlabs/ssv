@@ -1183,7 +1183,7 @@ func syncContractEvents(
 		// the SSV node cannot work without being up to date with Ethereum events.
 		go func() {
 			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
-			if !errors.Is(err, context.Canceled) {
+			if err != nil && !errors.Is(err, context.Canceled) {
 				logger.Fatal("failed syncing ongoing registry events",
 					zap.Uint64("last_processed_block", lastProcessedBlock),
 					zap.Error(err),

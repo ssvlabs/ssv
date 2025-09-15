@@ -601,9 +601,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5)
 		select {
 		case log, ok := <-logChan:
-			if ok {
-				require.Fail(t, "Should not receive log when startBlock > endBlock, received log with block number: %d", log.BlockNumber)
-			}
+			require.Falsef(t, ok, "should not receive log when startBlock > endBlock, received log with block number: %d", log.BlockNumber)
 		case err := <-errChan:
 			require.ErrorIs(t, err, ErrBadInput)
 		case <-env.ctx.Done():
