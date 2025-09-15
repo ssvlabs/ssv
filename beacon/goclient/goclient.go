@@ -171,8 +171,14 @@ func New(
 	logger *zap.Logger,
 	opt Options,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting",
-		fields.Address(opt.BeaconNodeAddr),
+	if opt.BeaconNodeAddr == "" {
+		return nil, fmt.Errorf("no beacon node address provided")
+	}
+
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
+
+	logger.Info("consensus client: connecting (multi client)",
+		fields.Addresses(beaconAddrList),
 		zap.Bool("with_weighted_attestation_data", opt.WithWeightedAttestationData),
 		zap.Bool("with_parallel_submissions", opt.WithParallelSubmissions),
 	)
@@ -200,11 +206,6 @@ func New(
 		seenClients:                        hashmap.New[string, struct{}](),
 	}
 
-	if opt.BeaconNodeAddr == "" {
-		return nil, fmt.Errorf("no beacon node address provided")
-	}
-
-	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	for _, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
 			return nil, err
@@ -217,7 +218,6 @@ func New(
 			zap.String("address", opt.BeaconNodeAddr),
 			zap.Error(err),
 		)
-
 		return nil, err
 	}
 

@@ -33,8 +33,10 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
-	"github.com/ssvlabs/ssv/api/handlers"
+	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
+	hnode "github.com/ssvlabs/ssv/api/handlers/node"
 	pinned_peers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
+	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
@@ -96,7 +98,7 @@ type SSVSignerConfig struct {
 }
 
 type config struct {
-	global_config.GlobalConfig   `yaml:"global"`
+	global_config.Global         `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExporterOptions              exporter.Options        `yaml:"exporter"`
@@ -186,8 +188,10 @@ var StartNodeCmd = &cobra.Command{
 
 		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
 		if err != nil {
-			logger.Fatal("failed to create beacon go-client", zap.Error(err),
-				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+			logger.Fatal("failed to create beacon go-client",
+				zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			)
 		}
 
 		networkConfig := &networkconfig.Network{
@@ -331,7 +335,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 		validatorRegistrationSubmitter := runner.NewVRSubmitter(cmd.Context(), logger, networkConfig.Beacon, consensusClient, validatorProvider)
 
-		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
+		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
 		if len(executionAddrList) == 0 {
 			logger.Fatal("no execution node address provided")
 		}
@@ -345,7 +349,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
 				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
@@ -361,7 +365,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
 				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
+				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
@@ -560,7 +564,7 @@ var StartNodeCmd = &cobra.Command{
 			go func() {
 				metricsHandler := metrics.NewHandler(logger, db, cfg.EnableProfile, operatorNode)
 				if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", cfg.MetricsAPIPort)); err != nil {
-					logger.Panic("failed to serve metrics", zap.Error(err))
+					logger.Fatal("failed to serve metrics", zap.Error(err))
 				}
 			}()
 		}
@@ -647,12 +651,12 @@ var StartNodeCmd = &cobra.Command{
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
-				handlers.NewNode(
+				hnode.NewNode(
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
 					[]string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
 					p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					p2pNetwork.(handlers.TopicIndex),
+					p2pNetwork.(hnode.TopicIndex),
 					nodeProber,
 					clNodeName,
 					elNodeName,
@@ -661,11 +665,10 @@ var StartNodeCmd = &cobra.Command{
 				pinned_peers.New(
 					p2pNetwork.Pinned(),
 					pinned_peers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),
-				),
-				&handlers.Validators{
+				), &hvalidators.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
@@ -1144,7 +1147,7 @@ func syncContractEvents(
 
 		// Print registry stats.
 		shares := nodeStorage.Shares().List(nil)
-		operators, err := nodeStorage.ListOperators(nil, 0, 0)
+		operators, err := nodeStorage.ListOperatorsAll(nil)
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}

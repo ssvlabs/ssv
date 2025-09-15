@@ -54,10 +54,6 @@ func stageAttribute(stage stage) attribute.KeyValue {
 	return attribute.String("ssv.validator.stage", string(stage))
 }
 
-func roleAttribute(role string) attribute.KeyValue {
-	return attribute.String(observability.RunnerRoleAttrKey, role)
-}
-
 func reasonAttribute(reason roundChangeReason) attribute.KeyValue {
 	return observability.RoundChangeReasonAttribute(string(reason))
 }
