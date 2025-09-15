@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -334,6 +337,10 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+type recipientsStorage interface {
+	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
 }
 
 type ValidatorRegistrationSubmitter interface {
