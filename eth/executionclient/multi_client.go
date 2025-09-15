@@ -217,9 +217,13 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 
 // StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
 // It spawns a go-routine that spins in a perpetual retry loop, terminating only on unrecoverable
-// interruptions (such as context cancels, client closure, etc.) as defined by isMultiClientInterruptedError func.
-// Any errors encountered during log-streaming are relayed on errorsCh channel. Both logsCh and errorsCh
-// are closed once the streaming go-routine terminates.
+// interruptions (such as context cancels, client closure, etc.) as defined by isMultiClientInterruptedError
+// func.
+// Any errors encountered during log-streaming are logged, errsCh channel relays only the 1 terminal error
+// after all retries are exhausted. Both logsCh and errsCh are closed once the streaming go-routine terminates.
+// TODO: once we are on the same page here - https://github.com/ssvlabs/ssv/pull/2472#discussion_r2346770514
+// - maybe remove `errsCh` (we don't need it if we are doing retries infinitely)
+// - adjust the comment above ^ as needed
 func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs, errCh chan error) {
 	logsCh = make(chan BlockLogs)
 	// All errors are buffered, so we don't block the execution of this func (waiting on the caller to
