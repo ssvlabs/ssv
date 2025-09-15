@@ -73,7 +73,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		contractAddr,
 		WithLoggerMulti(customLogger),
 		WithFollowDistanceMulti(customFollowDistance),
-		WithConnectionTimeoutMulti(customTimeout),
+		WithReqTimeoutMulti(customTimeout),
 		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
 		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
 	)
@@ -82,7 +82,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	require.NotNil(t, mc)
 	require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
 	require.EqualValues(t, customFollowDistance, mc.followDistance)
-	require.EqualValues(t, customTimeout, mc.connectionTimeout)
+	require.EqualValues(t, customTimeout, mc.reqTimeout)
 	require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
 	require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
 	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)

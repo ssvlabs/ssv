@@ -44,19 +44,23 @@ func WithFollowDistanceMulti(offset uint64) OptionMulti {
 	}
 }
 
-// WithConnectionTimeout sets timeout for network connection to eth1 node.
+// WithReqTimeout sets timeout for RPC requests to eth1 node.
 // The timeout must be positive, otherwise the default value will be used.
-func WithConnectionTimeout(timeout time.Duration) Option {
+func WithReqTimeout(timeout time.Duration) Option {
 	return func(s *ExecutionClient) {
-		s.connectionTimeout = timeout
+		if timeout > 0 {
+			s.reqTimeout = timeout
+		}
 	}
 }
 
-// WithConnectionTimeoutMulti sets timeout for network connection to eth1 node.
+// WithReqTimeoutMulti sets timeout for RPC requests to eth1 node.
 // The timeout must be positive, otherwise the default value will be used.
-func WithConnectionTimeoutMulti(timeout time.Duration) OptionMulti {
+func WithReqTimeoutMulti(timeout time.Duration) OptionMulti {
 	return func(s *MultiClient) {
-		s.connectionTimeout = timeout
+		if timeout > 0 {
+			s.reqTimeout = timeout
+		}
 	}
 }
 

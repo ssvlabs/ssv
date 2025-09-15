@@ -407,7 +407,7 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		blockResponse3 := createProposalResponseSafe(testSlot, feeRecipient3, false)
 
 		server1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-			ProposalResponseDuration: 100 * time.Millisecond,
+			ProposalResponseDuration: 500 * time.Millisecond,
 			ProposalResponse:         blockResponse1,
 		})
 		defer server1.Close()
@@ -419,7 +419,7 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		defer server2.Close()
 
 		server3, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
-			ProposalResponseDuration: 200 * time.Millisecond,
+			ProposalResponseDuration: 1000 * time.Millisecond,
 			ProposalResponse:         blockResponse3,
 		})
 		defer server3.Close()

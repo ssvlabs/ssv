@@ -172,7 +172,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
-			WithConnectionTimeout(2*time.Second),
+			WithReqTimeout(2*time.Second),
 		)
 		require.NoError(t, err)
 
@@ -211,7 +211,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
-			WithConnectionTimeout(2*time.Second),
+			WithReqTimeout(2*time.Second),
 		)
 		require.NoError(t, err)
 
@@ -232,7 +232,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
-			WithConnectionTimeout(2*time.Second),
+			WithReqTimeout(2*time.Second),
 		)
 		require.NoError(t, err)
 
@@ -262,7 +262,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(8),
-			WithConnectionTimeout(100*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -275,7 +275,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, logs)
 		require.Nil(t, fetchErrCh)
-		require.ErrorContains(t, err, "failed to get current block")
+		require.ErrorContains(t, err, "get current block")
 	})
 }
 
@@ -989,7 +989,7 @@ func TestFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithConnectionTimeout(100*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1079,7 +1079,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithConnectionTimeout(100*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1141,7 +1141,7 @@ func TestHeaderByNumber(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithConnectionTimeout(100*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1198,7 +1198,7 @@ func TestSyncProgress(t *testing.T) {
 			return p, nil
 		}
 		err = env.client.Healthy(env.ctx)
-		require.ErrorIs(t, err, errSyncing)
+		require.ErrorIs(t, err, ErrSyncing)
 	})
 
 	t.Run("within tolerable limits", func(t *testing.T) {

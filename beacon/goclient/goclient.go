@@ -162,6 +162,12 @@ type GoClient struct {
 }
 
 func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error) {
+	if opt.BeaconNodeAddr == "" {
+		return nil, fmt.Errorf("no beacon node address provided")
+	}
+
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
+
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
 		commonTimeout = DefaultCommonTimeout
@@ -185,11 +191,6 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
 
-	if opt.BeaconNodeAddr == "" {
-		return nil, fmt.Errorf("no beacon node address provided")
-	}
-
-	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	for _, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
 			return nil, err
@@ -203,9 +204,10 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		return nil, fmt.Errorf("initialize consensus client(s), address(es)=%s: %w", opt.BeaconNodeAddr, err)
 	}
 
+	client.log.Debug("connected successfully, fetching beacon config")
+
 	initCtx, initCtxCancel := context.WithTimeout(ctx, client.longTimeout)
 	defer initCtxCancel()
-
 	select {
 	case <-initCtx.Done():
 		return nil, fmt.Errorf("timed out awaiting Beacon config initialization, timeout=%s: %w", client.longTimeout, initCtx.Err())
@@ -216,6 +218,8 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	if config == nil {
 		return nil, fmt.Errorf("no beacon config set")
 	}
+
+	client.log.Debug("fetched beacon config successfully")
 
 	client.blockRootToSlotCache = ttlcache.New(
 		ttlcache.WithCapacity[phase0.Root, phase0.Slot](config.SlotsPerEpoch * BlockRootToSlotCacheCapacityEpochs),
