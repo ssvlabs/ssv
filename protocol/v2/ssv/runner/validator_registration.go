@@ -45,7 +45,6 @@ type ValidatorRegistrationRunner struct {
 	network                        specqbft.Network
 	signer                         ekm.BeaconSigner
 	operatorSigner                 ssvtypes.OperatorSigner
-	recipientsStorage              recipientsStorage
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
 	feeRecipientProvider           feeRecipientProvider
 
