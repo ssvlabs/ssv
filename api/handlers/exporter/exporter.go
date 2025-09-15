@@ -2,6 +2,8 @@ package exporter
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -53,7 +55,11 @@ func toApiError(errs *multierror.Error) *api.ErrorResponse {
 	return api.Error(errs)
 }
 
-func toStrings(errs []error) []string {
+func toStrings(err *multierror.Error) []string {
+	if err == nil || err.ErrorOrNil() == nil {
+		return nil
+	}
+	errs := err.Errors
 	result := make([]string, 0, len(errs))
 	for _, err := range errs {
 		if err != nil {
@@ -65,4 +71,52 @@ func toStrings(errs []error) []string {
 
 func isNotFoundError(e error) bool {
 	return errors.Is(e, store.ErrNotFound) || errors.Is(e, dutytracer.ErrNotFound)
+}
+
+func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
+	if e == nil || e.ErrorOrNil() == nil {
+		return nil
+	}
+	var filteredErrs *multierror.Error
+	for _, err := range e.Errors {
+		if !isNotFoundError(err) {
+			filteredErrs = multierror.Append(filteredErrs, err)
+		}
+	}
+	return filteredErrs
+}
+
+func parsePubkeysSlice(hexSlice api.HexSlice) []spectypes.ValidatorPK {
+	pubkeys := make([]spectypes.ValidatorPK, 0, len(hexSlice))
+	for _, pk := range hexSlice {
+		var key spectypes.ValidatorPK
+		copy(key[:], pk)
+		pubkeys = append(pubkeys, key)
+	}
+	return pubkeys
+}
+
+func (e *Exporter) extractIndices(req filterRequest) ([]phase0.ValidatorIndex, error) {
+	reqIdxs := req.indices()
+	reqPks := req.pubKeys()
+
+	indices := make([]phase0.ValidatorIndex, 0, len(reqIdxs)+len(reqPks))
+	var errs *multierror.Error
+
+	for _, idx := range reqIdxs {
+		indices = append(indices, phase0.ValidatorIndex(idx))
+	}
+	for _, pk := range reqPks {
+		idx, ok := e.validators.ValidatorIndex(pk)
+		if !ok {
+			errs = multierror.Append(errs, fmt.Errorf("validator not found for pubkey: %x", pk))
+			continue
+		}
+		indices = append(indices, idx)
+	}
+
+	slices.Sort(indices)
+	indices = slices.Compact(indices)
+
+	return indices, errs.ErrorOrNil()
 }
