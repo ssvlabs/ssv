@@ -66,7 +66,8 @@ func recordSingleClientRequest(
 	err error,
 ) {
 	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
-	// to it (there are too many requests being made to log them every time, hence this limiting).
+	// to it (there are too many requests being made to log them every time, some requests don't even result
+	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
 		logger.Debug("CL single-client request done",
 			zap.String("client_addr", clientAddr),
@@ -109,7 +110,8 @@ func recordMultiClientRequest(
 	err error,
 ) {
 	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
-	// to it (there are too many requests being made to log them every time, hence this limiting).
+	// to it (there are too many requests being made to log them every time, some requests don't even result
+	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
 		logger.Debug("CL multi-client request done",
 			zap.String("route_name", routeName),
