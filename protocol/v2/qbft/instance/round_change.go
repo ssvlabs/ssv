@@ -250,10 +250,10 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		return errors.New("round change msg type is wrong")
 	}
 	if msg.QBFTMessage.Height != i.State.Height {
-		return errors.New("wrong msg height")
+		return ErrWrongMsgHeight
 	}
 	if msg.QBFTMessage.Round != round {
-		return errors.New("wrong msg round")
+		return NewRetryableError(ErrWrongMsgRound)
 	}
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
 		return errors.New("msg allows 1 signer")

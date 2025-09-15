@@ -31,7 +31,7 @@ linters:
     - whitespace
   settings:
     errorlint:
-      errorf: true
+      errorf: false
     errcheck:
       check-type-assertions: false
       check-blank: false

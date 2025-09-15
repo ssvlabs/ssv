@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sort"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -20,16 +21,16 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	signedMsg *spectypes.PartialSignatureMessages,
 ) error {
 	if !b.hasRunningDuty() {
-		return errors.New("no running duty")
+		return NewRetryableError(ErrNoRunningDuty)
 	}
 
-	if err := b.validatePartialSigMsgForSlot(signedMsg, b.State.StartingDuty.DutySlot()); err != nil {
+	if err := b.validatePartialSigMsg(signedMsg, b.State.StartingDuty.DutySlot()); err != nil {
 		return err
 	}
 
 	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
 	if err != nil {
-		return err
+		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
 	}
 
 	return b.verifyExpectedRoot(ctx, runner, signedMsg, roots, domain)
@@ -49,20 +50,20 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
-		return errors.New("no running duty")
+		return NewRetryableError(ErrNoRunningDuty)
 	}
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
 	if len(b.State.DecidedValue) == 0 {
-		return errors.New("no decided value")
+		return fmt.Errorf("no decided value")
 	}
 
 	if b.State.RunningInstance == nil {
-		return errors.New("no running consensus instance")
+		return NewRetryableError(ErrInstanceNotFound)
 	}
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
 	if !decided {
-		return errors.New("consensus instance not decided")
+		return fmt.Errorf("no decided value")
 	}
 
 	// TODO: (Alan) maybe nicer to do this without switch
@@ -70,17 +71,17 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	case *CommitteeRunner:
 		decidedValue := &spectypes.BeaconVote{}
 		if err := decidedValue.Decode(decidedValueBytes); err != nil {
-			return errors.Wrap(err, "failed to parse decided value to BeaconData")
+			return errors.Wrap(err, "failed to parse decided value to BeaconVote")
 		}
 
-		return b.validatePartialSigMsgForSlot(psigMsgs, b.State.StartingDuty.DutySlot())
+		return b.validatePartialSigMsg(psigMsgs, b.State.StartingDuty.DutySlot())
 	default:
 		decidedValue := &spectypes.ValidatorConsensusData{}
 		if err := decidedValue.Decode(decidedValueBytes); err != nil {
 			return errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
 		}
 
-		if err := b.validatePartialSigMsgForSlot(psigMsgs, decidedValue.Duty.Slot); err != nil {
+		if err := b.validatePartialSigMsg(psigMsgs, decidedValue.Duty.Slot); err != nil {
 			return err
 		}
 

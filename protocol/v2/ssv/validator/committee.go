@@ -36,9 +36,6 @@ type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex
 type Committee struct {
 	logger *zap.Logger
 
-	ctx    context.Context
-	cancel context.CancelFunc
-
 	networkConfig *networkconfig.Network
 
 	// mtx syncs access to Queues, Runners, Shares.
@@ -55,8 +52,6 @@ type Committee struct {
 
 // NewCommittee creates a new cluster
 func NewCommittee(
-	ctx context.Context,
-	cancel context.CancelFunc,
 	logger *zap.Logger,
 	networkConfig *networkconfig.Network,
 	operator *spectypes.CommitteeMember,
@@ -75,8 +70,6 @@ func NewCommittee(
 	return &Committee{
 		logger:          logger,
 		networkConfig:   networkConfig,
-		ctx:             ctx,
-		cancel:          cancel,
 		Queues:          make(map[phase0.Slot]QueueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		Shares:          shares,
@@ -163,7 +156,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
 		c.Queues[duty.Slot] = QueueContainer{
-			Q: queue.New(1000), // TODO alan: get queue opts from options
+			Q: queue.New(logger, 1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             qbft.Height(duty.Slot),
@@ -351,10 +344,6 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	}
 
 	return nil
-}
-
-func (c *Committee) Stop() {
-	c.cancel()
 }
 
 func (c *Committee) Encode() ([]byte, error) {

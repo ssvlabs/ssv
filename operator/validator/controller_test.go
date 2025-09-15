@@ -251,7 +251,7 @@ func TestSetupValidators(t *testing.T) {
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, ownerAddr))
 	ownerAddressBytes := decodeHex(t, ownerAddr, "Failed to decode owner address")
-	testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
+	testValidator := setupTestValidator(t, createPubKey(byte('0')), ownerAddressBytes)
 
 	opStorage, done := newOperatorStorageForTest(logger)
 	defer done()
@@ -661,7 +661,7 @@ func TestFeeRecipientChangeNotification(t *testing.T) {
 		ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "owner address")
 		newFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "new fee recipient")
 
-		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
+		testValidator := setupTestValidator(t, createPubKey(byte('0')), ownerAddressBytes)
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			testValidator.Share.ValidatorPubKey: testValidator,
 		}
@@ -713,7 +713,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
+		testValidator := setupTestValidator(t, createPubKey(byte('0')), ownerAddressBytes)
 
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			testValidator.Share.ValidatorPubKey: testValidator,
@@ -745,7 +745,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	})
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes)
+		testValidator := setupTestValidator(t, createPubKey(byte('0')), ownerAddressBytes)
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			testValidator.Share.ValidatorPubKey: testValidator,
 		}
@@ -869,7 +869,7 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 	return res
 }
 
-func setupTestValidator(validatorPk spectypes.ValidatorPK, ownerAddressBytes []byte) *validator.Validator {
+func setupTestValidator(t *testing.T, validatorPk spectypes.ValidatorPK, ownerAddressBytes []byte) *validator.Validator {
 	return &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
 
@@ -882,7 +882,7 @@ func setupTestValidator(validatorPk spectypes.ValidatorPK, ownerAddressBytes []b
 
 		Queues: map[spectypes.RunnerRole]validator.QueueContainer{
 			spectypes.RoleValidatorRegistration: {
-				Q: queue.New(1000),
+				Q: queue.New(log.TestLogger(t), 1000),
 			},
 		},
 	}

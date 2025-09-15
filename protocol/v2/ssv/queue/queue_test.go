@@ -15,6 +15,8 @@ import (
 
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 var mockState = &State{
@@ -24,14 +26,8 @@ var mockState = &State{
 	Quorum:             4,
 }
 
-// newDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
-// with a capacity of 32 and a PusherDropping.
-func newDefault() Queue {
-	return New(32)
-}
-
 func TestPriorityQueue_TryPop(t *testing.T) {
-	queue := newDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
@@ -55,7 +51,7 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 }
 
 func TestPriorityQueue_Filter(t *testing.T) {
-	queue := newDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
@@ -113,7 +109,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		pushDelay      = 50 * time.Millisecond
 		precision      = 50 * time.Millisecond
 	)
-	queue := New(capacity)
+	queue := New(log.TestLogger(t), capacity)
 	require.True(t, queue.Empty())
 
 	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
@@ -165,7 +161,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 	for _, test := range messagePriorityTests {
 		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
 			// Create the PriorityQueue and populate it with messages.
-			q := newDefault()
+			q := New(log.TestLogger(t), 32)
 
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
@@ -192,7 +188,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
-	queue := newDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -228,7 +224,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
-	queue := newDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -275,12 +271,14 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(32)
+		return New(log.BenchLogger(b), 32)
 	}, false)
 }
 
 func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
-	benchmarkPriorityQueueParallel(b, newDefault, true)
+	benchmarkPriorityQueueParallel(b, func() Queue {
+		return New(log.BenchLogger(b), 32)
+	}, true)
 }
 
 func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bool) {
@@ -414,7 +412,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
-	queue := newDefault()
+	queue := New(log.BenchLogger(b), 32)
 
 	messageCount := 10_000
 	types := []qbft.MessageType{qbft.PrepareMsgType, qbft.CommitMsgType, qbft.RoundChangeMsgType}
