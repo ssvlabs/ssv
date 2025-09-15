@@ -57,7 +57,7 @@ type MultiClient struct {
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
 	followDistance             uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-	connectionTimeout          time.Duration
+	reqTimeout                 time.Duration
 	healthInvalidationInterval time.Duration
 	logBatchSize               uint64
 	syncDistanceTolerance      uint64
@@ -85,14 +85,14 @@ func NewMulti(
 	}
 
 	multiClient := &MultiClient{
-		nodeAddrs:         nodeAddrs,
-		clients:           make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
-		clientsMu:         make([]sync.Mutex, len(nodeAddrs)),
-		contractAddress:   contractAddr,
-		logger:            zap.NewNop(),
-		followDistance:    DefaultFollowDistance,
-		connectionTimeout: DefaultConnectionTimeout,
-		logBatchSize:      DefaultHistoricalLogsBatchSize,
+		nodeAddrs:       nodeAddrs,
+		clients:         make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
+		clientsMu:       make([]sync.Mutex, len(nodeAddrs)),
+		contractAddress: contractAddr,
+		logger:          zap.NewNop(),
+		followDistance:  DefaultFollowDistance,
+		reqTimeout:      DefaultReqTimeout,
+		logBatchSize:    DefaultHistoricalLogsBatchSize,
 	}
 
 	for _, opt := range opts {
@@ -102,21 +102,17 @@ func NewMulti(
 	multiClient.logger.Info("execution client: connecting (multi client)", fields.Addresses(nodeAddrs))
 
 	var connected bool
-
 	var multiErr error
 	for clientIndex := range nodeAddrs {
 		if err := multiClient.connect(ctx, clientIndex); err != nil {
 			multiClient.logger.Error("failed to connect to node",
 				zap.String("address", nodeAddrs[clientIndex]),
 				zap.Error(err))
-
 			multiErr = errors.Join(multiErr, err)
 			continue
 		}
-
 		connected = true
 	}
-
 	if !connected {
 		return nil, fmt.Errorf("no available clients: %w", multiErr)
 	}
@@ -152,7 +148,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		mc.contractAddress,
 		WithLogger(logger),
 		WithFollowDistance(mc.followDistance),
-		WithConnectionTimeout(mc.connectionTimeout),
+		WithReqTimeout(mc.reqTimeout),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
 	)
