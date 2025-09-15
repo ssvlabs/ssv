@@ -64,8 +64,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	customLogger := zap.NewExample()
 	const customFollowDistance = uint64(10)
 	const customTimeout = 100 * time.Millisecond
-	const customReconnectionInterval = 10 * time.Millisecond
-	const customReconnectionMaxInterval = 1 * time.Second
 	const customHealthInvalidationInterval = 50 * time.Millisecond
 	const customLogBatchSize = 11
 	const customSyncDistanceTolerance = 12
@@ -76,9 +74,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		contractAddr,
 		WithLoggerMulti(customLogger),
 		WithFollowDistanceMulti(customFollowDistance),
-		WithConnectionTimeoutMulti(customTimeout),
-		WithReconnectionInitialIntervalMulti(customReconnectionInterval),
-		WithReconnectionMaxIntervalMulti(customReconnectionMaxInterval),
+		WithReqTimeoutMulti(customTimeout),
 		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
 		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
 	)
@@ -87,9 +83,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	require.NotNil(t, mc)
 	require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
 	require.EqualValues(t, customFollowDistance, mc.followDistance)
-	require.EqualValues(t, customTimeout, mc.connectionTimeout)
-	require.EqualValues(t, customReconnectionInterval, mc.reconnectionInitialInterval)
-	require.EqualValues(t, customReconnectionMaxInterval, mc.reconnectionMaxInterval)
+	require.EqualValues(t, customTimeout, mc.reqTimeout)
 	require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
 	require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
 	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)

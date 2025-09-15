@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Map implements a thread-safe map with a sync.Map under the hood.
+// Map implements a thread-safe map with a sync.Map under the hood, it's best for read-heavy workloads.
 type Map[Key comparable, Value any] struct {
 	m sync.Map
 }

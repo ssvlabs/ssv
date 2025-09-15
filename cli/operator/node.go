@@ -33,7 +33,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
-	"github.com/ssvlabs/ssv/api/handlers"
+	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
+	hnode "github.com/ssvlabs/ssv/api/handlers/node"
+	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
@@ -95,7 +97,7 @@ type SSVSignerConfig struct {
 }
 
 type config struct {
-	global_config.GlobalConfig   `yaml:"global"`
+	global_config.Global         `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExporterOptions              exporter.Options        `yaml:"exporter"`
@@ -185,8 +187,10 @@ var StartNodeCmd = &cobra.Command{
 
 		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
 		if err != nil {
-			logger.Fatal("failed to create beacon go-client", zap.Error(err),
-				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+			logger.Fatal("failed to create beacon go-client",
+				zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			)
 		}
 
 		networkConfig := &networkconfig.Network{
@@ -330,7 +334,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 		validatorRegistrationSubmitter := runner.NewVRSubmitter(cmd.Context(), logger, networkConfig.Beacon, consensusClient, validatorProvider)
 
-		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
+		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
 		if len(executionAddrList) == 0 {
 			logger.Fatal("no execution node address provided")
 		}
@@ -344,9 +348,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
 				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
-				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
@@ -362,9 +364,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
 				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithReconnectionInitialIntervalMulti(executionclient.DefaultReconnectionInitialInterval),
-				executionclient.WithReconnectionMaxIntervalMulti(executionclient.DefaultReconnectionMaxInterval),
+				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
@@ -449,7 +449,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.ValidatorRegistrationSubmitter = validatorRegistrationSubmitter
-		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
 		var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 		if cfg.WsAPIPort != 0 {
@@ -457,7 +456,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
-			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws)
+			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -564,29 +563,22 @@ var StartNodeCmd = &cobra.Command{
 			go func() {
 				metricsHandler := metrics.NewHandler(logger, db, cfg.EnableProfile, operatorNode)
 				if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", cfg.MetricsAPIPort)); err != nil {
-					logger.Panic("failed to serve metrics", zap.Error(err))
+					logger.Fatal("failed to serve metrics", zap.Error(err))
 				}
 			}()
 		}
 
-		nodeProber := nodeprobe.NewProber(
-			logger,
-			func() {
-				logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.")
-			},
-			map[string]nodeprobe.Node{
-				"execution client": executionClient,
+		nodeProber := nodeprobe.New(logger)
+		nodeProber.AddNode(clNodeName, consensusClient, 10*time.Second, 5)
+		nodeProber.AddNode(elNodeName, executionClient, 10*time.Second, 5)
 
-				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
-				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-				"consensus client": consensusClient,
-			},
-		)
+		probeCtx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+		defer cancel()
+		if err := nodeProber.ProbeAll(probeCtx); err != nil {
+			logger.Fatal("Ethereum node(s) are not healthy", zap.Error(err))
+		}
 
-		nodeProber.Start(cmd.Context())
-		nodeProber.Wait()
-		logger.Info("ethereum node(s) are healthy")
+		logger.Info("Ethereum node(s) are healthy")
 
 		eventSyncer := syncContractEvents(
 			cmd.Context(),
@@ -601,8 +593,9 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode("event syncer", eventSyncer)
+			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, 10*time.Second, 5)
 		}
+		go startNodeProber(cmd.Context(), logger, nodeProber)
 
 		if _, err := metadataSyncer.SyncAll(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
@@ -657,18 +650,21 @@ var StartNodeCmd = &cobra.Command{
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
-				&handlers.Node{
+				hnode.NewNode(
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
-					ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
-					PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
-					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
-					NodeProber:      nodeProber,
-				},
-				&handlers.Validators{
+					[]string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+					p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					p2pNetwork.(hnode.TopicIndex),
+					nodeProber,
+					clNodeName,
+					elNodeName,
+					eventSyncerNodeName,
+				),
+				&hvalidators.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
@@ -1147,7 +1143,7 @@ func syncContractEvents(
 
 		// Print registry stats.
 		shares := nodeStorage.Shares().List(nil)
-		operators, err := nodeStorage.ListOperators(nil, 0, 0)
+		operators, err := nodeStorage.ListOperatorsAll(nil)
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}

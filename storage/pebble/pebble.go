@@ -85,7 +85,7 @@ func (pdb *DB) GetAll(prefix []byte, fn func(int, basedb.Obj) error) (err error)
 
 	defer func() { _ = iter.Close() }()
 
-	return allGetter(pdb.logger, iter, prefix, fn)
+	return allGetter(iter, prefix, fn)
 }
 
 func (pdb *DB) Begin() basedb.Txn {

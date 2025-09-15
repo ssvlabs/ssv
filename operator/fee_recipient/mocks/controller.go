@@ -13,8 +13,64 @@ import (
 	context "context"
 	reflect "reflect"
 
+	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
+	types "github.com/ssvlabs/ssv-spec/types"
+	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
 )
+
+// MockValidatorProvider is a mock of ValidatorProvider interface.
+type MockValidatorProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockValidatorProviderMockRecorder
+	isgomock struct{}
+}
+
+// MockValidatorProviderMockRecorder is the mock recorder for MockValidatorProvider.
+type MockValidatorProviderMockRecorder struct {
+	mock *MockValidatorProvider
+}
+
+// NewMockValidatorProvider creates a new mock instance.
+func NewMockValidatorProvider(ctrl *gomock.Controller) *MockValidatorProvider {
+	mock := &MockValidatorProvider{ctrl: ctrl}
+	mock.recorder = &MockValidatorProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
+	return m.recorder
+}
+
+// GetFeeRecipient mocks base method.
+func (m *MockValidatorProvider) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockValidatorProviderMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockValidatorProvider)(nil).GetFeeRecipient), validatorPK)
+}
+
+// SelfValidators mocks base method.
+func (m *MockValidatorProvider) SelfValidators() []*types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SelfValidators")
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	return ret0
+}
+
+// SelfValidators indicates an expected call of SelfValidators.
+func (mr *MockValidatorProviderMockRecorder) SelfValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfValidators))
+}
 
 // MockRecipientController is a mock of RecipientController interface.
 type MockRecipientController struct {
@@ -50,4 +106,16 @@ func (m *MockRecipientController) Start(ctx context.Context) {
 func (mr *MockRecipientControllerMockRecorder) Start(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start), ctx)
+}
+
+// SubscribeToFeeRecipientChanges mocks base method.
+func (m *MockRecipientController) SubscribeToFeeRecipientChanges(ch <-chan struct{}) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SubscribeToFeeRecipientChanges", ch)
+}
+
+// SubscribeToFeeRecipientChanges indicates an expected call of SubscribeToFeeRecipientChanges.
+func (mr *MockRecipientControllerMockRecorder) SubscribeToFeeRecipientChanges(ch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToFeeRecipientChanges", reflect.TypeOf((*MockRecipientController)(nil).SubscribeToFeeRecipientChanges), ch)
 }

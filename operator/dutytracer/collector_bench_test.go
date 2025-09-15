@@ -9,13 +9,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -43,7 +45,7 @@ func BenchmarkTracer(b *testing.B) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
 	// Define different message counts to test
 	messageCounts := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 4000, 8000}
@@ -75,6 +77,10 @@ func dummyVerify(*spectypes.PartialSignatureMessages) error {
 	return nil
 }
 
+func dummyGetFeeRecipient(owner common.Address) (bellatrix.ExecutionAddress, error) {
+	return bellatrix.ExecutionAddress{}, nil
+}
+
 func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 	var header [2]byte
 	r := io.NewSectionReader(file, 0, math.MaxInt64)
@@ -96,7 +102,7 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 			return nil, err
 		}
 
-		dataMsg := new(model.DiskMsg)
+		dataMsg := new(exporter.DiskMsg)
 		if err := dataMsg.UnmarshalSSZ(diskMsgBytes); err != nil {
 			return nil, err
 		}

@@ -58,8 +58,6 @@ const (
 	networkRouterConcurrency = 2048
 )
 
-type GetRecipientDataFunc func(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
-
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
@@ -79,7 +77,6 @@ type ControllerOptions struct {
 	OperatorDataStore              operatordatastore.OperatorDataStore
 	RegistryStorage                nodestorage.Storage
 	ValidatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
-	RecipientsStorage              Recipients
 	NewDecidedHandler              qbftcontroller.NewDecidedHandler
 	DutyRoles                      []spectypes.BeaconRole
 	DutyTraceCollector             *dutytracer.Collector
@@ -115,6 +112,7 @@ type Controller interface {
 	IndicesChangeChan() chan struct{}
 	ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor
 	ValidatorExitChan() <-chan duties.ExitDescriptor
+	FeeRecipientChangeChan() <-chan struct{}
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
@@ -126,11 +124,6 @@ type Controller interface {
 }
 
 type Nonce uint16
-
-type Recipients interface {
-	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
-	SaveRecipientData(rw basedb.ReadWriter, recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error)
-}
 
 type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
@@ -155,7 +148,6 @@ type controller struct {
 	networkConfig                  *networkconfig.Network
 	sharesStorage                  SharesStorage
 	operatorsStorage               registrystorage.Operators
-	recipientsStorage              Recipients
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
 	ibftStorageMap                 *storage.ParticipantStores
 
@@ -194,6 +186,7 @@ type controller struct {
 	indicesChangeCh         chan struct{}
 	validatorRegistrationCh chan duties.RegistrationDescriptor
 	validatorExitCh         chan duties.ExitDescriptor
+	feeRecipientChangeCh    chan struct{}
 
 	traceCollector *dutytracer.Collector
 }
@@ -236,7 +229,6 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		networkConfig:                  options.NetworkConfig,
 		sharesStorage:                  options.RegistryStorage.Shares(),
 		operatorsStorage:               options.RegistryStorage,
-		recipientsStorage:              options.RegistryStorage,
 		validatorRegistrationSubmitter: options.ValidatorRegistrationSubmitter,
 		ibftStorageMap:                 options.StorageMap,
 		validatorStore:                 options.ValidatorStore,
@@ -275,6 +267,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		indicesChangeCh:         make(chan struct{}),
 		validatorRegistrationCh: make(chan duties.RegistrationDescriptor),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
+		feeRecipientChangeCh:    make(chan struct{}, 1),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
 
@@ -302,6 +295,10 @@ func (c *controller) ValidatorRegistrationChan() <-chan duties.RegistrationDescr
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
 	return c.validatorExitCh
+}
+
+func (c *controller) FeeRecipientChangeChan() <-chan struct{} {
+	return c.feeRecipientChangeCh
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
@@ -785,10 +782,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		return nil, nil, nil
 	}
 
-	if err := c.setShareFeeRecipient(share); err != nil {
-		return nil, nil, fmt.Errorf("could not set share fee recipient: %w", err)
-	}
-
 	operator, err := c.committeeMemberFromShare(share)
 	if err != nil {
 		return nil, nil, err
@@ -801,7 +794,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.recipientsStorage, c.validatorRegistrationSubmitter, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
@@ -850,29 +843,48 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 }
 
 func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*spectypes.CommitteeMember, error) {
-	operators := make([]*spectypes.Operator, len(share.Committee))
-	for i, cm := range share.Committee {
+	operators := make([]*spectypes.Operator, 0, len(share.Committee))
+	var activeOperators uint64
+
+	for _, cm := range share.Committee {
 		opdata, found, err := c.operatorsStorage.GetOperatorData(nil, cm.Signer)
 		if err != nil {
 			return nil, fmt.Errorf("could not get operator data: %w", err)
 		}
+
+		operator := &spectypes.Operator{
+			OperatorID: cm.Signer,
+		}
+
 		if !found {
-			//TODO alan: support removed ops
-			return nil, fmt.Errorf("operator not found")
+			c.logger.Warn(
+				"operator data not found, validator will only start if the number of available operators is greater than or equal to the committee quorum",
+				fields.OperatorID(cm.Signer),
+				fields.CommitteeID(share.CommitteeID()),
+			)
+		} else {
+			activeOperators++
+
+			operatorPEM, err := base64.StdEncoding.DecodeString(opdata.PublicKey)
+			if err != nil {
+				return nil, fmt.Errorf("could not decode public key: %w", err)
+			}
+
+			operator.SSVOperatorPubKey = operatorPEM
 		}
 
-		operatorPEM, err := base64.StdEncoding.DecodeString(opdata.PublicKey)
-		if err != nil {
-			return nil, fmt.Errorf("could not decode public key: %w", err)
-		}
-
-		operators[i] = &spectypes.Operator{
-			OperatorID:        cm.Signer,
-			SSVOperatorPubKey: operatorPEM,
-		}
+		operators = append(operators, operator)
 	}
 
-	f := ssvtypes.ComputeF(uint64(len(share.Committee)))
+	// This check is needed in case not all operators are available in storage.
+	// It can happen after an operator is removed. In such a scenario, the committee should
+	// continue conducting duties, but the number of operators must still meet the quorum.
+	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(share.Committee)))
+	if activeOperators < quorum {
+		return nil, fmt.Errorf("insufficient active operators for quorum: %d available, %d required", activeOperators, quorum)
+	}
+
+	faultyNodeTolerance := ssvtypes.ComputeF(uint64(len(share.Committee)))
 
 	operatorPEM, err := base64.StdEncoding.DecodeString(c.operatorDataStore.GetOperatorData().PublicKey)
 	if err != nil {
@@ -883,7 +895,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 		OperatorID:        c.operatorDataStore.GetOperatorID(),
 		CommitteeID:       share.CommitteeID(),
 		SSVOperatorPubKey: operatorPEM,
-		FaultyNodes:       f,
+		FaultyNodes:       faultyNodeTolerance,
 		Committee:         operators,
 	}, nil
 }
@@ -907,46 +919,12 @@ func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	for i, c := range s.Committee {
 		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.Signer, c.SharePubKey)
 	}
+
 	c.logger.Debug(msg,
 		fields.PubKey(s.ValidatorPubKey[:]),
 		zap.Bool("own_validator", s.BelongsToOperator(c.operatorDataStore.GetOperatorID())),
 		zap.Strings("committee", committee),
-		fields.FeeRecipient(s.FeeRecipientAddress[:]),
 	)
-}
-
-func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare) error {
-	data, found, err := c.recipientsStorage.GetRecipientData(nil, share.OwnerAddress)
-	if err != nil {
-		return fmt.Errorf("could not get recipient data: %w", err)
-	}
-
-	if found {
-		c.logger.Debug(
-			"setting fee recipient to the value from recipient storage",
-			fields.Validator(share.ValidatorPubKey[:]),
-			fields.FeeRecipient(data.FeeRecipient[:]),
-		)
-		share.FeeRecipientAddress = data.FeeRecipient
-		return nil
-	}
-
-	c.logger.Debug(
-		"setting fee recipient to owner address",
-		fields.Validator(share.ValidatorPubKey[:]),
-		fields.FeeRecipient(share.OwnerAddress.Bytes()),
-	)
-	copy(share.FeeRecipientAddress[:], share.OwnerAddress.Bytes())
-	recipientData := &registrystorage.RecipientData{
-		Owner: share.OwnerAddress,
-	}
-	copy(recipientData.FeeRecipient[:], share.OwnerAddress.Bytes())
-	_, err = c.recipientsStorage.SaveRecipientData(nil, recipientData)
-	if err != nil {
-		return fmt.Errorf("save recipient data: %w", err)
-	}
-
-	return nil
 }
 
 func (c *controller) validatorStart(validator *validator.Validator) (bool, error) {
@@ -1007,9 +985,14 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 		if startedValidators > 0 {
 			c.logger.Debug("started new eligible validators", zap.Int("started_validators", startedValidators))
 
-			// Refresh duties only if there are started validators.
+			// Notify duty scheduler about validator indices changes so the scheduler can update its duties
 			if !c.reportIndicesChange(ctx) {
 				c.logger.Error("failed to notify indices change")
+			}
+			// Notify fee recipient controller about validator changes due to metadata updates
+			// so it can submit proposal preparations for the newly started validators
+			if !c.reportFeeRecipientChange(ctx) {
+				c.logger.Error("failed to notify fee recipient change")
 			}
 		} else {
 			c.logger.Warn("no eligible validators started despite metadata changes")
@@ -1027,6 +1010,18 @@ func (c *controller) reportIndicesChange(ctx context.Context) bool {
 	case <-timeoutCtx.Done():
 		return false
 	case c.indicesChangeCh <- struct{}{}:
+		return true
+	}
+}
+
+func (c *controller) reportFeeRecipientChange(ctx context.Context) bool {
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.SlotDuration)
+	defer cancel()
+
+	select {
+	case <-timeoutCtx.Done():
+		return false
+	case c.feeRecipientChangeCh <- struct{}{}:
 		return true
 	}
 }
@@ -1139,8 +1134,8 @@ func SetupRunners(
 	logger *zap.Logger,
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
-	recipientsStorage Recipients,
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
+	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
@@ -1190,7 +1185,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueChecker)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueChecker, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, share.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, validatorRegistrationSubmitter, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, validatorRegistrationSubmitter, validatorStore, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		default:

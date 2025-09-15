@@ -1036,9 +1036,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		blockNum++
 		// Check if the fee recipient was updated
-		recipientData, _, err := eh.nodeStorage.GetRecipientData(nil, testAddr)
+		feeRecipient, err := eh.nodeStorage.GetFeeRecipient(testAddr)
 		require.NoError(t, err)
-		require.Equal(t, testAddr2.String(), recipientData.FeeRecipient.String())
+		require.Equal(t, testAddr2.Bytes(), feeRecipient[:])
 	})
 
 	// DO / UNDO in one block tests

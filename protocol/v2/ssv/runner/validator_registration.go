@@ -11,11 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cespare/xxhash/v2"
-	"github.com/ethereum/go-ethereum/common"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -32,8 +31,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 const (
@@ -50,7 +47,7 @@ type ValidatorRegistrationRunner struct {
 	operatorSigner                 ssvtypes.OperatorSigner
 	recipientsStorage              recipientsStorage
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
-	validatorOwnerAddress          common.Address
+	feeRecipientProvider           feeRecipientProvider
 
 	gasLimit uint64
 }
@@ -58,17 +55,16 @@ type ValidatorRegistrationRunner struct {
 func NewValidatorRegistrationRunner(
 	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
-	validatorOwnerAddress common.Address,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	recipientsStorage recipientsStorage,
-	ValidatorRegistrationSubmitter ValidatorRegistrationSubmitter,
+	validatorRegistrationSubmitter ValidatorRegistrationSubmitter,
+	feeRecipientProvider feeRecipientProvider,
 	gasLimit uint64,
 ) (Runner, error) {
 	if len(share) != 1 {
-		return nil, errors.New("must have one share")
+		return nil, fmt.Errorf("must have one share")
 	}
 
 	return &ValidatorRegistrationRunner{
@@ -82,9 +78,8 @@ func NewValidatorRegistrationRunner(
 		network:                        network,
 		signer:                         signer,
 		operatorSigner:                 operatorSigner,
-		recipientsStorage:              recipientsStorage,
-		validatorRegistrationSubmitter: ValidatorRegistrationSubmitter,
-		validatorOwnerAddress:          validatorOwnerAddress,
+		validatorRegistrationSubmitter: validatorRegistrationSubmitter,
+		feeRecipientProvider:           feeRecipientProvider,
 
 		gasLimit: gasLimit,
 	}, nil
@@ -138,7 +133,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	registration, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
+	registration, err := r.buildValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
 		return traces.Errorf(span, "could not calculate validator registration: %w", err)
 	}
@@ -169,27 +164,27 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 }
 
 func (r *ValidatorRegistrationRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return errors.New("no consensus phase for validator registration")
+	return fmt.Errorf("no consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return errors.New("no post consensus phase for validator registration")
+	return fmt.Errorf("no post consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
-		return nil, spectypes.DomainError, errors.New("no running duty to compute preconsensus roots and domain")
+		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
 	}
-	vr, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
+	vr, err := r.buildValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate validator registration")
+		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}
 	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, errors.New("no post consensus roots for validator registration")
+	return nil, [4]byte{}, fmt.Errorf("no post consensus roots for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
@@ -200,7 +195,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
-	vr, err := r.calculateValidatorRegistration(duty.DutySlot())
+	vr, err := r.buildValidatorRegistration(duty.DutySlot())
 	if err != nil {
 		return traces.Errorf(span, "could not calculate validator registration: %w", err)
 	}
@@ -259,18 +254,12 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	return nil
 }
 
-func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0.Slot) (*v1.ValidatorRegistration, error) {
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], r.GetShare().ValidatorPubKey[:])
+func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slot) (*v1.ValidatorRegistration, error) {
+	validatorPubKey := r.GetShare().ValidatorPubKey
 
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
-
-	rData, found, err := r.recipientsStorage.GetRecipientData(nil, r.validatorOwnerAddress)
+	feeRecipient, err := r.feeRecipientProvider.GetFeeRecipient(validatorPubKey)
 	if err != nil {
-		return nil, fmt.Errorf("get recipient data from storage: %w", err)
-	}
-	if !found {
-		return nil, fmt.Errorf("recipient data not found for owner %s", r.validatorOwnerAddress.Hex())
+		return nil, fmt.Errorf("could not get fee recipient for validator %x: %w", validatorPubKey, err)
 	}
 
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
@@ -284,11 +273,12 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 		gasLimit = defaultGasLimit
 	}
 
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
 	return &v1.ValidatorRegistration{
-		FeeRecipient: rData.FeeRecipient,
+		FeeRecipient: feeRecipient,
 		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.NetworkConfig.EpochStartTime(epoch),
-		Pubkey:       pk,
+		Pubkey:       phase0.BLSPubKey(validatorPubKey),
 	}, nil
 }
 
@@ -340,14 +330,10 @@ func (r *ValidatorRegistrationRunner) Decode(data []byte) error {
 func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode ValidatorRegistrationRunner")
+		return [32]byte{}, fmt.Errorf("could not encode ValidatorRegistrationRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
-}
-
-type recipientsStorage interface {
-	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
 }
 
 type ValidatorRegistrationSubmitter interface {
@@ -420,8 +406,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 				if !share.IsAttesting(currentEpoch + 10) {
 					continue
 				}
-				pk := phase0.BLSPubKey{}
-				copy(pk[:], share.ValidatorPubKey[:])
+				pk := phase0.BLSPubKey(share.ValidatorPubKey)
 				r, ok := s.registrations[pk]
 				if !ok {
 					// we haven't constructed the corresponding validator registration for submission yet,
@@ -495,6 +480,12 @@ type validatorRegistration struct {
 	new bool
 }
 
+// feeRecipientProvider is used by the runner to get fee recipients for validators
+type feeRecipientProvider interface {
+	GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error)
+}
+
+// validatorStore is used by VRSubmitter for getting validator data
 type validatorStore interface {
 	SelfValidators() []*ssvtypes.SSVShare
 }

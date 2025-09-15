@@ -60,7 +60,7 @@ A validator is **considered safe to sign** when:
 | 🤝 **Works in distributed staking setups** where multiple operators sign jointly. **Each validator is evaluated separately.** If the BN fails to report accurate liveness, the validator can still be marked safe via **post-consensus operator agreement.** | ⏳ **Potential delays** if the post-consensus quorum does not finalize in time. ⚙️ **Extra computational overhead**, as each validator's state must be tracked independently. | 📡 **Solo staking clients fully depend on BN-reported liveness**, which can be inaccurate due to network issues. A single **faulty BN report** can cause unnecessary downtime. |
 | 🎯 **Granular control**: Instead of disabling all validators at once, **validators can be marked safe individually** when meeting safety criteria. | 🔍 **One or more operators failing to enable BN liveness tracking could affect accurate Doppelganger detection.** | ⚡ **One faulty BN report can lead to unnecessary downtime for all validators on the client.** |
 
-# 4. Addiotional considerations
+# 4. Additional considerations
 ### 💰 Cost of Protection
 - A validator will incur penalties due to 2-3 missed epochs during Doppelganger Protection.
 - This trade-off is minor compared to the potential slashing penalties, making it an acceptable cost for securing validators.
