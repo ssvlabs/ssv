@@ -153,6 +153,9 @@ func (n *p2pNetwork) SetupHost() error {
 	}
 	n.backoffConnector = backoffConnector
 
+	// Apply pinned peers protections: persist addrs, protect & setup redial on disconnect.
+	n.pinned.attachHost(n.host, n.libConnManager)
+
 	return nil
 }
 

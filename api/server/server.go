@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	exporterHandlers "github.com/ssvlabs/ssv/api/handlers/exporter"
 	nodeHandlers "github.com/ssvlabs/ssv/api/handlers/node"
+	pinnedpeers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
 	validatorsHandlers "github.com/ssvlabs/ssv/api/handlers/validators"
 	"github.com/ssvlabs/ssv/eth/loganalyzer"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -23,11 +24,11 @@ type Server struct {
 	addr   string
 
 	node        *nodeHandlers.Node
+	pinned      *pinnedpeers.Handler
 	validators  *validatorsHandlers.Validators
 	exporter    *exporterHandlers.Exporter
 	logAnalyzer *loganalyzer.APIHandler
-
-	httpServer *http.Server
+	httpServer  *http.Server
 
 	fullExporter bool
 }
@@ -37,6 +38,7 @@ func New(
 	logger *zap.Logger,
 	addr string,
 	node *nodeHandlers.Node,
+	pinned *pinnedpeers.Handler,
 	validators *validatorsHandlers.Validators,
 	exporter *exporterHandlers.Exporter,
 	logAnalyzer *loganalyzer.APIHandler,
@@ -46,6 +48,7 @@ func New(
 		logger:       logger,
 		addr:         addr,
 		node:         node,
+		pinned:       pinned,
 		validators:   validators,
 		exporter:     exporter,
 		logAnalyzer:  logAnalyzer,
@@ -85,6 +88,24 @@ func (s *Server) Run() error {
 	// @Success 200 {object} handlers.TopicsResponse
 	// @Router /v1/node/topics [get]
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
+
+	// @Summary List pinned peers
+	// @Tags Node
+	// @Produce json
+	// @Router /v1/node/pinned-peers [get]
+	router.Get("/v1/node/pinned-peers", api.Handler(s.pinned.List))
+	// @Summary Add pinned peers
+	// @Tags Node
+	// @Accept json
+	// @Produce json
+	// @Router /v1/node/pinned-peers [post]
+	router.Post("/v1/node/pinned-peers", api.Handler(s.pinned.Add))
+	// @Summary Remove pinned peers
+	// @Tags Node
+	// @Accept json
+	// @Produce json
+	// @Router /v1/node/pinned-peers [delete]
+	router.Delete("/v1/node/pinned-peers", api.Handler(s.pinned.Remove))
 
 	// @Summary Get node health status
 	// @Description Returns the health status of the SSV node
