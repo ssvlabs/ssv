@@ -235,12 +235,12 @@ func (gc *GoClient) getProposalParallel(
 		}(client)
 	}
 
-	var lastErr error
+	var errs error
 	for range gc.clients {
 		select {
 		case res := <-resultCh:
 			if res.err != nil {
-				lastErr = res.err
+				errs = errors.Join(errs, res.err)
 				continue
 			}
 			// Got a successful response, cancel other requests and return.
@@ -255,7 +255,7 @@ func (gc *GoClient) getProposalParallel(
 		}
 	}
 
-	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d: %w", len(gc.clients), slot, lastErr)
+	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
 func (gc *GoClient) SubmitBlindedBeaconBlock(
@@ -459,7 +459,7 @@ func (gc *GoClient) submitProposalPreparationBatches(
 	case submitted == len(preparations):
 		return nil
 	case submitted > 0:
-		return fmt.Errorf("partially submitted proposal preparations: %d/%d, last error: %w", submitted, len(preparations), jointErr)
+		return fmt.Errorf("partially submitted proposal preparations: %d/%d, encountered errors: %w", submitted, len(preparations), jointErr)
 	default:
 		return fmt.Errorf("failed to submit any of %d proposal preparations: %w", len(preparations), jointErr)
 	}
