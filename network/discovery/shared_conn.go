@@ -22,10 +22,7 @@ func (s *SharedUDPConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPor
 	if !ok {
 		return 0, netip.AddrPort{}, errors.New("connection was closed")
 	}
-	l := len(packet.Data)
-	if l > len(b) {
-		l = len(b)
-	}
+	l := min(len(packet.Data), len(b))
 	copy(b[:l], packet.Data[:l])
 	return l, packet.Addr, nil
 }

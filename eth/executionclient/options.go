@@ -44,45 +44,21 @@ func WithFollowDistanceMulti(offset uint64) OptionMulti {
 	}
 }
 
-// WithConnectionTimeout sets timeout for network connection to eth1 node.
-func WithConnectionTimeout(timeout time.Duration) Option {
+// WithReqTimeout sets timeout for RPC requests to eth1 node.
+func WithReqTimeout(timeout time.Duration) Option {
 	return func(s *ExecutionClient) {
-		s.connectionTimeout = timeout
+		if timeout > 0 {
+			s.reqTimeout = timeout
+		}
 	}
 }
 
-// WithConnectionTimeoutMulti sets timeout for network connection to eth1 node.
-func WithConnectionTimeoutMulti(timeout time.Duration) OptionMulti {
+// WithReqTimeoutMulti sets timeout for RPC requests to eth1 node.
+func WithReqTimeoutMulti(timeout time.Duration) OptionMulti {
 	return func(s *MultiClient) {
-		s.connectionTimeout = timeout
-	}
-}
-
-// WithReconnectionInitialInterval sets initial reconnection interval.
-func WithReconnectionInitialInterval(interval time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.reconnectionInitialInterval = interval
-	}
-}
-
-// WithReconnectionInitialIntervalMulti sets initial reconnection interval.
-func WithReconnectionInitialIntervalMulti(interval time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.reconnectionInitialInterval = interval
-	}
-}
-
-// WithReconnectionMaxInterval sets max reconnection interval.
-func WithReconnectionMaxInterval(interval time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.reconnectionMaxInterval = interval
-	}
-}
-
-// WithReconnectionMaxIntervalMulti sets max reconnection interval.
-func WithReconnectionMaxIntervalMulti(interval time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.reconnectionMaxInterval = interval
+		if timeout > 0 {
+			s.reqTimeout = timeout
+		}
 	}
 }
 

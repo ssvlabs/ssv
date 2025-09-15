@@ -10,7 +10,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/api/handlers"
+	exporterHandlers "github.com/ssvlabs/ssv/api/handlers/exporter"
+	nodeHandlers "github.com/ssvlabs/ssv/api/handlers/node"
+	validatorsHandlers "github.com/ssvlabs/ssv/api/handlers/validators"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -19,9 +21,9 @@ type Server struct {
 	logger *zap.Logger
 	addr   string
 
-	node       *handlers.Node
-	validators *handlers.Validators
-	exporter   *handlers.Exporter
+	node       *nodeHandlers.Node
+	validators *validatorsHandlers.Validators
+	exporter   *exporterHandlers.Exporter
 	httpServer *http.Server
 
 	fullExporter bool
@@ -31,9 +33,9 @@ type Server struct {
 func New(
 	logger *zap.Logger,
 	addr string,
-	node *handlers.Node,
-	validators *handlers.Validators,
-	exporter *handlers.Exporter,
+	node *nodeHandlers.Node,
+	validators *validatorsHandlers.Validators,
+	exporter *exporterHandlers.Exporter,
 	fullExporter bool,
 ) *Server {
 	return &Server{

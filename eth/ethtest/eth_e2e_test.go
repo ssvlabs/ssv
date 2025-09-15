@@ -322,10 +322,9 @@ func TestEthExecLayer(t *testing.T) {
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
 
-			recipientData, found, err := nodeStorage.GetRecipientData(nil, testAddrAlice)
+			feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
 			require.NoError(t, err)
-			require.True(t, found)
-			require.Equal(t, testAddrBob.String(), recipientData.FeeRecipient.String())
+			require.Equal(t, testAddrBob.Bytes(), feeRecipient[:])
 		}
 
 		stopChan <- struct{}{}
