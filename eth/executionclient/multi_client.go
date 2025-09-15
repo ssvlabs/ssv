@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -58,7 +57,6 @@ type MultiClient struct {
 	followDistance             uint64 // TODO: consider reading the finalized checkpoint from consensus layer
 	reqTimeout                 time.Duration
 	healthInvalidationInterval time.Duration
-	logBatchSize               uint64
 	syncDistanceTolerance      uint64
 
 	contractAddress ethcommon.Address
@@ -86,7 +84,6 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 		logger:          zap.NewNop(),
 		followDistance:  DefaultFollowDistance,
 		reqTimeout:      DefaultReqTimeout,
-		logBatchSize:    DefaultHistoricalLogsBatchSize,
 	}
 
 	for _, opt := range opts {
@@ -214,24 +211,13 @@ func (mc *MultiClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64
 // StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
 // It spawns a go-routine that spins in a perpetual retry loop, terminating only on unrecoverable
 // interruptions (such as context cancels, client closure, etc.) as defined by isMultiClientInterruptedError
-// func.
-// Any errors encountered during log-streaming are logged, errsCh channel relays only the 1 terminal error
-// after all retries are exhausted. Both logsCh and errsCh are closed once the streaming go-routine terminates.
-// TODO: once we are on the same page here - https://github.com/ssvlabs/ssv/pull/2472#discussion_r2346770514
-// - maybe remove `errsCh` (we don't need it if we are doing retries infinitely)
-// - adjust the comment above ^ as needed
-func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs, errCh chan error) {
+// func. The logsCh is closed once the streaming go-routine terminates. Any errors encountered during
+// streaming are logged.
+func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs) {
 	logsCh = make(chan BlockLogs)
-	// All errors are buffered, so we don't block the execution of this func (waiting on the caller to
-	// handle the error before we can continue further).
-	errCh = make(chan error, 1)
 
 	go func() {
 		defer close(logsCh)
-		defer close(errCh)
-
-		const maxTries = math.MaxUint64 // infinitely many
-		tries := uint64(0)
 
 		for {
 			select {
@@ -267,17 +253,12 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh
 					return
 				}
 
-				tries++
-				if tries > maxTries {
-					errCh <- fmt.Errorf("failed to stream registry events even after %d retries: %w", tries, err)
-					return
-				}
 				mc.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
 			}
 		}
 	}()
 
-	return logsCh, errCh
+	return logsCh
 }
 
 // Healthy returns whether MultiClient has at least 1 healthy EL client (a client that responds to requests and

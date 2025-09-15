@@ -149,12 +149,11 @@ func (mr *MockProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 }
 
 // StreamLogs mocks base method.
-func (m *MockProvider) StreamLogs(ctx context.Context, fromBlock uint64) (chan BlockLogs, chan error) {
+func (m *MockProvider) StreamLogs(ctx context.Context, fromBlock uint64) chan BlockLogs {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamLogs", ctx, fromBlock)
 	ret0, _ := ret[0].(chan BlockLogs)
-	ret1, _ := ret[1].(chan error)
-	return ret0, ret1
+	return ret0
 }
 
 // StreamLogs indicates an expected call of StreamLogs.
@@ -307,12 +306,11 @@ func (mr *MockSingleClientProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 }
 
 // StreamLogs mocks base method.
-func (m *MockSingleClientProvider) StreamLogs(ctx context.Context, fromBlock uint64) (chan BlockLogs, chan error) {
+func (m *MockSingleClientProvider) StreamLogs(ctx context.Context, fromBlock uint64) chan BlockLogs {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamLogs", ctx, fromBlock)
 	ret0, _ := ret[0].(chan BlockLogs)
-	ret1, _ := ret[1].(chan error)
-	return ret0, ret1
+	return ret0
 }
 
 // StreamLogs indicates an expected call of StreamLogs.

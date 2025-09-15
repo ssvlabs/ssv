@@ -64,7 +64,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	const customFollowDistance = uint64(10)
 	const customTimeout = 100 * time.Millisecond
 	const customHealthInvalidationInterval = 50 * time.Millisecond
-	const customLogBatchSize = 11
 	const customSyncDistanceTolerance = 12
 
 	mc, err := NewMulti(
@@ -77,14 +76,12 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
 		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
 	)
-	mc.logBatchSize = customLogBatchSize
 	require.NoError(t, err)
 	require.NotNil(t, mc)
 	require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
 	require.EqualValues(t, customFollowDistance, mc.followDistance)
 	require.EqualValues(t, customTimeout, mc.reqTimeout)
 	require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
-	require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
 	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
 }
 
@@ -338,7 +335,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			closed:      make(chan struct{}),
 		}
 
-		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+		logsCh := mc.StreamLogs(ctx, 200)
 
 		// Expecting two logs: 200, 201, and then logsCh and errsCh should be closed (with no errors on errsCh).
 		receivedLogs := make([]BlockLogs, 0, 2)
@@ -351,9 +348,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 		require.Len(t, receivedLogs, 2, "expected to receive two logs")
 		require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
 		require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
-		for err := range errsCh {
-			require.Failf(t, err.Error(), "got unexpected error on errsCh")
-		}
 	})
 	t.Run("occasional no-progress, nil error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -417,7 +411,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			closed:      make(chan struct{}),
 		}
 
-		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+		logsCh := mc.StreamLogs(ctx, 200)
 
 		blk1, ok1 := <-logsCh
 		require.True(t, ok1, "expected to receive the first log from channel")
@@ -425,10 +419,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 
 		_, open := <-logsCh
 		require.False(t, open, "logs channel should be closed after all logs are received")
-
-		for err := range errsCh {
-			require.NoError(t, err, "unexpected error received")
-		}
 	})
 	t.Run("failover due to error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -487,7 +477,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			closed:      make(chan struct{}),
 		}
 
-		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+		logsCh := mc.StreamLogs(ctx, 200)
 
 		receivedLogs := make([]BlockLogs, 0, 2)
 		var wg sync.WaitGroup
@@ -507,10 +497,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 
 		_, open := <-logsCh
 		require.False(t, open, "logs channel should be closed after all logs are received")
-
-		for err := range errsCh {
-			require.NoError(t, err, "unexpected error received")
-		}
 	})
 	t.Run("multiple failover attempts", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -582,7 +568,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			closed:      make(chan struct{}),
 		}
 
-		logsCh, errsCh := mc.StreamLogs(ctx, 200)
+		logsCh := mc.StreamLogs(ctx, 200)
 
 		blk1, ok1 := <-logsCh
 		require.True(t, ok1, "expected to receive the first log from channel")
@@ -590,10 +576,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 
 		_, open := <-logsCh
 		require.False(t, open, "logs channel should be closed after all logs are received")
-
-		for err := range errsCh {
-			require.NoError(t, err, "unexpected error received")
-		}
 	})
 }
 
@@ -632,7 +614,7 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 		closed:      make(chan struct{}),
 	}
 
-	logsCh, errsCh := mc.StreamLogs(ctx, 200)
+	logsCh := mc.StreamLogs(ctx, 200)
 
 	// Expecting two logs: 200, 201, and then logsCh and errsCh should be closed (with no errors on errsCh).
 	receivedLogs := make([]BlockLogs, 0, 2)
@@ -645,9 +627,6 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 	require.Len(t, receivedLogs, 2, "expected to receive two logs")
 	require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
 	require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
-	for err := range errsCh {
-		require.Failf(t, err.Error(), "got unexpected error on errsCh")
-	}
 }
 
 func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
@@ -700,7 +679,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			closed:      make(chan struct{}),
 		}
 
-		logsCh, _ := mc.StreamLogs(ctx, 200)
+		logsCh := mc.StreamLogs(ctx, 200)
 		// Make sure logsCh is closed
 		for range logsCh {
 			require.FailNow(t, "expected to receive no logs")
@@ -758,7 +737,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			closed:      make(chan struct{}),
 		}
 
-		logsCh, _ := mc.StreamLogs(ctx, 200)
+		logsCh := mc.StreamLogs(ctx, 200)
 		// Make sure logsCh is closed
 		for range logsCh {
 			require.FailNow(t, "expected to receive no logs")
@@ -813,7 +792,7 @@ func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
 			closed:      make(chan struct{}),
 		}
 
-		logsCh, _ := mc.StreamLogs(ctx, 200)
+		logsCh := mc.StreamLogs(ctx, 200)
 		// Make sure logsCh is closed
 		for range logsCh {
 			require.FailNow(t, "expected to receive no logs")

@@ -4,7 +4,6 @@ package executionclient
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -26,7 +25,7 @@ import (
 
 type Provider interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logsCh <-chan BlockLogs, errsCh <-chan error, err error)
-	StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs, errsCh chan error)
+	StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs)
 	Filterer() (*contract.ContractFilterer, error)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
 	ChainID(ctx context.Context) (*big.Int, error)
@@ -119,7 +118,11 @@ func (ec *ExecutionClient) Close() error {
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logsCh <-chan BlockLogs, errorsCh <-chan error, err error) {
+func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (
+	logsCh <-chan BlockLogs,
+	errsCh <-chan error,
+	err error,
+) {
 	start := time.Now()
 	currentBlock, err := ec.client.BlockNumber(ctx)
 	recordSingleClientRequest(ctx, ec.logger, "BlockNumber", ec.nodeAddr, time.Since(start), err)
@@ -134,23 +137,30 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, nil, ErrNothingToSync
 	}
 
-	logsCh, errorsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 	return
 }
 
-// Calls FilterLogs multiple times and batches results to avoid fetching an enormous number of events.
-func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan BlockLogs, <-chan error) {
-	logCh := make(chan BlockLogs, defaultLogBuf)
-	// All errors are buffered, so we don't block the execution of this func (waiting on the caller to
-	// handle the error before we can continue further).
-	errCh := make(chan error, 1)
+// Calls FilterLogs multiple times (in batches) gradually sending the results on logCh to avoid fetching
+// an enormous number of events. If an error is encountered, the fetching terminates and the error is sent
+// on errCh. Both logCh and errCh are closed upon this function termination.
+func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (logCh chan BlockLogs, errCh chan error) {
+	// All errors are buffered so we don't block the execution of this func (waiting on the caller to
+	// handle the error before we can continue further) + it provides more flexibility for the caller
+	// allowing him to process logCh before continuing to checking the errCh channel.
+	errCh = make(chan error, 1) // we send 1 error at most on this channel
 
 	if startBlock > endBlock {
+		logCh = make(chan BlockLogs)
 		errCh <- ErrBadInput
 		close(logCh)
 		close(errCh)
 		return logCh, errCh // must return a non-nil closed logCh channel to prevent the caller misusing it
 	}
+
+	const maxBufferSize = 8 * 1024
+	bufferSize := min(endBlock-startBlock+1, maxBufferSize)
+	logCh = make(chan BlockLogs, bufferSize)
 
 	go func() {
 		defer close(logCh)
@@ -296,24 +306,13 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 // StreamLogs subscribes to events emitted by the Ethereum SSV contract(s) starting at fromBlock.
 // It spawns a go-routine that spins in a perpetual retry loop, terminating only on unrecoverable
 // interruptions (such as context cancels, client closure, etc.) as defined by isSingleClientInterruptedError
-// func.
-// Any errors encountered during log-streaming are logged, errsCh channel relays only the 1 terminal error
-// after all retries are exhausted. Both logsCh and errsCh are closed once the streaming go-routine terminates.
-// TODO: once we are on the same page here - https://github.com/ssvlabs/ssv/pull/2472#discussion_r2346770514
-// - maybe remove `errsCh` (we don't need it if we are doing retries infinitely)
-// - adjust the comment above ^ as needed
-func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs, errsCh chan error) {
+// func. The logsCh is closed once the streaming go-routine terminates. Any errors encountered during
+// streaming are logged.
+func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan BlockLogs) {
 	logsCh = make(chan BlockLogs)
-	// All errors are buffered, so we don't block the execution of this func (waiting on the caller to
-	// handle the error before we can continue further).
-	errCh := make(chan error, 1)
 
 	go func() {
 		defer close(logsCh)
-		defer close(errCh)
-
-		const maxTries = math.MaxUint64 // infinitely many
-		tries := uint64(0)
 
 		for {
 			select {
@@ -336,18 +335,12 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (lo
 					err = fmt.Errorf("streamLogsToChan halted without an error")
 				}
 
-				tries++
-				if tries > maxTries {
-					errCh <- fmt.Errorf("failed to stream registry events even after %d retries: %w", tries, err)
-					return
-				}
-
 				ec.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
 			}
 		}
 	}()
 
-	return logsCh, errCh
+	return logsCh
 }
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.

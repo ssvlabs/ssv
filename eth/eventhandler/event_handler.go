@@ -109,16 +109,15 @@ func New(
 func (eh *EventHandler) HandleBlockEventsStream(
 	ctx context.Context,
 	logStreamCh <-chan executionclient.BlockLogs,
-	logStreamErrsCh <-chan error,
 	executeTasks bool,
-) (lastProcessedBlock uint64, err error) {
+) (lastProcessedBlock uint64, progressed bool, err error) {
 	for blockLogs := range logStreamCh {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
 		tasks, err := eh.processBlockEvents(ctx, blockLogs)
 		if err != nil {
-			return lastProcessedBlock, fmt.Errorf("process block events: %w", err)
+			return lastProcessedBlock, progressed, fmt.Errorf("process block events: %w", err)
 		}
 
 		logger.Debug("processed events from block",
@@ -126,6 +125,7 @@ func (eh *EventHandler) HandleBlockEventsStream(
 			fields.Took(time.Since(start)),
 		)
 
+		progressed = true
 		lastProcessedBlock = blockLogs.BlockNumber
 
 		metrics.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
@@ -147,12 +147,7 @@ func (eh *EventHandler) HandleBlockEventsStream(
 		}
 	}
 
-	var errs error
-	for err := range logStreamErrsCh {
-		errs = errors.Join(errs, err)
-	}
-
-	return lastProcessedBlock, errs
+	return lastProcessedBlock, progressed, nil
 }
 
 func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {

@@ -1145,8 +1145,15 @@ func syncContractEvents(
 		switch {
 		case errors.Is(err, executionclient.ErrNothingToSync):
 			// Nothing was synced, keep fromBlock as is.
+			logger.Info("finished syncing historical events, nothing to sync",
+				zap.Uint64("from_block", fromBlock.Uint64()),
+			)
 		case err == nil:
-			// Advance fromBlock to the block after lastProcessedBlock.
+			// Successfully synced up to a fresh block, advance fromBlock to the block after lastProcessedBlock.
+			logger.Info("finished syncing historical events to a fresh block",
+				zap.Uint64("from_block", fromBlock.Uint64()),
+				zap.Uint64("last_processed_block", lastProcessedBlock),
+			)
 			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
 		default:
 			logger.Fatal("failed to sync historical registry events", zap.Error(err))

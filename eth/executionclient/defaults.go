@@ -10,5 +10,4 @@ const (
 	DefaultFollowDistance             = 8
 	// TODO ALAN: revert
 	DefaultHistoricalLogsBatchSize = 200
-	defaultLogBuf                  = 8 * 1024
 )

@@ -429,7 +429,7 @@ func TestStreamLogs(t *testing.T) {
 		err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance))
 		require.NoError(t, err)
 
-		logs, errsCh := env.client.StreamLogs(env.ctx, 0)
+		logs := env.client.StreamLogs(env.ctx, 0)
 		var streamedLogs []ethtypes.Log
 		var streamedLogsCount atomic.Int64
 		go func() {
@@ -437,13 +437,6 @@ func TestStreamLogs(t *testing.T) {
 			for block := range logs {
 				streamedLogs = append(streamedLogs, block.Logs...)
 				streamedLogsCount.Add(int64(len(block.Logs)))
-			}
-		}()
-		go func() {
-			for err := range errsCh {
-				if err != nil {
-					panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
-				}
 			}
 		}()
 
@@ -506,7 +499,7 @@ func TestStreamLogs(t *testing.T) {
 		defer cancel()
 
 		// Start streaming logs
-		logsCh, errsCh := env.client.StreamLogs(ctx, 0)
+		logsCh := env.client.StreamLogs(ctx, 0)
 
 		// Set up a channel to detect when the log channel is closed
 		done := make(chan struct{})
@@ -514,11 +507,6 @@ func TestStreamLogs(t *testing.T) {
 			// This goroutine should exit when the log channel is closed
 			for range logsCh {
 				// Just consume logsCh
-			}
-			for err := range errsCh {
-				if err != nil {
-					panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
-				}
 			}
 			close(done)
 		}()
@@ -551,7 +539,7 @@ func TestStreamLogs(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start streaming logs
-		logsCh, errsCh := env.client.StreamLogs(env.ctx, 0)
+		logsCh := env.client.StreamLogs(env.ctx, 0)
 
 		// Set up a channel to detect when the log channel is closed
 		done := make(chan struct{})
@@ -559,11 +547,6 @@ func TestStreamLogs(t *testing.T) {
 			// This goroutine should exit when the log channel is closed
 			for range logsCh {
 				// Just consume logsCh
-			}
-			for err := range errsCh {
-				if err != nil {
-					panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
-				}
 			}
 			close(done)
 		}()
@@ -800,14 +783,7 @@ func TestSimSSV(t *testing.T) {
 	err = env.createClient(WithLogger(logger), WithFollowDistance(0))
 	require.NoError(t, err)
 
-	logs, errsCh := env.client.StreamLogs(env.ctx, 0)
-	go func() {
-		for err := range errsCh {
-			if err != nil {
-				panic(fmt.Errorf("got unexpected error from errsCh: %w", err))
-			}
-		}
-	}()
+	logs := env.client.StreamLogs(env.ctx, 0)
 
 	// Emit event OperatorAdded
 	tx, err := boundContract.RegisterOperator(env.auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"fmt"
 	"testing"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -141,75 +140,11 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 				eventsCh <- blockLogs
 			}
 		}()
-		errsCh := make(chan error)
-		go func() {
-			defer close(errsCh)
-		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, true)
+		lastProcessedBlock, progressed, err := eh.HandleBlockEventsStream(ctx, eventsCh, true)
+		require.NoError(t, err)
 		require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
-		require.NoError(t, err)
-
-		logs := observedLogs.All()
-		observedLogsFlow := make([]string, 0, len(logs))
-		for _, entry := range logs {
-			observedLogsFlow = append(observedLogsFlow, entry.Message)
-		}
-		happyFlow := []string{
-			"setting up validator controller",
-			"malformed event: failed to verify signature",
-			"processed events from block",
-		}
-		require.Equal(t, happyFlow, observedLogsFlow)
-	})
-
-	t.Run("errors during processing", func(t *testing.T) {
-		logger, observedLogs := setupLogsCapture()
-
-		// Create operators rsa keys
-		ops, err := createOperators(1, 0)
-		require.NoError(t, err)
-
-		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
-		require.NoError(t, err)
-
-		for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
-			od := &storage.OperatorData{
-				PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
-				OwnerAddress: ethcommon.Address{},
-				ID:           id,
-			}
-
-			found, err := eh.nodeStorage.SaveOperatorData(nil, od)
-			require.NoError(t, err)
-			require.False(t, found)
-		}
-
-		eventsCh := make(chan executionclient.BlockLogs)
-		go func() {
-			defer close(eventsCh)
-
-			logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-			events := []ethtypes.Log{
-				logValidatorAdded,
-			}
-
-			for _, blockLogs := range executionclient.PackLogs(events) {
-				eventsCh <- blockLogs
-			}
-		}()
-		errsCh := make(chan error)
-		go func() {
-			errsCh <- fmt.Errorf("some error 1")
-			errsCh <- fmt.Errorf("some error 2")
-			defer close(errsCh)
-		}()
-
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, errsCh, true)
-		require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
-		require.Error(t, err)
-		require.ErrorContains(t, err, "some error 1")
-		require.ErrorContains(t, err, "some error 2")
+		require.True(t, progressed)
 
 		logs := observedLogs.All()
 		observedLogsFlow := make([]string, 0, len(logs))
