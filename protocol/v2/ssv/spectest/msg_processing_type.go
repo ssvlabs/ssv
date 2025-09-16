@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,9 +13,10 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -26,7 +26,6 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type MsgProcessingSpecTest struct {
@@ -200,47 +199,8 @@ func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 }
 
 func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name string, testType string) {
-	var r runner.Runner
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		r = &runner.CommitteeRunner{}
-	case *runner.AggregatorRunner:
-		r = &runner.AggregatorRunner{}
-	case *runner.ProposerRunner:
-		r = &runner.ProposerRunner{}
-	case *runner.SyncCommitteeAggregatorRunner:
-		r = &runner.SyncCommitteeAggregatorRunner{}
-	case *runner.ValidatorRegistrationRunner:
-		r = &runner.ValidatorRegistrationRunner{}
-	case *runner.VoluntaryExitRunner:
-		r = &runner.VoluntaryExitRunner{}
-	default:
-		t.Fatalf("unknown runner type")
-	}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
-	require.NoError(t, err)
-	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
-	require.NoError(t, err)
+	r := runnerForTest(t, test.Runner, name, testType)
 
-	// override base-runner NetworkConfig now
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		r.(*runner.CommitteeRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-	case *runner.AggregatorRunner:
-		r.(*runner.AggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-	case *runner.ProposerRunner:
-		r.(*runner.ProposerRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-	case *runner.SyncCommitteeAggregatorRunner:
-		r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-	case *runner.ValidatorRegistrationRunner:
-		r.(*runner.ValidatorRegistrationRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-	case *runner.VoluntaryExitRunner:
-		r.(*runner.VoluntaryExitRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-	default:
-		t.Fatalf("unknown runner type")
-	}
-
-	// override
 	test.PostDutyRunnerState = r
 
 	root, err := r.GetRoot()
