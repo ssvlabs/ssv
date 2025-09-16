@@ -28,9 +28,19 @@ import (
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
-// Each validator has multiple DutyRunners, for each duty type.
+// Each validator has multiple DutyRunners - one per duty-type.
 type Validator struct {
 	logger *zap.Logger
+
+	// mtx ensures the consistent Validator lifecycle (the correct usage of Start and Stop methods),
+	// as well as syncs access to validator-managed data (such as Queues) across go-routines.
+	mtx *sync.RWMutex
+
+	// Started reflects whether this validator has already been started. Once the Validator has been stopped, it
+	// cannot be restarted.
+	started bool
+	// Stopped reflects whether this validator has already been stopped.
+	stopped bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -43,19 +53,9 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	// mtx protects access to Queues.
-	mtx    *sync.RWMutex
 	Queues map[spectypes.RunnerRole]queue.Queue
 
 	DutyRunners runner.ValidatorDutyRunners
-
-	// startedMtx together with started flag ensures that Validator can be started only once until it is stopped,
-	// after Validator has been stopped it can be started again.
-	startedMtx sync.Mutex
-	// Started reflects whether this validator has already been started. Note, Validator struct can still be used
-	// for various purposes even if it hasn't been started, or has already been stopped - this shouldn't result into
-	// fatal inconsistencies, but we might want to fix that in the future.
-	started bool
 
 	messageValidator validation.MessageValidator
 }

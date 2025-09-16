@@ -9,11 +9,15 @@ import (
 
 // Start starts Validator.
 func (v *Validator) Start() (started bool, err error) {
-	v.startedMtx.Lock()
-	defer v.startedMtx.Unlock()
+	v.mtx.Lock()
+	defer v.mtx.Unlock()
+
+	if v.stopped {
+		return false, fmt.Errorf("stopped validator cannot be restarted")
+	}
 
 	if v.started {
-		return false, nil
+		return false, nil // nothing to do
 	}
 
 	n, ok := v.Network.(p2p.Subscriber)
@@ -35,14 +39,14 @@ func (v *Validator) Start() (started bool, err error) {
 
 // Stop stops Validator.
 func (v *Validator) Stop() {
-	v.startedMtx.Lock()
-	defer v.startedMtx.Unlock()
+	v.mtx.Lock()
+	defer v.mtx.Unlock()
 
-	if !v.started {
-		return
+	if v.stopped || !v.started {
+		return // nothing to do
 	}
 
 	v.cancel()
 
-	v.started = false
+	v.stopped = true
 }
