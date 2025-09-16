@@ -34,7 +34,7 @@ type Validator struct {
 
 	// mtx ensures the consistent Validator lifecycle (the correct usage of Start and Stop methods),
 	// as well as syncs access to validator-managed data (such as Queues) across go-routines.
-	mtx *sync.RWMutex
+	mtx sync.RWMutex
 
 	// Started reflects whether this validator has already been started. Once the Validator has been stopped, it
 	// cannot be restarted.
@@ -64,7 +64,6 @@ type Validator struct {
 func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
 	v := &Validator{
 		logger:           logger.Named(log.NameValidator).With(fields.PubKey(options.SSVShare.ValidatorPubKey[:])),
-		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
 		cancel:           cancel,
 		NetworkConfig:    options.NetworkConfig,
