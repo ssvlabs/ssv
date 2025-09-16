@@ -2042,6 +2042,13 @@ func (m *mockValidatorStore) Validator(pubKey []byte) (*ssvtypes.SSVShare, bool)
 	return nil, false
 }
 
+func (m *mockValidatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (spectypes.ValidatorPK, bool) {
+	if s, ok := m.byIndex[index]; ok && s != nil {
+		return s.ValidatorPubKey, true
+	}
+	return spectypes.ValidatorPK{}, false
+}
+
 func (m *mockValidatorStore) Validators() []*ssvtypes.SSVShare {
 	out := make([]*ssvtypes.SSVShare, 0, len(m.byIndex))
 	for _, s := range m.byIndex {
