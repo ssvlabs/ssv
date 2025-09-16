@@ -15,7 +15,7 @@ go 1.24
 
 require (
 	github.com/alecthomas/kong v1.8.1
-	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
+	github.com/attestantio/go-eth2-client v0.26.1-0.20250829122455-ff89a2135a43 // TODO(fulu): Update to release tag once Fulu mainnet is scheduled
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/docker/docker v28.3.2+incompatible
 	github.com/docker/go-connections v0.5.0
@@ -29,9 +29,9 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/sourcegraph/conc v0.3.0
-	github.com/ssvlabs/eth2-key-manager v1.5.5
+	github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/ssvlabs/ssv v1.2.1-0.20250904093034-64dc248758c3
-	github.com/ssvlabs/ssv-spec v1.1.3
+	github.com/ssvlabs/ssv-spec v1.1.4-0.20250915143636-11b7a193cd88 // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/valyala/fasthttp v1.58.0
@@ -157,3 +157,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 )
+
+replace github.com/ssvlabs/ssv => ../

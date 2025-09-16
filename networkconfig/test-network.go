@@ -56,6 +56,11 @@ var TestNetwork = &Network{
 				PreviousVersion: phase0.Version{4, 0, 0, 0},
 				CurrentVersion:  phase0.Version{5, 0, 0, 0},
 			},
+			spec.DataVersionFulu: {
+				Epoch:           phase0.Epoch(6),
+				PreviousVersion: phase0.Version{5, 0, 0, 0},
+				CurrentVersion:  phase0.Version{6, 0, 0, 0},
+			},
 		},
 	},
 	SSV: &SSV{

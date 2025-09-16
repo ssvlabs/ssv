@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -423,7 +422,6 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			networkConfig.Beacon.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 

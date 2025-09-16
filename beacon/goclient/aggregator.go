@@ -35,8 +35,14 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
 
+	// Explicitly set Index field as beacon nodes may return inconsistent values.
+	// Pre-Electra: Index = committeeIndex | Electra+ (EIP-7549): Index = 0
 	dataVersion, _ := gc.beaconConfig.ForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
-	if dataVersion < spec.DataVersionElectra {
+	if dataVersion >= spec.DataVersionElectra {
+		// EIP-7549: For Electra and later, index must always be 0
+		attData.Index = 0
+	} else {
+		// Pre-Electra uses committee index
 		attData.Index = committeeIndex
 	}
 
@@ -76,79 +82,80 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
 
-	switch aggDataResp.Data.Version {
-	case spec.DataVersionElectra:
-		if aggDataResp.Data.Electra == nil {
-			gc.log.Error(clNilResponseForkDataErrMsg,
-				zap.String("api", "AggregateAttestation"),
-			)
-			return nil, DataVersionNil, fmt.Errorf("aggregate attestation electra data is nil")
-		}
-		return &electra.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       aggDataResp.Data.Electra,
-			SelectionProof:  selectionProof,
-		}, aggDataResp.Data.Version, nil
-	case spec.DataVersionDeneb:
-		if aggDataResp.Data.Deneb == nil {
-			gc.log.Error(clNilResponseForkDataErrMsg,
-				zap.String("api", "AggregateAttestation"),
-			)
-			return nil, DataVersionNil, fmt.Errorf("aggregate attestation deneb data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       aggDataResp.Data.Deneb,
-			SelectionProof:  selectionProof,
-		}, aggDataResp.Data.Version, nil
-	case spec.DataVersionCapella:
-		if aggDataResp.Data.Capella == nil {
-			gc.log.Error(clNilResponseForkDataErrMsg,
-				zap.String("api", "AggregateAttestation"),
-			)
-			return nil, DataVersionNil, fmt.Errorf("aggregate attestation capella data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       aggDataResp.Data.Capella,
-			SelectionProof:  selectionProof,
-		}, aggDataResp.Data.Version, nil
-	case spec.DataVersionBellatrix:
-		if aggDataResp.Data.Bellatrix == nil {
-			gc.log.Error(clNilResponseForkDataErrMsg,
-				zap.String("api", "AggregateAttestation"),
-			)
-			return nil, DataVersionNil, fmt.Errorf("aggregate attestation bellatrix data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       aggDataResp.Data.Bellatrix,
-			SelectionProof:  selectionProof,
-		}, aggDataResp.Data.Version, nil
-	case spec.DataVersionAltair:
-		if aggDataResp.Data.Altair == nil {
-			gc.log.Error(clNilResponseForkDataErrMsg,
-				zap.String("api", "AggregateAttestation"),
-			)
-			return nil, DataVersionNil, fmt.Errorf("aggregate attestation altair data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       aggDataResp.Data.Altair,
-			SelectionProof:  selectionProof,
-		}, aggDataResp.Data.Version, nil
-	default:
+	version := aggDataResp.Data.Version
+	switch version {
+	case spec.DataVersionPhase0:
 		if aggDataResp.Data.Phase0 == nil {
-			gc.log.Error(clNilResponseForkDataErrMsg,
-				zap.String("api", "AggregateAttestation"),
-			)
-			return nil, DataVersionNil, fmt.Errorf("aggregate attestation phase0 data is nil")
+			gc.log.Error(clNilResponseForkDataErrMsg, zap.String("api", "AggregateAttestation"))
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation %s data is nil", version.String())
 		}
 		return &phase0.AggregateAndProof{
 			AggregatorIndex: index,
 			Aggregate:       aggDataResp.Data.Phase0,
 			SelectionProof:  selectionProof,
-		}, aggDataResp.Data.Version, nil
+		}, version, nil
+	case spec.DataVersionAltair:
+		if aggDataResp.Data.Altair == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg, zap.String("api", "AggregateAttestation"))
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation %s data is nil", version.String())
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Altair,
+			SelectionProof:  selectionProof,
+		}, version, nil
+	case spec.DataVersionBellatrix:
+		if aggDataResp.Data.Bellatrix == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg, zap.String("api", "AggregateAttestation"))
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation %s data is nil", version.String())
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Bellatrix,
+			SelectionProof:  selectionProof,
+		}, version, nil
+	case spec.DataVersionCapella:
+		if aggDataResp.Data.Capella == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg, zap.String("api", "AggregateAttestation"))
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation %s data is nil", version.String())
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Capella,
+			SelectionProof:  selectionProof,
+		}, version, nil
+	case spec.DataVersionDeneb:
+		if aggDataResp.Data.Deneb == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg, zap.String("api", "AggregateAttestation"))
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation %s data is nil", version.String())
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Deneb,
+			SelectionProof:  selectionProof,
+		}, version, nil
+	case spec.DataVersionElectra:
+		if aggDataResp.Data.Electra == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg, zap.String("api", "AggregateAttestation"))
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation %s data is nil", version.String())
+		}
+		return &electra.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Electra,
+			SelectionProof:  selectionProof,
+		}, version, nil
+	case spec.DataVersionFulu:
+		if aggDataResp.Data.Fulu == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg, zap.String("api", "AggregateAttestation"))
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation %s data is nil", version.String())
+		}
+		return &electra.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Fulu,
+			SelectionProof:  selectionProof,
+		}, version, nil
+	default:
+		return nil, DataVersionNil, fmt.Errorf("unknown data version: %d", version)
 	}
 }
 
