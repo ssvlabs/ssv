@@ -202,13 +202,13 @@ func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, indices []phase
 // toParticipantsRangeEntry converts an index-based entry into a ParticipantsRangeEntry
 // by resolving the validator's pubkey from the registry store.
 func (e *Exporter) toParticipantsRangeEntry(ent dutytracer.ParticipantsRangeIndexEntry) (qbftstorage.ParticipantsRangeEntry, error) {
-	share, found := e.validators.ValidatorByIndex(ent.Index)
+	pk, found := e.validators.ValidatorPubkey(ent.Index)
 	if !found {
 		return qbftstorage.ParticipantsRangeEntry{}, fmt.Errorf("validator not found by index: %d", ent.Index)
 	}
 	return qbftstorage.ParticipantsRangeEntry{
 		Slot:    ent.Slot,
-		PubKey:  share.ValidatorPubKey,
+		PubKey:  pk,
 		Signers: ent.Signers,
 	}, nil
 }
