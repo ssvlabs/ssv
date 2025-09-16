@@ -11,6 +11,12 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 )
 
+type filterRequest interface {
+	pubKeys() []spectypes.ValidatorPK
+	indices() []uint64
+	hasFilters() bool
+}
+
 type decided struct {
 	Round        uint64                 `json:"round"`
 	BeaconRoot   phase0.Root            `json:"ssvRoot"`

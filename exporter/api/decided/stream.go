@@ -43,7 +43,7 @@ func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws 
 
 	return func(msg dutytracer.DecidedInfo) {
 		// backfill pubkey for retro-compatibility until we deprecate it
-		share, found := validators.ValidatorByIndex(msg.Index)
+		pk, found := validators.ValidatorPubkey(msg.Index)
 		if !found {
 			logger.Debug("decided listener: validator not found by index", fields.ValidatorIndex(msg.Index))
 			return
@@ -51,12 +51,12 @@ func NewDecidedListener(logger *zap.Logger, domainType spectypes.DomainType, ws 
 
 		participation := qbftstorage.Participation{
 			ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
-				PubKey:  share.ValidatorPubKey,
+				PubKey:  pk,
 				Slot:    msg.Slot,
 				Signers: msg.Signers,
 			},
 			Role:   msg.Role,
-			PubKey: share.ValidatorPubKey,
+			PubKey: pk,
 		}
 
 		key := fmt.Sprintf("%d:%d:%d", msg.Index, msg.Slot, len(msg.Signers))

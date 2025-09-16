@@ -32,12 +32,19 @@ type decidedRequest struct {
 	Indices api.Uint64Slice `json:"indices"`
 }
 
-func (r *decidedRequest) parsePubkeys() []spectypes.ValidatorPK {
-	pubKeys := make([]spectypes.ValidatorPK, len(r.PubKeys))
-	for i, pk := range r.PubKeys {
-		copy(pubKeys[i][:], pk)
-	}
-	return pubKeys
+// implements filterRequest interface
+func (r *decidedRequest) pubKeys() []spectypes.ValidatorPK {
+	return parsePubkeysSlice(r.PubKeys)
+}
+
+// implements filterRequest interface
+func (r *decidedRequest) indices() []uint64 {
+	return r.Indices
+}
+
+// implements filterRequest interface
+func (r *decidedRequest) hasFilters() bool {
+	return len(r.PubKeys) > 0 || len(r.Indices) > 0
 }
 
 func toParticipantResponse(role spectypes.BeaconRole, entry qbftstorage.ParticipantsRangeEntry) *participantResponse {
