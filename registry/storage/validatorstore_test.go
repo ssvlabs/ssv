@@ -1413,7 +1413,7 @@ func TestValidatorStore_FeeRecipients(t *testing.T) {
 
 		// Manually corrupt the internal state (simulate partial update)
 		store.mu.Lock()
-		store.byValidatorPubkey[share.ValidatorPubKey] = share.ValidatorIndex
+		store.pubkeyToIndex[share.ValidatorPubKey] = share.ValidatorIndex
 		// Don't add to byValidatorIndex to simulate corruption
 		store.mu.Unlock()
 
@@ -1422,4 +1422,45 @@ func TestValidatorStore_FeeRecipients(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "validator share is nil")
 	})
+}
+
+// Ensures the index->pubkey mapping is permanent and accessible
+// even after shares are removed or the transient state is dropped.
+func TestValidatorStore_PermanentIndexToPubkeyMapping(t *testing.T) {
+	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+	store := createValidatorStore(shareMap)
+
+	// Add a share
+	share := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  phase0.ValidatorIndex(42),
+			ValidatorPubKey: spectypes.ValidatorPK{0xAA, 0xBB, 0xCC},
+			Committee:       []*spectypes.ShareMember{{Signer: 1}},
+		},
+		Status:       eth2apiv1.ValidatorStateActiveOngoing,
+		OwnerAddress: common.HexToAddress("0x1"),
+	}
+
+	shareMap[share.ValidatorPubKey] = share
+	require.NoError(t, store.handleSharesAdded(share))
+
+	// Mapping exists right after add
+	pk, ok := store.ValidatorPubkey(share.ValidatorIndex)
+	require.True(t, ok)
+	require.Equal(t, share.ValidatorPubKey, pk)
+
+	// Remove the share from store; mapping must remain
+	delete(shareMap, share.ValidatorPubKey)
+	require.NoError(t, store.handleShareRemoved(share))
+
+	pk, ok = store.ValidatorPubkey(share.ValidatorIndex)
+	require.True(t, ok)
+	require.Equal(t, share.ValidatorPubKey, pk)
+
+	// Drop transient state; mapping must remain
+	store.handleDrop()
+
+	pk, ok = store.ValidatorPubkey(share.ValidatorIndex)
+	require.True(t, ok)
+	require.Equal(t, share.ValidatorPubKey, pk)
 }
