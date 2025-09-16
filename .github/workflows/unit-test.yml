@@ -2,6 +2,10 @@ name: Unit tests
 
 
 on:
+  push:
+    branches:
+      - stage
+      - main
   pull_request:
     types: [opened, synchronize]
 

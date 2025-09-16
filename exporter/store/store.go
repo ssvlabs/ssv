@@ -6,10 +6,11 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/hashicorp/go-multierror"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -31,31 +32,33 @@ func New(db basedb.Database) *DutyTraceStore {
 	}
 }
 
-func (s *DutyTraceStore) SaveValidatorDuty(dto *model.ValidatorDutyTrace) error {
+func (s *DutyTraceStore) SaveValidatorDuty(dto *exporter.ValidatorDutyTrace) error {
 	role, slot, index := dto.Role, dto.Slot, dto.Validator
 	prefix := s.makeValidatorPrefix(slot, role, index)
 
+	ctx := fmt.Sprintf("role=%s slot=%d index=%d", role, slot, index)
 	value, err := dto.MarshalSSZ()
 	if err != nil {
-		return fmt.Errorf("marshall validator duty: %w", err)
+		return fmt.Errorf("marshal validator duty (%s): %w", ctx, err)
 	}
 
 	if err = s.db.Set(prefix, nil, value); err != nil {
-		return fmt.Errorf("save validator duty: %w", err)
+		return fmt.Errorf("save validator duty (%s): %w", ctx, err)
 	}
 
 	return nil
 }
 
-func (s *DutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace) error {
+func (s *DutyTraceStore) SaveValidatorDuties(duties []*exporter.ValidatorDutyTrace) error {
 	return s.db.SetMany(nil, len(duties), func(i int) (basedb.Obj, error) {
-		value, err := duties[i].MarshalSSZ()
-		if err != nil {
-			return basedb.Obj{}, fmt.Errorf("marshall committee duty: %w", err)
-		}
 		role := duties[i].Role
 		slot := duties[i].Slot
 		index := duties[i].Validator
+		ctx := fmt.Sprintf("role=%s slot=%d index=%d", role, slot, index)
+		value, err := duties[i].MarshalSSZ()
+		if err != nil {
+			return basedb.Obj{}, fmt.Errorf("marshal validator duty (%s): %w", ctx, err)
+		}
 
 		key := s.makeValidatorPrefix(slot, role, index)
 		return basedb.Obj{
@@ -65,79 +68,94 @@ func (s *DutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace)
 	})
 }
 
-func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
+func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
 	prefix := s.makeValidatorPrefix(slot, role, index)
+	ctx := fmt.Sprintf("role=%s slot=%d index=%d", role, slot, index)
+
 	obj, found, err := s.db.Get(prefix, nil)
 	if err != nil {
-		return nil, fmt.Errorf("get validator duty: %w", err)
+		return nil, fmt.Errorf("get validator duty (%s): %w", ctx, err)
 	}
 	if !found {
-		return nil, ErrNotFound
+		return nil, fmt.Errorf("get validator duty (%s): %w", ctx, ErrNotFound)
 	}
 
-	duty := new(model.ValidatorDutyTrace)
+	duty := new(exporter.ValidatorDutyTrace)
 	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
-		return nil, fmt.Errorf("unmarshall validator duty: %w", err)
+		return nil, fmt.Errorf("unmarshal validator duty (%s): %w", ctx, err)
 	}
 
 	return duty, nil
 }
 
-func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (duties []*model.ValidatorDutyTrace, err error) {
+func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+	var duties []*exporter.ValidatorDutyTrace
+	var errs *multierror.Error
+
 	prefix := s.makeValidatorPrefix(slot, role)
-	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
-		duty := new(model.ValidatorDutyTrace)
+	ctx := fmt.Sprintf("role=%s slot=%d", role, slot)
+
+	iterationError := s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
+		duty := new(exporter.ValidatorDutyTrace)
 		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
-			return fmt.Errorf("unmarshall validator duty: %w", err)
+			errs = multierror.Append(errs, fmt.Errorf("unmarshal validator duty (%s): %w", ctx, err))
+		} else {
+			duties = append(duties, duty)
 		}
-		duties = append(duties, duty)
 		return nil
 	})
-	if err != nil {
-		return nil, err
+	if iterationError != nil {
+		errs = multierror.Append(errs, fmt.Errorf("iterate validator duties (%s): %w", ctx, iterationError))
 	}
 
-	return
+	return duties, errs.ErrorOrNil()
 }
 
-func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (id spectypes.CommitteeID, err error) {
+func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
 	prefix := s.makeValidatorCommitteePrefix(slot)
+	ctx := fmt.Sprintf("slot=%d index=%d", slot, index)
+
 	key := uInt64ToByteSlice(uint64(index))
 	obj, found, err := s.db.Get(prefix, key)
 	if err != nil {
-		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", err)
+		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link (%s): %w", ctx, err)
 	}
 	if !found {
-		return spectypes.CommitteeID{}, ErrNotFound
+		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link (%s): %w", ctx, ErrNotFound)
 	}
-
 	return spectypes.CommitteeID(obj.Value), nil
 }
 
-func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) (links []*model.CommitteeDutyLink, err error) {
+func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+	var links []*exporter.CommitteeDutyLink
+	var errs *multierror.Error
+
 	prefix := s.makeValidatorCommitteePrefix(slot)
-	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
+	ctx := fmt.Sprintf("slot=%d", slot)
+
+	iterationError := s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
 		var committeeID spectypes.CommitteeID
 		copy(committeeID[:], obj.Value)
 		index := binary.LittleEndian.Uint64(obj.Key)
-		links = append(links, &model.CommitteeDutyLink{
+		links = append(links, &exporter.CommitteeDutyLink{
 			ValidatorIndex: phase0.ValidatorIndex(index),
 			CommitteeID:    committeeID,
 		})
 		return nil
 	})
-	if err != nil {
-		return nil, err
+	if iterationError != nil {
+		errs = multierror.Append(errs, fmt.Errorf("iterate committee duty links (%s): %w", ctx, iterationError))
 	}
 
-	return links, nil
+	return links, errs.ErrorOrNil()
 }
 
 func (s *DutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
+	ctx := fmt.Sprintf("slot=%d index=%d committeeID=%x", slot, index, id)
 	prefix := s.makeValidatorCommitteePrefix(slot)
 	key := uInt64ToByteSlice(uint64(index))
 	if err := s.db.Set(prefix, key, id[:]); err != nil {
-		return fmt.Errorf("save committee duty link: %w", err)
+		return fmt.Errorf("save committee duty link (%s): %w", ctx, err)
 	}
 
 	return nil
@@ -167,13 +185,14 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[ph
 	})
 }
 
-func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
+func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteeSlotPrefix(slot)
 
 	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
+		ctx := fmt.Sprintf("slot=%d committeeID=%x", duties[i].Slot, duties[i].CommitteeID)
 		value, err := duties[i].MarshalSSZ()
 		if err != nil {
-			return basedb.Obj{}, fmt.Errorf("marshall committee duty: %w", err)
+			return basedb.Obj{}, fmt.Errorf("marshal committee duty (%s): %w", ctx, err)
 		}
 		return basedb.Obj{
 			Value: value,
@@ -182,54 +201,60 @@ func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.C
 	})
 }
 
-func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error {
+func (s *DutyTraceStore) SaveCommitteeDuty(duty *exporter.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteePrefix(duty.Slot, duty.CommitteeID)
 
+	ctx := fmt.Sprintf("slot=%d committeeID=%x", duty.Slot, duty.CommitteeID)
 	value, err := duty.MarshalSSZ()
 	if err != nil {
-		return fmt.Errorf("marshall committee duty: %w", err)
+		return fmt.Errorf("marshal committee duty (%s): %w", ctx, err)
 	}
 
 	if err = s.db.Set(prefix, nil, value); err != nil {
-		return fmt.Errorf("save committee duty: %w", err)
+		return fmt.Errorf("save committee duty (%s): %w", ctx, err)
 	}
 
 	return nil
 }
 
-func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
-	prefix := s.makeCommitteeSlotPrefix(slot)
+func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error) {
+	var duties []*exporter.CommitteeDutyTrace
+	var errs *multierror.Error
 
-	var duties []*model.CommitteeDutyTrace
-	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
-		duty := new(model.CommitteeDutyTrace)
+	prefix := s.makeCommitteeSlotPrefix(slot)
+	ctx := fmt.Sprintf("slot=%d", slot)
+
+	iterationError := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		duty := new(exporter.CommitteeDutyTrace)
 		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
-			return fmt.Errorf("unmarshall committee duty: %w", err)
+			errs = multierror.Append(errs, fmt.Errorf("unmarshal committee duty (%s): %w", ctx, err))
+		} else {
+			duties = append(duties, duty)
 		}
-		duties = append(duties, duty)
 		return nil
 	})
-
-	if err != nil {
-		return nil, fmt.Errorf("get all committee IDs: %w", err)
+	if iterationError != nil {
+		errs = multierror.Append(errs, fmt.Errorf("iterate committee duties (%s): %w", ctx, iterationError))
 	}
 
-	return duties, nil
+	return duties, errs.ErrorOrNil()
 }
 
-func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *model.CommitteeDutyTrace, err error) {
+func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *exporter.CommitteeDutyTrace, err error) {
 	prefix := s.makeCommitteePrefix(slot, committeeID)
+	ctx := fmt.Sprintf("slot=%d committeeID=%x", slot, committeeID)
+
 	obj, found, err := s.db.Get(prefix, nil)
 	if err != nil {
-		return nil, fmt.Errorf("get committee duty: %w", err)
+		return nil, fmt.Errorf("get committee duty (%s): %w", ctx, err)
 	}
 	if !found {
-		return nil, ErrNotFound
+		return nil, fmt.Errorf("get committee duty (%s): %w", ctx, ErrNotFound)
 	}
 
-	duty = new(model.CommitteeDutyTrace)
+	duty = new(exporter.CommitteeDutyTrace)
 	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
-		return nil, fmt.Errorf("unmarshall committee duty: %w", err)
+		return nil, fmt.Errorf("unmarshal committee duty (%s): %w", ctx, err)
 	}
 
 	return

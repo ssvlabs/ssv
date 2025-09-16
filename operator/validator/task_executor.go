@@ -60,10 +60,16 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 		}
 	}
 	if startedValidators > 0 {
-		// Notify DutyScheduler about the changes in validator indices without blocking.
+		// Notify DutyScheduler and FeeRecipientController about the changes in validators without blocking.
 		go func() {
+			// Notify duty scheduler about validator indices changes so the scheduler can update its duties
 			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
+			}
+			// Notify about fee recipient changes so the fee recipient controller can submit
+			// new proposal preparations for the reactivated validators
+			if !c.reportFeeRecipientChange(c.ctx) {
+				logger.Error("failed to notify fee recipient change")
 			}
 		}()
 	}
@@ -79,17 +85,16 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
+	var updated bool
 	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
-			v.Share.FeeRecipientAddress = recipient
-			logger.Debug("updated recipient address")
+			updated = true
 
-			pk := phase0.BLSPubKey{}
-			copy(pk[:], v.Share.ValidatorPubKey[:])
+			pk := phase0.BLSPubKey(v.Share.ValidatorPubKey)
 			regDesc := duties.RegistrationDescriptor{
 				ValidatorIndex:  v.Share.ValidatorIndex,
 				ValidatorPubkey: pk,
-				FeeRecipient:    v.Share.FeeRecipientAddress[:],
+				FeeRecipient:    recipient[:],
 				BlockNumber:     blockNumber,
 			}
 
@@ -106,6 +111,16 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 		}
 		return true
 	})
+
+	if updated {
+		go func() {
+			// Notify the fee recipient controller about the fee recipient address change
+			// so it can submit updated proposal preparations with the new fee recipient
+			if !c.reportFeeRecipientChange(c.ctx) {
+				logger.Error("failed to notify fee recipient change")
+			}
+		}()
+	}
 
 	return nil
 }

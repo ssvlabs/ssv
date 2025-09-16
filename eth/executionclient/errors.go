@@ -11,15 +11,14 @@ import (
 var (
 	ErrClosed        = fmt.Errorf("closed")
 	ErrBadInput      = fmt.Errorf("bad input")
-	ErrNothingToSync = errors.New("nothing to sync")
+	ErrNothingToSync = fmt.Errorf("nothing to sync")
+	ErrSyncing       = fmt.Errorf("syncing")
 )
 
-// Domain-specific errors.
-var (
-	errSyncing = fmt.Errorf("syncing")
-)
-
-const elResponseErrMsg = "Execution client returned an error"
+// errSingleClient wraps provided error adding more details to it, useful for single-client errors.
+func (ec *ExecutionClient) errSingleClient(err error, routeName string) error {
+	return fmt.Errorf("single-client request %s -> %s: %w", ec.nodeAddr, routeName, err)
+}
 
 const (
 	// errCodeQueryLimit refers to request exceeding the defined limit

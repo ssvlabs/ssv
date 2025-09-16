@@ -132,10 +132,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 				})
 
 				// Compare with mirror only the first (capacity) elements.
-				addedSoFarCap := capacity
-				if len(mirror) < capacity {
-					addedSoFarCap = len(mirror)
-				}
+				addedSoFarCap := min(len(mirror), capacity)
 				requireHeights(t, i, mirror[:addedSoFarCap]...)
 			}
 

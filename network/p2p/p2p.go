@@ -20,6 +20,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -33,7 +35,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
@@ -93,7 +94,8 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeCommittees *hashmap.Map[string, validatorStatus]
+	// subscribedCommittees tracks committee subscription statuses for committees we've subscribed to.
+	subscribedCommittees *hashmap.Map[string, committeeSubscriptionStatus]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
@@ -135,7 +137,7 @@ func New(
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
-		activeCommittees:        hashmap.New[string, validatorStatus](),
+		subscribedCommittees:    hashmap.New[string, committeeSubscriptionStatus](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -453,7 +455,7 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
-		n.logger.Panic("could not setup discovery", zap.Error(err))
+		n.logger.Fatal("could not setup discovery", zap.Error(err))
 	}
 }
 

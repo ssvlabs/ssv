@@ -1,4 +1,4 @@
-package handlers
+package node
 
 import (
 	"context"
@@ -43,22 +43,27 @@ func CreateTestNode(t *testing.T, n int, ctx context.Context) *Node {
 
 	nodeMock := &NodeMock{}
 	nodeMock.HealthyMock.Store(nil)
-	nodeProber := nodeprobe.NewProber(zap.L(), nil, map[string]nodeprobe.Node{
-		"consensus client": nodeMock,
-		"execution client": nodeMock,
-		"event syncer":     nodeMock,
-	})
+	nodeProber := nodeprobe.New(zap.L())
+	const node1 = "node_1"
+	const node2 = "node_2"
+	const node3 = "node_3"
+	nodeProber.AddNode(node1, nodeMock, 10*time.Second, 5)
+	nodeProber.AddNode(node2, nodeMock, 10*time.Second, 5)
+	nodeProber.AddNode(node3, nodeMock, 10*time.Second, 5)
 
-	return &Node{
-		ListenAddresses: []string{
+	return NewNode(
+		[]string{
 			fmt.Sprintf("tcp://%s:%d", "localhost", 3030),
 			fmt.Sprintf("udp://%s:%d", "localhost", 3030),
 		},
-		PeersIndex: ln.Nodes[0].(p2pv1.PeersIndexProvider).PeersIndex(),
-		Network:    ln.Nodes[0].(p2pv1.HostProvider).Host().Network(),
-		TopicIndex: ln.Nodes[0].(TopicIndex),
-		NodeProber: nodeProber,
-	}
+		ln.Nodes[0].(p2pv1.PeersIndexProvider).PeersIndex(),
+		ln.Nodes[0].(p2pv1.HostProvider).Host().Network(),
+		ln.Nodes[0].(TopicIndex),
+		nodeProber,
+		node1,
+		node2,
+		node3,
+	)
 }
 
 // createNetworkAndSubscribe creates a local network and subscribes each node to validator topics.
