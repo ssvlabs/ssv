@@ -199,7 +199,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				With(zap.String("message_identifier", string(v.messageID(msg)))).
 				With(zap.Int("attempt", msgRetryCnt+1))
 
-			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
+			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, &runner.RetryableError{}) && msgRetryCnt < retryCount:
 				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
@@ -214,7 +214,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 					}
 				}(msg)
 			default:
-				logger.Error(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+				logger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 			}
 		}
 	}

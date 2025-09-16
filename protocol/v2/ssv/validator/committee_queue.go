@@ -208,24 +208,24 @@ func (c *Committee) ConsumeQueue(
 				With(zap.String("message_identifier", string(c.messageID(msg)))).
 				With(zap.Int("attempt", msgRetryCnt+1))
 
-			const couldNotHandleMsgLogPrefix = "❗ could not handle message, "
+			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
-				logger.Error(couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
+				logger.Error("❗ "+couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
 			case errors.Is(err, &runner.RetryableError{}) && msgRetryCnt < retryCount:
 				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
-						logger.Warn("❗ not gonna replay message because the queue is full",
+						logger.Error("❗ not gonna replay message because the queue is full",
 							zap.String("message_identifier", string(c.messageID(msg))),
 							fields.MessageType(msg.MsgType),
 						)
 					}
 				}(msg)
 			default:
-				logger.Error(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+				logger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 			}
 
 			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
