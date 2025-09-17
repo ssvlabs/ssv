@@ -15,12 +15,12 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/eth/eventhandler/mocks"
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 	"github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/operator/validator/mocks"
 )
 
 type CommonTestInput struct {
@@ -62,7 +62,7 @@ type TestEnv struct {
 	execClient     *executionclient.ExecutionClient
 	rpcServer      *rpc.Server
 	httpSrv        *httptest.Server
-	validatorCtrl  *mocks.MockController
+	taskExecutor   *mocks.MockTaskExecutor
 	mockCtrl       *gomock.Controller
 	followDistance *uint64
 }
@@ -124,7 +124,7 @@ func (e *TestEnv) setup(
 		return err
 	}
 	if validatorCtrl == nil {
-		return fmt.Errorf("validatorCtrl is empty")
+		return fmt.Errorf("taskExecutor is empty")
 	}
 
 	// Adding testAddresses to the genesis block mostly to specify some balances for them
@@ -196,7 +196,7 @@ func (e *TestEnv) setup(
 		eventsyncer.WithLogger(logger),
 	)
 
-	e.validatorCtrl = validatorCtrl
+	e.taskExecutor = validatorCtrl
 	e.sim = sim
 	e.auth = auth
 	e.validators = validators

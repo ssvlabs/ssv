@@ -32,7 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// Event names
+// Ethereum event names.
 const (
 	OperatorAdded              = "OperatorAdded"
 	OperatorRemoved            = "OperatorRemoved"
