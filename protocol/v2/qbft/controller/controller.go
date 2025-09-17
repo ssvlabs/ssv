@@ -230,6 +230,18 @@ func (c *Controller) Decode(data []byte) error {
 	return nil
 }
 
+// UnmarshalJSON is a custom JSON unmarshaller for Controller
+func (c *Controller) UnmarshalJSON(data []byte) error {
+	type ControllerAlias Controller
+	aux := &struct {
+		*ControllerAlias
+	}{
+		ControllerAlias: (*ControllerAlias)(c),
+	}
+
+	return json.Unmarshal(data, aux)
+}
+
 func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage) error {
 	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit); err != nil {
 		// We do not return error here, just Log broadcasting error.
