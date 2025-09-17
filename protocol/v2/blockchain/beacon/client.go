@@ -12,8 +12,6 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 )
 
-// TODO: add missing tests
-
 //go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
 
 // AttesterCalls interface has all attester duty specific calls
@@ -27,11 +25,9 @@ type AttesterCalls interface {
 // ProposerCalls interface has all block proposer duty specific calls
 type ProposerCalls interface {
 	// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
-	GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error)
+	GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error)
 	// SubmitBeaconBlock submit the block to the node
 	SubmitBeaconBlock(ctx context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error
-	// SubmitBlindedBeaconBlock submit the blinded block to the node
-	SubmitBlindedBeaconBlock(ctx context.Context, block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error
 }
 
 // AggregatorCalls interface has all attestation aggregator duty specific calls

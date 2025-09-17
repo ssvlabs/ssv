@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 
@@ -38,7 +38,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 
 // Verify each signature in container removing the invalid ones
 func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigContainer, root [32]byte,
-	committee []*spectypes.ShareMember, validatorIndex spec.ValidatorIndex) {
+	committee []*spectypes.ShareMember, validatorIndex phase0.ValidatorIndex) {
 	signatures := container.GetSignatures(validatorIndex, root)
 
 	for operatorID, signature := range signatures {
@@ -113,11 +113,11 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.E
 func (b *BaseRunner) verifyExpectedRoot(
 	ctx context.Context,
 	runner Runner,
-	signedMsg *spectypes.PartialSignatureMessages,
+	psigMsgs *spectypes.PartialSignatureMessages,
 	expectedRootObjs []ssz.HashRoot,
-	domain spec.DomainType,
+	domain phase0.DomainType,
 ) error {
-	if len(expectedRootObjs) != len(signedMsg.Messages) {
+	if len(expectedRootObjs) != len(psigMsgs.Messages) {
 		return errors.New("wrong expected roots count")
 	}
 
@@ -157,7 +157,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 			return string(ret[i][:]) < string(ret[j][:])
 		})
 		return ret
-	}(*signedMsg)
+	}(*psigMsgs)
 
 	// verify roots
 	for i, r := range sortedRoots {

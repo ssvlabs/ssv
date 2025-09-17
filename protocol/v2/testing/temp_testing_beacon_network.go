@@ -61,7 +61,7 @@ func (bn *BeaconNodeWrapped) SubmitAggregateSelectionProof(ctx context.Context, 
 func (bn *BeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return bn.Bn.GetBeaconNetwork()
 }
-func (bn *BeaconNodeWrapped) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (bn *BeaconNodeWrapped) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
 	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
 }
 func (bn *BeaconNodeWrapped) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
@@ -81,9 +81,6 @@ func (bn *BeaconNodeWrapped) SubmitAttestations(ctx context.Context, attestation
 }
 func (bn *BeaconNodeWrapped) SubmitSyncMessages(ctx context.Context, msgs []*altair.SyncCommitteeMessage) error {
 	return bn.Bn.SubmitSyncMessages(msgs)
-}
-func (bn *BeaconNodeWrapped) SubmitBlindedBeaconBlock(ctx context.Context, block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
-	return bn.Bn.SubmitBlindedBeaconBlock(block, sig)
 }
 func (bn *BeaconNodeWrapped) SubmitSignedContributionAndProof(ctx context.Context, contribution *altair.SignedContributionAndProof) error {
 	return bn.Bn.SubmitSignedContributionAndProof(contribution)

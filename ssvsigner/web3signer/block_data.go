@@ -15,7 +15,7 @@ import (
 )
 
 // ConvertBlockToBeaconBlockData converts various block types to Web3Signer BeaconBlockData format
-func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
+func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (*BeaconBlockData, error) {
 	switch v := obj.(type) {
 	case *capella.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
@@ -24,7 +24,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionCapella),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -41,7 +41,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionDeneb),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -58,7 +58,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionElectra),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -75,7 +75,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionCapella),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -92,7 +92,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionDeneb),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -109,7 +109,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionElectra),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,

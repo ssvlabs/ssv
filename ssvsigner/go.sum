@@ -16,8 +16,8 @@ github.com/alecthomas/repr v0.4.0 h1:GhI2A8MACjfegCPVq9f1FLvIBS+DrQ2KQBFZP1iFzXc
 github.com/alecthomas/repr v0.4.0/go.mod h1:Fr0507jx4eOXV7AlPV6AVZLYrLIuIeSOWtW57eE/O/4=
 github.com/andybalholm/brotli v1.1.1 h1:PR2pgnyFznKEugtsUo0xLdDop5SKXd5Qf5ysW+7XdTA=
 github.com/andybalholm/brotli v1.1.1/go.mod h1:05ib4cKhjx3OQYUY22hTVd34Bc8upXjOLL2rKwwZBoA=
-github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc h1:Z8ZheVRqbZsg9wg+OECZGxGglYmVZ7sLAPjaMZR6r6M=
-github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc/go.mod h1:/KTLN3WuH1xrJL7ZZrpBoWM1xCCihnFbzequD5L+83o=
+github.com/attestantio/go-eth2-client v0.26.1-0.20250829122455-ff89a2135a43 h1:v5l00W4U5WuYz6+Cux0URjN/VBKCupwzG6gCgRdn6Wo=
+github.com/attestantio/go-eth2-client v0.26.1-0.20250829122455-ff89a2135a43/go.mod h1:fvULSL9WtNskkOB4i+Yyr6BKpNHXvmpGZj9969fCrfY=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bits-and-blooms/bitset v1.20.0 h1:2F+rfL86jE2d/bmw7OhqUg2Sj/1rURkBn3MdfoPyRVU=
@@ -329,12 +329,10 @@ github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9yS
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
-github.com/ssvlabs/eth2-key-manager v1.5.5 h1:AzwNowGvcmVpRCVHq10FVnpkVIUpoDo5YbJWNMnYA8Q=
-github.com/ssvlabs/eth2-key-manager v1.5.5/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
-github.com/ssvlabs/ssv v1.2.1-0.20250904093034-64dc248758c3 h1:LLRrFhEbYamKRH5XgoxdIyOGrW5LXn/JlU5Dd5zK3jE=
-github.com/ssvlabs/ssv v1.2.1-0.20250904093034-64dc248758c3/go.mod h1:F4U2KdYrpQPHQ2VVIRa7NdrLxiV599NqN6dHz8KFREQ=
-github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo8=
-github.com/ssvlabs/ssv-spec v1.1.3/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
+github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f h1:DJlz/EO6c82mYGp0mqOKPYbvXc62ab48ZrJ//N1JMIM=
+github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f/go.mod h1:d1hIujREvu5udtEE/GPGZRO/wCOs6hM1ClIqiR9Swgc=
+github.com/ssvlabs/ssv-spec v1.1.4-0.20250917104829-415b506a25fa h1:K204tP8jIQadQd3dnrA7+p7C7I74ivc1Q1/TNZR0UOA=
+github.com/ssvlabs/ssv-spec v1.1.4-0.20250917104829-415b506a25fa/go.mod h1:QG0s0z3bM9gGAin3P3phhaQ71MJWXCSGxRvmb+cy5dk=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -20,8 +20,8 @@ func (b *BaseRunner) signBeaconObject(
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
 	obj ssz.HashRoot,
-	slot spec.Slot,
-	signatureDomain spec.DomainType,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
 	epoch := runner.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
@@ -35,7 +35,7 @@ func (b *BaseRunner) signBeaconObject(
 		ctx,
 		obj,
 		domain,
-		spec.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
+		phase0.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
 		slot,
 		signatureDomain,
 	)
@@ -51,8 +51,24 @@ func (b *BaseRunner) signBeaconObject(
 	}, nil
 }
 
+//func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
+//	signature, err := runner.GetSigner().SignBeaconObject(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
+//	if err != nil {
+//		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
+//	}
+//
+//	return &spectypes.SignedPartialSignatureMessage{
+//		Message:   *msg,
+//		Signature: signature,
+//		Signer:    b.Share.OperatorID,
+//	}, nil
+//}
+
 // Validate message content without verifying signatures
-func (b *BaseRunner) validatePartialSigMsg(psigMsgs *spectypes.PartialSignatureMessages, expectedSlot spec.Slot) error {
+func (b *BaseRunner) validatePartialSigMsgForSlot(
+	psigMsgs *spectypes.PartialSignatureMessages,
+	expectedSlot phase0.Slot,
+) error {
 	if err := psigMsgs.Validate(); err != nil {
 		return errors.Wrap(err, "PartialSignatureMessages invalid")
 	}

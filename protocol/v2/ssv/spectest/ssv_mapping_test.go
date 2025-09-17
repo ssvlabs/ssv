@@ -238,11 +238,14 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	}
 
 	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ := json.Marshal(msg)
-		typedMsg := &spectypes.PartialSignatureMessages{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
-		outputMsgs = append(outputMsgs, typedMsg)
+	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
+	if m["OutputMessages"] != nil {
+		for _, msg := range m["OutputMessages"].([]interface{}) {
+			byts, _ := json.Marshal(msg)
+			typedMsg := &spectypes.PartialSignatureMessages{}
+			require.NoError(t, json.Unmarshal(byts, typedMsg))
+			outputMsgs = append(outputMsgs, typedMsg)
+		}
 	}
 
 	shareInstance := &spectypes.Share{}
@@ -312,12 +315,14 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	}
 
 	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	require.NotNilf(t, m["OutputMessages"], "OutputMessages can't be nil")
-	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ := json.Marshal(msg)
-		typedMsg := &spectypes.PartialSignatureMessages{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
-		outputMsgs = append(outputMsgs, typedMsg)
+	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
+	if m["OutputMessages"] != nil {
+		for _, msg := range m["OutputMessages"].([]interface{}) {
+			byts, _ := json.Marshal(msg)
+			typedMsg := &spectypes.PartialSignatureMessages{}
+			require.NoError(t, json.Unmarshal(byts, typedMsg))
+			outputMsgs = append(outputMsgs, typedMsg)
+		}
 	}
 
 	beaconBroadcastedRoots := make([]string, 0)
@@ -511,12 +516,14 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 	}
 
 	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	require.NotNilf(t, m["OutputMessages"], "OutputMessages can't be nil")
-	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ := json.Marshal(msg)
-		typedMsg := &spectypes.PartialSignatureMessages{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
-		outputMsgs = append(outputMsgs, typedMsg)
+	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
+	if m["OutputMessages"] != nil {
+		for _, msg := range m["OutputMessages"].([]interface{}) {
+			byts, _ := json.Marshal(msg)
+			typedMsg := &spectypes.PartialSignatureMessages{}
+			require.NoError(t, json.Unmarshal(byts, typedMsg))
+			outputMsgs = append(outputMsgs, typedMsg)
+		}
 	}
 
 	beaconBroadcastedRoots := make([]string, 0)

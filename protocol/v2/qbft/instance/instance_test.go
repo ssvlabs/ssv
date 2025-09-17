@@ -14,7 +14,7 @@ func TestInstance_Marshaling(t *testing.T) {
 		MsgType:    specqbft.ProposalMsgType,
 		Height:     specqbft.FirstHeight,
 		Round:      specqbft.FirstRound,
-		Identifier: []byte{1, 2, 3, 4},
+		Identifier: testingutils.TestingIdentifier,
 		Root:       testingutils.TestingQBFTRootData,
 	}
 	TestingSK := testingutils.Testing4SharesSet()
@@ -24,7 +24,7 @@ func TestInstance_Marshaling(t *testing.T) {
 	i := &specqbft.Instance{
 		State: &specqbft.State{
 			CommitteeMember:                 testingutils.TestingCommitteeMember(TestingSK),
-			ID:                              []byte{1, 2, 3, 4},
+			ID:                              testingutils.TestingIdentifier,
 			Round:                           1,
 			Height:                          1,
 			LastPreparedRound:               1,
