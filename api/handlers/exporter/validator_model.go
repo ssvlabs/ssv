@@ -17,6 +17,21 @@ type validatorRequest struct {
 	Indices api.Uint64Slice `json:"indices"`
 }
 
+// implements filterRequest interface
+func (r *validatorRequest) pubKeys() []spectypes.ValidatorPK {
+	return parsePubkeysSlice(r.PubKeys)
+}
+
+// implements filterRequest interface
+func (r *validatorRequest) indices() []uint64 {
+	return r.Indices
+}
+
+// implements filterRequest interface
+func (r *validatorRequest) hasFilters() bool {
+	return len(r.PubKeys) > 0 || len(r.Indices) > 0
+}
+
 type validatorTraceResponse struct {
 	Data   []validatorTrace `json:"data"`
 	Errors []string         `json:"errors,omitempty"`
