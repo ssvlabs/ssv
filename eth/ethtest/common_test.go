@@ -116,14 +116,14 @@ func (e *TestEnv) setup(
 		}
 	}
 
-	eh, validatorCtrl, mockCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
+	eh, taskExecutor, mockCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
 	e.mockCtrl = mockCtrl
 	e.nodeStorage = nodeStorage
 
 	if err != nil {
 		return err
 	}
-	if validatorCtrl == nil {
+	if taskExecutor == nil {
 		return fmt.Errorf("taskExecutor is empty")
 	}
 
@@ -196,7 +196,7 @@ func (e *TestEnv) setup(
 		eventsyncer.WithLogger(logger),
 	)
 
-	e.taskExecutor = validatorCtrl
+	e.taskExecutor = taskExecutor
 	e.sim = sim
 	e.auth = auth
 	e.validators = validators
