@@ -124,10 +124,10 @@ func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
 			zap.Error(err),
 		)
 
-		// Wait before the next retry attempt.
+		// Wait before the next attempt.
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case <-time.After(n.retryDelay):
 		}
 	}
