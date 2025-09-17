@@ -56,7 +56,7 @@ func toApiError(errs *multierror.Error) *api.ErrorResponse {
 }
 
 func toStrings(err *multierror.Error) []string {
-	if err == nil || err.ErrorOrNil() == nil {
+	if err.ErrorOrNil() == nil {
 		return nil
 	}
 	errs := err.Errors
