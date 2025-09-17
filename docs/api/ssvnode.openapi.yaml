@@ -1,0 +1,846 @@
+basePath: /
+definitions:
+  api.ErrorResponse:
+    properties:
+      error:
+        description: application-level error message, for debugging
+        type: string
+      status:
+        description: user-level status message
+        type: string
+    type: object
+  exporter.CommitteeMessage:
+    properties:
+      signer:
+        description: Signer is the operator ID that produced the message.
+        type: integer
+      time:
+        description: ReceivedTime is when the message was observed.
+        format: date-time
+        type: string
+      validatorIdx:
+        description: ValidatorIdx lists related validator indices, when applicable.
+        items:
+          type: integer
+        type: array
+    type: object
+  exporter.CommitteeTrace:
+    properties:
+      attester:
+        description: Attester contains post-consensus messages for attester duties.
+        items:
+          $ref: '#/definitions/exporter.CommitteeMessage'
+        type: array
+      committeeID:
+        description: CommitteeID is the 32-byte committee identifier (hex).
+        format: hex
+        type: string
+      consensus:
+        description: Consensus lists per-round QBFT messages observed for this committee.
+        items:
+          $ref: '#/definitions/exporter.Round'
+        type: array
+      decideds:
+        description: Decideds lists decided messages emitted for this duty.
+        items:
+          $ref: '#/definitions/exporter.Decided'
+        type: array
+      proposalData:
+        description: Proposal is the hex-encoded proposal payload for this duty, if
+          available.
+        format: hex
+        type: string
+      slot:
+        description: Slot is the duty slot for this committee trace.
+        format: int64
+        type: integer
+      sync_committee:
+        description: SyncCommittee contains post-consensus messages for sync-committee
+          duties.
+        items:
+          $ref: '#/definitions/exporter.CommitteeMessage'
+        type: array
+    type: object
+  exporter.CommitteeTracesRequest:
+    properties:
+      committeeIDs:
+        description: CommitteeIDs is a comma-separated list of committee IDs (hex,
+          64 chars per ID).
+        items:
+          format: hex
+          maxLength: 64
+          minLength: 64
+          type: string
+        type: array
+      from:
+        description: From is the starting slot (inclusive).
+        format: int64
+        minimum: 0
+        type: integer
+      to:
+        description: To is the ending slot (inclusive).
+        format: int64
+        minimum: 0
+        type: integer
+    type: object
+  exporter.CommitteeTracesResponse:
+    properties:
+      data:
+        description: Data contains the list of committee duty traces matching the
+          request.
+        items:
+          $ref: '#/definitions/exporter.CommitteeTrace'
+        type: array
+      errors:
+        description: Errors lists non-fatal issues encountered while building the
+          response (duties not found, enrichment errors, etc.).
+        example:
+        - committee duty missing for slot 123456
+        items:
+          type: string
+        type: array
+    type: object
+  exporter.Decided:
+    properties:
+      round:
+        description: Round is the QBFT round number when the decision was made.
+        example: 2
+        format: int64
+        type: integer
+      signers:
+        description: Signers lists operator IDs that signed the decided message.
+        items:
+          type: integer
+        type: array
+      ssvRoot:
+        description: BeaconRoot is the decided root value (hex-encoded).
+        example: f3a1...
+        format: hex
+        type: string
+      time:
+        description: ReceivedTime is when the decided message was observed.
+        format: date-time
+        type: string
+    type: object
+  exporter.DecidedParticipant:
+    properties:
+      message:
+        properties:
+          Signers:
+            description: We're keeping "Signers" capitalized to avoid breaking existing
+              clients that rely on the current structure.
+            items:
+              type: integer
+            type: array
+        type: object
+      public_key:
+        format: hex
+        type: string
+      role:
+        example: ATTESTER
+        type: string
+      slot:
+        example: 123456
+        format: int64
+        type: integer
+    type: object
+  exporter.DecidedsRequest:
+    properties:
+      from:
+        description: From is the starting slot (inclusive).
+        format: int64
+        minimum: 0
+        type: integer
+      indices:
+        description: Indices is a comma-separated list of validator indices.
+        items:
+          format: int64
+          minimum: 0
+          type: integer
+        type: array
+      pubkeys:
+        description: PubKeys is a comma-separated list of validator public keys (hex,
+          96 chars per key).
+        items:
+          format: hex
+          maxLength: 96
+          minLength: 96
+          type: string
+        type: array
+      roles:
+        description: Roles is a comma-separated list of beacon roles to include.
+        items:
+          enum:
+          - ATTESTER
+          - AGGREGATOR
+          - PROPOSER
+          - SYNC_COMMITTEE
+          - SYNC_COMMITTEE_CONTRIBUTION
+          type: string
+        type: array
+      to:
+        description: To is the ending slot (inclusive).
+        format: int64
+        minimum: 0
+        type: integer
+    required:
+    - roles
+    type: object
+  exporter.Message:
+    properties:
+      round:
+        description: Round is the round associated with this message.
+        format: int64
+        type: integer
+      signer:
+        description: Signer is the operator ID that sent the message.
+        type: integer
+      ssvRoot:
+        description: BeaconRoot is the message root value (hex-encoded).
+        format: hex
+        type: string
+      time:
+        description: ReceivedTime is when the message was observed.
+        format: date-time
+        type: string
+    type: object
+  exporter.ProposalTrace:
+    properties:
+      leader:
+        description: Signer is the leader operator ID that proposed.
+        type: integer
+      prepareJustifications:
+        description: PrepareJustifications holds the prepare justifications included
+          in the proposal.
+        items:
+          $ref: '#/definitions/exporter.Message'
+        type: array
+      round:
+        description: Round is the round number for this proposal.
+        example: 1
+        format: int64
+        type: integer
+      roundChangeJustifications:
+        description: RoundChanges holds the round-change justifications included in
+          the proposal.
+        items:
+          $ref: '#/definitions/exporter.RoundChange'
+        type: array
+      ssvRoot:
+        description: BeaconRoot is the proposed root value (hex-encoded).
+        format: hex
+        type: string
+      time:
+        description: ReceivedTime is when the proposal was observed.
+        format: date-time
+        type: string
+    type: object
+  exporter.Round:
+    properties:
+      commits:
+        description: Commits lists commit messages received in this round.
+        items:
+          $ref: '#/definitions/exporter.Message'
+        type: array
+      prepares:
+        description: Prepares lists prepare messages received in this round.
+        items:
+          $ref: '#/definitions/exporter.Message'
+        type: array
+      proposal:
+        allOf:
+        - $ref: '#/definitions/exporter.ProposalTrace'
+        description: Proposal is the proposal observed in this round, if any.
+      roundChanges:
+        description: RoundChanges lists round change justifications that led to this
+          round.
+        items:
+          $ref: '#/definitions/exporter.RoundChange'
+        type: array
+    type: object
+  exporter.RoundChange:
+    properties:
+      prepareMessages:
+        description: PrepareMessages lists the prepare messages that justify the prepared
+          round.
+        items:
+          $ref: '#/definitions/exporter.Message'
+        type: array
+      preparedRound:
+        description: PreparedRound is the highest prepared round the sender claims.
+        format: int64
+        type: integer
+      round:
+        description: Round is the round associated with this message.
+        format: int64
+        type: integer
+      signer:
+        description: Signer is the operator ID that sent the message.
+        type: integer
+      ssvRoot:
+        description: BeaconRoot is the message root value (hex-encoded).
+        format: hex
+        type: string
+      time:
+        description: ReceivedTime is when the message was observed.
+        format: date-time
+        type: string
+    type: object
+  exporter.TraceDecidedsResponse:
+    properties:
+      data:
+        description: Data contains the decided duty participant entries matching the
+          request.
+        items:
+          $ref: '#/definitions/exporter.DecidedParticipant'
+        type: array
+      errors:
+        description: Errors lists non-fatal issues encountered while building the
+          response (e.g., entries with empty signer sets).
+        example:
+        - omitting entry with no signers (index=deadbeef
+        - ' slot=123456'
+        - ' role=ATTESTER)'
+        items:
+          type: string
+        type: array
+    type: object
+  exporter.ValidatorTrace:
+    properties:
+      committeeID:
+        description: CommitteeID is the 32-byte committee identifier (hex), when applicable.
+        example: aabbcc
+        format: hex
+        type: string
+      consensus:
+        description: Rounds lists per-round QBFT messages observed for this validator.
+        items:
+          $ref: '#/definitions/exporter.Round'
+        type: array
+      decideds:
+        description: Decideds lists decided messages emitted for this duty.
+        items:
+          $ref: '#/definitions/exporter.Decided'
+        type: array
+      post:
+        description: Post lists post-consensus partial signature messages.
+        items:
+          $ref: '#/definitions/exporter.Message'
+        type: array
+      pre:
+        description: Pre lists pre-consensus partial signature messages.
+        items:
+          $ref: '#/definitions/exporter.Message'
+        type: array
+      proposalData:
+        description: Proposal is the hex-encoded proposal payload for this duty, if
+          available.
+        format: hex
+        type: string
+      role:
+        description: Role is the beacon role for this duty (e.g., ATTESTER).
+        example: ATTESTER
+        type: string
+      slot:
+        description: Slot is the duty slot for this validator trace.
+        example: 123456
+        format: int64
+        type: integer
+      validator:
+        description: Validator is the validator index for the duty.
+        example: 123
+        format: int64
+        type: integer
+    type: object
+  exporter.ValidatorTracesRequest:
+    properties:
+      from:
+        description: From is the starting slot (inclusive).
+        example: 123456
+        format: int64
+        minimum: 0
+        type: integer
+      indices:
+        description: Indices is a comma-separated list of validator indices.
+        items:
+          format: int64
+          minimum: 0
+          type: integer
+        type: array
+      pubkeys:
+        description: PubKeys is a comma-separated list of validator public keys (hex,
+          96 chars per key).
+        items:
+          format: hex
+          maxLength: 96
+          minLength: 96
+          type: string
+        type: array
+      roles:
+        description: Roles is a comma-separated list of beacon roles to include.
+        items:
+          enum:
+          - ATTESTER
+          - AGGREGATOR
+          - PROPOSER
+          - SYNC_COMMITTEE
+          - SYNC_COMMITTEE_CONTRIBUTION
+          type: string
+        type: array
+      to:
+        description: To is the ending slot (inclusive).
+        example: 123460
+        format: int64
+        minimum: 0
+        type: integer
+    required:
+    - roles
+    type: object
+  exporter.ValidatorTracesResponse:
+    properties:
+      data:
+        description: Data contains the list of validator duty traces matching the
+          request.
+        items:
+          $ref: '#/definitions/exporter.ValidatorTrace'
+        type: array
+      errors:
+        description: Errors lists non-fatal issues encountered while building the
+          response (duties not found, enrichment errors, etc.).
+        example:
+        - duty data unavailable for slot 123457
+        items:
+          type: string
+        type: array
+    type: object
+info:
+  contact:
+    email: support@ssv.network
+    name: SSV Labs
+    url: https://ssv.network
+  description: HTTP endpoints exposed by the SSV node, including exporter traces and
+    validator metadata.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  title: SSV Node API
+  version: 0.1.0
+paths:
+  /v1/exporter/decideds:
+    get:
+      consumes:
+      - application/json
+      description: Returns decided duty participant traces for validators or committees,
+        including partial error details.
+      parameters:
+      - description: From is the starting slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: from
+        type: integer
+      - collectionFormat: csv
+        description: Indices is a comma-separated list of validator indices.
+        in: query
+        items:
+          type: integer
+        name: indices
+        type: array
+      - collectionFormat: csv
+        description: PubKeys is a comma-separated list of validator public keys (hex,
+          96 chars per key).
+        in: query
+        items:
+          type: string
+        name: pubkeys
+        type: array
+      - collectionFormat: csv
+        description: Roles is a comma-separated list of beacon roles to include.
+        in: query
+        items:
+          enum:
+          - ATTESTER
+          - AGGREGATOR
+          - PROPOSER
+          - SYNC_COMMITTEE
+          - SYNC_COMMITTEE_CONTRIBUTION
+          type: string
+        name: roles
+        required: true
+        type: array
+      - description: To is the ending slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: to
+        type: integer
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.DecidedsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.TraceDecidedsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve decided message traces
+      tags:
+      - Exporter
+    post:
+      consumes:
+      - application/json
+      description: Returns decided duty participant traces for validators or committees,
+        including partial error details.
+      parameters:
+      - description: From is the starting slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: from
+        type: integer
+      - collectionFormat: csv
+        description: Indices is a comma-separated list of validator indices.
+        in: query
+        items:
+          type: integer
+        name: indices
+        type: array
+      - collectionFormat: csv
+        description: PubKeys is a comma-separated list of validator public keys (hex,
+          96 chars per key).
+        in: query
+        items:
+          type: string
+        name: pubkeys
+        type: array
+      - collectionFormat: csv
+        description: Roles is a comma-separated list of beacon roles to include.
+        in: query
+        items:
+          enum:
+          - ATTESTER
+          - AGGREGATOR
+          - PROPOSER
+          - SYNC_COMMITTEE
+          - SYNC_COMMITTEE_CONTRIBUTION
+          type: string
+        name: roles
+        required: true
+        type: array
+      - description: To is the ending slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: to
+        type: integer
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.DecidedsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.TraceDecidedsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve decided message traces
+      tags:
+      - Exporter
+  /v1/exporter/traces/committee:
+    get:
+      consumes:
+      - application/json
+      description: Returns consensus and post-consensus traces for requested committees.
+      parameters:
+      - collectionFormat: csv
+        description: CommitteeIDs is a comma-separated list of committee IDs (hex,
+          64 chars per ID).
+        in: query
+        items:
+          type: string
+        name: committeeIDs
+        type: array
+      - description: From is the starting slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: from
+        type: integer
+      - description: To is the ending slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: to
+        type: integer
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.CommitteeTracesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.CommitteeTracesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve committee duty traces
+      tags:
+      - Exporter
+    post:
+      consumes:
+      - application/json
+      description: Returns consensus and post-consensus traces for requested committees.
+      parameters:
+      - collectionFormat: csv
+        description: CommitteeIDs is a comma-separated list of committee IDs (hex,
+          64 chars per ID).
+        in: query
+        items:
+          type: string
+        name: committeeIDs
+        type: array
+      - description: From is the starting slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: from
+        type: integer
+      - description: To is the ending slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: to
+        type: integer
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.CommitteeTracesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.CommitteeTracesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve committee duty traces
+      tags:
+      - Exporter
+  /v1/exporter/traces/validator:
+    get:
+      consumes:
+      - application/json
+      description: Returns consensus, decided, and message traces for the requested
+        validator duties.
+      parameters:
+      - description: From is the starting slot (inclusive).
+        example: 123456
+        format: int64
+        in: query
+        minimum: 0
+        name: from
+        type: integer
+      - collectionFormat: csv
+        description: Indices is a comma-separated list of validator indices.
+        in: query
+        items:
+          type: integer
+        name: indices
+        type: array
+      - collectionFormat: csv
+        description: PubKeys is a comma-separated list of validator public keys (hex,
+          96 chars per key).
+        in: query
+        items:
+          type: string
+        name: pubkeys
+        type: array
+      - collectionFormat: csv
+        description: Roles is a comma-separated list of beacon roles to include.
+        in: query
+        items:
+          enum:
+          - ATTESTER
+          - AGGREGATOR
+          - PROPOSER
+          - SYNC_COMMITTEE
+          - SYNC_COMMITTEE_CONTRIBUTION
+          type: string
+        name: roles
+        required: true
+        type: array
+      - description: To is the ending slot (inclusive).
+        example: 123460
+        format: int64
+        in: query
+        minimum: 0
+        name: to
+        type: integer
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.ValidatorTracesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.ValidatorTracesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve validator duty traces
+      tags:
+      - Exporter
+    post:
+      consumes:
+      - application/json
+      description: Returns consensus, decided, and message traces for the requested
+        validator duties.
+      parameters:
+      - description: From is the starting slot (inclusive).
+        example: 123456
+        format: int64
+        in: query
+        minimum: 0
+        name: from
+        type: integer
+      - collectionFormat: csv
+        description: Indices is a comma-separated list of validator indices.
+        in: query
+        items:
+          type: integer
+        name: indices
+        type: array
+      - collectionFormat: csv
+        description: PubKeys is a comma-separated list of validator public keys (hex,
+          96 chars per key).
+        in: query
+        items:
+          type: string
+        name: pubkeys
+        type: array
+      - collectionFormat: csv
+        description: Roles is a comma-separated list of beacon roles to include.
+        in: query
+        items:
+          enum:
+          - ATTESTER
+          - AGGREGATOR
+          - PROPOSER
+          - SYNC_COMMITTEE
+          - SYNC_COMMITTEE_CONTRIBUTION
+          type: string
+        name: roles
+        required: true
+        type: array
+      - description: To is the ending slot (inclusive).
+        example: 123460
+        format: int64
+        in: query
+        minimum: 0
+        name: to
+        type: integer
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.ValidatorTracesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.ValidatorTracesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve validator duty traces
+      tags:
+      - Exporter
+schemes:
+- http
+- https
+swagger: "2.0"
+tags:
+- description: Duty traces and participants.
+  name: Exporter
+- description: Validator listing and metadata.
+  name: Validators
+- description: Node identity, peers, topics, and health.
+  name: Node

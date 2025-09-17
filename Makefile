@@ -30,7 +30,7 @@ RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
-lint: golangci-lint deadcode-lint
+lint: golangci-lint deadcode-lint openapi-lint
 
 .PHONY: golangci-lint
 golangci-lint:
@@ -173,6 +173,16 @@ mock:
 generate:
 	go generate ./...
 
+SWAG := $(RUN_TOOL) github.com/swaggo/swag/cmd/swag
+
+.PHONY: openapi openapi-lint
+
+openapi:
+	@SWAG='$(SWAG)' bash scripts/openapi.sh --write
+
+openapi-lint:
+	@SWAG='$(SWAG)' bash scripts/openapi.sh --lint
+
 .PHONY: tools
 tools:
 	$(GET_TOOL) golang.org/x/tools/cmd/goimports
@@ -181,6 +191,7 @@ tools:
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
 	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	$(GET_TOOL) golang.org/x/tools/cmd/deadcode
+	$(GET_TOOL) github.com/swaggo/swag/cmd/swag
 	$(RUN_TOOL)
 
 .PHONY: format

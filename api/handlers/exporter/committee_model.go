@@ -10,13 +10,18 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 )
 
-type committeeRequest struct {
-	From         uint64       `json:"from"`
-	To           uint64       `json:"to"`
-	CommitteeIDs api.HexSlice `json:"committeeIDs"`
+// CommitteeTracesRequest represents the filter parameters accepted by the
+// committee traces endpoints.
+type CommitteeTracesRequest struct {
+	// From is the starting slot (inclusive).
+	From uint64 `json:"from" format:"int64" minimum:"0"`
+	// To is the ending slot (inclusive).
+	To uint64 `json:"to" format:"int64" minimum:"0"`
+	// CommitteeIDs is a comma-separated list of committee IDs (hex, 64 chars per ID).
+	CommitteeIDs api.HexSlice `json:"committeeIDs" swaggertype:"array,string" format:"hex" minLength:"64" maxLength:"64" pattern:"^[0-9a-f]{64}$"`
 }
 
-func (req *committeeRequest) parseCommitteeIds() []spectypes.CommitteeID {
+func (req *CommitteeTracesRequest) parseCommitteeIds() []spectypes.CommitteeID {
 	committeeIDs := make([]spectypes.CommitteeID, len(req.CommitteeIDs))
 	for i, cmt := range req.CommitteeIDs {
 		copy(committeeIDs[i][:], cmt)
@@ -24,31 +29,47 @@ func (req *committeeRequest) parseCommitteeIds() []spectypes.CommitteeID {
 	return committeeIDs
 }
 
-type committeeTraceResponse struct {
-	Data   []committeeTrace `json:"data"`
-	Errors []string         `json:"errors,omitempty"`
+// CommitteeTracesResponse represents the API response returned by the
+// committee traces endpoints.
+type CommitteeTracesResponse struct {
+	// Data contains the list of committee duty traces matching the request.
+	Data []CommitteeTrace `json:"data"`
+	// Errors lists non-fatal issues encountered while building the response (duties not found, enrichment errors, etc.).
+	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"committee duty missing for slot 123456"`
 }
 
-type committeeTrace struct {
-	Slot      uint64    `json:"slot"`
-	Consensus []round   `json:"consensus"`
-	Decideds  []decided `json:"decideds"`
+// CommitteeTrace contains the duty trace information for a specific committee.
+type CommitteeTrace struct {
+	// Slot is the duty slot for this committee trace.
+	Slot uint64 `json:"slot" format:"int64"`
+	// Consensus lists per-round QBFT messages observed for this committee.
+	Consensus []Round `json:"consensus"`
+	// Decideds lists decided messages emitted for this duty.
+	Decideds []Decided `json:"decideds"`
 
-	SyncCommittee []committeeMessage `json:"sync_committee"`
-	Attester      []committeeMessage `json:"attester"`
+	// SyncCommittee contains post-consensus messages for sync-committee duties.
+	SyncCommittee []CommitteeMessage `json:"sync_committee"`
+	// Attester contains post-consensus messages for attester duties.
+	Attester []CommitteeMessage `json:"attester"`
 
-	CommitteeID string `json:"committeeID"`
-	Proposal    string `json:"proposalData,omitempty"`
+	// CommitteeID is the 32-byte committee identifier (hex).
+	CommitteeID string `json:"committeeID" format:"hex"`
+	// Proposal is the hex-encoded proposal payload for this duty, if available.
+	Proposal string `json:"proposalData,omitempty" format:"hex"`
 }
 
-type committeeMessage struct {
-	Signer       uint64    `json:"signer"`
-	ValidatorIdx []uint64  `json:"validatorIdx"`
-	ReceivedTime time.Time `json:"time"`
+// CommitteeMessage encapsulates post-consensus committee data.
+type CommitteeMessage struct {
+	// Signer is the operator ID that produced the message.
+	Signer uint64 `json:"signer"`
+	// ValidatorIdx lists related validator indices, when applicable.
+	ValidatorIdx []uint64 `json:"validatorIdx"`
+	// ReceivedTime is when the message was observed.
+	ReceivedTime time.Time `json:"time" format:"date-time"`
 }
 
-func toCommitteeTrace(t *exporter.CommitteeDutyTrace) committeeTrace {
-	return committeeTrace{
+func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
+	return CommitteeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
 		Consensus:     toRounds(t.Rounds),
@@ -60,9 +81,9 @@ func toCommitteeTrace(t *exporter.CommitteeDutyTrace) committeeTrace {
 	}
 }
 
-func toCommitteePost(m []*exporter.SignerData) (out []committeeMessage) {
+func toCommitteePost(m []*exporter.SignerData) (out []CommitteeMessage) {
 	for _, mt := range m {
-		out = append(out, committeeMessage{
+		out = append(out, CommitteeMessage{
 			Signer:       mt.Signer,
 			ValidatorIdx: toUint64Slice(mt.ValidatorIdx),
 			ReceivedTime: toTime(mt.ReceivedTime),
