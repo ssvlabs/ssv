@@ -252,16 +252,21 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 	if err != nil {
 		return nil, err
 	}
-	// After Fork fork happens on all networks,
+	// After Fulu fork happens on all networks,
 	// - Fulu check should become required
 	// - Gloas check might be added as non-required
 	fuluEpoch, err := getForkEpoch("FULU_FORK_EPOCH", false)
 	if err != nil {
 		return nil, err
 	}
-	fuluForkVersion, err := getForkVersion("FULU_FORK_VERSION")
-	if err != nil {
-		return nil, err
+
+	// Only get fork version if the fork is scheduled (not FarFutureEpoch)
+	var fuluForkVersion phase0.Version
+	if fuluEpoch != FarFutureEpoch {
+		fuluForkVersion, err = getForkVersion("FULU_FORK_VERSION")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	forkEpochs := map[spec.DataVersion]phase0.Fork{

@@ -20,7 +20,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (
 	case *capella.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash beacon block (capella): %w", err)
+			return nil, fmt.Errorf("could not hash beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
@@ -37,7 +37,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (
 	case *deneb.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash beacon block (deneb): %w", err)
+			return nil, fmt.Errorf("could not hash beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
@@ -52,9 +52,11 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (
 		}, nil
 
 	case *electra.BeaconBlock:
+		// Note: Fulu reuses Electra's block types, so this case handles both
+		// Electra (version=DataVersionElectra) and Fulu (version=DataVersionFulu)
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash beacon block (electra): %w", err)
+			return nil, fmt.Errorf("could not hash beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
@@ -71,7 +73,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (
 	case *apiv1capella.BlindedBeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash blinded beacon block (capella): %w", err)
+			return nil, fmt.Errorf("could not hash blinded beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
@@ -88,7 +90,7 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (
 	case *apiv1deneb.BlindedBeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash blinded beacon block (deneb): %w", err)
+			return nil, fmt.Errorf("could not hash blinded beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
@@ -103,9 +105,11 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (
 		}, nil
 
 	case *apiv1electra.BlindedBeaconBlock:
+		// Note: Fulu reuses Electra's blinded block types, so this case handles both
+		// Electra (version=DataVersionElectra) and Fulu (version=DataVersionFulu)
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash blinded beacon block (electra): %w", err)
+			return nil, fmt.Errorf("could not hash blinded beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{

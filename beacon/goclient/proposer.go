@@ -275,6 +275,7 @@ func (gc *GoClient) submitBlindedBlock(
 		if block.FuluBlinded.Body.ExecutionPayloadHeader == nil {
 			return fmt.Errorf("%s blinded block execution payload header is nil", version.String())
 		}
+		// Fulu reuses Electra's block types as per consensus spec
 		signedBlindedBlock.Fulu = &apiv1electra.SignedBlindedBeaconBlock{
 			Message:   block.FuluBlinded,
 			Signature: sig,
@@ -366,6 +367,7 @@ func (gc *GoClient) submitRegularBlock(
 		if block.Fulu.Block.Body.ExecutionPayload == nil {
 			return fmt.Errorf("%s block execution payload is nil", version.String())
 		}
+		// Fulu reuses Electra's block types as per consensus spec
 		signedBlock.Fulu = &apiv1fulu.SignedBlockContents{
 			SignedBlock: &electra.SignedBeaconBlock{
 				Message:   block.Fulu.Block,
