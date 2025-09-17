@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -28,11 +27,16 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(err)
 	}
 
-	var errs *multierror.Error
 	var results []validatorDutyTraceWithCommitteeID
+	var errs *multierror.Error
 
 	indices, err := e.extractIndices(&request)
 	errs = multierror.Append(errs, err)
+
+	// if the request was for a specific set of participants and we couldn't resolve any, we're done
+	if request.hasFilters() && len(indices) == 0 {
+		return toApiError(errs)
+	}
 
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
@@ -50,9 +54,15 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
+	// by design, not found duties are expected and not considered as API errors
+	errs = filterOutDutyNotFoundErrors(errs)
+
+	// if we don't have a single valid result and we have at least one meaningful error, return an error
 	if len(results) == 0 && errs.ErrorOrNil() != nil {
+		e.logger.Error("error serving SSV API request", zap.Any("request", request), zap.Error(errs))
 		return toApiError(errs)
 	}
+
 	return api.Render(w, r, toValidatorTraceResponse(results, errs))
 }
 
@@ -103,12 +113,8 @@ func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, s
 
 		duty, err := e.traceStore.GetValidatorDuty(role, slot, idx)
 		if err != nil {
-			// if error is not found, nothing to report as we might not have a duty for this role
-			// otherwise report it:
-			if !isNotFoundError(err) {
-				e.logger.Error("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
-				errs = multierror.Append(errs, err)
-			}
+			e.logger.Error("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
+			errs = multierror.Append(errs, err)
 			continue
 		}
 		result.ValidatorDutyTrace = *duty
@@ -143,12 +149,8 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 
 		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
 		if err != nil {
-			// if error is not found, nothing to report as we might not have a duty for this role
-			// otherwise report it:
-			if !isNotFoundError(err) {
-				e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.ValidatorIndex(index))
-				errs = multierror.Append(errs, err)
-			}
+			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.ValidatorIndex(index))
+			errs = multierror.Append(errs, err)
 			continue
 		}
 
@@ -178,39 +180,11 @@ func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *
 		}
 		r.Data = append(r.Data, trace)
 	}
-
-	if errs.ErrorOrNil() != nil {
-		r.Errors = toStrings(errs.Errors)
-	}
+	r.Errors = toStrings(errs)
 	return r
 }
 
 // === Shared validator traces helpers ===
 func isCommitteeDuty(role spectypes.BeaconRole) bool {
 	return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
-}
-
-func (e *Exporter) extractIndices(request *validatorRequest) ([]phase0.ValidatorIndex, error) {
-	indices := make([]phase0.ValidatorIndex, 0, len(request.Indices)+len(request.PubKeys))
-	var errs *multierror.Error
-
-	for _, idx := range request.Indices {
-		indices = append(indices, phase0.ValidatorIndex(idx))
-	}
-
-	for _, req := range request.PubKeys {
-		var pubkey spectypes.ValidatorPK
-		copy(pubkey[:], req)
-		idx, ok := e.validators.ValidatorIndex(pubkey)
-		if !ok {
-			errs = multierror.Append(errs, fmt.Errorf("validator not found for pubkey: %x", pubkey))
-			continue
-		}
-		indices = append(indices, idx)
-	}
-
-	slices.Sort(indices)
-	indices = slices.Compact(indices)
-
-	return indices, errs.ErrorOrNil()
 }
