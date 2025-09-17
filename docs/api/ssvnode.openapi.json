@@ -1,7 +1,6 @@
 {
     "schemes": [
-        "http",
-        "https"
+        "http"
     ],
     "swagger": "2.0",
     "info": {
@@ -9,8 +8,8 @@
         "title": "SSV Node API",
         "contact": {
             "name": "SSV Labs",
-            "url": "https://ssv.network",
-            "email": "support@ssv.network"
+            "url": "https://ssvlabs.io",
+            "email": "info@ssv.network"
         },
         "license": {
             "name": "Apache 2.0",

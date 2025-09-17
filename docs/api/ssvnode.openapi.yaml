@@ -415,9 +415,9 @@ definitions:
     type: object
 info:
   contact:
-    email: support@ssv.network
+    email: info@ssv.network
     name: SSV Labs
-    url: https://ssv.network
+    url: https://ssvlabs.io
   description: HTTP endpoints exposed by the SSV node, including exporter traces and
     validator metadata.
   license:
@@ -835,7 +835,6 @@ paths:
       - Exporter
 schemes:
 - http
-- https
 swagger: "2.0"
 tags:
 - description: Duty traces and participants.
