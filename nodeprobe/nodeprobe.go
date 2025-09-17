@@ -25,6 +25,7 @@ type pNode struct {
 
 	healthcheckTimeout time.Duration
 	retriesMax         int
+	retryDelay         time.Duration
 }
 
 // Prober allows for probing (checking the health of) the nodes it is configured with. It supports retries
@@ -122,16 +123,19 @@ func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
 			zap.Int("attempt", attempt),
 			zap.Error(err),
 		)
+
+		time.Sleep(n.retryDelay) // wait before the next retry attempt
 	}
 
 	return fmt.Errorf("node is unhealthy: %w", err)
 }
 
-func (p *Prober) AddNode(nodeName string, node node, healthcheckTimeout time.Duration, retriesMax int) {
+func (p *Prober) AddNode(nodeName string, node node, healthcheckTimeout time.Duration, retriesMax int, retryDelay time.Duration) {
 	p.nodes.Set(nodeName, pNode{
 		name:               nodeName,
 		n:                  node,
 		healthcheckTimeout: healthcheckTimeout,
 		retriesMax:         retriesMax,
+		retryDelay:         retryDelay,
 	})
 }
