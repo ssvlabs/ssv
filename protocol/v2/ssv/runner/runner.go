@@ -251,7 +251,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
-func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
+func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, valueCheckFn specqbft.ProposedValueCheckF, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
@@ -265,8 +265,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, err
 	}
 
-	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
-	// do not return error if no running duty
+	// we allow all consensus msgs to be processed, once the process finishes, we check if there is
+	// an actual running duty - we consider this messaged "processed" (we might or might not get another
+	// message, hopefully we are running the duty by that time to finish the processing below)
 	if !b.hasRunningDuty() {
 		logger.Debug("no running duty")
 		return false, nil, nil
@@ -280,16 +281,17 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
 	}
 
-	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
+	if err := b.validateDecidedConsensusData(valueCheckFn, decidedValue); err != nil {
 		return true, nil, errors.Wrap(err, "decided ValidatorConsensusData invalid")
 	}
 
-	b.State.DecidedValue, err = decidedValue.Encode()
+	decidedValueEncoded, err := decidedValue.Encode()
 	if err != nil {
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
 
-	// update the highest decided slot
+	// update the decided and the highest decided slot
+	b.State.DecidedValue = decidedValueEncoded
 	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
 	return true, decidedValue, nil
