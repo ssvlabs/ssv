@@ -124,7 +124,12 @@ func (p *Prober) probeNode(ctx context.Context, n pNode) (err error) {
 			zap.Error(err),
 		)
 
-		time.Sleep(n.retryDelay) // wait before the next retry attempt
+		// Wait before the next retry attempt.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(n.retryDelay):
+		}
 	}
 
 	return fmt.Errorf("node is unhealthy: %w", err)
