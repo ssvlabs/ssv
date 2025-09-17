@@ -331,8 +331,8 @@ github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0b
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f h1:DJlz/EO6c82mYGp0mqOKPYbvXc62ab48ZrJ//N1JMIM=
 github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f/go.mod h1:d1hIujREvu5udtEE/GPGZRO/wCOs6hM1ClIqiR9Swgc=
-github.com/ssvlabs/ssv-spec v1.1.4-0.20250915143636-11b7a193cd88 h1:0A/q4iJ1y46L28FYI0PqgWotTpu9nM/WkD7lQ00TjKs=
-github.com/ssvlabs/ssv-spec v1.1.4-0.20250915143636-11b7a193cd88/go.mod h1:l+SjAubJjKiJjzI7zz/NP6sr14lzeP1cgaVyG5OJ4rM=
+github.com/ssvlabs/ssv-spec v1.1.4-0.20250917074424-09fb36c35d82 h1:lCmwrNaU2JHn12oENvr1BdG1hL36U6/Iq8dPkkXiwW8=
+github.com/ssvlabs/ssv-spec v1.1.4-0.20250917074424-09fb36c35d82/go.mod h1:QG0s0z3bM9gGAin3P3phhaQ71MJWXCSGxRvmb+cy5dk=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=

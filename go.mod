@@ -40,7 +40,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f // TODO(fulu): Update to release tag with Fulu mainnet support
-	github.com/ssvlabs/ssv-spec v1.1.4-0.20250915143636-11b7a193cd88 // TODO(fulu): Update to release tag with Fulu mainnet support
+	github.com/ssvlabs/ssv-spec v1.1.4-0.20250917074424-09fb36c35d82 // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250910103216-8fc1632c2d52
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.10.0

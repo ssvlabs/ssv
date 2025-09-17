@@ -31,7 +31,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/ssvlabs/ssv v1.2.1-0.20250904093034-64dc248758c3
-	github.com/ssvlabs/ssv-spec v1.1.4-0.20250915143636-11b7a193cd88 // TODO(fulu): Update to release tag with Fulu mainnet support
+	github.com/ssvlabs/ssv-spec v1.1.4-0.20250917074424-09fb36c35d82 // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/valyala/fasthttp v1.58.0
