@@ -358,9 +358,7 @@ var StartNodeCmd = &cobra.Command{
 				executionAddrList[0],
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
-				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
 			if err != nil {
@@ -374,9 +372,7 @@ var StartNodeCmd = &cobra.Command{
 				executionAddrList,
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
-				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
 				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
 			if err != nil {

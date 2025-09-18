@@ -1153,47 +1153,54 @@ func TestFilterer(t *testing.T) {
 
 // TestSyncProgress tests the sync progress of the client.
 func TestSyncProgress(t *testing.T) {
-	env := setupTestEnv(t, 5*time.Second)
-
-	// Deploy the contract
-	_, err := env.deploySimContract()
-	require.NoError(t, err)
-
-	// Create a client and connect to the simulator
-	err = env.createClient(WithHealthInvalidationInterval(0))
-	require.NoError(t, err)
-
-	err = env.client.Healthy(env.ctx)
-	require.NoError(t, err)
-
 	t.Run("out of sync", func(t *testing.T) {
+		env := setupTestEnv(t, 5*time.Second)
+
+		// Deploy the contract
+		_, err := env.deploySimContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(
+			WithHealthInvalidationInterval(0), // makes sure we don't skip the health-check
+			WithSyncDistanceTolerance(0),
+		)
+		require.NoError(t, err)
+
 		env.client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
 			p.HighestBlock = 6
 			return p, nil
 		}
+
 		err = env.client.Healthy(env.ctx)
+		require.Error(t, err)
 		require.ErrorIs(t, err, ErrSyncing)
 	})
 
 	t.Run("within tolerable limits", func(t *testing.T) {
-		client, err := New(
-			env.ctx,
-			env.wsURL,
-			env.contractAddr,
+		env := setupTestEnv(t, 5*time.Second)
+
+		// Deploy the contract
+		_, err := env.deploySimContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(
+			WithHealthInvalidationInterval(0), // makes sure we don't skip the health-check
 			WithSyncDistanceTolerance(2),
 		)
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, client.Close()) })
 
-		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+		env.client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
 			p.HighestBlock = 7
 			return p, nil
 		}
-		err = client.Healthy(env.ctx)
+
+		err = env.client.Healthy(env.ctx)
 		require.NoError(t, err)
 	})
 }

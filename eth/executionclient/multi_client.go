@@ -50,14 +50,18 @@ var _ Provider = &MultiClient{}
 // The execution MultiClient switches to EL2, the consensus multi client switches to CL2,
 // This shouldn't cause significant duty misses.
 type MultiClient struct {
-	// optional
 	logger *zap.Logger
+
+	reqTimeout    time.Duration
+	reqRetryDelay time.Duration
+
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
-	followDistance             uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-	reqTimeout                 time.Duration
+	followDistance uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+
 	healthInvalidationInterval time.Duration
-	syncDistanceTolerance      uint64
+
+	syncDistanceTolerance uint64
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -77,13 +81,16 @@ func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Ad
 	}
 
 	multiClient := &MultiClient{
-		clientAddrs:     nodeAddrs,
-		clients:         make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
-		clientsMu:       make([]sync.Mutex, len(nodeAddrs)),
-		contractAddress: contractAddr,
-		logger:          zap.NewNop(),
-		followDistance:  DefaultFollowDistance,
-		reqTimeout:      DefaultReqTimeout,
+		clientAddrs:                nodeAddrs,
+		clients:                    make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
+		clientsMu:                  make([]sync.Mutex, len(nodeAddrs)),
+		contractAddress:            contractAddr,
+		logger:                     zap.NewNop(),
+		reqTimeout:                 DefaultReqTimeout,
+		reqRetryDelay:              DefaultReqRetryDelay,
+		followDistance:             DefaultFollowDistance,
+		healthInvalidationInterval: DefaultHealthInvalidationInterval,
+		syncDistanceTolerance:      DefaultSyncDistanceTolerance,
 	}
 
 	for _, opt := range opts {
@@ -219,42 +226,47 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) (logsCh
 	go func() {
 		defer close(logsCh)
 
+		attemptDelay := time.Duration(0) // no delay on the 1st attempt
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-mc.closed:
 				return
-			default:
-				// fromBlock is defined in the outer scope (from f's func perspective), but we have to modify it
-				// inside the f func because in case of failover to another client - we want to keep progressing
-				// from the latest block (not re-read the whole feed from the initial value of fromBlock). Note,
-				// f is called sequentially by a single go-routine, hence there is no need to synchronize concurrent
-				// access to fromBlock variable.
-				f := func(client SingleClientProvider) (any, error) {
-					lastProcessedBlock, progressed, err := client.streamLogsToChan(ctx, logsCh, fromBlock)
-					if progressed {
-						fromBlock = lastProcessedBlock + 1
-					}
-					if isSingleClientInterruptedError(err) {
-						// This is a valid way to finish streamLogsToChan call. Propagate error to let the caller know.
-						return nil, err
-					}
-					if err == nil {
-						// streamLogsToChan should never return without an error, so we treat a nil error as
-						// an error by itself.
-						err = fmt.Errorf("streamLogsToChan halted without an error")
-					}
+			case <-time.After(attemptDelay):
+				// waited out the delay (precautionary measure to avoid overloading EL with requests)
+			}
+
+			// fromBlock is defined in the outer scope (from f's func perspective), but we have to modify it
+			// inside the f func because in case of failover to another client - we want to keep progressing
+			// from the latest block (not re-read the whole feed from the initial value of fromBlock). Note,
+			// f is called sequentially by a single go-routine, hence there is no need to synchronize concurrent
+			// access to fromBlock variable.
+			f := func(client SingleClientProvider) (any, error) {
+				lastProcessedBlock, progressed, err := client.streamLogsToChan(ctx, logsCh, fromBlock)
+				if progressed {
+					fromBlock = lastProcessedBlock + 1
+				}
+				if isSingleClientInterruptedError(err) {
+					// This is a valid way to finish streamLogsToChan call. Propagate error to let the caller know.
 					return nil, err
 				}
-				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f)
-				if isMultiClientInterruptedError(err) {
-					// We are done with log streaming.
-					return
+				if err == nil {
+					// streamLogsToChan should never return without an error, so we treat a nil error as
+					// an error by itself.
+					err = fmt.Errorf("streamLogsToChan halted without an error")
 				}
-
-				mc.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
+				return nil, err
 			}
+			_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f)
+			if isMultiClientInterruptedError(err) {
+				// We are done with log streaming.
+				return
+			}
+
+			mc.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
+			attemptDelay = mc.reqRetryDelay // any retry attempt should be delayed
 		}
 	}()
 

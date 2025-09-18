@@ -23,6 +23,66 @@ import (
 )
 
 func TestNewMulti(t *testing.T) {
+	t.Run("success, default values", func(t *testing.T) {
+		ctx := t.Context()
+
+		sim := simTestBackend(testAddr)
+
+		rpcServer, _ := sim.Node().RPCHandler()
+		httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+		defer rpcServer.Stop()
+		defer httpsrv.Close()
+		addr := httpToWebSocketURL(httpsrv.URL)
+
+		addresses := []string{addr}
+		contractAddr := ethcommon.HexToAddress("0x1234")
+
+		mc, err := NewMulti(
+			ctx,
+			addresses,
+			contractAddr,
+		)
+		require.NoError(t, err)
+		require.NotNil(t, mc)
+		require.Equal(t, zap.NewNop(), mc.logger)
+		require.EqualValues(t, DefaultReqTimeout, mc.reqTimeout)
+		require.EqualValues(t, DefaultReqRetryDelay, mc.reqRetryDelay)
+		require.EqualValues(t, DefaultFollowDistance, mc.followDistance)
+		require.EqualValues(t, DefaultHealthInvalidationInterval, mc.healthInvalidationInterval)
+		require.EqualValues(t, DefaultSyncDistanceTolerance, mc.syncDistanceTolerance)
+	})
+	t.Run("success, options override default values", func(t *testing.T) {
+		ctx := t.Context()
+
+		sim := simTestBackend(testAddr)
+
+		rpcServer, _ := sim.Node().RPCHandler()
+		httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+		defer rpcServer.Stop()
+		defer httpsrv.Close()
+		addr := httpToWebSocketURL(httpsrv.URL)
+
+		addresses := []string{addr}
+		contractAddr := ethcommon.HexToAddress("0x1234")
+
+		customLogger := zap.NewExample()
+		const customTimeout = 100 * time.Millisecond
+		const customSyncDistanceTolerance = 12
+
+		mc, err := NewMulti(
+			ctx,
+			addresses,
+			contractAddr,
+			WithLoggerMulti(customLogger),
+			WithReqTimeoutMulti(customTimeout),
+			WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, mc)
+		require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
+		require.EqualValues(t, customTimeout, mc.reqTimeout)
+		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+	})
 	t.Run("no node addresses", func(t *testing.T) {
 		ctx := t.Context()
 
@@ -44,45 +104,6 @@ func TestNewMulti(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "create single client")
 	})
-}
-
-func TestNewMulti_WithOptions(t *testing.T) {
-	ctx := t.Context()
-
-	sim := simTestBackend(testAddr)
-
-	rpcServer, _ := sim.Node().RPCHandler()
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := httpToWebSocketURL(httpsrv.URL)
-
-	addresses := []string{addr}
-	contractAddr := ethcommon.HexToAddress("0x1234")
-
-	customLogger := zap.NewExample()
-	const customFollowDistance = uint64(10)
-	const customTimeout = 100 * time.Millisecond
-	const customHealthInvalidationInterval = 50 * time.Millisecond
-	const customSyncDistanceTolerance = 12
-
-	mc, err := NewMulti(
-		ctx,
-		addresses,
-		contractAddr,
-		WithLoggerMulti(customLogger),
-		WithFollowDistanceMulti(customFollowDistance),
-		WithReqTimeoutMulti(customTimeout),
-		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
-		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, mc)
-	require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
-	require.EqualValues(t, customFollowDistance, mc.followDistance)
-	require.EqualValues(t, customTimeout, mc.reqTimeout)
-	require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
-	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
 }
 
 func TestMultiClient_assertSameChainIDs(t *testing.T) {
@@ -297,16 +318,6 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 
 		mockClient1.
 			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
-				out <- BlockLogs{BlockNumber: 200}
-				out <- BlockLogs{BlockNumber: 201}
-				return 201, true, nil
-			}).
-			Times(1)
-
-		mockClient1.
-			EXPECT().
 			Healthy(gomock.Any()).
 			DoAndReturn(func(ctx context.Context) error {
 				return nil
@@ -315,17 +326,28 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 
 		mockClient2.
 			EXPECT().
-			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
-			Return(uint64(202), true, nil).
-			Times(1)
-
-		mockClient2.
-			EXPECT().
 			Healthy(gomock.Any()).
 			DoAndReturn(func(ctx context.Context) error {
 				return nil
 			}).
 			AnyTimes()
+
+		gomock.InOrder(
+			mockClient1.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
+					out <- BlockLogs{BlockNumber: 200}
+					out <- BlockLogs{BlockNumber: 201}
+					return 201, true, nil // nil error results into failover
+				}).
+				Times(1),
+			mockClient2.
+				EXPECT().
+				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
+				Return(uint64(202), true, ErrClosed). // ErrClosed terminates test
+				Times(1),
+		)
 
 		mc := &MultiClient{
 			clientAddrs: []string{"mockNode1", "mockNode2"},
@@ -337,7 +359,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 
 		logsCh := mc.StreamLogs(ctx, 200)
 
-		// Expecting two logs: 200, 201, and then logsCh and errsCh should be closed (with no errors on errsCh).
+		// Expecting two logs: 200, 201, and then logsCh should be closed.
 		receivedLogs := make([]BlockLogs, 0, 2)
 		for blk := range logsCh {
 			receivedLogs = append(receivedLogs, blk)
@@ -398,7 +420,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
 					out <- BlockLogs{BlockNumber: 200}
-					return 200, true, ErrClosed // Prevents StreamLogs retries (terminates test)
+					return 200, true, ErrClosed // ErrClosed terminates test
 				}).
 				Times(1),
 		)
@@ -464,7 +486,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
 				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
 					out <- BlockLogs{BlockNumber: 202}
-					return 202, true, ErrClosed // Prevents StreamLogs retries (terminates test)
+					return 202, true, ErrClosed // ErrClosed terminates test
 				}).
 				Times(1),
 		)
@@ -555,7 +577,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 				streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 				DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
 					out <- BlockLogs{BlockNumber: 200}
-					return 200, true, ErrClosed // Prevents StreamLogs retries (terminates test)
+					return 200, true, ErrClosed // ErrClosed terminates test
 				}).
 				Times(1),
 		)
@@ -594,7 +616,7 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
 			out <- BlockLogs{BlockNumber: 200}
 			out <- BlockLogs{BlockNumber: 201}
-			return 202, true, nil
+			return 202, true, ErrClosed // ErrClosed terminates test
 		}).
 		Times(1)
 
@@ -616,7 +638,7 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 
 	logsCh := mc.StreamLogs(ctx, 200)
 
-	// Expecting two logs: 200, 201, and then logsCh and errsCh should be closed (with no errors on errsCh).
+	// Expecting two logs: 200, 201, and then logsCh should be closed.
 	receivedLogs := make([]BlockLogs, 0, 2)
 	for blk := range logsCh {
 		receivedLogs = append(receivedLogs, blk)

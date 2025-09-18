@@ -49,23 +49,25 @@ type ExecutionClient struct {
 	nodeAddr        string
 	contractAddress ethcommon.Address
 
-	// optional
 	logger *zap.Logger
+
+	reqTimeout    time.Duration
+	reqRetryDelay time.Duration
+
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
-	followDistance             uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-	reqTimeout                 time.Duration
-	healthInvalidationInterval time.Duration
-	logBatchSize               uint64
+	followDistance uint64 // TODO: consider reading the finalized checkpoint from consensus layer
 
 	syncDistanceTolerance uint64
 	// syncProgressFn is a struct-field so it can be overwritten for testing
 	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
 
-	// variables
-	client         *ethClient
-	closed         chan struct{}
-	lastSyncedTime atomic.Int64
+	client *ethClient
+	closed chan struct{}
+
+	// healthInvalidationInterval ensures we don't spam EL with health-check type requests too much.
+	healthInvalidationInterval time.Duration
+	lastHeathyTime             atomic.Int64
 }
 
 // New creates a new instance of ExecutionClient.
@@ -74,10 +76,11 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		nodeAddr:                   nodeAddr,
 		contractAddress:            contractAddr,
 		logger:                     zap.NewNop(),
-		followDistance:             DefaultFollowDistance,
 		reqTimeout:                 DefaultReqTimeout,
+		reqRetryDelay:              DefaultReqRetryDelay,
+		followDistance:             DefaultFollowDistance,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
-		logBatchSize:               DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		syncDistanceTolerance:      DefaultSyncDistanceTolerance,
 		closed:                     make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -166,8 +169,10 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 		defer close(logCh)
 		defer close(errCh)
 
-		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += ec.logBatchSize {
-			toBlock := min(fromBlock+ec.logBatchSize-1, endBlock)
+		const logBatchSize = 200 // TODO Make batch of logs adaptive depending on "websocket: read limit"
+
+		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += logBatchSize {
+			toBlock := min(fromBlock+logBatchSize-1, endBlock)
 
 			start := time.Now()
 			query := ethereum.FilterQuery{
@@ -314,29 +319,34 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (lo
 	go func() {
 		defer close(logsCh)
 
+		attemptDelay := time.Duration(0) // no delay on the 1st attempt
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ec.closed:
 				return
-			default:
-				lastProcessedBlock, progressed, err := ec.streamLogsToChan(ctx, logsCh, fromBlock)
-				if progressed {
-					fromBlock = lastProcessedBlock + 1
-				}
-				if isSingleClientInterruptedError(err) {
-					// This is a valid way to finish streamLogsToChan call. We are done with log streaming.
-					return
-				}
-				if err == nil {
-					// streamLogsToChan should never return without an error, so we treat a nil error as
-					// an error by itself.
-					err = fmt.Errorf("streamLogsToChan halted without an error")
-				}
-
-				ec.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
+			case <-time.After(attemptDelay):
+				// waited out the delay (precautionary measure to avoid overloading EL with requests)
 			}
+
+			lastProcessedBlock, progressed, err := ec.streamLogsToChan(ctx, logsCh, fromBlock)
+			if progressed {
+				fromBlock = lastProcessedBlock + 1
+			}
+			if isSingleClientInterruptedError(err) {
+				// This is a valid way to finish streamLogsToChan call. We are done with log streaming.
+				return
+			}
+			if err == nil {
+				// streamLogsToChan should never return without an error, so we treat a nil error as
+				// an error by itself.
+				err = fmt.Errorf("streamLogsToChan halted without an error")
+			}
+
+			ec.logger.Error("failed to stream registry events, gonna retry", zap.Error(err))
+			attemptDelay = ec.reqRetryDelay // any retry attempt should be delayed
 		}
 	}()
 
@@ -349,16 +359,12 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ErrClosed
 	}
 
-	lastHealthyTime := time.Unix(ec.lastSyncedTime.Load(), 0)
+	lastHealthyTime := time.Unix(ec.lastHeathyTime.Load(), 0)
 	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
 		// Synced recently, reuse the result (only if ec.healthInvalidationInterval is set).
 		return nil
 	}
 
-	return ec.healthy(ctx)
-}
-
-func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
 	recordSingleClientRequest(ctx, ec.logger, "SyncProgress", ec.nodeAddr, time.Since(start), err)
@@ -381,7 +387,8 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
-	ec.lastSyncedTime.Store(time.Now().Unix())
+
+	ec.lastHeathyTime.Store(time.Now().Unix())
 
 	return nil
 }
