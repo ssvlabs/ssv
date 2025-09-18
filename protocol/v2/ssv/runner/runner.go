@@ -119,7 +119,7 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
 	b.highestDecidedSlot = slot
 }
 
-// setupForNewDuty is sets the runner for a new duty
+// baseSetupForNewDuty is sets the runner for a new duty
 func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	// start new state
 	// start new state
@@ -155,7 +155,7 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 	return nil
 }
 
-// baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
+// baseStartNewNonBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
 func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty *spectypes.ValidatorDuty, quorum uint64) error {
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start non-beacon duty")
