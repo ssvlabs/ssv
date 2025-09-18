@@ -463,7 +463,7 @@ func (ec *ExecutionClient) streamLogsToChan(
 	for {
 		select {
 		case <-ctx.Done():
-			return lastBlock, progressed, context.Canceled
+			return lastBlock, progressed, ctx.Err()
 
 		case <-ec.closed:
 			return lastBlock, progressed, ErrClosed
