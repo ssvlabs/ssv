@@ -342,15 +342,13 @@ definitions:
         example: ATTESTER
         type: string
       slot:
-        description: Slot is the duty slot for this validator trace.
-        example: 123456
-        format: int64
-        type: integer
+        description: Slot is the duty slot for this validator trace (numeric string).
+        example: "123456"
+        type: string
       validator:
-        description: Validator is the validator index for the duty.
-        example: 123
-        format: int64
-        type: integer
+        description: Validator is the validator index for the duty (numeric string).
+        example: "123"
+        type: string
     type: object
   exporter.ValidatorTracesRequest:
     properties:

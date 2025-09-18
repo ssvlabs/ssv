@@ -51,12 +51,12 @@ type ValidatorTracesResponse struct {
 // ValidatorTrace captures the consensus trace information for a single
 // validator duty.
 type ValidatorTrace struct {
-	// Slot is the duty slot for this validator trace.
-	Slot phase0.Slot `json:"slot" swaggertype:"integer" format:"int64" example:"123456"`
+	// Slot is the duty slot for this validator trace (numeric string).
+	Slot phase0.Slot `json:"slot" swaggertype:"string" example:"123456"`
 	// Role is the beacon role for this duty (e.g., ATTESTER).
 	Role string `json:"role" example:"ATTESTER"`
-	// Validator is the validator index for the duty.
-	Validator phase0.ValidatorIndex `json:"validator" swaggertype:"integer" format:"int64" example:"123"`
+	// Validator is the validator index for the duty (numeric string).
+	Validator phase0.ValidatorIndex `json:"validator" swaggertype:"string" example:"123"`
 	// CommitteeID is the 32-byte committee identifier (hex), when applicable.
 	CommitteeID string `json:"committeeID,omitempty" format:"hex" example:"aabbcc"`
 	// Rounds lists per-round QBFT messages observed for this validator.

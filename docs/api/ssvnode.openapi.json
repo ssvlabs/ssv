@@ -1041,16 +1041,14 @@
                     "example": "ATTESTER"
                 },
                 "slot": {
-                    "description": "Slot is the duty slot for this validator trace.",
-                    "type": "integer",
-                    "format": "int64",
-                    "example": 123456
+                    "description": "Slot is the duty slot for this validator trace (numeric string).",
+                    "type": "string",
+                    "example": "123456"
                 },
                 "validator": {
-                    "description": "Validator is the validator index for the duty.",
-                    "type": "integer",
-                    "format": "int64",
-                    "example": 123
+                    "description": "Validator is the validator index for the duty (numeric string).",
+                    "type": "string",
+                    "example": "123"
                 }
             }
         },
