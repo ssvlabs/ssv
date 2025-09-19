@@ -523,12 +523,11 @@ func (c *controller) initValidators(shares []*ssvtypes.SSVShare) ([]*validator.V
 
 	c.logger.Info(
 		"initialized validators",
-		zap.Int("validators_map_size", c.validatorsMap.SizeValidators()),
-		zap.Int("committees_size", c.validatorsMap.SizeCommittees()),
-		zap.Int("missing_metadata", len(fetchMetadata)),
-		zap.Int("shares", len(shares)),
+		zap.Int("attempted", len(shares)),
 		zap.Int("initialized", len(validatorsInitialized)),
+		zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("failures", len(errs)),
+		zap.Int("committees", c.validatorsMap.SizeCommittees()),
 	)
 
 	if len(errs) == len(shares) {
@@ -553,9 +552,7 @@ func (c *controller) startValidators(validators []*validator.Validator) (started
 	}
 
 	c.logger.Info("started validators",
-		zap.Int("validators_map_size", c.validatorsMap.SizeValidators()),
-		zap.Int("committees_size", c.validatorsMap.SizeCommittees()),
-		zap.Int("shares", len(validators)),
+		zap.Int("attempted", len(validators)),
 		zap.Int("started", started),
 		zap.Int("failures", len(errs)),
 	)
@@ -603,7 +600,7 @@ func (c *controller) startEligibleValidators(ctx context.Context, pubKeys []spec
 	for _, share := range shares {
 		select {
 		case <-ctx.Done():
-			c.logger.Warn("context canceled, stopping validator start loop")
+			c.logger.Info("terminating validator start loop (due to context canceled)")
 			return startedValidators
 		default:
 		}
@@ -1072,7 +1069,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 				recordValidatorStatus(ctx, count, status)
 			}
 		case <-ctx.Done():
-			c.logger.Info("stopped reporting validator statuses. Context canceled")
+			c.logger.Info("terminating reporting validator statuses (due to context canceled)")
 			return
 		}
 	}
