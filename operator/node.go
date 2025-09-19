@@ -47,7 +47,6 @@ type Options struct {
 type Node struct {
 	logger           *zap.Logger
 	network          *networkconfig.Network
-	context          context.Context
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions
 	exporterOptions  exporter.Options
@@ -78,7 +77,6 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 
 	node := &Node{
 		logger:           logger.Named(log.NameOperator),
-		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
 		exporterOptions:  exporterOpts,
@@ -120,8 +118,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 }
 
 // Start starts to stream duties and run IBFT instances
-func (n *Node) Start() error {
-	ctx := n.context // TODO: pass it to Start
+func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {

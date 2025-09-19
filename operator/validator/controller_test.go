@@ -459,11 +459,11 @@ func TestSetupValidators(t *testing.T) {
 			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
 
-			initedValidators, _ := ctr.setupValidators(tc.shares)
+			initedValidators, _ := ctr.initValidators(tc.shares)
 			require.Len(t, initedValidators, tc.initedValidators, "%s", tc.name)
 
 			// TODO: Alan, should we check for committee too?
-			started := ctr.startValidators(initedValidators, nil)
+			started := ctr.startValidators(initedValidators)
 
 			require.Equal(t, tc.started, started, "%s", tc.name)
 
