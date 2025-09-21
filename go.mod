@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.26.1-0.20250829122455-ff89a2135a43 // TODO(fulu): Update to release tag once Fulu mainnet is scheduled
+	github.com/attestantio/go-eth2-client v0.27.0
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -39,8 +39,8 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250915165327-727be48a373f // TODO(fulu): Update to release tag with Fulu mainnet support
-	github.com/ssvlabs/ssv-spec v1.1.4-0.20250917104829-415b506a25fa // TODO(fulu): Update to release tag with Fulu mainnet support
+	github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250921090156-3803c4e877ae // TODO(fulu): Update to release tag with Fulu mainnet support
+	github.com/ssvlabs/ssv-spec v1.1.4-0.20250921090236-eaca8673b7c1 // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250910103216-8fc1632c2d52
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.10.0
@@ -287,4 +287,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 
 // TODO(fulu): Once Fulu mainnet epoch is scheduled, merge upstream official release into SSV fork
 // and update to new version tag. Current fork includes both Fulu support and SSV-specific changes.
-replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250916050033-a3418b3bf251
+replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250921085701-7014c8fd0091

@@ -18,8 +18,7 @@ Update the following dependencies to versions that include Fulu mainnet support:
 
 #### In parent `go.mod`:
 - [ ] `github.com/ssvlabs/go-eth2-client` - Merge upstream official Fulu mainnet release and update fork
-  - Current: v0.6.31-0.20250916050033-a3418b3bf251 (includes Fulu testnet support and SSV-specific changes)
-  - TODO(fulu) comment added to replace directive in go.mod
+  - Current: v0.6.31-0.20250921085701-7014c8fd0091 (includes Fulu testnet support and SSV-specific changes)
 - [ ] `github.com/ssvlabs/eth2-key-manager` - Update to official release tag with Fulu mainnet support
 - [ ] `github.com/ssvlabs/ssv-spec` - Update to official release tag with Fulu mainnet support
 
