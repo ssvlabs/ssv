@@ -181,9 +181,10 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		randao := getTestRANDAO()
 
 		// Should get block successfully but fee recipient should be zero
-		versionedProposal, _, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
 		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
 		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
 		feeRecipient, err := versionedProposal.FeeRecipient()
@@ -206,9 +207,10 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		versionedProposal, _, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
 		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
 		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
 		feeRecipient, err := versionedProposal.FeeRecipient()
@@ -234,9 +236,10 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		versionedProposal, _, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
 		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
 		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
 		require.True(t, versionedProposal.Blinded, "should return a blinded block")
@@ -261,9 +264,10 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		versionedProposal, _, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
 		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
 		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
 		require.True(t, versionedProposal.Blinded, "should return a blinded block")

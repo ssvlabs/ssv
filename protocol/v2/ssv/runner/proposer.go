@@ -260,7 +260,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	versionedBlock, blkToSign, err := cd.GetBlockData()
 	if err != nil {
-		return errors.Wrap(err, "could not get block data")
+		return traces.Errorf(span, "could not get block data from consensus data: %w", err)
 	}
 
 	if versionedBlock.Blinded {
@@ -380,7 +380,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
-		return errors.Wrap(err, "could not get block")
+		return traces.Errorf(span, "could not get block data from consensus data: %w", err)
 	}
 
 	loggerFields := []zap.Field{

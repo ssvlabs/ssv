@@ -142,7 +142,7 @@ func (gc *GoClient) GetBeaconBlock(
 		}
 		return beaconBlock, beaconBlock.Fulu, nil
 	default:
-		return nil, nil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
+		return nil, nil, fmt.Errorf("unknown block version %d", beaconBlock.Version)
 	}
 }
 
