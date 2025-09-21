@@ -472,9 +472,6 @@ func (c *controller) StartValidators(ctx context.Context) error {
 
 		// Setup committee validators.
 		validators, committees := c.setupValidators(ownShares)
-		if len(validators) == 0 {
-			return nil, nil, fmt.Errorf("none of %d validators were successfully initialized", len(ownShares))
-		}
 
 		return validators, committees, nil
 	}
@@ -781,7 +778,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 
 func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator, *validator.Committee, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
-		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey[:]))
+		c.logger.Info("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey[:]))
 		return nil, nil, nil
 	}
 
