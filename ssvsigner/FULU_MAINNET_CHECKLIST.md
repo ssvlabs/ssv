@@ -24,6 +24,11 @@ Update the following dependencies to versions that include Fulu mainnet support:
 
 ### 2. Configuration Updates
 
+#### Fork Epoch Required Flag (`beacon/goclient/spec.go`):
+- [ ] Change `getForkEpoch("FULU_FORK_EPOCH", false)` to `getForkEpoch("FULU_FORK_EPOCH", true)`
+  - Currently set to `false` for backward compatibility with CLs that don't yet support Fulu
+  - Should be changed to `true` (required) one step before mainnet fork when Fulu is widely supported by CL clients
+
 #### Web3Signer Version:
 Update to the latest version that includes Fulu mainnet epoch (check for version > 25.9.0):
 - [ ] `ssvsigner/e2e/testenv/containers.go` line 144

@@ -25,6 +25,10 @@ type AttesterCalls interface {
 // ProposerCalls interface has all block proposer duty specific calls
 type ProposerCalls interface {
 	// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
+	// Returns:
+	//   - *api.VersionedProposal: The full versioned proposal containing all block variants
+	//   - ssz.Marshaler: The specific versioned block for the current fork (e.g., beaconBlock.Capella, beaconBlock.Deneb)
+	//   - error: Any error encountered during block retrieval
 	GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error)
 	// SubmitBeaconBlock submit the block to the node
 	SubmitBeaconBlock(ctx context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error

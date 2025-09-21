@@ -158,4 +158,8 @@ require (
 	lukechampine.com/blake3 v1.3.0 // indirect
 )
 
+// Using local SSV module to maintain alignment with the parent package during active development.
+// This avoids circular dependency issues where ssvsigner would need to reference specific SSV commits
+// that subsequently change. When ssvsigner is extracted to a separate repository, this will be
+// replaced with explicit version management.
 replace github.com/ssvlabs/ssv => ../

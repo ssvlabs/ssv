@@ -77,7 +77,7 @@ func (gc *GoClient) fetchProposal(
 	return resp.Data, nil
 }
 
-// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
+// GetBeaconBlock implements ProposerCalls.GetBeaconBlock
 func (gc *GoClient) GetBeaconBlock(
 	ctx context.Context,
 	slot phase0.Slot,
@@ -367,8 +367,8 @@ func (gc *GoClient) submitRegularBlock(
 		if block.Fulu.Block.Body.ExecutionPayload == nil {
 			return fmt.Errorf("%s block execution payload is nil", version.String())
 		}
-		// Fulu reuses Electra's block types as per consensus spec
 		signedBlock.Fulu = &apiv1fulu.SignedBlockContents{
+			// Fulu reuses Electra's block types as per consensus spec
 			SignedBlock: &electra.SignedBeaconBlock{
 				Message:   block.Fulu.Block,
 				Signature: sig,

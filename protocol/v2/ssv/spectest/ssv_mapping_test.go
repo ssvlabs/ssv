@@ -242,7 +242,8 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
 	if m["OutputMessages"] != nil {
 		for _, msg := range m["OutputMessages"].([]interface{}) {
-			byts, _ := json.Marshal(msg)
+			byts, err := json.Marshal(msg)
+			require.NoError(t, err)
 			typedMsg := &spectypes.PartialSignatureMessages{}
 			require.NoError(t, json.Unmarshal(byts, typedMsg))
 			outputMsgs = append(outputMsgs, typedMsg)
@@ -309,7 +310,8 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 
 	msgs := make([]*spectypes.SignedSSVMessage, 0)
 	for _, msg := range m["Messages"].([]interface{}) {
-		byts, _ := json.Marshal(msg)
+		byts, err := json.Marshal(msg)
+		require.NoError(t, err)
 		typedMsg := &spectypes.SignedSSVMessage{}
 		require.NoError(t, json.Unmarshal(byts, typedMsg))
 		msgs = append(msgs, typedMsg)
@@ -319,7 +321,8 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
 	if m["OutputMessages"] != nil {
 		for _, msg := range m["OutputMessages"].([]interface{}) {
-			byts, _ := json.Marshal(msg)
+			byts, err := json.Marshal(msg)
+			require.NoError(t, err)
 			typedMsg := &spectypes.PartialSignatureMessages{}
 			require.NoError(t, json.Unmarshal(byts, typedMsg))
 			outputMsgs = append(outputMsgs, typedMsg)
@@ -368,7 +371,8 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
 	base := &runner.BaseRunner{}
-	byts, _ := json.Marshal(baseRunnerMap)
+	byts, err := json.Marshal(baseRunnerMap)
+	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(byts, &base))
 	base.NetworkConfig = networkconfig.TestNetwork
 
@@ -520,7 +524,8 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
 	if m["OutputMessages"] != nil {
 		for _, msg := range m["OutputMessages"].([]interface{}) {
-			byts, _ := json.Marshal(msg)
+			byts, err := json.Marshal(msg)
+			require.NoError(t, err)
 			typedMsg := &spectypes.PartialSignatureMessages{}
 			require.NoError(t, json.Unmarshal(byts, typedMsg))
 			outputMsgs = append(outputMsgs, typedMsg)
@@ -549,7 +554,8 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 }
 
 func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
-	byts, _ := json.Marshal(committeeMap)
+	byts, err := json.Marshal(committeeMap)
+	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 

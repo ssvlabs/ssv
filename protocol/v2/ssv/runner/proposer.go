@@ -407,15 +407,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		return traces.Errorf(span, "%s: %w", errMsg, err)
 	}
 
-	// Build success log fields conditionally
-	successFields := []zap.Field{
-		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
-		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
-		fields.Took(time.Since(start)),
-		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-	}
-
 	const eventMsg = "✅ successfully submitted block proposal"
 	span.AddEvent(eventMsg, trace.WithAttributes(
 		observability.BeaconSlotAttribute(r.BaseRunner.State.StartingDuty.DutySlot()),
@@ -423,7 +414,12 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		observability.BeaconBlockHashAttribute(blockHash),
 		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
 	))
-	logger.Info(eventMsg, successFields...)
+	logger.Info(eventMsg,
+		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
+		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
+		fields.Took(time.Since(start)),
+		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()))
 
 	r.GetState().Finished = true
 	r.measurements.EndDutyFlow()
