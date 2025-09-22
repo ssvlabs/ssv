@@ -1,0 +1,1147 @@
+{
+    "schemes": [
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "HTTP endpoints exposed by the SSV node, including exporter traces and validator metadata.",
+        "title": "SSV Node API",
+        "contact": {
+            "name": "SSV Labs",
+            "url": "https://ssvlabs.io",
+            "email": "info@ssv.network"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "0.1.0"
+    },
+    "basePath": "/",
+    "paths": {
+        "/v1/exporter/decideds": {
+            "get": {
+                "description": "Returns decided duty participant traces for validators or committees, including partial error details.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve decided message traces",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "From is the starting slot (inclusive).",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Indices is a comma-separated list of validator indices.",
+                        "name": "indices",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "PubKeys is a comma-separated list of validator public keys (hex, 96 chars per key).",
+                        "name": "pubkeys",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "ATTESTER",
+                                "AGGREGATOR",
+                                "PROPOSER",
+                                "SYNC_COMMITTEE",
+                                "SYNC_COMMITTEE_CONTRIBUTION"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of beacon roles to include.",
+                        "name": "roles",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "To is the ending slot (inclusive).",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.DecidedsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.TraceDecidedsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Returns decided duty participant traces for validators or committees, including partial error details.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve decided message traces",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "From is the starting slot (inclusive).",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Indices is a comma-separated list of validator indices.",
+                        "name": "indices",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "PubKeys is a comma-separated list of validator public keys (hex, 96 chars per key).",
+                        "name": "pubkeys",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "ATTESTER",
+                                "AGGREGATOR",
+                                "PROPOSER",
+                                "SYNC_COMMITTEE",
+                                "SYNC_COMMITTEE_CONTRIBUTION"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of beacon roles to include.",
+                        "name": "roles",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "To is the ending slot (inclusive).",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.DecidedsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.TraceDecidedsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/exporter/traces/committee": {
+            "get": {
+                "description": "Returns consensus and post-consensus traces for requested committees.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve committee duty traces",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "CommitteeIDs is a comma-separated list of committee IDs (hex, 64 chars per ID).",
+                        "name": "committeeIDs",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "From is the starting slot (inclusive).",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "To is the ending slot (inclusive).",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.CommitteeTracesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.CommitteeTracesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Returns consensus and post-consensus traces for requested committees.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve committee duty traces",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "CommitteeIDs is a comma-separated list of committee IDs (hex, 64 chars per ID).",
+                        "name": "committeeIDs",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "From is the starting slot (inclusive).",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "To is the ending slot (inclusive).",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.CommitteeTracesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.CommitteeTracesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/exporter/traces/validator": {
+            "get": {
+                "description": "Returns consensus, decided, and message traces for the requested validator duties.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve validator duty traces",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "example": 123456,
+                        "description": "From is the starting slot (inclusive).",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Indices is a comma-separated list of validator indices.",
+                        "name": "indices",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "PubKeys is a comma-separated list of validator public keys (hex, 96 chars per key).",
+                        "name": "pubkeys",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "ATTESTER",
+                                "AGGREGATOR",
+                                "PROPOSER",
+                                "SYNC_COMMITTEE",
+                                "SYNC_COMMITTEE_CONTRIBUTION"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of beacon roles to include.",
+                        "name": "roles",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "example": 123460,
+                        "description": "To is the ending slot (inclusive).",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.ValidatorTracesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.ValidatorTracesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Returns consensus, decided, and message traces for the requested validator duties.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve validator duty traces",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "example": 123456,
+                        "description": "From is the starting slot (inclusive).",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Indices is a comma-separated list of validator indices.",
+                        "name": "indices",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "PubKeys is a comma-separated list of validator public keys (hex, 96 chars per key).",
+                        "name": "pubkeys",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "enum": [
+                                "ATTESTER",
+                                "AGGREGATOR",
+                                "PROPOSER",
+                                "SYNC_COMMITTEE",
+                                "SYNC_COMMITTEE_CONTRIBUTION"
+                            ],
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "Roles is a comma-separated list of beacon roles to include.",
+                        "name": "roles",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "example": 123460,
+                        "description": "To is the ending slot (inclusive).",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.ValidatorTracesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.ValidatorTracesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "api.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "description": "application-level error message, for debugging",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "user-level status message",
+                    "type": "string"
+                }
+            }
+        },
+        "exporter.CommitteeMessage": {
+            "type": "object",
+            "properties": {
+                "signer": {
+                    "description": "Signer is the operator ID that produced the message.",
+                    "type": "integer"
+                },
+                "time": {
+                    "description": "ReceivedTime is when the message was observed.",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "validatorIdx": {
+                    "description": "ValidatorIdx lists related validator indices, when applicable.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "exporter.CommitteeTrace": {
+            "type": "object",
+            "properties": {
+                "attester": {
+                    "description": "Attester contains post-consensus messages for attester duties.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.CommitteeMessage"
+                    }
+                },
+                "committeeID": {
+                    "description": "CommitteeID is the 32-byte committee identifier (hex).",
+                    "type": "string",
+                    "format": "hex"
+                },
+                "consensus": {
+                    "description": "Consensus lists per-round QBFT messages observed for this committee.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Round"
+                    }
+                },
+                "decideds": {
+                    "description": "Decideds lists decided messages emitted for this duty.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Decided"
+                    }
+                },
+                "proposalData": {
+                    "description": "Proposal is the hex-encoded proposal payload for this duty, if available.",
+                    "type": "string",
+                    "format": "hex"
+                },
+                "slot": {
+                    "description": "Slot is the duty slot for this committee trace.",
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "sync_committee": {
+                    "description": "SyncCommittee contains post-consensus messages for sync-committee duties.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.CommitteeMessage"
+                    }
+                }
+            }
+        },
+        "exporter.CommitteeTracesRequest": {
+            "type": "object",
+            "properties": {
+                "committeeIDs": {
+                    "description": "CommitteeIDs is a comma-separated list of committee IDs (hex, 64 chars per ID).",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "hex",
+                        "maxLength": 64,
+                        "minLength": 64
+                    }
+                },
+                "from": {
+                    "description": "From is the starting slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                },
+                "to": {
+                    "description": "To is the ending slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                }
+            }
+        },
+        "exporter.CommitteeTracesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Data contains the list of committee duty traces matching the request.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.CommitteeTrace"
+                    }
+                },
+                "errors": {
+                    "description": "Errors lists non-fatal issues encountered while building the response (duties not found, enrichment errors, etc.).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "committee duty missing for slot 123456"
+                    ]
+                }
+            }
+        },
+        "exporter.Decided": {
+            "type": "object",
+            "properties": {
+                "round": {
+                    "description": "Round is the QBFT round number when the decision was made.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 2
+                },
+                "signers": {
+                    "description": "Signers lists operator IDs that signed the decided message.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "ssvRoot": {
+                    "description": "BeaconRoot is the decided root value (hex-encoded).",
+                    "type": "string",
+                    "format": "hex",
+                    "example": "f3a1..."
+                },
+                "time": {
+                    "description": "ReceivedTime is when the decided message was observed.",
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "exporter.DecidedParticipant": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "object",
+                    "properties": {
+                        "Signers": {
+                            "description": "We're keeping \"Signers\" capitalized to avoid breaking existing clients that rely on the current structure.",
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                },
+                "public_key": {
+                    "type": "string",
+                    "format": "hex"
+                },
+                "role": {
+                    "type": "string",
+                    "example": "ATTESTER"
+                },
+                "slot": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 123456
+                }
+            }
+        },
+        "exporter.DecidedsRequest": {
+            "type": "object",
+            "required": [
+                "roles"
+            ],
+            "properties": {
+                "from": {
+                    "description": "From is the starting slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                },
+                "indices": {
+                    "description": "Indices is a comma-separated list of validator indices.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    }
+                },
+                "pubkeys": {
+                    "description": "PubKeys is a comma-separated list of validator public keys (hex, 96 chars per key).",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "hex",
+                        "maxLength": 96,
+                        "minLength": 96
+                    }
+                },
+                "roles": {
+                    "description": "Roles is a comma-separated list of beacon roles to include.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "ATTESTER",
+                            "AGGREGATOR",
+                            "PROPOSER",
+                            "SYNC_COMMITTEE",
+                            "SYNC_COMMITTEE_CONTRIBUTION"
+                        ]
+                    }
+                },
+                "to": {
+                    "description": "To is the ending slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                }
+            }
+        },
+        "exporter.Message": {
+            "type": "object",
+            "properties": {
+                "round": {
+                    "description": "Round is the round associated with this message.",
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "signer": {
+                    "description": "Signer is the operator ID that sent the message.",
+                    "type": "integer"
+                },
+                "ssvRoot": {
+                    "description": "BeaconRoot is the message root value (hex-encoded).",
+                    "type": "string",
+                    "format": "hex"
+                },
+                "time": {
+                    "description": "ReceivedTime is when the message was observed.",
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "exporter.ProposalTrace": {
+            "type": "object",
+            "properties": {
+                "leader": {
+                    "description": "Signer is the leader operator ID that proposed.",
+                    "type": "integer"
+                },
+                "prepareJustifications": {
+                    "description": "PrepareJustifications holds the prepare justifications included in the proposal.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Message"
+                    }
+                },
+                "round": {
+                    "description": "Round is the round number for this proposal.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "roundChangeJustifications": {
+                    "description": "RoundChanges holds the round-change justifications included in the proposal.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.RoundChange"
+                    }
+                },
+                "ssvRoot": {
+                    "description": "BeaconRoot is the proposed root value (hex-encoded).",
+                    "type": "string",
+                    "format": "hex"
+                },
+                "time": {
+                    "description": "ReceivedTime is when the proposal was observed.",
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "exporter.Round": {
+            "type": "object",
+            "properties": {
+                "commits": {
+                    "description": "Commits lists commit messages received in this round.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Message"
+                    }
+                },
+                "prepares": {
+                    "description": "Prepares lists prepare messages received in this round.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Message"
+                    }
+                },
+                "proposal": {
+                    "description": "Proposal is the proposal observed in this round, if any.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/exporter.ProposalTrace"
+                        }
+                    ]
+                },
+                "roundChanges": {
+                    "description": "RoundChanges lists round change justifications that led to this round.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.RoundChange"
+                    }
+                }
+            }
+        },
+        "exporter.RoundChange": {
+            "type": "object",
+            "properties": {
+                "prepareMessages": {
+                    "description": "PrepareMessages lists the prepare messages that justify the prepared round.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Message"
+                    }
+                },
+                "preparedRound": {
+                    "description": "PreparedRound is the highest prepared round the sender claims.",
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "round": {
+                    "description": "Round is the round associated with this message.",
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "signer": {
+                    "description": "Signer is the operator ID that sent the message.",
+                    "type": "integer"
+                },
+                "ssvRoot": {
+                    "description": "BeaconRoot is the message root value (hex-encoded).",
+                    "type": "string",
+                    "format": "hex"
+                },
+                "time": {
+                    "description": "ReceivedTime is when the message was observed.",
+                    "type": "string",
+                    "format": "date-time"
+                }
+            }
+        },
+        "exporter.TraceDecidedsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Data contains the decided duty participant entries matching the request.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.DecidedParticipant"
+                    }
+                },
+                "errors": {
+                    "description": "Errors lists non-fatal issues encountered while building the response (e.g., entries with empty signer sets).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "omitting entry with no signers (index=deadbeef",
+                        " slot=123456",
+                        " role=ATTESTER)"
+                    ]
+                }
+            }
+        },
+        "exporter.ValidatorTrace": {
+            "type": "object",
+            "properties": {
+                "committeeID": {
+                    "description": "CommitteeID is the 32-byte committee identifier (hex), when applicable.",
+                    "type": "string",
+                    "format": "hex",
+                    "example": "aabbcc"
+                },
+                "consensus": {
+                    "description": "Rounds lists per-round QBFT messages observed for this validator.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Round"
+                    }
+                },
+                "decideds": {
+                    "description": "Decideds lists decided messages emitted for this duty.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Decided"
+                    }
+                },
+                "post": {
+                    "description": "Post lists post-consensus partial signature messages.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Message"
+                    }
+                },
+                "pre": {
+                    "description": "Pre lists pre-consensus partial signature messages.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.Message"
+                    }
+                },
+                "proposalData": {
+                    "description": "Proposal is the hex-encoded proposal payload for this duty, if available.",
+                    "type": "string",
+                    "format": "hex"
+                },
+                "role": {
+                    "description": "Role is the beacon role for this duty (e.g., ATTESTER).",
+                    "type": "string",
+                    "example": "ATTESTER"
+                },
+                "slot": {
+                    "description": "Slot is the duty slot for this validator trace (numeric string).",
+                    "type": "string",
+                    "example": "123456"
+                },
+                "validator": {
+                    "description": "Validator is the validator index for the duty (numeric string).",
+                    "type": "string",
+                    "example": "123"
+                }
+            }
+        },
+        "exporter.ValidatorTracesRequest": {
+            "type": "object",
+            "required": [
+                "roles"
+            ],
+            "properties": {
+                "from": {
+                    "description": "From is the starting slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "example": 123456
+                },
+                "indices": {
+                    "description": "Indices is a comma-separated list of validator indices.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    }
+                },
+                "pubkeys": {
+                    "description": "PubKeys is a comma-separated list of validator public keys (hex, 96 chars per key).",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "hex",
+                        "maxLength": 96,
+                        "minLength": 96
+                    }
+                },
+                "roles": {
+                    "description": "Roles is a comma-separated list of beacon roles to include.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "ATTESTER",
+                            "AGGREGATOR",
+                            "PROPOSER",
+                            "SYNC_COMMITTEE",
+                            "SYNC_COMMITTEE_CONTRIBUTION"
+                        ]
+                    }
+                },
+                "to": {
+                    "description": "To is the ending slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "example": 123460
+                }
+            }
+        },
+        "exporter.ValidatorTracesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Data contains the list of validator duty traces matching the request.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.ValidatorTrace"
+                    }
+                },
+                "errors": {
+                    "description": "Errors lists non-fatal issues encountered while building the response (duties not found, enrichment errors, etc.).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "duty data unavailable for slot 123457"
+                    ]
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "description": "Duty traces and participants.",
+            "name": "Exporter"
+        },
+        {
+            "description": "Validator listing and metadata.",
+            "name": "Validators"
+        },
+        {
+            "description": "Node identity, peers, topics, and health.",
+            "name": "Node"
+        }
+    ]
+}

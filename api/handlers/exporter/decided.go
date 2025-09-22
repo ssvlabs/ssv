@@ -16,8 +16,22 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
+// TraceDecideds godoc
+// @Summary Retrieve decided message traces
+// @Description Returns decided duty participant traces for validators or committees, including partial error details.
+// @Tags Exporter
+// @Accept json
+// @Produce json
+// @Param request query DecidedsRequest false "Filters as query parameters"
+// @Param request body DecidedsRequest false "Filters as JSON body"
+// @Success 200 {object} TraceDecidedsResponse
+// @Failure 400 {object} api.ErrorResponse
+// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
+// @Failure 500 {object} api.ErrorResponse
+// @Router /v1/exporter/decideds [get]
+// @Router /v1/exporter/decideds [post]
 func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
-	var request decidedRequest
+	var request DecidedsRequest
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
@@ -27,7 +41,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(err)
 	}
 
-	var participants = make([]*participantResponse, 0)
+	var participants = make([]*DecidedParticipant, 0)
 	var errs *multierror.Error
 
 	indices, err := e.extractIndices(&request)
@@ -86,15 +100,13 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// otherwise return a partial response with valid participants
-	var response decidedResponse
-	response.Data = participants
-	response.Errors = toStrings(errs)
+	response := TraceDecidedsResponseFromParticipants(participants, toStrings(errs))
 	return api.Render(w, r, response)
 }
 
-// backward-compatible handler for exporter-v1 "decideds" endpoint
+// Decideds is the backward-compatible handler for exporter-v1 "decideds" endpoint.
 func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
-	var request decidedRequest
+	var request DecidedsRequest
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
@@ -107,8 +119,8 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	pubkeys := request.pubKeys()
 
 	// Initialize with empty slice to ensure we always return [] instead of null
-	var response decidedResponse
-	response.Data = make([]*participantResponse, 0)
+	var response DecidedsResponse
+	response.Data = make([]*DecidedParticipant, 0)
 
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
@@ -144,7 +156,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, response)
 }
 
-func validateDecidedRequest(request *decidedRequest) error {
+func validateDecidedRequest(request *DecidedsRequest) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}

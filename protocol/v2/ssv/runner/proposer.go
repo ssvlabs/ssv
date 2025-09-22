@@ -231,7 +231,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValCheckF(), signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -276,7 +276,14 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	span.AddEvent("signing beacon object")
-	msg, err := r.BaseRunner.signBeaconObject(ctx, r, duty, blkToSign, cd.Duty.Slot, spectypes.DomainProposer)
+	msg, err := signBeaconObject(
+		ctx,
+		r,
+		duty,
+		blkToSign,
+		cd.Duty.Slot,
+		spectypes.DomainProposer,
+	)
 	if err != nil {
 		return traces.Errorf(span, "failed signing block: %w", err)
 	}
@@ -318,6 +325,10 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (r *ProposerRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
 }
 
 func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -482,7 +493,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	// sign partial randao
 	span.AddEvent("signing beacon object")
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := r.BaseRunner.signBeaconObject(
+	msg, err := signBeaconObject(
 		ctx,
 		r,
 		proposerDuty,
@@ -535,12 +546,44 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	return nil
 }
 
-func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
-	return r.BaseRunner
+func (r *ProposerRunner) HasRunningQBFTInstance() bool {
+	return r.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (r *ProposerRunner) HasAcceptedProposalForCurrentRound() bool {
+	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (r *ProposerRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return r.BaseRunner.GetShares()
+}
+
+func (r *ProposerRunner) GetRole() spectypes.RunnerRole {
+	return r.BaseRunner.GetRole()
+}
+
+func (r *ProposerRunner) GetLastHeight() specqbft.Height {
+	return r.BaseRunner.GetLastHeight()
+}
+
+func (r *ProposerRunner) GetLastRound() specqbft.Round {
+	return r.BaseRunner.GetLastRound()
+}
+
+func (r *ProposerRunner) GetStateRoot() ([32]byte, error) {
+	return r.BaseRunner.GetStateRoot()
+}
+
+func (r *ProposerRunner) SetTimeoutFunc(fn TimeoutF) {
+	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *ProposerRunner) GetNetwork() specqbft.Network {
 	return r.network
+}
+
+func (r *ProposerRunner) GetNetworkConfig() *networkconfig.Network {
+	return r.BaseRunner.NetworkConfig
 }
 
 func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
