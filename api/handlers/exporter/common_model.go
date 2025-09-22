@@ -17,45 +17,70 @@ type filterRequest interface {
 	hasFilters() bool
 }
 
-type decided struct {
-	Round        uint64                 `json:"round"`
-	BeaconRoot   phase0.Root            `json:"ssvRoot"`
-	Signers      []spectypes.OperatorID `json:"signers"`
-	ReceivedTime time.Time              `json:"time"`
+// Decided represents a decided message within a duty trace.
+type Decided struct {
+	// Round is the QBFT round number when the decision was made.
+	Round uint64 `json:"round" format:"int64" example:"2"`
+	// BeaconRoot is the decided root value (hex-encoded).
+	BeaconRoot phase0.Root `json:"ssvRoot" swaggertype:"string" format:"hex" example:"f3a1..."`
+	// Signers lists operator IDs that signed the decided message.
+	Signers []spectypes.OperatorID `json:"signers" swaggertype:"array,integer"`
+	// ReceivedTime is when the decided message was observed.
+	ReceivedTime time.Time `json:"time" format:"date-time"`
 }
 
-type round struct {
-	Proposal     *proposalTrace `json:"proposal"`
-	Prepares     []message      `json:"prepares"`
-	Commits      []message      `json:"commits"`
-	RoundChanges []roundChange  `json:"roundChanges"`
+// Round captures the per-round consensus trace details.
+type Round struct {
+	// Proposal is the proposal observed in this round, if any.
+	Proposal *ProposalTrace `json:"proposal"`
+	// Prepares lists prepare messages received in this round.
+	Prepares []Message `json:"prepares"`
+	// Commits lists commit messages received in this round.
+	Commits []Message `json:"commits"`
+	// RoundChanges lists round change justifications that led to this round.
+	RoundChanges []RoundChange `json:"roundChanges"`
 }
 
-type proposalTrace struct {
-	Round                 uint64               `json:"round"`
-	BeaconRoot            phase0.Root          `json:"ssvRoot"`
-	Signer                spectypes.OperatorID `json:"leader"`
-	RoundChanges          []roundChange        `json:"roundChangeJustifications"`
-	PrepareJustifications []message            `json:"prepareJustifications"`
-	ReceivedTime          time.Time            `json:"time"`
+// ProposalTrace stores proposal data for a consensus round.
+type ProposalTrace struct {
+	// Round is the round number for this proposal.
+	Round uint64 `json:"round" format:"int64" example:"1"`
+	// BeaconRoot is the proposed root value (hex-encoded).
+	BeaconRoot phase0.Root `json:"ssvRoot" swaggertype:"string" format:"hex"`
+	// Signer is the leader operator ID that proposed.
+	Signer spectypes.OperatorID `json:"leader" swaggertype:"integer"`
+	// RoundChanges holds the round-change justifications included in the proposal.
+	RoundChanges []RoundChange `json:"roundChangeJustifications"`
+	// PrepareJustifications holds the prepare justifications included in the proposal.
+	PrepareJustifications []Message `json:"prepareJustifications"`
+	// ReceivedTime is when the proposal was observed.
+	ReceivedTime time.Time `json:"time" format:"date-time"`
 }
 
-type roundChange struct {
-	message
-	PreparedRound   uint64    `json:"preparedRound"`
-	PrepareMessages []message `json:"prepareMessages"`
+// RoundChange provides justification information for a round change event.
+type RoundChange struct {
+	Message
+	// PreparedRound is the highest prepared round the sender claims.
+	PreparedRound uint64 `json:"preparedRound" format:"int64"`
+	// PrepareMessages lists the prepare messages that justify the prepared round.
+	PrepareMessages []Message `json:"prepareMessages"`
 }
 
-type message struct {
-	Round        uint64               `json:"round,omitempty"`
-	BeaconRoot   phase0.Root          `json:"ssvRoot"`
-	Signer       spectypes.OperatorID `json:"signer"`
-	ReceivedTime time.Time            `json:"time"`
+// Message represents a QBFT message trace entry.
+type Message struct {
+	// Round is the round associated with this message.
+	Round uint64 `json:"round,omitempty" format:"int64"`
+	// BeaconRoot is the message root value (hex-encoded).
+	BeaconRoot phase0.Root `json:"ssvRoot" swaggertype:"string" format:"hex"`
+	// Signer is the operator ID that sent the message.
+	Signer spectypes.OperatorID `json:"signer" swaggertype:"integer"`
+	// ReceivedTime is when the message was observed.
+	ReceivedTime time.Time `json:"time" format:"date-time"`
 }
 
-func toDecideds(d []*exporter.DecidedTrace) (out []decided) {
+func toDecideds(d []*exporter.DecidedTrace) (out []Decided) {
 	for _, dt := range d {
-		out = append(out, decided{
+		out = append(out, Decided{
 			Round:        dt.Round,
 			BeaconRoot:   dt.BeaconRoot,
 			Signers:      dt.Signers,
@@ -65,9 +90,9 @@ func toDecideds(d []*exporter.DecidedTrace) (out []decided) {
 	return
 }
 
-func toRounds(r []*exporter.RoundTrace) (out []round) {
+func toRounds(r []*exporter.RoundTrace) (out []Round) {
 	for _, rt := range r {
-		out = append(out, round{
+		out = append(out, Round{
 			Proposal:     toProposalTrace(rt.ProposalTrace),
 			Prepares:     toUIMessageTrace(rt.Prepares),
 			Commits:      toUIMessageTrace(rt.Commits),
@@ -77,7 +102,7 @@ func toRounds(r []*exporter.RoundTrace) (out []round) {
 	return
 }
 
-func toProposalTrace(rt *exporter.ProposalTrace) *proposalTrace {
+func toProposalTrace(rt *exporter.ProposalTrace) *ProposalTrace {
 	if rt == nil {
 		return nil
 	}
@@ -90,7 +115,7 @@ func toProposalTrace(rt *exporter.ProposalTrace) *proposalTrace {
 		return nil
 	}
 
-	return &proposalTrace{
+	return &ProposalTrace{
 		Round:                 rt.Round,
 		BeaconRoot:            rt.BeaconRoot,
 		Signer:                rt.Signer,
@@ -100,9 +125,9 @@ func toProposalTrace(rt *exporter.ProposalTrace) *proposalTrace {
 	}
 }
 
-func toUIMessageTrace(m []*exporter.QBFTTrace) (out []message) {
+func toUIMessageTrace(m []*exporter.QBFTTrace) (out []Message) {
 	for _, mt := range m {
-		out = append(out, message{
+		out = append(out, Message{
 			Round:        mt.Round,
 			BeaconRoot:   mt.BeaconRoot,
 			Signer:       mt.Signer,
@@ -112,10 +137,10 @@ func toUIMessageTrace(m []*exporter.QBFTTrace) (out []message) {
 	return
 }
 
-func toUIRoundChangeTrace(m []*exporter.RoundChangeTrace) (out []roundChange) {
+func toUIRoundChangeTrace(m []*exporter.RoundChangeTrace) (out []RoundChange) {
 	for _, mt := range m {
-		out = append(out, roundChange{
-			message: message{
+		out = append(out, RoundChange{
+			Message: Message{
 				Round:        mt.Round,
 				BeaconRoot:   mt.BeaconRoot,
 				Signer:       mt.Signer,
@@ -132,9 +157,9 @@ func toUIRoundChangeTrace(m []*exporter.RoundChangeTrace) (out []roundChange) {
 func toTime(t uint64) time.Time { return time.UnixMilli(int64(t)) }
 
 // toMessageTrace converts PartialSigTrace to API message trace model
-func toMessageTrace(m []*exporter.PartialSigTrace) (out []message) {
+func toMessageTrace(m []*exporter.PartialSigTrace) (out []Message) {
 	for _, mt := range m {
-		out = append(out, message{
+		out = append(out, Message{
 			BeaconRoot:   mt.BeaconRoot,
 			Signer:       mt.Signer,
 			ReceivedTime: toTime(mt.ReceivedTime),
