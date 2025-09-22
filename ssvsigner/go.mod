@@ -29,7 +29,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/sourcegraph/conc v0.3.0
-	github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250921090156-3803c4e877ae // TODO(fulu): Update to release tag with Fulu mainnet support
+	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv v1.2.1-0.20250904093034-64dc248758c3
 	github.com/ssvlabs/ssv-spec v1.1.4-0.20250921090236-eaca8673b7c1 // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/stretchr/testify v1.10.0

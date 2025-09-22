@@ -39,7 +39,7 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.5.6-0.20250921090156-3803c4e877ae // TODO(fulu): Update to release tag with Fulu mainnet support
+	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv-spec v1.1.4-0.20250921090236-eaca8673b7c1 // TODO(fulu): Update to release tag with Fulu mainnet support
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250910103216-8fc1632c2d52
 	github.com/status-im/keycard-go v0.2.0
