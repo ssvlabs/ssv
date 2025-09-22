@@ -16,8 +16,22 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
+// CommitteeTraces godoc
+// @Summary Retrieve committee duty traces
+// @Description Returns consensus and post-consensus traces for requested committees.
+// @Tags Exporter
+// @Accept json
+// @Produce json
+// @Param request query CommitteeTracesRequest false "Filters as query parameters"
+// @Param request body CommitteeTracesRequest false "Filters as JSON body"
+// @Success 200 {object} CommitteeTracesResponse
+// @Failure 400 {object} api.ErrorResponse
+// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
+// @Failure 500 {object} api.ErrorResponse
+// @Router /v1/exporter/traces/committee [get]
+// @Router /v1/exporter/traces/committee [post]
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
-	var request committeeRequest
+	var request CommitteeTracesRequest
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
@@ -49,7 +63,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toCommitteeTraceResponse(all, errs))
 }
 
-func validateCommitteeRequest(request *committeeRequest) error {
+func validateCommitteeRequest(request *CommitteeTracesRequest) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -84,9 +98,9 @@ func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []sp
 	return duties, errs.ErrorOrNil()
 }
 
-func toCommitteeTraceResponse(duties []*exporter.CommitteeDutyTrace, errs *multierror.Error) *committeeTraceResponse {
-	r := new(committeeTraceResponse)
-	r.Data = make([]committeeTrace, 0)
+func toCommitteeTraceResponse(duties []*exporter.CommitteeDutyTrace, errs *multierror.Error) *CommitteeTracesResponse {
+	r := new(CommitteeTracesResponse)
+	r.Data = make([]CommitteeTrace, 0)
 	for _, t := range duties {
 		r.Data = append(r.Data, toCommitteeTrace(t))
 	}

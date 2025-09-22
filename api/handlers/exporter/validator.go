@@ -16,8 +16,22 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
+// ValidatorTraces godoc
+// @Summary Retrieve validator duty traces
+// @Description Returns consensus, decided, and message traces for the requested validator duties.
+// @Tags Exporter
+// @Accept json
+// @Produce json
+// @Param request query ValidatorTracesRequest false "Filters as query parameters"
+// @Param request body ValidatorTracesRequest false "Filters as JSON body"
+// @Success 200 {object} ValidatorTracesResponse
+// @Failure 400 {object} api.ErrorResponse
+// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
+// @Failure 500 {object} api.ErrorResponse
+// @Router /v1/exporter/traces/validator [get]
+// @Router /v1/exporter/traces/validator [post]
 func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error {
-	var request validatorRequest
+	var request ValidatorTracesRequest
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
@@ -66,7 +80,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toValidatorTraceResponse(results, errs))
 }
 
-func validateValidatorRequest(request *validatorRequest) error {
+func validateValidatorRequest(request *ValidatorTracesRequest) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -170,9 +184,9 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 	return results, errs.ErrorOrNil()
 }
 
-func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *multierror.Error) *validatorTraceResponse {
-	r := new(validatorTraceResponse)
-	r.Data = make([]validatorTrace, 0)
+func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *multierror.Error) *ValidatorTracesResponse {
+	r := new(ValidatorTracesResponse)
+	r.Data = make([]ValidatorTrace, 0)
 	for _, t := range duties {
 		trace := toValidatorTrace(&t.ValidatorDutyTrace)
 		if t.CommitteeID != nil {
