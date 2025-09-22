@@ -129,12 +129,18 @@ type Controller struct {
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
-	validatorCommonOpts     *validator.CommonOptions
-	validatorStore          registrystorage.ValidatorStore
-	validatorsMap           *validators.ValidatorsMap
-	validatorStartFunc      func(validator *validator.Validator) (bool, error)
-	committeeValidatorSetup chan struct{}
-	dutyGuard               *validator.CommitteeDutyGuard
+	validatorCommonOpts *validator.CommonOptions
+	validatorStore      registrystorage.ValidatorStore
+	validatorsMap       *validators.ValidatorsMap
+
+	// validatorStartFunc is a struct-field so we can mock it out for testing.
+	validatorStartFunc func(validator *validator.Validator) (bool, error)
+	// validatorsInitDone is closed once all committee validators have been initialized.
+	validatorsInitDone chan struct{}
+
+	// dutyGuard ensures once-per-validator committee duty execution, it is defined here so we can
+	// share it between different committees.
+	dutyGuard *validator.CommitteeDutyGuard
 
 	validatorSyncer *metadata.Syncer
 
@@ -240,8 +246,13 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		validatorRegistrationCh: make(chan duties.RegistrationDescriptor),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		feeRecipientChangeCh:    make(chan struct{}, 1),
-		committeeValidatorSetup: make(chan struct{}, 1),
-		dutyGuard:               validator.NewCommitteeDutyGuard(),
+
+		validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+			return validator.Start()
+		},
+		validatorsInitDone: make(chan struct{}),
+
+		dutyGuard: validator.NewCommitteeDutyGuard(),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -425,12 +436,12 @@ func (c *Controller) StartValidators(ctx context.Context) error {
 
 	if c.validatorCommonOpts.ExporterOptions.Enabled {
 		// There are no committee validators to set up.
-		close(c.committeeValidatorSetup)
+		close(c.validatorsInitDone)
 		return nil
 	}
 
 	init := func() ([]*validator.Validator, []*validator.Committee, error) {
-		defer close(c.committeeValidatorSetup)
+		defer close(c.validatorsInitDone)
 
 		// Load non-liquidated shares that belong to our own Operator.
 		ownShares := c.sharesStorage.List(
@@ -710,7 +721,7 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spect
 
 func (c *Controller) FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
 	if afterInit {
-		<-c.committeeValidatorSetup
+		<-c.validatorsInitDone
 	}
 	var indices []phase0.ValidatorIndex
 	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
@@ -895,20 +906,13 @@ func (c *Controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	)
 }
 
-func (c *Controller) validatorStart(validator *validator.Validator) (bool, error) {
-	if c.validatorStartFunc == nil {
-		return validator.Start()
-	}
-	return c.validatorStartFunc(validator)
-}
-
 // startValidator will start the given validator if applicable
 func (c *Controller) startValidator(v *validator.Validator) (bool, error) {
 	c.reportValidatorStatus(v.Share)
 	if v.Share.ValidatorIndex == 0 {
 		return false, errors.New("validator index not found")
 	}
-	started, err := c.validatorStart(v)
+	started, err := c.validatorStartFunc(v)
 	if err != nil {
 		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, fmt.Errorf("could not start validator: %w", err)
