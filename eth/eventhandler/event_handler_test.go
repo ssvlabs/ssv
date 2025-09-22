@@ -32,6 +32,7 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/eventhandler/mocks"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
@@ -42,7 +43,6 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
-	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -1357,7 +1357,7 @@ func setupEventHandler(
 	network *networkconfig.Network,
 	operator *testOperator,
 	useMockCtrl bool,
-) (*EventHandler, *mocks.MockController, error) {
+) (*EventHandler, *mocks.MockTaskExecutor, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -1379,7 +1379,7 @@ func setupEventHandler(
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		validatorCtrl := mocks.NewMockController(ctrl)
+		tExecutor := mocks.NewMockTaskExecutor(ctrl)
 
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 		require.NoError(t, err)
@@ -1389,7 +1389,7 @@ func setupEventHandler(
 		eh, err := New(
 			nodeStorage,
 			parser,
-			validatorCtrl,
+			tExecutor,
 			network,
 			operatorDataStore,
 			operator.privateKey,
@@ -1402,7 +1402,7 @@ func setupEventHandler(
 			return nil, nil, err
 		}
 
-		return eh, validatorCtrl, nil
+		return eh, tExecutor, nil
 	}
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
