@@ -6,7 +6,7 @@ import spectypes "github.com/ssvlabs/ssv-spec/types"
 type ValidatorDutyRunners map[spectypes.RunnerRole]Runner
 
 // DutyRunnerForMsgID returns a Runner from the provided msg ID, or nil if not found
-func (ci ValidatorDutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
+func (r ValidatorDutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
 	role := msgID.GetRoleType()
-	return ci[role]
+	return r[role]
 }

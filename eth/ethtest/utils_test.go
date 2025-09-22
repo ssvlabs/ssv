@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
+	"github.com/ssvlabs/ssv/eth/eventhandler/mocks"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/exporter"
@@ -29,7 +30,6 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
-	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -152,7 +152,7 @@ func setupEventHandler(
 	operator *testOperator,
 	ownerAddress *ethcommon.Address,
 	useMockCtrl bool,
-) (*eventhandler.EventHandler, *mocks.MockController, *gomock.Controller, operatorstorage.Storage, error) {
+) (*eventhandler.EventHandler, *mocks.MockTaskExecutor, *gomock.Controller, operatorstorage.Storage, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -180,14 +180,14 @@ func setupEventHandler(
 	dgHandler := doppelganger.NoOpHandler{}
 
 	if useMockCtrl {
-		validatorCtrl := mocks.NewMockController(ctrl)
+		tExecutor := mocks.NewMockTaskExecutor(ctrl)
 
 		parser := eventparser.New(contractFilterer)
 
 		eh, err := eventhandler.New(
 			nodeStorage,
 			parser,
-			validatorCtrl,
+			tExecutor,
 			testNetworkConfig,
 			operatorDataStore,
 			operator.privateKey,
@@ -201,7 +201,7 @@ func setupEventHandler(
 			return nil, nil, nil, nil, err
 		}
 
-		return eh, validatorCtrl, ctrl, nodeStorage, nil
+		return eh, tExecutor, ctrl, nodeStorage, nil
 	}
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
