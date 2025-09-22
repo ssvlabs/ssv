@@ -9,7 +9,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -420,70 +419,69 @@ func (c *Controller) handleNonCommitteeMessages(
 }
 
 // StartValidators loads all persisted shares and sets up the corresponding validators
-func (c *Controller) StartValidators(ctx context.Context) error {
+func (c *Controller) StartValidators(_ context.Context, validators []*validator.Validator) error {
 	// TODO: Pass context wherever the execution flow may be blocked.
 
-	if c.validatorCommonOpts.ExporterOptions.Enabled {
-		// There are no committee validators to set up.
-		close(c.committeeValidatorSetup)
-		return nil
-	}
+	started, errs := c.startValidators(validators)
 
-	init := func() ([]*validator.Validator, error) {
-		defer close(c.committeeValidatorSetup)
-
-		// Load non-liquidated shares that belong to our own Operator.
-		ownShares := c.sharesStorage.List(
-			nil,
-			registrystorage.ByNotLiquidated(),
-			registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
-		)
-		if len(ownShares) == 0 {
-			c.logger.Info("no validators to start: no own non-liquidated validator shares found in DB")
-			return nil, nil
-		}
-
-		// Initialize validators.
-		validatorsInitialized, err := c.initValidators(ownShares)
-		if err != nil {
-			return nil, err
-		}
-
-		return validatorsInitialized, nil
-	}
-
-	// Initialize validators.
-	validatorsInitialized, err := init()
-	if err != nil {
-		return fmt.Errorf("init validators: %w", err)
-	}
-	if len(validatorsInitialized) == 0 {
-		// If no validators were initialized - we're not subscribed to any subnets, we
-		// have to subscribe to at least 1 random subnet to participate in the network.
-		if err := c.network.SubscribeRandoms(1); err != nil {
-			return fmt.Errorf("subscribe to random subnets: %w", err)
-		}
-		c.logger.Info("no validators to start, successfully subscribed to random subnet")
-		return nil
-	}
-
-	// Start validators.
-	started := c.startValidators(validatorsInitialized)
 	if started == 0 {
-		return fmt.Errorf("none of %d validators started successfully", len(validatorsInitialized))
+		return fmt.Errorf("none of %d validators started successfully", len(validators))
 	}
+
+	c.logger.Info("started validators",
+		zap.Int("attempted", len(validators)),
+		zap.Int("started", started),
+		zap.Int("failures", len(errs)),
+	)
+
 	return nil
 }
 
-// initValidators initializes validators for the provided shares.
-// Share w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterward.
-func (c *Controller) initValidators(shares []*ssvtypes.SSVShare) ([]*validator.Validator, error) {
-	c.logger.Info("initializing validators ...", zap.Int("shares", len(shares)))
+func (c *Controller) startValidators(validators []*validator.Validator) (started int, errs []error) {
+	for _, v := range validators {
+		s, err := c.startValidator(v)
+		if err != nil {
+			c.logger.Error("could not start validator", zap.Error(err))
+			errs = append(errs, err)
+			continue
+		}
+		if s {
+			started++
+		}
+	}
+
+	return started, errs
+}
+
+// InitValidators initializes validators our own Operator manages. This func skips initializing shares
+// w/o metadata - those will be initialized and started later on (once we can fetch metadata for those).
+func (c *Controller) InitValidators() ([]*validator.Validator, error) {
+	defer close(c.committeeValidatorSetup)
+
+	if c.validatorCommonOpts.ExporterOptions.Enabled {
+		// For Exporter, there are no committee validators to set up.
+		return nil, nil
+	}
+
+	c.logger.Info("loading own non-liquidated validators to initialize ...")
+
+	// Load non-liquidated shares that belong to our own Operator.
+	ownShares := c.sharesStorage.List(
+		nil,
+		registrystorage.ByNotLiquidated(),
+		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
+	)
+	if len(ownShares) == 0 {
+		c.logger.Info("no validators to start: no own non-liquidated validator shares found in DB")
+		return nil, nil
+	}
+
+	c.logger.Info("initializing validators ...", zap.Int("shares", len(ownShares)))
 
 	var errs []error
 	var fetchMetadata [][]byte
-	validatorsInitialized := make([]*validator.Validator, 0, len(shares))
-	for _, share := range shares {
+	validatorsInitialized := make([]*validator.Validator, 0, len(ownShares))
+	for _, share := range ownShares {
 		v, hasMetadata, err := c.onShareInit(share)
 		if err != nil {
 			c.logger.Warn("could not initialize validator", fields.PubKey(share.ValidatorPubKey[:]), zap.Error(err))
@@ -499,41 +497,18 @@ func (c *Controller) initValidators(shares []*ssvtypes.SSVShare) ([]*validator.V
 
 	c.logger.Info(
 		"initialized validators",
-		zap.Int("attempted", len(shares)),
+		zap.Int("attempted", len(ownShares)),
 		zap.Int("initialized", len(validatorsInitialized)),
 		zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("failures", len(errs)),
 		zap.Int("committees", c.validatorsMap.SizeCommittees()),
 	)
 
-	if len(errs) == len(shares) {
-		return nil, fmt.Errorf("all %d validators errored during initialization", len(shares))
+	if len(errs) > 0 && len(errs) == len(ownShares) {
+		return nil, fmt.Errorf("all %d validators errored during initialization", len(ownShares))
 	}
 
 	return validatorsInitialized, nil
-}
-
-func (c *Controller) startValidators(validators []*validator.Validator) (started int) {
-	var errs []error
-	for _, v := range validators {
-		s, err := c.startValidator(v)
-		if err != nil {
-			c.logger.Error("could not start validator", zap.Error(err))
-			errs = append(errs, err)
-			continue
-		}
-		if s {
-			started++
-		}
-	}
-
-	c.logger.Info("started validators",
-		zap.Int("attempted", len(validators)),
-		zap.Int("started", started),
-		zap.Int("failures", len(errs)),
-	)
-
-	return started
 }
 
 // StartNetworkHandlers init msg worker that handles network messages
@@ -912,7 +887,7 @@ func (c *Controller) validatorStart(validator *validator.Validator) (bool, error
 func (c *Controller) startValidator(v *validator.Validator) (bool, error) {
 	c.reportValidatorStatus(v.Share)
 	if v.Share.ValidatorIndex == 0 {
-		return false, errors.New("validator index not found")
+		return false, fmt.Errorf("validator index not found")
 	}
 	started, err := c.validatorStart(v)
 	if err != nil {
