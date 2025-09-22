@@ -359,28 +359,26 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 }
 
 func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectestingutils.TestKeySet) runner.Runner {
-	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
-
-	base := &runner.BaseRunner{}
-	byts, _ := json.Marshal(baseRunnerMap)
-	require.NoError(t, json.Unmarshal(byts, &base))
-	base.NetworkConfig = networkconfig.TestNetwork
-
 	logger := log.TestLogger(t)
 
-	ret := baseRunnerForRole(logger, base.RunnerRoleType, base, ks)
+	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
-	if ret.GetBaseRunner().QBFTController != nil {
-		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
-		if ret.GetBaseRunner().State != nil {
-			if ret.GetBaseRunner().State.RunningInstance != nil {
+	baseRunner := &runner.BaseRunner{}
+	byts, _ := json.Marshal(baseRunnerMap)
+	require.NoError(t, json.Unmarshal(byts, &baseRunner))
+	baseRunner.NetworkConfig = networkconfig.TestNetwork
+
+	ret := createRunnerWithBaseRunner(logger, baseRunner.RunnerRoleType, baseRunner, ks)
+
+	if baseRunner.QBFTController != nil {
+		baseRunner.QBFTController = fixControllerForRun(t, logger, ret, baseRunner.QBFTController, ks)
+		if baseRunner.State != nil {
+			if baseRunner.State.RunningInstance != nil {
 				operator := spectestingutils.TestingCommitteeMember(ks)
-				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ks, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, operator)
+				baseRunner.State.RunningInstance = fixInstanceForRun(t, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
 			}
 		}
 	}
-
-	ret.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
 
 	return ret
 }
@@ -435,7 +433,7 @@ func fixInstanceForRun(t *testing.T, ks *spectestingutils.TestKeySet, inst *inst
 	return newInst
 }
 
-func baseRunnerForRole(logger *zap.Logger, role spectypes.RunnerRole, base *runner.BaseRunner, ks *spectestingutils.TestKeySet) runner.Runner {
+func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, base *runner.BaseRunner, ks *spectestingutils.TestKeySet) runner.Runner {
 	switch role {
 	case spectypes.RoleCommittee:
 		ret := ssvtesting.CommitteeRunner(logger, ks)

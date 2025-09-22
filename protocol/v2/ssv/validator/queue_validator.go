@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -61,7 +60,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	defer v.mtx.RUnlock()
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		span.AddEvent("pushing message to queue")
-		if pushed := q.Q.TryPush(msg); !pushed {
+		if pushed := q.TryPush(msg); !pushed {
 			const eventMsg = "❗ dropping message because the queue is full"
 			logger.Warn(eventMsg,
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
@@ -93,7 +92,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
 	ctx := v.ctx
 
-	var q QueueContainer
+	var q queue.Queue
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
@@ -122,21 +121,14 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
-		state := *q.queueState
+		state := queue.State{}
 		r := v.DutyRunners.DutyRunnerForMsgID(msgID)
 		if r == nil {
 			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
 		}
-		var runningInstance *instance.Instance
-		if r.HasRunningDuty() {
-			runningInstance = r.GetBaseRunner().State.RunningInstance
-			if runningInstance != nil {
-				decided, _ := runningInstance.IsDecided()
-				state.HasRunningInstance = !decided
-			}
-		}
-		state.Height = v.getLastHeight(msgID)
-		state.Round = v.getLastRound(msgID)
+		state.HasRunningInstance = r.HasRunningQBFTInstance()
+		state.Height = r.GetLastHeight()
+		state.Round = r.GetLastRound()
 		state.Quorum = v.Operator.GetQuorum()
 
 		filter := queue.FilterAny
@@ -149,7 +141,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				}
 				return e.Type == types.ExecuteDuty
 			}
-		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		} else if state.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.SSVMessage) bool {
@@ -166,7 +158,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+		msg := q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		if ctx.Err() != nil {
 			// Optimization: terminate fast if we can.
 			return nil
@@ -206,7 +198,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				msgRetries.Set(v.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
-					if pushed := q.Q.TryPush(msg); !pushed {
+					if pushed := q.TryPush(msg); !pushed {
 						logger.Warn("❗ not gonna replay message because the queue is full",
 							zap.String("message_identifier", string(v.messageID(msg))),
 							fields.MessageType(msg.MsgType),
@@ -220,31 +212,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	}
 
 	return nil
-}
-
-func (v *Validator) getLastHeight(identifier spectypes.MessageID) specqbft.Height {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Height(0)
-	}
-	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-		return ctrl.Height
-	}
-	return specqbft.Height(0)
-}
-
-func (v *Validator) getLastRound(identifier spectypes.MessageID) specqbft.Round {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Round(1)
-	}
-	if r.HasRunningDuty() {
-		inst := r.GetBaseRunner().State.RunningInstance
-		if inst != nil {
-			return inst.State.Round
-		}
-	}
-	return specqbft.Round(1)
 }
 
 // messageID is a wrapper that provides a logger to report errors (if any).

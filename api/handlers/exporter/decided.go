@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -16,8 +16,22 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
+// TraceDecideds godoc
+// @Summary Retrieve decided message traces
+// @Description Returns decided duty participant traces for validators or committees, including partial error details.
+// @Tags Exporter
+// @Accept json
+// @Produce json
+// @Param request query DecidedsRequest false "Filters as query parameters"
+// @Param request body DecidedsRequest false "Filters as JSON body"
+// @Success 200 {object} TraceDecidedsResponse
+// @Failure 400 {object} api.ErrorResponse
+// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
+// @Failure 500 {object} api.ErrorResponse
+// @Router /v1/exporter/decideds [get]
+// @Router /v1/exporter/decideds [post]
 func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
-	var request decidedRequest
+	var request DecidedsRequest
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
@@ -27,20 +41,16 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(err)
 	}
 
-	pubkeys := request.parsePubkeys()
-	var participants = make([]*participantResponse, 0)
+	var participants = make([]*DecidedParticipant, 0)
 	var errs *multierror.Error
 
-	// Collect indices from both pubkeys and indices in the request
-	indices := make([]phase0.ValidatorIndex, 0, len(request.Indices)+len(pubkeys))
-	for _, idx := range request.Indices {
-		indices = append(indices, phase0.ValidatorIndex(idx))
+	indices, err := e.extractIndices(&request)
+	errs = multierror.Append(errs, err)
+
+	// if the request was for a specific set of participants and we couldn't resolve any, we're done
+	if request.hasFilters() && len(indices) == 0 {
+		return toApiError(errs)
 	}
-	extra, merr := e.pubkeysToIndices(pubkeys)
-	errs = multierror.Append(errs, merr)
-	indices = append(indices, extra...)
-	slices.Sort(indices)
-	indices = slices.Compact(indices)
 
 	for _, r := range request.Roles {
 		role := spectypes.BeaconRole(r)
@@ -80,21 +90,23 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	// if we don't have a single valid participant, return an error
+	// by design, not found duties are expected and not considered as API errors
+	errs = filterOutDutyNotFoundErrors(errs)
+
+	// if we don't have a single valid result and we have at least one meaningful error, return an error
 	if len(participants) == 0 && errs.ErrorOrNil() != nil {
+		e.logger.Error("error serving SSV API request", zap.Any("request", request), zap.Error(errs))
 		return toApiError(errs)
 	}
 
 	// otherwise return a partial response with valid participants
-	var response decidedResponse
-	response.Data = participants
-	response.Errors = toStrings(errs.Errors)
+	response := TraceDecidedsResponseFromParticipants(participants, toStrings(errs))
 	return api.Render(w, r, response)
 }
 
-// backward-compatible handler for exporter-v1 "decideds" endpoint
+// Decideds is the backward-compatible handler for exporter-v1 "decideds" endpoint.
 func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
-	var request decidedRequest
+	var request DecidedsRequest
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
@@ -104,11 +116,11 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(err)
 	}
 
-	pubkeys := request.parsePubkeys()
+	pubkeys := request.pubKeys()
 
 	// Initialize with empty slice to ensure we always return [] instead of null
-	var response decidedResponse
-	response.Data = make([]*participantResponse, 0)
+	var response DecidedsResponse
+	response.Data = make([]*DecidedParticipant, 0)
 
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
@@ -144,7 +156,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, response)
 }
 
-func validateDecidedRequest(request *decidedRequest) error {
+func validateDecidedRequest(request *DecidedsRequest) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -199,32 +211,16 @@ func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, indices []phase
 	return entries, errs
 }
 
-// pubkeysToIndices converts pubkeys to indices using the validator store,
-// aggregating missing validators into a multierror instead of failing fast.
-func (e *Exporter) pubkeysToIndices(pubkeys []spectypes.ValidatorPK) ([]phase0.ValidatorIndex, *multierror.Error) {
-	indices := make([]phase0.ValidatorIndex, 0, len(pubkeys))
-	var errs *multierror.Error
-	for _, pk := range pubkeys {
-		idx, ok := e.validators.ValidatorIndex(pk)
-		if !ok {
-			errs = multierror.Append(errs, fmt.Errorf("validator not found by pubkey: %x", pk))
-			continue
-		}
-		indices = append(indices, idx)
-	}
-	return indices, errs
-}
-
 // toParticipantsRangeEntry converts an index-based entry into a ParticipantsRangeEntry
 // by resolving the validator's pubkey from the registry store.
 func (e *Exporter) toParticipantsRangeEntry(ent dutytracer.ParticipantsRangeIndexEntry) (qbftstorage.ParticipantsRangeEntry, error) {
-	share, found := e.validators.ValidatorByIndex(ent.Index)
+	pk, found := e.validators.ValidatorPubkey(ent.Index)
 	if !found {
 		return qbftstorage.ParticipantsRangeEntry{}, fmt.Errorf("validator not found by index: %d", ent.Index)
 	}
 	return qbftstorage.ParticipantsRangeEntry{
 		Slot:    ent.Slot,
-		PubKey:  share.ValidatorPubKey,
+		PubKey:  pk,
 		Signers: ent.Signers,
 	}, nil
 }

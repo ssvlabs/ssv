@@ -102,13 +102,3 @@ func (o *CommonOptions) NewOptions(
 		DutyRunners: dutyRunners,
 	}
 }
-
-// State of the validator
-type State uint32
-
-const (
-	// NotStarted the validator hasn't started
-	NotStarted State = iota
-	// Started validator is running
-	Started
-)

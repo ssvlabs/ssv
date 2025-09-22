@@ -15,27 +15,40 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (b *BaseRunner) signBeaconObject(
+func signBeaconObject(
 	ctx context.Context,
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
-	obj ssz.HashRoot,
+	root ssz.HashRoot,
 	slot spec.Slot,
 	signatureDomain spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
+	epoch := runner.GetNetworkConfig().EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get beacon domain")
+		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
-		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
+	return signAsValidator(ctx, runner, duty.ValidatorIndex, root, slot, signatureDomain, domain)
+}
+
+func signAsValidator(
+	ctx context.Context,
+	runner Runner,
+	validatorIndex spec.ValidatorIndex,
+	root ssz.HashRoot,
+	slot spec.Slot,
+	signatureDomain spec.DomainType,
+	domain spec.Domain,
+) (*spectypes.PartialSignatureMessage, error) {
+	share, ok := runner.GetShares()[validatorIndex]
+	if !ok {
+		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
 	sig, r, err := runner.GetSigner().SignBeaconObject(
 		ctx,
-		obj,
+		root,
 		domain,
-		spec.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
+		spec.BLSPubKey(share.SharePubKey),
 		slot,
 		signatureDomain,
 	)
@@ -47,7 +60,7 @@ func (b *BaseRunner) signBeaconObject(
 		PartialSignature: sig,
 		SigningRoot:      r,
 		Signer:           runner.GetOperatorSigner().GetOperatorID(),
-		ValidatorIndex:   duty.ValidatorIndex,
+		ValidatorIndex:   validatorIndex,
 	}, nil
 }
 

@@ -94,7 +94,7 @@ func TestNewController(t *testing.T) {
 		Context:           t.Context(),
 	}
 	control := NewController(logger, controllerOptions, exporter.Options{})
-	require.IsType(t, &controller{}, control)
+	require.IsType(t, &Controller{}, control)
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
@@ -769,13 +769,13 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	})
 }
 
-func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) controller {
+func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) Controller {
 	// Default to test network config if not provided.
 	if opts.networkConfig == nil {
 		opts.networkConfig = networkconfig.TestNetwork
 	}
 
-	return controller{
+	return Controller{
 		logger:                  logger,
 		beacon:                  opts.beacon,
 		network:                 opts.network,
@@ -880,10 +880,8 @@ func setupTestValidator(t *testing.T, validatorPk spectypes.ValidatorPK, ownerAd
 			OwnerAddress: common.BytesToAddress(ownerAddressBytes),
 		},
 
-		Queues: map[spectypes.RunnerRole]validator.QueueContainer{
-			spectypes.RoleValidatorRegistration: {
-				Q: queue.New(log.TestLogger(t), 1000),
-			},
+		Queues: map[spectypes.RunnerRole]queue.Queue{
+			spectypes.RoleValidatorRegistration: queue.New(log.TestLogger(t), 1000),
 		},
 	}
 }
@@ -1166,7 +1164,7 @@ func waitForNoAction(logger *zap.Logger, indicesChange chan struct{}, timeout ti
 	return done
 }
 
-func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
+func prepareController(t *testing.T) (*Controller, *mocks.MockSharesStorage) {
 	ctrl := gomock.NewController(t)
 	t.Cleanup(ctrl.Finish) // Ensures gomock is properly cleaned up after the test
 
@@ -1189,7 +1187,7 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 	mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
 	mockValidatorsMap := validators.New(ctx)
 
-	validatorCtrl := &controller{
+	validatorCtrl := &Controller{
 		ctx:               ctx,
 		beacon:            mockBeaconNode,
 		logger:            logger,

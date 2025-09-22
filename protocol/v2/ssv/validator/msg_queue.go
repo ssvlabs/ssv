@@ -18,12 +18,6 @@ import (
 // non-retryable error (can be checked via `errors.Is(err, &runner.RetryableError{})`).
 type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
 
-// QueueContainer wraps a queue with its corresponding state.
-type QueueContainer struct {
-	Q          queue.Queue
-	queueState *queue.State
-}
-
 type msgIDType string
 
 // messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
