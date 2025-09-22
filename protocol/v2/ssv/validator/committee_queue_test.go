@@ -79,7 +79,7 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 }
 
 // runConsumeQueueAsync wraps ConsumeQueue execution in a goroutine.
-func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committee, q QueueContainer,
+func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
 	logger *zap.Logger, handler func(context.Context, *queue.SSVMessage) error,
 	committeeRunner *runner.CommitteeRunner) {
 	t.Helper()
@@ -180,7 +180,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	committee := &Committee{
 		logger:          logger,
 		ctx:             ctx,
-		Queues:          make(map[phase0.Slot]QueueContainer),
+		Queues:          make(map[phase0.Slot]queueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig:   networkconfig.TestNetwork,
 		CommitteeMember: &spectypes.CommitteeMember{},
@@ -233,7 +233,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 	committee := &Committee{
 		logger:        logger,
 		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]QueueContainer),
+		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig: networkconfig.TestNetwork,
 	}
@@ -256,7 +256,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 	}
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID2, qbftMsg2)
 
-	q := QueueContainer{
+	q := queueContainer{
 		Q: queue.New(1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
@@ -317,14 +317,14 @@ func TestStartConsumeQueue(t *testing.T) {
 
 	committee := &Committee{
 		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]QueueContainer),
+		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		networkConfig: networkconfig.TestNetwork,
 	}
 
 	slot := phase0.Slot(123)
 
-	q := QueueContainer{
+	q := queueContainer{
 		Q: queue.New(1000),
 		queueState: &queue.State{
 			HasRunningInstance: false,
@@ -379,7 +379,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 
 	committee := &Committee{
 		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]QueueContainer),
+		Queues:  make(map[phase0.Slot]queueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
@@ -422,7 +422,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		combinedMessages[i], combinedMessages[j] = combinedMessages[j], combinedMessages[i]
 	})
 
-	q := QueueContainer{
+	q := queueContainer{
 		Q: queue.New(1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
@@ -498,7 +498,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 
 	committee := &Committee{
 		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]QueueContainer),
+		Queues:  make(map[phase0.Slot]queueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
@@ -528,7 +528,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	testMsg1 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID1, qbftMsg)
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
-	q := QueueContainer{
+	q := queueContainer{
 		Q: queue.New(1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
@@ -577,7 +577,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 
 	committee := &Committee{
 		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]QueueContainer),
+		Queues:  make(map[phase0.Slot]queueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
@@ -607,7 +607,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	testMsg1 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID1, qbftMsg)
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
-	q := QueueContainer{
+	q := queueContainer{
 		Q: queue.New(1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
@@ -688,7 +688,7 @@ func TestChangingFilterState(t *testing.T) {
 			return fmt.Errorf("intentionally stopping ConsumeQueue after first message")
 		}
 
-		q := QueueContainer{
+		q := queueContainer{
 			Q: queue.New(1),
 			queueState: &queue.State{
 				HasRunningInstance: true,
@@ -806,13 +806,13 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			committee := &Committee{
 				ctx:     ctx,
-				Queues:  make(map[phase0.Slot]QueueContainer),
+				Queues:  make(map[phase0.Slot]queueContainer),
 				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
 
-			q := QueueContainer{
+			q := queueContainer{
 				Q: queue.New(10),
 				queueState: &queue.State{
 					HasRunningInstance: tc.hasRunningDuty,
@@ -967,13 +967,13 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 
 			committee := &Committee{
 				ctx:     ctx,
-				Queues:  make(map[phase0.Slot]QueueContainer),
+				Queues:  make(map[phase0.Slot]queueContainer),
 				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
 
-			q := QueueContainer{
+			q := queueContainer{
 				Q: queue.New(10),
 				queueState: &queue.State{
 					HasRunningInstance: true,
@@ -1053,7 +1053,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 
 	committee := &Committee{
 		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]QueueContainer),
+		Queues:  make(map[phase0.Slot]queueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
@@ -1081,7 +1081,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{5}, eventMsgBody),
 	}
 
-	q := QueueContainer{
+	q := queueContainer{
 		Q: queue.New(10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
@@ -1179,13 +1179,13 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	committee := &Committee{
 		logger:          logger,
 		ctx:             ctx,
-		Queues:          make(map[phase0.Slot]QueueContainer),
+		Queues:          make(map[phase0.Slot]queueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
 		networkConfig:   networkconfig.TestNetwork,
 	}
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
-	qContainer := QueueContainer{
+	qContainer := queueContainer{
 		Q: queue.New(queueCapacity),
 		queueState: &queue.State{
 			HasRunningInstance: false,
@@ -1283,7 +1283,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	}
 
 	slot := phase0.Slot(123)
-	q := QueueContainer{
+	q := queueContainer{
 		Q: queue.New(10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
@@ -1347,10 +1347,10 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	slot := phase0.Slot(42)
 	committee := &Committee{
 		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]QueueContainer),
+		Queues:  make(map[phase0.Slot]queueContainer),
 		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
-	qc := QueueContainer{
+	qc := queueContainer{
 		Q: queue.New(1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
@@ -1563,7 +1563,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		committee := &Committee{
 			logger:          mainLogger.Named("DropWhenInboxStrictlyFull"),
 			ctx:             ctx,
-			Queues:          make(map[phase0.Slot]QueueContainer),
+			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
 			networkConfig:   networkconfig.TestNetwork,
@@ -1573,7 +1573,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		nextRound := specqbft.Round(2)
 		queueCapacity := 3
 
-		qContainer := QueueContainer{
+		qContainer := queueContainer{
 			Q: queue.New(queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
@@ -1638,7 +1638,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		committee := &Committee{
 			logger:          mainLogger.Named("HighPriorityDropping"),
 			ctx:             ctx,
-			Queues:          make(map[phase0.Slot]QueueContainer),
+			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
 			networkConfig:   networkconfig.TestNetwork,
@@ -1647,7 +1647,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		currentRound := specqbft.Round(1)
 		queueCapacity := 3
 
-		qContainer := QueueContainer{
+		qContainer := queueContainer{
 			Q: queue.New(queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
@@ -1732,7 +1732,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		committee := &Committee{
 			ctx:     ctx,
-			Queues:  make(map[phase0.Slot]QueueContainer),
+			Queues:  make(map[phase0.Slot]queueContainer),
 			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
 
@@ -1755,7 +1755,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		slot := phase0.Slot(456)
 
-		q := QueueContainer{
+		q := queueContainer{
 			Q: queue.New(queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,

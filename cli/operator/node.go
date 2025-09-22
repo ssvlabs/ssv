@@ -1066,7 +1066,7 @@ func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient executionclient.Provider,
-	validatorCtrl validator.Controller,
+	validatorCtrl *validator.Controller,
 	networkConfig *networkconfig.Network,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,

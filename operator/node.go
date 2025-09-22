@@ -36,7 +36,7 @@ type Options struct {
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	DB                  basedb.Database
-	ValidatorController validator.Controller
+	ValidatorController *validator.Controller
 	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
@@ -47,7 +47,7 @@ type Options struct {
 type Node struct {
 	logger           *zap.Logger
 	network          *networkconfig.Network
-	validatorsCtrl   validator.Controller
+	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
 	exporterOptions  exporter.Options
 	consensusClient  beaconprotocol.BeaconNode
