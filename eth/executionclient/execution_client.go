@@ -67,7 +67,7 @@ type ExecutionClient struct {
 
 	// healthInvalidationInterval ensures we don't spam EL with health-check type requests too much.
 	healthInvalidationInterval time.Duration
-	lastHeathyTime             atomic.Int64
+	lastHealthyTime            atomic.Int64
 }
 
 // New creates a new instance of ExecutionClient.
@@ -359,7 +359,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ErrClosed
 	}
 
-	lastHealthyTime := time.Unix(ec.lastHeathyTime.Load(), 0)
+	lastHealthyTime := time.Unix(ec.lastHealthyTime.Load(), 0)
 	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
 		// Synced recently, reuse the result (only if ec.healthInvalidationInterval is set).
 		return nil
@@ -388,7 +388,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
 
-	ec.lastHeathyTime.Store(time.Now().Unix())
+	ec.lastHealthyTime.Store(time.Now().Unix())
 
 	return nil
 }
