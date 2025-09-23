@@ -47,9 +47,9 @@ func CreateTestNode(t *testing.T, n int, ctx context.Context) *Node {
 	const node1 = "node_1"
 	const node2 = "node_2"
 	const node3 = "node_3"
-	nodeProber.AddNode(node1, nodeMock, 10*time.Second, 5)
-	nodeProber.AddNode(node2, nodeMock, 10*time.Second, 5)
-	nodeProber.AddNode(node3, nodeMock, 10*time.Second, 5)
+	nodeProber.AddNode(node1, nodeMock, 10*time.Second, 5, 0)
+	nodeProber.AddNode(node2, nodeMock, 10*time.Second, 5, 0)
+	nodeProber.AddNode(node3, nodeMock, 10*time.Second, 5, 0)
 
 	return NewNode(
 		[]string{

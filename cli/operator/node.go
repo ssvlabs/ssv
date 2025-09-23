@@ -569,8 +569,8 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		nodeProber := nodeprobe.New(logger)
-		nodeProber.AddNode(clNodeName, consensusClient, 10*time.Second, 5)
-		nodeProber.AddNode(elNodeName, executionClient, 10*time.Second, 5)
+		nodeProber.AddNode(clNodeName, consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+		nodeProber.AddNode(elNodeName, executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 
 		probeCtx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 		defer cancel()
@@ -593,7 +593,7 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, 10*time.Second, 5)
+			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
 		go startNodeProber(cmd.Context(), logger, nodeProber)
 
