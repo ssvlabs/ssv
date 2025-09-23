@@ -15,19 +15,12 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // MessageHandler process the msg. return error if exist
 type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
-
-// QueueContainer wraps a queue with its corresponding state
-type QueueContainer struct {
-	Q          queue.Queue
-	queueState *queue.State
-}
 
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
@@ -67,7 +60,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	defer v.mtx.RUnlock()
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		span.AddEvent("pushing message to queue")
-		if pushed := q.Q.TryPush(msg); !pushed {
+		if pushed := q.TryPush(msg); !pushed {
 			const eventMsg = "❗ dropping message because the queue is full"
 			logger.Warn(eventMsg,
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
@@ -103,7 +96,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	var q QueueContainer
+	var q queue.Queue
 	err := func() error {
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
@@ -124,21 +117,14 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
-		state := *q.queueState
+		state := queue.State{}
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
 		if runner == nil {
 			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
 		}
-		var runningInstance *instance.Instance
-		if runner.HasRunningDuty() {
-			runningInstance = runner.GetBaseRunner().State.RunningInstance
-			if runningInstance != nil {
-				decided, _ := runningInstance.IsDecided()
-				state.HasRunningInstance = !decided
-			}
-		}
-		state.Height = v.GetLastHeight(msgID)
-		state.Round = v.GetLastRound(msgID)
+		state.HasRunningInstance = runner.HasRunningQBFTInstance()
+		state.Height = runner.GetLastHeight()
+		state.Round = runner.GetLastRound()
 		state.Quorum = v.Operator.GetQuorum()
 
 		filter := queue.FilterAny
@@ -151,7 +137,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				}
 				return e.Type == types.ExecuteDuty
 			}
-		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		} else if state.HasRunningInstance && !runner.HasAcceptedProposalForCurrentRound() {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.SSVMessage) bool {
@@ -168,15 +154,12 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
-		if ctx.Err() != nil {
-			break
-		}
+		msg := q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		if msg == nil {
 			v.logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
-		lens = append(lens, q.Q.Len())
+		lens = append(lens, q.Len())
 		if len(lens) >= 10 {
 			v.logger.Debug("📬 [TEMPORARY] queue statistics",
 				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
@@ -184,6 +167,10 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			lens = lens[:0]
 		}
 
+		// Handle the message, but only if ctx hasn't been canceled (so we can exit fast)
+		if ctx.Err() != nil {
+			break
+		}
 		// Handle the message.
 		if err := handler(ctx, msg); err != nil {
 			v.logMsg(msg, "❗ could not handle message",
@@ -217,31 +204,4 @@ func (v *Validator) logMsg(msg *queue.SSVMessage, logMsg string, withFields ...z
 		}
 	}
 	v.logger.Debug(logMsg, append(baseFields, withFields...)...)
-}
-
-// GetLastHeight returns the last height for the given identifier
-func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Height(0)
-	}
-	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-		return ctrl.Height
-	}
-	return specqbft.Height(0)
-}
-
-// GetLastRound returns the last height for the given identifier
-func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Round(1)
-	}
-	if r.HasRunningDuty() {
-		inst := r.GetBaseRunner().State.RunningInstance
-		if inst != nil {
-			return inst.State.Round
-		}
-	}
-	return specqbft.Round(1)
 }

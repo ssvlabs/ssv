@@ -177,7 +177,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp DecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 3)
@@ -219,7 +219,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp DecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				// expect only entries for the filtered pubkey.
@@ -288,7 +288,7 @@ func TestExporterDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp DecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2)
@@ -640,7 +640,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 				require.Len(t, resp.Errors, 0) // ErrNotFound suppressed
@@ -667,7 +667,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.GreaterOrEqual(t, len(resp.Data), 1)
 				require.Contains(t, resp.Errors, "forced error on GetCommitteeDecideds")
@@ -686,7 +686,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, "PROPOSER", resp.Data[0].Role)
@@ -716,7 +716,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
@@ -739,7 +739,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
@@ -759,7 +759,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
@@ -832,7 +832,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 6) // 2 validators * 2 roles + 1 committee * 2 roles
@@ -886,7 +886,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2) // 1 validator * 2 roles + 1 committee * 1 role
@@ -968,7 +968,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 				require.Len(t, resp.Errors, 0) // ErrNotFound suppressed
@@ -1095,7 +1095,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
@@ -1121,7 +1121,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
@@ -1146,7 +1146,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp decidedResponse
+				var resp TraceDecidedsResponse
 
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
@@ -1292,7 +1292,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp committeeTraceResponse
+				var resp CommitteeTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, uint64(100), resp.Data[0].Slot)
@@ -1317,7 +1317,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp committeeTraceResponse
+				var resp CommitteeTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, uint64(100), resp.Data[0].Slot)
@@ -1381,7 +1381,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK, // Not found is not returned as an error status by the API
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp committeeTraceResponse
+				var resp CommitteeTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 				require.Len(t, resp.Errors, 0) // ErrNotFound suppressed
@@ -1416,7 +1416,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK, // Not found is not returned as an error status by the API
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp committeeTraceResponse
+				var resp CommitteeTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 				require.Len(t, resp.Errors, 0) // ErrNotFound suppressed
@@ -1437,7 +1437,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp committeeTraceResponse
+				var resp CommitteeTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)   // Should return processed results (best effort)
 				require.Len(t, resp.Errors, 1) // 1 error because ErrNotFound suppressed
@@ -1539,7 +1539,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
@@ -1570,7 +1570,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
@@ -1602,7 +1602,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 2)
 				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
@@ -1645,7 +1645,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 				require.Len(t, resp.Errors, 0) // ErrNotFound suppressed
@@ -1702,7 +1702,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				// Do not assert exact count; presence depends on mocked trace shape
 				require.True(t, len(resp.Data) >= 0)
@@ -1732,7 +1732,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 0)
 				require.Len(t, resp.Errors, 0)
@@ -1845,7 +1845,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				require.Contains(t, resp.Errors, "forced error on GetValidatorDuty")
@@ -1925,7 +1925,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp validatorTraceResponse
+				var resp ValidatorTracesResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1) // deduplicated
 			},
