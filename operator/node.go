@@ -144,24 +144,18 @@ func (n *Node) Start(ctx context.Context) error {
 		return fmt.Errorf("init validators: %w", err)
 	}
 
-	if n.exporterOptions.Enabled {
-		// For exporter, we connect to all subnets.
-
-		err := n.net.SubscribeAll()
-		if err != nil {
-			n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
-		}
-	} else {
-		// For regular SSV node, we either connect to the subnets validators we manage need or any random
-		// subnet just to participate in the network.
-
+	// For regular SSV node, starting a validator will also connect us to subnets that correspond
+	// to that validator. But if we don't have validators to start (if none were initialized) -
+	// have to subscribe to at least 1 random subnet explicitly to just be able to participate
+	// in the network.
+	startValidators := func() error {
 		if len(validatorsInitialized) == 0 {
-			// If no validators were initialized - we're not subscribed to any subnets, we
-			// have to subscribe to at least 1 random subnet to participate in the network.
 			if err := n.net.SubscribeRandoms(1); err != nil {
 				return fmt.Errorf("subscribe to 1 random subnet: %w", err)
 			}
+
 			n.logger.Info("no validators to start, successfully subscribed to random subnet")
+
 			return nil
 		}
 
@@ -169,6 +163,22 @@ func (n *Node) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("start validators: %w", err)
 		}
+
+		return nil
+	}
+	if n.exporterOptions.Enabled {
+		// For exporter, we want to connect to all subnets.
+		startValidators = func() error {
+			err := n.net.SubscribeAll()
+			if err != nil {
+				n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
+				return nil
+			}
+			return nil
+		}
+	}
+	if err = startValidators(); err != nil {
+		return err
 	}
 
 	go n.net.UpdateSubnets()

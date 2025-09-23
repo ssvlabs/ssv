@@ -472,7 +472,7 @@ func (c *Controller) InitValidators() ([]*validator.Validator, error) {
 		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
 	)
 	if len(ownShares) == 0 {
-		c.logger.Info("no validators to start: no own non-liquidated validator shares found in DB")
+		c.logger.Info("no validators to initialize: no own non-liquidated validator shares found in DB")
 		return nil, nil
 	}
 
