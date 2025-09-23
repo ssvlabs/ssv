@@ -1,10 +1,8 @@
 # SSV Exporter v2 — Pre‑Release Notes (v2.0.0‑rc.1)
 
-> **Audience:** SSV node operators and clients integrating with the exporter API.  
-> **Focus:** configuration (files/flags/env), API surface (HTTP + WebSocket), compatibility, and upgrade steps.  
-> **Compatibility:** v2 keeps legacy clients working. 
->     - In *standard* mode, the legacy `/v1/exporter/decideds` response keeps the v1 format and error semantics (fail‑fast on processing errors). Error message strings may differ from exporter v1. 
->     - In *archive* mode, the same path is backed by the new v2 pipeline and returns a retro‑compatible `data` entry plus an additional `errors` array; processing is **best‑effort** and returns all valid results when possible. If a request yields **no valid results** and **at least one meaningful error**, the API returns an HTTP error.
+- **Audience:** SSV node operators and clients integrating with the exporter API.  
+- **Focus:** configuration (files/flags/env), API surface (HTTP + WebSocket), compatibility, and upgrade steps.
+- **Compatibility:** v2 keeps legacy clients working. 
 
 ---
 
@@ -12,54 +10,45 @@
 
 Exporter v2 introduces **full duty tracing** (consensus rounds, pre/post partial signatures), **committee‑level views**, richer filtering, OpenAPI definitions, and a clearer configuration model with **two operating modes**:
 
-- **archive** — full traces persisted to disk, new `/traces/*` endpoints, and `/decideds` served by the v2 pipeline (adds `errors` array).
-- **standard** — v1‑compatible participants only; the legacy `/decideds` payload is preserved and old data is pruned automatically.
+### Standard mode
 
-v2 uses **best‑effort responses**: it returns partial results alongside non‑fatal issues in an `errors` array. If a request yields **no valid data** and **at least one meaningful error**, it returns an HTTP error instead of an empty success.
+Setting `Mode: standard` keeps the legacy behavior:
+- Data is pruned automatically
+- The HTTP API *fails fast* and aborts on first error
+- The legacy `/decideds` payload is preserved
+
+### Archive mode
+
+Setting `Mode: archive` enables the full extent of v2.
+
+Compared to `Mode: standard`:
+- Data is permanently saved to disk
+- The HTTP API implements *best-effort processing* and returns all results that could be processed
+- The legacy `/decideds` payload is enriched with a new `errors` field to support best-effort processing
+
+In addition, `Mode: archive` also enables:
+- Full duty tracing: consensus messages are recorded on disk and exposed via the API
+- These traces are exposed via two new API endpoints: `/traces/validator` and `/traces/committee`
+
+**Best‑effort** processing: the exporter returns partial results (`data`) alongside non‑fatal issues (`errors`) in an envelope response. If a request yields **no valid data** and **at least one meaningful error**, an HTTP error is returned instead of an empty success.
 
 ---
 
-## Quick Start
+## Configuration file
 
-### 1) Choose a mode and enable the exporter
+The configuration file schema was updated in favor of a clearer configuration model.
 
-```yaml
-# config.yaml (excerpt)
-exporter:
-  Enabled: true              # enable exporter pipeline
-  Mode: archive              # "archive" | "standard"
-  RetainSlots: 50400         # used in standard mode only (~7 days at 12s/slot)
-```
+Changes:
+- **New top‑level block:** `exporter.Enabled`, `exporter.Mode`, `exporter.RetainSlots`.
+- **Deprecated:** `ssv.ValidatorOptions.Exporter: true` (replace with the block above). Any previous example configs using that key must be updated.
 
-**Archive mode requirements & effects**
-- Persists detailed traces on disk (Pebble). Higher CPU/disk and P2P traffic (subscribes to all subnets).
-- Enables new endpoints under `/v1/exporter/traces/*` and serves `/v1/exporter/decideds` via the v2 handler (adds `errors`).
+> If your deployment uses environment variable overrides for YAML keys, use your usual `FOO__BAR` convention (no change introduced by v2).
 
-**Standard mode**
-- No duty tracer or trace persistence. Keeps legacy participants flow and response shape.
-- Background pruning based on `RetainSlots` (initial prune and then continuous, slot‑aligned).
- - When the exporter is enabled, the node subscribes to all subnets unless you configure fixed subnets.
-
-### 2) Expose API ports
-
-```yaml
-# HTTP API (required for clients)
-SSVAPIPort: 16000
-
-# WebSocket API (optional; use a different port than SSVAPIPort)
-WebSocketAPIPort: 16001
-WithPing: true
-```
-
-> The OpenAPI spec is versioned under `docs/api/ssvnode.openapi.yaml|json`.
-
-### 3) Minimal working configs
-
-**Archive mode (recommended for full tracing)**
+### Minimal working config: archive mode
 
 ```yaml
 global:
-  LogLevel: info
+  LogLevel: debug  # please use debug on first run
 
 db:
   Path: ./data/db
@@ -77,38 +66,44 @@ exporter:
   Enabled: true
   Mode: archive
 
-SSVAPIPort: 16000
-WebSocketAPIPort: 16001
+SSVAPIPort: 16000        # enables HTTP API, optional 
+WebSocketAPIPort: 16001  # enables WS API, optional
 WithPing: true
 ```
 
-**Standard mode (v1‑compatible)**
+### Minimal working config: standard mode
 
 ```yaml
+global:
+  LogLevel: debug  # please use debug on first run
+
+db:
+  Path: ./data/db
+
+eth2:
+  BeaconNodeAddr: http://your-beacon:5052
+
+eth1:
+  ETH1Addr: ws://your-execution:8546/ws
+
+# p2p: optional fixed subnets. When the exporter is enabled (any mode),
+#      the node subscribes to all subnets to capture duties unless you set fixed subnets.
+
 exporter:
   Enabled: true
   Mode: standard
-  RetainSlots: 50400
+  RetainSlots: 50400     # v1-compatible way to control memory use
 
-SSVAPIPort: 16000
-# WebSocket is optional; /stream works in standard mode for decided notifications.
-WebSocketAPIPort: 16001
+SSVAPIPort: 16000        # enables HTTP API, optional 
+WebSocketAPIPort: 16001  # enables WS API, optional
+WithPing: true
 ```
 
 ---
 
-## Configuration & Flags
+## HTTP API overview (updated)
 
-- **New top‑level block:** `exporter.Enabled`, `exporter.Mode`, `exporter.RetainSlots`.
-- **Deprecated:** `ssv.ValidatorOptions.Exporter: true` (replace with the block above). Any previous example configs using that key must be updated.
-- **Storage backend:** When the exporter is enabled, the node uses **Pebble** automatically for exporter data. Standard mode still uses Pebble but does **not** persist full duty traces.
-- **Rate limiting:** Endpoints may return **`429 Too Many Requests`**. Clients should back off and retry with jitter.
-
-> If your deployment uses environment variable overrides for YAML keys, use your usual `FOO__BAR` convention (no change introduced by v2).
-
----
-
-## HTTP API (v2)
+Please refer to the new [OpenApi spec](https://github.com/ssvlabs/ssv/tree/stage/docs/API) (`docs/API/ssvnode.openAPI.yaml|json`) for details. Below is a high-level overview of the new HTTP API endpoints.
 
 All endpoints accept filters in the **query string** or as a **JSON body** (same request struct). Field constraints are summarized in the Appendix.
 
@@ -130,8 +125,11 @@ Detailed per‑validator duty traces: consensus rounds (proposal, prepares, comm
 ```bash
 curl -s "http://localhost:16000/v1/exporter/traces/validator?from=123456&to=123460&roles=ATTESTER,AGGREGATOR&indices=123,456"
 
-curl -s -X POST http://localhost:16000/v1/exporter/traces/validator   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"roles":["ATTESTER"],"pubkeys":["<96-hex>"],"indices":[123]}'
+curl -s -X POST http://localhost:16000/v1/exporter/traces/validator   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"roles":["ATTESTER"],"pubkeys":["<96-char hex>"],"indices":[123]}'
 ```
+
+Response data schema: [ValidatorTrace](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/API/ssvnode.openAPI.json#L996)
+
 
 ---
 
@@ -149,10 +147,12 @@ Committee‑level traces: consensus rounds plus post‑consensus signer data for
 
 **Examples**
 ```bash
-curl -s "http://localhost:16000/v1/exporter/traces/committee?from=123456&to=123460&committeeIDs=<64-hex>"
+curl -s "http://localhost:16000/v1/exporter/traces/committee?from=123456&to=123460&committeeIDs=<64-char hex>"
 
-curl -s -X POST http://localhost:16000/v1/exporter/traces/committee   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"committeeIDs":["<64-hex>"]}'
+curl -s -X POST http://localhost:16000/v1/exporter/traces/committee   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"committeeIDs":["<64-char hex>"]}'
 ```
+
+Response data schema: [CommitteeTrace](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/API/ssvnode.openAPI.json#L630)
 
 ---
 
@@ -174,40 +174,36 @@ Note: In standard mode, the `indices` filter is ignored for this endpoint; use `
 
 **Examples**
 ```bash
-# Standard mode → v1 payload
-curl -s "http://localhost:16000/v1/exporter/decideds?from=123456&to=123460&roles=ATTESTER&pubkeys=<96-hex>"
+curl -s "http://localhost:16000/v1/exporter/decideds?from=123456&to=123460&roles=ATTESTER&pubkeys=<96-char hex>"
 
-# Archive mode → richer payload with `errors`
-curl -s "http://localhost:16000/v1/exporter/decideds?from=123456&to=123460&roles=ATTESTER"
+curl -s -X POST http://localhost:16000/v1/exporter/decideds   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"roles":["ATTESTER"],"pubkeys":["<96-char hex>"]}'
 ```
 
+Response data schema: [TraceDecideds](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/API/ssvnode.openAPI.json#L972)
+
+### API requests: field constraints
+
+- **Validator public keys:** 96 hex chars (48‑byte BLS).
+- **Committee IDs:** 64 hex chars (32 bytes).
+- **Slots & indices:** non‑negative int64.
+- **Roles enum:** `ATTESTER`, `AGGREGATOR`, `PROPOSER`, `SYNC_COMMITTEE`, `SYNC_COMMITTEE_CONTRIBUTION`.
+
 ---
 
-## WebSocket API
+## WebSocket API overview (unchanged)
 
-When `WebSocketAPIPort` is configured and the exporter is enabled:
+No changes were made to the WebSocket API. As before, when `WebSocketAPIPort` is configured and the exporter is enabled:
 
-- `ws://<host>:<port>/stream` — **decided (quorum) events** published once per `(validator, role, root)` with a **1‑minute de‑duplication window**.  
-  Where possible, listeners backfill pubkeys from the registry for retro‑compatibility.
+- `ws://<host>:<port>/stream` — *decided (quorum) events* published once per `(validator, role, root)` with a *1‑minute de‑duplication window*.
 - `ws://<host>:<port>/query` — retained for ad‑hoc lookups (internal format), unchanged from v1.
-
----
-
-## Compatibility & Behavior Changes
-
-- **Retro‑compatibility:** The legacy `/v1/exporter/decideds` remains available in both modes. In archive mode it is powered by the new backend and **adds** `errors` to the response (existing fields preserved). Clients that strictly validate schemas should allow unknown fields.
-- **Two modes:** Archive (full traces, Pebble, all subnets) vs. Standard (participants only, pruning).
-- **Best‑effort processing:** Partial results with `errors` instead of hard failures where possible; empty‑with‑errors yields HTTP error.
-- **Rate limiting:** APIs may respond with `429 Too Many Requests`; clients must implement backoff with jitter.
-- **OpenAPI:** Specs are versioned under `docs/api/ssvnode.openapi.yaml|json`.
 
 ---
 
 ## Operational Notes
 
-- **Performance & storage (archive):** Persisting detailed traces increases CPU, memory, disk, and P2P usage. Traces are evicted from memory after a few slots and merged from disk on late arrival.
-- **Pruning (standard):** Initial prune to `currentSlot - RetainSlots` followed by continuous per‑slot pruning.
-- **Health checks:** After enabling v2, confirm `GET /v1/node/health` is healthy, then call a small `/traces/validator` range (archive) or `/decideds` (standard) to validate visibility.
+- Persisting detailed traces increases CPU, memory, disk, and P2P usage.
+- No safety was implemented against large ranges in API requests and Out-of-Memory errors are possible: users are expected to call the API with reasonable ranges that the node can handle (exact limits depend on available RAM to hold results).
+- DB migration may take a long time to process and garbage collect. Enable `debug` logs on first run.
 
 ---
 
@@ -217,10 +213,28 @@ When `WebSocketAPIPort` is configured and the exporter is enabled:
 2. **Migrate config:**
    - Remove `ssv.ValidatorOptions.Exporter: true` if present.
    - Add the new `exporter` block with `Enabled` and `Mode` (and `RetainSlots` for standard).
-3. **Expose API(s):** set `SSVAPIPort` (HTTP); optionally set `WebSocketAPIPort` (streaming).
-4. **Restart** the node. With archive mode enabled, the exporter data store switches to **Pebble** automatically.
-5. **Validate**: probe `/v1/exporter/decideds` and (if archive) `/v1/exporter/traces/validator`; connect to `/stream` to observe live decided events.
+   - Set an API port
+   - Please refer to our [minimal configuration examples](#Configuration-file) for a working example.
+3. **Restart** the node with archive mode enabled.
+4. **Validate**: probe `/v1/exporter/decideds` and (if archive) `/v1/exporter/traces/validator`; connect to `/stream` to observe live decided events.
 
+### Configuration file upgrade
+
+**Deprecated**
+```
+ssv:
+  ValidatorOptions:
+    Exporter: true
+    ExporterRetainSlots: 50400
+```
+
+**New**
+```
+exporter:
+  Enabled: true
+  Mode: standard # possible values: standard, archive
+  RetainSlots: 50400
+```
 ---
 
 ## Troubleshooting
@@ -231,7 +245,7 @@ When `WebSocketAPIPort` is configured and the exporter is enabled:
 - Database migrations can take time. Before upgrading, back up your database. Look for this INFO log to confirm completion:
     - migration completed
 - Post‑migration garbage collection (GC) can take even longer. Look for this DEBUG log to confirm GC completion:
-    - post-migrations garbage collection completed
+    - post-migration garbage collection completed
       Until GC completes, the HTTP API and exporter components do not start. Note: the consensus client initializes earlier and may emit logs during
 migrations; filtering those out can help.
 - HTTP API readiness (requires SSVAPIPort > 0):
@@ -242,13 +256,6 @@ migrations; filtering those out can help.
     - evicted validator duty traces to disk (INFO, periodic)
     - evicted validator mappings to disk (INFO, periodic)
 - Expect “using pebble db” (INFO) when the exporter is enabled (both modes).
-
-## Appendix — Field Constraints
-
-- **Validator public keys:** 96 hex chars (48‑byte BLS).
-- **Committee IDs:** 64 hex chars (32 bytes).
-- **Slots & indices:** non‑negative int64.
-- **Roles enum:** `ATTESTER`, `AGGREGATOR`, `PROPOSER`, `SYNC_COMMITTEE`, `SYNC_COMMITTEE_CONTRIBUTION`.
 
 ---
 
