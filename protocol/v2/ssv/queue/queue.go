@@ -217,13 +217,14 @@ func (q *priorityQueue) Len() int {
 }
 
 func (q *priorityQueue) recordInboxSize(inboxSize int64) {
-	if q.inboxSizeMetric != nil {
-		q.inboxSizeMetric.Record(
-			context.Background(),
-			inboxSize,
-			metric.WithAttributes(attribute.String("queue_id", q.queueId)),
-		)
+	if q.inboxSizeMetric == nil {
+		return
 	}
+	q.inboxSizeMetric.Record(
+		context.Background(),
+		inboxSize,
+		metric.WithAttributes(attribute.String("queue_id", q.queueId)),
+	)
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

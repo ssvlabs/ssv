@@ -40,10 +40,15 @@ var (
 	)
 )
 
+// ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).
+// Runner-role is the only parameter we differentiate by.
 func ValidatorMetricID(runnerRole spectypes.RunnerRole) string {
 	return utils.FormatRunnerRole(runnerRole)
 }
 
+// CommitteeMetricID returns a queue identifier to differentiate committee-related queues (in metrics).
+// We are splitting all committee-related queues into 32 buckets, this allows us to observe the properties
+// of the last ~32 queues (this corresponds to ~1 epoch).
 func CommitteeMetricID(slot phase0.Slot) string {
 	slotInEpoch := slot % 32
 	return fmt.Sprintf("%d", slotInEpoch)
