@@ -36,15 +36,8 @@ func WithFollowDistance(offset uint64) Option {
 	}
 }
 
-// WithFollowDistanceMulti sets finalization offset (a block at this offset into the past
-// from the head block will be considered as very likely finalized).
-func WithFollowDistanceMulti(offset uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.followDistance = offset
-	}
-}
-
 // WithReqTimeout sets timeout for RPC requests to eth1 node.
+// The timeout must be positive, otherwise the default value will be used.
 func WithReqTimeout(timeout time.Duration) Option {
 	return func(s *ExecutionClient) {
 		if timeout > 0 {
@@ -54,6 +47,7 @@ func WithReqTimeout(timeout time.Duration) Option {
 }
 
 // WithReqTimeoutMulti sets timeout for RPC requests to eth1 node.
+// The timeout must be positive, otherwise the default value will be used.
 func WithReqTimeoutMulti(timeout time.Duration) OptionMulti {
 	return func(s *MultiClient) {
 		if timeout > 0 {
@@ -65,13 +59,6 @@ func WithReqTimeoutMulti(timeout time.Duration) OptionMulti {
 // WithHealthInvalidationInterval sets health invalidation interval. 0 disables caching.
 func WithHealthInvalidationInterval(interval time.Duration) Option {
 	return func(s *ExecutionClient) {
-		s.healthInvalidationInterval = interval
-	}
-}
-
-// WithHealthInvalidationIntervalMulti sets health invalidation interval.
-func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
-	return func(s *MultiClient) {
 		s.healthInvalidationInterval = interval
 	}
 }

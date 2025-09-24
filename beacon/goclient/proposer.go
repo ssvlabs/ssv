@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -30,20 +31,15 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(ctx, "ProposerDuties", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
-
+	recordMultiClientRequest(ctx, gc.log, "ProposerDuties", http.MethodGet, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "ProposerDuties"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
+		return nil, errMultiClient(fmt.Errorf("fetch proposer duties: %w", err), "ProposerDuties")
 	}
 	if resp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "ProposerDuties"),
-		)
-		return nil, fmt.Errorf("proposer duties response is nil")
+		return nil, errMultiClient(fmt.Errorf("proposer duties response is nil"), "ProposerDuties")
+	}
+	if resp.Data == nil {
+		return nil, errMultiClient(fmt.Errorf("proposer duties response data is nil"), "ProposerDuties")
 	}
 
 	return resp.Data, nil
@@ -63,16 +59,17 @@ func (gc *GoClient) fetchProposal(
 		RandaoReveal: sig,
 		Graffiti:     graffiti,
 	})
-	recordRequestDuration(ctx, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
+	recordSingleClientRequest(ctx, gc.log, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Proposal"),
-			zap.String("address", client.Address()),
-			fields.Slot(slot),
-			zap.Error(err),
-		)
-		return nil, err
+		return nil, errSingleClient(fmt.Errorf("fetch proposal: %w", err), client.Address(), "Proposal")
 	}
+	if resp == nil {
+		return nil, errSingleClient(fmt.Errorf("proposal response is nil"), client.Address(), "Proposal")
+	}
+	if resp.Data == nil {
+		return nil, errSingleClient(fmt.Errorf("proposal response data is nil"), client.Address(), "Proposal")
+	}
+
 	return resp.Data, nil
 }
 
@@ -99,7 +96,7 @@ func (gc *GoClient) GetBeaconBlock(
 			return nil, DataVersionNil, err
 		}
 	} else {
-		// For multiple clients, race them in parallel for fastest response
+		// For multiple clients, race them in parallel for the fastest response
 		beaconBlock, err = gc.getProposalParallel(ctx, slot, sig, graffiti)
 		if err != nil {
 			return nil, DataVersionNil, err
@@ -215,14 +212,14 @@ func (gc *GoClient) getProposalParallel(
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
 ) (*api.VersionedProposal, error) {
-	// Create a context that we'll cancel as soon as we get first successful response
+	// Create a context that we'll cancel as soon as we get the first successful response
 	parallelCtx, cancelParallel := context.WithCancel(ctx)
 	defer cancelParallel()
 
 	type result struct {
 		proposal *api.VersionedProposal
 		err      error
-		address  string
+		client   string
 	}
 
 	resultCh := make(chan result, len(gc.clients))
@@ -230,36 +227,35 @@ func (gc *GoClient) getProposalParallel(
 	for _, client := range gc.clients {
 		go func(c Client) {
 			proposal, err := gc.fetchProposal(parallelCtx, c, slot, sig, graffiti)
-			// Errors are already logged in fetchProposal
 			select {
-			case resultCh <- result{proposal: proposal, err: err, address: c.Address()}:
+			case resultCh <- result{proposal: proposal, err: err, client: c.Address()}:
 			case <-parallelCtx.Done():
 				// Context canceled, exit without blocking
 			}
 		}(client)
 	}
 
-	var lastErr error
-	for i := 0; i < len(gc.clients); i++ {
+	var errs error
+	for range gc.clients {
 		select {
 		case res := <-resultCh:
 			if res.err != nil {
-				lastErr = res.err
+				errs = errors.Join(errs, res.err)
 				continue
 			}
-			// Got a successful response, cancel other requests and return
-			gc.log.Debug("received proposal from client",
-				zap.String("address", res.address),
+			// Got a successful response, cancel other requests and return.
+			gc.log.Debug("received proposal, canceling other requests",
+				zap.String("client", res.client),
 				fields.Slot(slot),
-				zap.Int("response_number", i+1))
-			cancelParallel() // Cancel other goroutines immediately
+			)
+			cancelParallel()
 			return res.proposal, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 
-	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d: %w", len(gc.clients), slot, lastErr)
+	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
 func (gc *GoClient) SubmitBlindedBeaconBlock(
@@ -412,10 +408,9 @@ func (gc *GoClient) handleProposalPreparationsOnReconnect(ctx context.Context, c
 	provider := gc.proposalPreparationsProvider
 	gc.proposalPreparationsProviderMu.RUnlock()
 
-	// Provider may be nil during early reconnections if the beacon client reconnects
-	// before operator.New() completes and calls SetProposalPreparationsProvider.
-	// This is harmless - we skip re-submission and let the regular
-	// schedule handle it once the fee recipient controller starts.
+	// Provider may be nil during early reconnections if the beacon client reconnects before operator.New()
+	// completes and calls SetProposalPreparationsProvider. This is harmless - we skip re-submission and let
+	// the regular schedule handle it once the fee recipient controller starts.
 	if provider == nil {
 		logger.Debug("proposal preparations provider not set during reconnection",
 			zap.String("reason", "early reconnection before initialization complete"),
@@ -433,30 +428,27 @@ func (gc *GoClient) handleProposalPreparationsOnReconnect(ctx context.Context, c
 		return
 	}
 
-	if err := gc.submitProposalPreparationBatches(preparations, func(batch []*eth2apiv1.ProposalPreparation) error {
+	err = gc.submitProposalPreparationBatches(preparations, func(batch []*eth2apiv1.ProposalPreparation) error {
 		return client.SubmitProposalPreparations(ctx, batch)
-	}); err != nil {
-		logger.Warn("failed to submit all preparations on reconnect", zap.Error(err))
+	})
+	if err != nil {
+		logger.Warn("failed to submit proposal preparations on reconnect", zap.Error(err))
+		return
 	}
+
+	logger.Debug("successfully submitted all proposal preparations on reconnect",
+		zap.Int("total", len(preparations)),
+	)
 }
 
-// submitProposalPreparationBatches submits proposal preparations in batches using the provided submit function
 func (gc *GoClient) submitProposalPreparationBatches(
 	preparations []*eth2apiv1.ProposalPreparation,
 	submitFunc func(batch []*eth2apiv1.ProposalPreparation) error,
-) error {
+) (jointErr error) {
 	var submitted, batchStart int
-	var lastErr error
-
 	for batch := range slices.Chunk(preparations, ProposalPreparationBatchSize) {
 		if err := submitFunc(batch); err != nil {
-			gc.log.Error(clResponseErrMsg,
-				zap.String("api", "SubmitProposalPreparations"),
-				zap.Int("batch_start", batchStart),
-				zap.Int("batch_size", len(batch)),
-				zap.Error(err),
-			)
-			lastErr = err
+			jointErr = errors.Join(jointErr, fmt.Errorf("submit batch (start=%d, size=%d): %w", batchStart, len(batch), err))
 		} else {
 			submitted += len(batch)
 		}
@@ -465,25 +457,10 @@ func (gc *GoClient) submitProposalPreparationBatches(
 
 	switch {
 	case submitted == len(preparations):
-		gc.log.Debug("successfully submitted all proposal preparations",
-			zap.Int("total", len(preparations)),
-		)
 		return nil
-
 	case submitted > 0:
-		gc.log.Error("partially submitted proposal preparations",
-			zap.Int("submitted", submitted),
-			zap.Int("failed", len(preparations)-submitted),
-			zap.Int("total", len(preparations)),
-			zap.Error(lastErr),
-		)
-		return fmt.Errorf("partially submitted preparations: %d/%d, last error: %w", submitted, len(preparations), lastErr)
-
+		return fmt.Errorf("partially submitted proposal preparations: %d/%d, encountered errors: %w", submitted, len(preparations), jointErr)
 	default:
-		gc.log.Error("couldn't submit any proposal preparations",
-			zap.Int("total", len(preparations)),
-			zap.Error(lastErr),
-		)
-		return fmt.Errorf("failed to submit any preparations: %w", lastErr)
+		return fmt.Errorf("failed to submit any of %d proposal preparations: %w", len(preparations), jointErr)
 	}
 }
