@@ -21,23 +21,21 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	// ValidatorQueuesInboxSizeMetric keeps track of message queue size(s) across all validator-related message queues.
-	// This metric is meant to be shared across many queues differentiating between them via an added "id" attribute.
-	ValidatorQueuesInboxSizeMetric = metrics.New(
+	// InboxSizeMetric keeps track of message queue size(s) across all validator/committee related message queues.
+	// This metric is meant to be shared across many queues differentiating between them via an added "queue_type" and
+	// "queue_id" attributes.
+	InboxSizeMetric = metrics.New(
 		meter.Int64Gauge(
-			observability.InstrumentName(observabilityNamespace, "validator_queues_inbox_size"),
+			observability.InstrumentName(observabilityNamespace, "queue_inbox_size"),
 			metric.WithUnit("{size}"),
-			metric.WithDescription("the latest observed validator queue(s) size")),
+			metric.WithDescription("the latest observed inbox size (for some queue)"),
+		),
 	)
+)
 
-	// CommitteeQueuesInboxSizeMetric keeps track of message queue size(s) across all committee-related message queues.
-	// This metric is meant to be shared across many queues differentiating between them via an added "id" attribute.
-	CommitteeQueuesInboxSizeMetric = metrics.New(
-		meter.Int64Gauge(
-			observability.InstrumentName(observabilityNamespace, "committee_queues_inbox_size"),
-			metric.WithUnit("{size}"),
-			metric.WithDescription("the latest observed committee queue(s) size")),
-	)
+const (
+	ValidatorQueueMetricType = "validator"
+	CommitteeQueueMetricType = "committee"
 )
 
 // ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).

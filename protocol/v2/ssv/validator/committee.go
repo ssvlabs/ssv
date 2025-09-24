@@ -182,7 +182,11 @@ func (c *Committee) getQueue(slot phase0.Slot) queueContainer {
 		q = queueContainer{
 			Q: queue.New(
 				1000,
-				queue.WithInboxSizeMetric(queue.CommitteeQueuesInboxSizeMetric, queue.CommitteeMetricID(slot)),
+				queue.WithInboxSizeMetric(
+					queue.InboxSizeMetric,
+					queue.CommitteeQueueMetricType,
+					queue.CommitteeMetricID(slot),
+				),
 			),
 			queueState: &queue.State{
 				HasRunningInstance: false,

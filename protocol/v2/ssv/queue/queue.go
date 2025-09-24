@@ -47,15 +47,18 @@ type priorityQueue struct {
 	inbox    chan *SSVMessage
 	lastRead time.Time
 
-	// queueId is used to provide additional details when recording inboxSizeMetric.
+	// queueType enriches inboxSizeMetric to describe what type of queue this is.
+	queueType string
+	// queueId enriches inboxSizeMetric to describe which exact queue this is.
 	queueId         string
 	inboxSizeMetric metric.Int64Gauge
 }
 
 type Option func(*priorityQueue)
 
-func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueId string) Option {
+func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueType string, queueId string) Option {
 	return func(q *priorityQueue) {
+		q.queueType = queueType
 		q.queueId = queueId
 		q.inboxSizeMetric = inboxSizeMetric
 	}
@@ -223,7 +226,8 @@ func (q *priorityQueue) recordInboxSize(inboxSize int64) {
 	q.inboxSizeMetric.Record(
 		context.Background(),
 		inboxSize,
-		metric.WithAttributes(attribute.String("queue_id", q.queueId)),
+		metric.WithAttributes(attribute.String("ssv.queue.type", q.queueType)),
+		metric.WithAttributes(attribute.String("ssv.queue.id", q.queueId)),
 	)
 }
 

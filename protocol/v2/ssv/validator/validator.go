@@ -82,7 +82,11 @@ func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, optio
 		dutyRunner.SetTimeoutFunc(v.onTimeout)
 		v.Queues[dutyRunner.GetRole()] = queue.New(
 			options.QueueSize,
-			queue.WithInboxSizeMetric(queue.ValidatorQueuesInboxSizeMetric, queue.ValidatorMetricID(dutyRunner.GetRole())),
+			queue.WithInboxSizeMetric(
+				queue.InboxSizeMetric,
+				queue.ValidatorQueueMetricType,
+				queue.ValidatorMetricID(dutyRunner.GetRole()),
+			),
 		)
 	}
 
