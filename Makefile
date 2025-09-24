@@ -30,7 +30,7 @@ RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
-lint: golangci-lint deadcode-lint
+lint: golangci-lint deadcode-lint openapi-lint
 
 .PHONY: golangci-lint
 golangci-lint:
@@ -105,6 +105,11 @@ docker-benchmark:
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
 
+.PHONY: spec-alignment-diff
+spec-alignment-diff:
+	cd ./scripts/differ && go install .
+	cd ./scripts/spec-alignment && ./differ.sh
+
 .PHONY: start-node
 start-node:
 	@echo "Build binary: ${BUILD_PATH}"
@@ -173,6 +178,16 @@ mock:
 generate:
 	go generate ./...
 
+SWAG := $(RUN_TOOL) github.com/swaggo/swag/cmd/swag
+
+.PHONY: openapi openapi-lint
+
+openapi:
+	@SWAG='$(SWAG)' bash scripts/openapi.sh --write
+
+openapi-lint:
+	@SWAG='$(SWAG)' bash scripts/openapi.sh --lint
+
 .PHONY: tools
 tools:
 	$(GET_TOOL) golang.org/x/tools/cmd/goimports
@@ -181,6 +196,7 @@ tools:
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
 	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	$(GET_TOOL) golang.org/x/tools/cmd/deadcode
+	$(GET_TOOL) github.com/swaggo/swag/cmd/swag
 	$(RUN_TOOL)
 
 .PHONY: format

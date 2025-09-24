@@ -11,12 +11,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
@@ -26,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type SyncCommitteeAggregatorRunner struct {
@@ -194,7 +194,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValCheckF(), signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -231,7 +231,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 			return traces.Errorf(span, "could not generate contribution and proof: %w", err)
 		}
 
-		signed, err := r.BaseRunner.signBeaconObject(
+		signed, err := signBeaconObject(
 			ctx,
 			r,
 			r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
@@ -284,6 +284,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (r *SyncCommitteeAggregatorRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -484,7 +488,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 			SubcommitteeIndex: subnet,
 		}
 		span.AddEvent("signing beacon object")
-		msg, err := r.BaseRunner.signBeaconObject(
+		msg, err := signBeaconObject(
 			ctx,
 			r,
 			duty.(*spectypes.ValidatorDuty),
@@ -532,12 +536,44 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 	return nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetBaseRunner() *BaseRunner {
-	return r.BaseRunner
+func (r *SyncCommitteeAggregatorRunner) HasRunningQBFTInstance() bool {
+	return r.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (r *SyncCommitteeAggregatorRunner) HasAcceptedProposalForCurrentRound() bool {
+	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return r.BaseRunner.GetShares()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetRole() spectypes.RunnerRole {
+	return r.BaseRunner.GetRole()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetLastHeight() specqbft.Height {
+	return r.BaseRunner.GetLastHeight()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetLastRound() specqbft.Round {
+	return r.BaseRunner.GetLastRound()
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetStateRoot() ([32]byte, error) {
+	return r.BaseRunner.GetStateRoot()
+}
+
+func (r *SyncCommitteeAggregatorRunner) SetTimeoutFunc(fn TimeoutF) {
+	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetNetwork() specqbft.Network {
 	return r.network
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetNetworkConfig() *networkconfig.Network {
+	return r.BaseRunner.NetworkConfig
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() beacon.BeaconNode {

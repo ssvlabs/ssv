@@ -50,9 +50,7 @@ func TestHandleLocalEvent(t *testing.T) {
 
 		logger := zaptest.NewLogger(t)
 		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		require.NoError(t, eh.HandleLocalEvents(ctx, parsedData))
 	})
@@ -77,9 +75,7 @@ func TestHandleLocalEvent(t *testing.T) {
 
 		logger := zaptest.NewLogger(t)
 		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 			od := &storage.OperatorData{

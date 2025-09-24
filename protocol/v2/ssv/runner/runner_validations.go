@@ -8,6 +8,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -97,12 +98,12 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 }
 
-func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.Encoder) error {
+func (b *BaseRunner) validateDecidedConsensusData(valueCheckFn specqbft.ProposedValueCheckF, val spectypes.Encoder) error {
 	byts, err := val.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode decided value")
 	}
-	if err := runner.GetValChecker().CheckValue(byts); err != nil {
+	if err := valueCheckFn(byts); err != nil {
 		return errors.Wrap(err, "decided value is invalid")
 	}
 
