@@ -235,11 +235,14 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 	go func() {
 		defer close(logs)
+		mc.logger.Debug("MultiClient StreamLogs goroutine started", zap.Uint64("from_block", fromBlock))
 		for {
 			select {
 			case <-ctx.Done():
+				mc.logger.Debug("MultiClient StreamLogs context canceled")
 				return
 			case <-mc.closed:
+				mc.logger.Debug("MultiClient StreamLogs closed")
 				return
 			default:
 				// Update healthyCh of all nodes and make sure at least one of them is available.
@@ -247,10 +250,17 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					mc.logger.Fatal("no healthy clients", zap.Error(err))
 				}
 
+				mc.logger.Debug("MultiClient calling streamLogsToChan", zap.Uint64("from_block", fromBlock))
+
 				// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
 				f := func(client SingleClientProvider) (any, error) {
+					mc.logger.Debug("MultiClient executing streamLogsToChan function")
 					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
+					mc.logger.Debug("MultiClient streamLogsToChan returned",
+						zap.Uint64("next_block", nextBlockToProcess),
+						zap.Error(err))
 					if isInterruptedError(err) {
+						mc.logger.Debug("MultiClient got interrupted error", zap.Error(err))
 						return nil, err
 					}
 
@@ -259,7 +269,9 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				}
 
 				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
+				mc.logger.Debug("MultiClient call returned", zap.Error(err))
 				if err == nil {
+					mc.logger.Warn("MultiClient StreamLogs exiting with nil error - this should never happen!")
 					return
 				}
 
@@ -364,6 +376,104 @@ func (mc *MultiClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) (
 
 func (mc *MultiClient) Filterer() (*contract.ContractFilterer, error) {
 	return contract.NewContractFilterer(mc.contractAddress, mc)
+}
+
+// StreamFilterLogs subscribes to filter logs for the contract using one of the available clients.
+func (mc *MultiClient) StreamFilterLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log {
+	logCh := make(chan ethtypes.Log, 100)
+
+	go func() {
+		defer close(logCh)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-mc.closed:
+				return
+			default:
+				// Update healthyCh of all nodes and make sure at least one of them is available.
+				if err := mc.Healthy(ctx); err != nil {
+					mc.logger.Error("no healthy clients for filter logs", zap.Error(err))
+					time.Sleep(time.Second) // Brief pause before retry
+					continue
+				}
+
+				f := func(client SingleClientProvider) (any, error) {
+					filterStream := client.StreamFilterLogs(ctx, fromBlock)
+					for log := range filterStream {
+						select {
+						case logCh <- log:
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						case <-mc.closed:
+							return nil, errors.New("multi client closed")
+						}
+					}
+					return nil, errors.New("filter stream ended")
+				}
+
+				_, err := mc.call(contextWithMethod(ctx, "StreamFilterLogs"), f, 0)
+				if isInterruptedError(err) {
+					mc.logger.Debug("stream filter logs stopped", zap.Error(err))
+					return
+				}
+
+				mc.logger.Error("failed to stream filter logs, retrying", zap.Error(err))
+				time.Sleep(time.Second) // Brief pause before retry
+			}
+		}
+	}()
+
+	return logCh
+}
+
+// StreamFinalizedLogs streams logs from finalized blocks using one of the available clients.
+func (mc *MultiClient) StreamFinalizedLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+	logCh := make(chan BlockLogs, 10)
+
+	go func() {
+		defer close(logCh)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-mc.closed:
+				return
+			default:
+				// Update healthyCh of all nodes and make sure at least one of them is available.
+				if err := mc.Healthy(ctx); err != nil {
+					mc.logger.Error("no healthy clients for finalized logs", zap.Error(err))
+					time.Sleep(time.Second) // Brief pause before retry
+					continue
+				}
+
+				f := func(client SingleClientProvider) (any, error) {
+					finalizedStream := client.StreamFinalizedLogs(ctx, fromBlock)
+					for blockLogs := range finalizedStream {
+						select {
+						case logCh <- blockLogs:
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						case <-mc.closed:
+							return nil, errors.New("multi client closed")
+						}
+					}
+					return nil, errors.New("finalized stream ended")
+				}
+
+				_, err := mc.call(contextWithMethod(ctx, "StreamFinalizedLogs"), f, 0)
+				if isInterruptedError(err) {
+					mc.logger.Debug("stream finalized logs stopped", zap.Error(err))
+					return
+				}
+
+				mc.logger.Error("failed to stream finalized logs, retrying", zap.Error(err))
+				time.Sleep(time.Second) // Brief pause before retry
+			}
+		}
+	}()
+
+	return logCh
 }
 
 func (mc *MultiClient) ChainID(_ context.Context) (*big.Int, error) {
