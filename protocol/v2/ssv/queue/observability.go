@@ -26,7 +26,7 @@ var (
 	// "queue_id" attributes.
 	InboxSizeMetric = metrics.New(
 		meter.Int64Gauge(
-			observability.InstrumentName(observabilityNamespace, "queue_inbox_size"),
+			observability.InstrumentName(observabilityNamespace, "inbox_size"),
 			metric.WithUnit("{size}"),
 			metric.WithDescription("the latest observed inbox size (for some queue)"),
 		),
