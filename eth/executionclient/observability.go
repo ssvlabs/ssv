@@ -11,8 +11,10 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
@@ -97,17 +99,42 @@ var (
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordRequestDuration(ctx context.Context, routeName, serverAddr string, duration time.Duration, err error) {
+func recordSingleClientRequest(
+	ctx context.Context,
+	logger *zap.Logger,
+	routeName, clientAddr string,
+	duration time.Duration,
+	err error,
+) {
+	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
+	// to it (there are too many requests being made to log them every time, some requests don't even result
+	// into a network-based call due to caching implemented for some routes).
+	if err != nil || duration > 1*time.Millisecond {
+		logger.Debug("EL single-client request done",
+			zap.String("client_addr", clientAddr),
+			zap.String("route_name", routeName),
+			zap.Bool("success", err == nil),
+			zap.Error(err),
+			fields.Took(duration),
+		)
+	}
+
+	// Build metric attributes, add error-code attribute in case there is an error.
 	attr := []attribute.KeyValue{
-		semconv.ServerAddress(serverAddr),
-		attribute.String("http.route_name", routeName),
+		semconv.ServerAddress(clientAddr),
+		attribute.String("rpc.route_name", routeName),
 	}
-
-	var rpcErr rpc.Error
-	if errors.As(err, &rpcErr) {
-		attr = append(attr, attribute.Int("http.response.error_status_code", rpcErr.ErrorCode()))
+	if err != nil {
+		// Error code of 0 signifies the presence of some error, see if we can clarify if further by checking
+		// for rpc error codes.
+		errCode := 0
+		var rpcErr rpc.Error
+		if errors.As(err, &rpcErr) {
+			errCode = rpcErr.ErrorCode()
+		}
+		attr = append(attr, attribute.Int("rpc.response.error_status_code", errCode))
 	}
-
+	// Record the request as a metric.
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
