@@ -15,11 +15,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hashicorp/go-multierror"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
@@ -27,20 +26,19 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
-// mockParticipantStore is a basic mock for qbftstorage.ParticipantStore.
+// mockParticipantStore is a basic mock for ibftstorage.ParticipantStore.
 type mockParticipantStore struct {
-	participantsRangeEntries map[string][]qbftstorage.ParticipantsRangeEntry
+	participantsRangeEntries map[string][]ibftstorage.ParticipantsRangeEntry
 }
 
 // newMockParticipantStore creates a new instance of mockParticipantStore.
 func newMockParticipantStore() *mockParticipantStore {
 	return &mockParticipantStore{
-		participantsRangeEntries: make(map[string][]qbftstorage.ParticipantsRangeEntry),
+		participantsRangeEntries: make(map[string][]ibftstorage.ParticipantsRangeEntry),
 	}
 }
 
@@ -53,8 +51,8 @@ func (m *mockParticipantStore) SaveParticipants(spectypes.ValidatorPK, phase0.Sl
 }
 
 // GetAllParticipantsInRange returns all participant entries within the given slot range.
-func (m *mockParticipantStore) GetAllParticipantsInRange(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
-	var result []qbftstorage.ParticipantsRangeEntry
+func (m *mockParticipantStore) GetAllParticipantsInRange(from, to phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
+	var result []ibftstorage.ParticipantsRangeEntry
 	for _, entries := range m.participantsRangeEntries {
 		for _, entry := range entries {
 			if entry.Slot >= from && entry.Slot <= to {
@@ -66,9 +64,9 @@ func (m *mockParticipantStore) GetAllParticipantsInRange(from, to phase0.Slot) (
 }
 
 // GetParticipantsInRange returns participant entries for a given public key and slot range.
-func (m *mockParticipantStore) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *mockParticipantStore) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
 	key := hex.EncodeToString(pk[:])
-	var result []qbftstorage.ParticipantsRangeEntry
+	var result []ibftstorage.ParticipantsRangeEntry
 	entries, ok := m.participantsRangeEntries[key]
 	if !ok {
 		return result, nil
@@ -96,7 +94,7 @@ func (m *mockParticipantStore) PruneContinously(context.Context, slotticker.Prov
 // AddEntry adds an entry to the mock store.
 func (m *mockParticipantStore) AddEntry(pk spectypes.ValidatorPK, slot phase0.Slot, signers []uint64) {
 	key := hex.EncodeToString(pk[:])
-	entry := qbftstorage.ParticipantsRangeEntry{
+	entry := ibftstorage.ParticipantsRangeEntry{
 		Slot:    slot,
 		PubKey:  pk,
 		Signers: signers,
@@ -109,7 +107,7 @@ type errorAllRangeMockStore struct {
 	*mockParticipantStore
 }
 
-func (m *errorAllRangeMockStore) GetAllParticipantsInRange(phase0.Slot, phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *errorAllRangeMockStore) GetAllParticipantsInRange(phase0.Slot, phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
 	return nil, fmt.Errorf("forced error on GetAllParticipantsInRange")
 }
 
@@ -118,7 +116,7 @@ type errorByPKMockStore struct {
 	*mockParticipantStore
 }
 
-func (m *errorByPKMockStore) GetParticipantsInRange(spectypes.ValidatorPK, phase0.Slot, phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *errorByPKMockStore) GetParticipantsInRange(spectypes.ValidatorPK, phase0.Slot, phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
 	return nil, fmt.Errorf("forced error on GetParticipantsInRange")
 }
 
@@ -132,7 +130,7 @@ func TestTransformToParticipantResponse(t *testing.T) {
 	var pk spectypes.ValidatorPK
 	copy(pk[:], pkBytes)
 
-	entry := qbftstorage.ParticipantsRangeEntry{
+	entry := ibftstorage.ParticipantsRangeEntry{
 		Slot:    phase0.Slot(123),
 		PubKey:  pk,
 		Signers: []uint64{1, 2, 3, 4},
@@ -734,7 +732,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				entry := qbftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
+				entry := ibftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
 				store.AddValidatorDecided(spectypes.BNRoleProposer, phase0.Slot(150), entry.Signers)
 			},
 			expectedStatus: http.StatusOK,
@@ -754,7 +752,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				entry := qbftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
+				entry := ibftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
 				store.AddCommitteeDecided(phase0.Slot(150), entry.Signers)
 			},
 			expectedStatus: http.StatusOK,

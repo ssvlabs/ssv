@@ -86,10 +86,6 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 		i.metrics.Start()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
-		logger = logger.With(
-			fields.QBFTRound(i.State.Round),
-			fields.QBFTHeight(i.State.Height))
-
 		proposerID := i.proposer(specqbft.FirstRound)
 		const eventMsg = "ℹ️ starting QBFT instance"
 		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))

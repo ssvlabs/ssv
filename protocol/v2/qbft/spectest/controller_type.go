@@ -19,11 +19,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -58,8 +58,8 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := spectestingutils.TestingIdentifier
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
-	return qbfttesting.NewTestingQBFTController(
+	config := protocoltesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
+	return protocoltesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
 		identifier[:],
 		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
@@ -169,7 +169,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 }
 
 func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
+	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	specDir = filepath.Join(specDir, "generate")
 	dir := typescomparable.GetSCDir(specDir, reflect.TypeOf(test).String())

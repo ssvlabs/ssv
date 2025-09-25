@@ -92,7 +92,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		span.SetAttributes(observability.ValidatorIndexAttribute(validatorIndex))
 	}
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing voluntary exit message: %w", err)
 	}
@@ -137,6 +137,10 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 
 	r.GetState().Finished = true
 
+	const dutyFinishedEvent = "successfully finished duty processing"
+	logger.Info(dutyFinishedEvent)
+	span.AddEvent(dutyFinishedEvent)
+
 	span.SetStatus(codes.Ok, "")
 	return nil
 }
@@ -145,8 +149,8 @@ func (r *VoluntaryExitRunner) ProcessConsensus(ctx context.Context, logger *zap.
 	return errors.New("no consensus phase for voluntary exit")
 }
 
-func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
-	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
+func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, timeoutData)
 }
 
 func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {

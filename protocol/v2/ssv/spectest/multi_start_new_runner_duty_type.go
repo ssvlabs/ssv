@@ -9,11 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
