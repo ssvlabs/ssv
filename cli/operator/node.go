@@ -184,6 +184,12 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
+		logger.Info("connecting CL(s)",
+			fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			zap.Bool("with_weighted_attestation_data", cfg.ConsensusClient.WithWeightedAttestationData),
+			zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
+		)
+
 		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
 		if err != nil {
 			logger.Fatal("failed to create beacon go-client",
@@ -338,17 +344,20 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("no execution node address provided")
 		}
 
-		var executionClient executionclient.Provider
+		logger.Info("connecting EL(s)",
+			fields.Addresses(executionAddrList),
+			zap.Duration("request_timeout", cfg.ExecutionClient.ConnectionTimeout),
+			zap.Uint64("sync_distance_tolerance", cfg.ExecutionClient.SyncDistanceTolerance),
+		)
 
+		var executionClient executionclient.Provider
 		if len(executionAddrList) == 1 {
 			ec, err := executionclient.New(
 				cmd.Context(),
 				executionAddrList[0],
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
-				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
 			if err != nil {
@@ -362,9 +371,7 @@ var StartNodeCmd = &cobra.Command{
 				executionAddrList,
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
-				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
 				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
 			if err != nil {
@@ -567,8 +574,8 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		nodeProber := nodeprobe.New(logger)
-		nodeProber.AddNode(clNodeName, consensusClient, 10*time.Second, 5)
-		nodeProber.AddNode(elNodeName, executionClient, 10*time.Second, 5)
+		nodeProber.AddNode(clNodeName, consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+		nodeProber.AddNode(elNodeName, executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 
 		probeCtx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 		defer cancel()
@@ -591,7 +598,7 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, 10*time.Second, 5)
+			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
 		go startNodeProber(cmd.Context(), logger, nodeProber)
 
@@ -672,7 +679,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		if err := operatorNode.Start(); err != nil {
+		if err := operatorNode.Start(cfg.SSVOptions.Context); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
@@ -1132,8 +1139,15 @@ func syncContractEvents(
 		switch {
 		case errors.Is(err, executionclient.ErrNothingToSync):
 			// Nothing was synced, keep fromBlock as is.
+			logger.Info("finished syncing historical events, nothing to sync",
+				zap.Uint64("from_block", fromBlock.Uint64()),
+			)
 		case err == nil:
-			// Advance fromBlock to the block after lastProcessedBlock.
+			// Successfully synced up to a fresh block, advance fromBlock to the block after lastProcessedBlock.
+			logger.Info("finished syncing historical events to a fresh block",
+				zap.Uint64("from_block", fromBlock.Uint64()),
+				zap.Uint64("last_processed_block", lastProcessedBlock),
+			)
 			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
 		default:
 			logger.Fatal("failed to sync historical registry events", zap.Error(err))
@@ -1167,14 +1181,16 @@ func syncContractEvents(
 			zap.Int("my_validators", operatorValidators),
 		)
 
-		// Sync ongoing registry events in the background.
+		// Sync ongoing registry events in the background, crash if ongoing sync has stopped because
+		// the SSV node cannot work without being up to date with Ethereum events.
 		go func() {
-			err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
-
-			// Crash if ongoing sync has stopped, regardless of the reason.
-			logger.Fatal("failed syncing ongoing registry events",
-				zap.Uint64("last_processed_block", lastProcessedBlock),
-				zap.Error(err))
+			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+			if err != nil && !errors.Is(err, context.Canceled) {
+				logger.Fatal("failed syncing ongoing registry events",
+					zap.Uint64("last_processed_block", lastProcessedBlock),
+					zap.Error(err),
+				)
+			}
 		}()
 	}
 

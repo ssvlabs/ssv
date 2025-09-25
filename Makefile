@@ -105,6 +105,11 @@ docker-benchmark:
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
 
+.PHONY: spec-alignment-diff
+spec-alignment-diff:
+	cd ./scripts/differ && go install .
+	cd ./scripts/spec-alignment && ./differ.sh
+
 .PHONY: start-node
 start-node:
 	@echo "Build binary: ${BUILD_PATH}"

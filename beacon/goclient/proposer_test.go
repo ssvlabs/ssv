@@ -344,7 +344,7 @@ func TestSubmitProposalPreparationBatches(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "partially submitted preparations: 1000/1500")
+		require.Contains(t, err.Error(), "partially submitted proposal preparations: 1000/1500")
 		require.Equal(t, []int{0, 1, 2}, processedBatches, "all batches should be attempted")
 	})
 
@@ -363,7 +363,7 @@ func TestSubmitProposalPreparationBatches(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to submit any preparations")
+		require.Contains(t, err.Error(), fmt.Sprintf("failed to submit any of %d proposal preparations", len(preparations)))
 		require.Equal(t, 1, attemptCount, "should attempt once")
 	})
 

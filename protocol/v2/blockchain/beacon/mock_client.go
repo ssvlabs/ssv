@@ -208,22 +208,6 @@ func (m *MockSyncCommitteeCalls) EXPECT() *MockSyncCommitteeCallsMockRecorder {
 	return m.recorder
 }
 
-// GetSyncMessageBlockRoot mocks base method.
-func (m *MockSyncCommitteeCalls) GetSyncMessageBlockRoot(ctx context.Context) (phase0.Root, spec.DataVersion, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncMessageBlockRoot", ctx)
-	ret0, _ := ret[0].(phase0.Root)
-	ret1, _ := ret[1].(spec.DataVersion)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// GetSyncMessageBlockRoot indicates an expected call of GetSyncMessageBlockRoot.
-func (mr *MockSyncCommitteeCallsMockRecorder) GetSyncMessageBlockRoot(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncMessageBlockRoot", reflect.TypeOf((*MockSyncCommitteeCalls)(nil).GetSyncMessageBlockRoot), ctx)
-}
-
 // SubmitSyncMessages mocks base method.
 func (m *MockSyncCommitteeCalls) SubmitSyncMessages(ctx context.Context, msgs []*altair.SyncCommitteeMessage) error {
 	m.ctrl.T.Helper()
@@ -813,22 +797,6 @@ func (m *MockBeaconNode) GetSyncCommitteeContribution(ctx context.Context, slot 
 func (mr *MockBeaconNodeMockRecorder) GetSyncCommitteeContribution(ctx, slot, selectionProofs, subnetIDs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeContribution", reflect.TypeOf((*MockBeaconNode)(nil).GetSyncCommitteeContribution), ctx, slot, selectionProofs, subnetIDs)
-}
-
-// GetSyncMessageBlockRoot mocks base method.
-func (m *MockBeaconNode) GetSyncMessageBlockRoot(ctx context.Context) (phase0.Root, spec.DataVersion, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncMessageBlockRoot", ctx)
-	ret0, _ := ret[0].(phase0.Root)
-	ret1, _ := ret[1].(spec.DataVersion)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// GetSyncMessageBlockRoot indicates an expected call of GetSyncMessageBlockRoot.
-func (mr *MockBeaconNodeMockRecorder) GetSyncMessageBlockRoot(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncMessageBlockRoot", reflect.TypeOf((*MockBeaconNode)(nil).GetSyncMessageBlockRoot), ctx)
 }
 
 // GetValidatorData mocks base method.

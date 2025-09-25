@@ -47,7 +47,6 @@ type Options struct {
 type Node struct {
 	logger           *zap.Logger
 	network          *networkconfig.Network
-	context          context.Context
 	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
 	exporterOptions  exporter.Options
@@ -78,7 +77,6 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 
 	node := &Node{
 		logger:           logger.Named(log.NameOperator),
-		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
 		exporterOptions:  exporterOpts,
@@ -120,8 +118,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 }
 
 // Start starts to stream duties and run IBFT instances
-func (n *Node) Start() error {
-	ctx := n.context // TODO: pass it to Start
+func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
@@ -140,20 +137,52 @@ func (n *Node) Start() error {
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	if n.exporterOptions.Enabled {
-		// Subscribe to all subnets.
-		err := n.net.SubscribeAll()
+	// IMPORTANT: We must initialize validators regardless of whether we are running exporter or
+	// a regular SSV node.
+	validatorsInitialized, err := n.validatorsCtrl.InitValidators()
+	if err != nil {
+		return fmt.Errorf("init validators: %w", err)
+	}
+
+	// For regular SSV node, starting a validator will also connect us to subnets that correspond
+	// to that validator. But if we don't have validators to start (if none were initialized) -
+	// have to subscribe to at least 1 random subnet explicitly to just be able to participate
+	// in the network.
+	startValidators := func() error {
+		if len(validatorsInitialized) == 0 {
+			if err := n.net.SubscribeRandoms(1); err != nil {
+				return fmt.Errorf("subscribe to 1 random subnet: %w", err)
+			}
+
+			n.logger.Info("no validators to start, successfully subscribed to random subnet")
+
+			return nil
+		}
+
+		err = n.validatorsCtrl.StartValidators(ctx, validatorsInitialized)
 		if err != nil {
-			n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
+			return fmt.Errorf("start validators: %w", err)
+		}
+
+		return nil
+	}
+	if n.exporterOptions.Enabled {
+		// For exporter, we want to connect to all subnets.
+		startValidators = func() error {
+			err := n.net.SubscribeAll()
+			if err != nil {
+				n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
+				return nil
+			}
+			return nil
 		}
 	}
+	if err = startValidators(); err != nil {
+		return err
+	}
+
 	go n.net.UpdateSubnets()
 	go n.net.UpdateScoreParams()
-
-	err := n.validatorsCtrl.StartValidators(ctx)
-	if err != nil {
-		return fmt.Errorf("start validators: %w", err)
-	}
 
 	go n.reportOperators()
 
