@@ -61,24 +61,8 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 
 	msg.TraceContext = ctx
 
-	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
-	q, ok := c.Queues[slot]
-	if !ok {
-		q = queueContainer{
-			Q: queue.New(1000), // TODO alan: get queue opts from options
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             specqbft.Height(slot),
-				Slot:               slot,
-				//Quorum:             options.SSVShare.Share,// TODO
-			},
-		}
-		c.Queues[slot] = q
-		const eventMsg = "missing queue for slot created"
-		logger.Debug(eventMsg, fields.Slot(slot))
-		span.AddEvent(eventMsg)
-	}
+	q := c.getQueue(slot)
 	c.mtx.Unlock()
 
 	span.AddEvent("pushing message to the queue")
