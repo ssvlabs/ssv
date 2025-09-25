@@ -8,14 +8,15 @@
 
 ## Overview
 
-Exporter v2 introduces **full duty tracing** (consensus rounds, pre/post partial signatures), **committee‑level views**, richer filtering, OpenAPI definitions, and a clearer configuration model with **two operating modes**:
+Exporter v2 introduces **full duty tracing** (consensus stages, pre/post partial signatures), **committee‑level views**, richer filtering, OpenAPI definitions, and a clearer configuration model with **two operating modes**:
 
-### Standard mode
+### Standard mode (activated by default)
 
-Setting `Mode: standard` keeps the legacy behavior:
+Setting `Mode: standard` or omitting the key entirely keeps the legacy behavior:
 - Data is pruned automatically
 - The HTTP API *fails fast* and aborts on first error
 - The legacy `/decideds` payload is preserved
+
 
 ### Archive mode
 
@@ -48,7 +49,8 @@ Changes:
 
 ```yaml
 global:
-  LogLevel: debug  # please use debug on first run
+  # It is recommended to use debug for the first startup (fresh install or after upgrading to the new release). Switch back to info once everything is healthy.
+  LogLevel: debug
 
 db:
   Path: ./data/db
@@ -59,8 +61,11 @@ eth2:
 eth1:
   ETH1Addr: ws://your-execution:8546/ws
 
-# p2p: optional fixed subnets. When the exporter is enabled (any mode),
-#      the node subscribes to all subnets to capture duties unless you set fixed subnets.
+p2p:
+  # Subnets: optional fixed subnet bitmask.
+  # By default (any mode), the node subscribes to all subnets to capture duties.
+  # Set a fixed mask to limit subscriptions; omit to use the default.
+  Subnets: 0xffffffffffffffffffffffffffffffff  # full mask = all subnets
 
 exporter:
   Enabled: true
@@ -75,7 +80,8 @@ WithPing: true
 
 ```yaml
 global:
-  LogLevel: debug  # please use debug on first run
+  # It is recommended to use debug for the first startup (fresh install or after upgrading to the new release). Switch back to info once everything is healthy.
+  LogLevel: debug
 
 db:
   Path: ./data/db
@@ -86,8 +92,11 @@ eth2:
 eth1:
   ETH1Addr: ws://your-execution:8546/ws
 
-# p2p: optional fixed subnets. When the exporter is enabled (any mode),
-#      the node subscribes to all subnets to capture duties unless you set fixed subnets.
+p2p:
+  # Subnets: optional fixed subnet bitmask.
+  # By default (any mode), the node subscribes to all subnets to capture duties.
+  # Set a fixed mask to limit subscriptions; omit to use the default.
+  Subnets: 0xffffffffffffffffffffffffffffffff  # full mask = all subnets
 
 exporter:
   Enabled: true
@@ -103,13 +112,13 @@ WithPing: true
 
 ## HTTP API overview (updated)
 
-Please refer to the new [OpenApi spec](https://github.com/ssvlabs/ssv/tree/stage/docs/API) (`docs/API/ssvnode.openAPI.yaml|json`) for details. Below is a high-level overview of the new HTTP API endpoints.
+Please refer to the new [OpenApi spec](https://github.com/ssvlabs/ssv/tree/stage/docs/api) (`docs/api/ssvnode.openapi.yaml|json`) for details. Below is a high-level overview of the new HTTP API endpoints.
 
-All endpoints accept filters in the **query string** or as a **JSON body** (same request struct). Field constraints are summarized in the Appendix.
+For each endpoint, the same filters can be sent via GET (query parameters) or POST (JSON body).
 
 ### `GET|POST /v1/exporter/traces/validator`  _(archive mode only)_
 
-Detailed per‑validator duty traces: consensus rounds (proposal, prepares, commits, round‑changes), decided messages, and pre/post partial signatures. Optional proposal data is returned when available.
+Detailed per‑validator duty traces: consensus stages (proposal, prepares, commits, round‑changes), decided messages, and pre/post partial signatures. Optional proposal data is returned when available.
 
 **Request fields** (`ValidatorTracesRequest`)
 - `from`, `to` — inclusive slot range (int64 ≥ 0).
@@ -128,14 +137,14 @@ curl -s "http://localhost:16000/v1/exporter/traces/validator?from=123456&to=1234
 curl -s -X POST http://localhost:16000/v1/exporter/traces/validator   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"roles":["ATTESTER"],"pubkeys":["<96-char hex>"],"indices":[123]}'
 ```
 
-Response data schema: [ValidatorTrace](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/API/ssvnode.openAPI.json#L996)
+Response data schema: [ValidatorTrace](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/api/ssvnode.openapi.json#L996)
 
 
 ---
 
 ### `GET|POST /v1/exporter/traces/committee`  _(archive mode only)_
 
-Committee‑level traces: consensus rounds plus post‑consensus signer data for attester and sync‑committee duties, grouped by committee.
+Committee‑level traces: consensus stages plus post‑consensus signer data for attester and sync‑committee duties, grouped by committee.
 
 **Request fields** (`CommitteeTracesRequest`)
 - `from`, `to` — inclusive slot range (int64 ≥ 0).
@@ -152,14 +161,14 @@ curl -s "http://localhost:16000/v1/exporter/traces/committee?from=123456&to=1234
 curl -s -X POST http://localhost:16000/v1/exporter/traces/committee   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"committeeIDs":["<64-char hex>"]}'
 ```
 
-Response data schema: [CommitteeTrace](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/API/ssvnode.openAPI.json#L630)
+Response data schema: [CommitteeTrace](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/api/ssvnode.openapi.json#L630)
 
 ---
 
 ### `GET|POST /v1/exporter/decideds`  _(both modes)_
 
 - **Standard mode:** returns the *v1 payload*: `{ data: ParticipantResponse[] }`.  
-- **Archive mode:** same path and returns `{ data: DecidedParticipant[], errors?: string[] }`. The `errors` field is **additive** and does not remove existing fields (`role`, `slot`, `public_key`, `message.Signers`).
+- **Archive mode:** same path and returns `{ data: DecidedParticipant[], errors?: string[] }`. The `errors` field is additive and does not imply that `data` is empty.
 
 **Filters** (`DecidedsRequest`)
 - `from`, `to` — inclusive slot range (int64 ≥ 0).
@@ -179,7 +188,7 @@ curl -s "http://localhost:16000/v1/exporter/decideds?from=123456&to=123460&roles
 curl -s -X POST http://localhost:16000/v1/exporter/decideds   -H 'Content-Type: application/json'   -d '{"from":123456,"to":123460,"roles":["ATTESTER"],"pubkeys":["<96-char hex>"]}'
 ```
 
-Response data schema: [TraceDecideds](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/API/ssvnode.openAPI.json#L972)
+Response data schema: [TraceDecideds](https://github.com/ssvlabs/ssv/blob/164e25cb6462759f98063fa32dd092f0dc4439f4/docs/api/ssvnode.openapi.json#L972)
 
 ### API requests: field constraints
 
@@ -214,8 +223,8 @@ No changes were made to the WebSocket API. As before, when `WebSocketAPIPort` is
    - Remove `ssv.ValidatorOptions.Exporter: true` if present.
    - Add the new `exporter` block with `Enabled` and `Mode` (and `RetainSlots` for standard).
    - Set an API port
-   - Please refer to our [minimal configuration examples](#Configuration-file) for a working example.
-3. **Restart** the node with archive mode enabled.
+   - Please refer to our [minimal configuration examples](#configuration-file) for a working example.
+3. **Restart** the node.
 4. **Validate**: probe `/v1/exporter/decideds` and (if archive) `/v1/exporter/traces/validator`; connect to `/stream` to observe live decided events.
 
 ### Configuration file upgrade
@@ -259,4 +268,4 @@ migrations; filtering those out can help.
 
 ---
 
-_This is a pre‑release. APIs and models may evolve before v2.0.0. Please report issues and feedback._
+__Pre-release: Interfaces and model behavior are subject to change prior to v2.0.0. Please share issues and feedback via [GitHub issues](https://github.com/ssvlabs/ssv/issues).__
