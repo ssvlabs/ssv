@@ -242,16 +242,29 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 	if err != nil {
 		return nil, err
 	}
-	// After Electra fork happens on all networks,
-	// - Electra check should become required
-	// - Fulu check might be added as non-required
-	electraEpoch, err := getForkEpoch("ELECTRA_FORK_EPOCH", false)
+	electraEpoch, err := getForkEpoch("ELECTRA_FORK_EPOCH", true)
 	if err != nil {
 		return nil, err
 	}
 	electraForkVersion, err := getForkVersion("ELECTRA_FORK_VERSION")
 	if err != nil {
 		return nil, err
+	}
+	// After Fulu fork happens on all networks,
+	// - Fulu check should become required
+	// - Gloas check might be added as non-required
+	fuluEpoch, err := getForkEpoch("FULU_FORK_EPOCH", false)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only get fork version if the fork is scheduled (not FarFutureEpoch)
+	var fuluForkVersion phase0.Version
+	if fuluEpoch != FarFutureEpoch {
+		fuluForkVersion, err = getForkVersion("FULU_FORK_VERSION")
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	forkEpochs := map[spec.DataVersion]phase0.Fork{
@@ -284,6 +297,11 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 			PreviousVersion: denebForkVersion,
 			CurrentVersion:  electraForkVersion,
 			Epoch:           electraEpoch,
+		},
+		spec.DataVersionFulu: {
+			PreviousVersion: electraForkVersion,
+			CurrentVersion:  fuluForkVersion,
+			Epoch:           fuluEpoch,
 		},
 	}
 

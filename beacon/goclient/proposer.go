@@ -13,6 +13,7 @@ import (
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
+	apiv1fulu "github.com/attestantio/go-eth2-client/api/v1/fulu"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
@@ -73,13 +74,13 @@ func (gc *GoClient) fetchProposal(
 	return resp.Data, nil
 }
 
-// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
+// GetBeaconBlock implements ProposerCalls.GetBeaconBlock
 func (gc *GoClient) GetBeaconBlock(
 	ctx context.Context,
 	slot phase0.Slot,
 	graffitiBytes []byte,
 	randao []byte,
-) (ssz.Marshaler, spec.DataVersion, error) {
+) (*api.VersionedProposal, ssz.Marshaler, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
@@ -93,20 +94,20 @@ func (gc *GoClient) GetBeaconBlock(
 	if len(gc.clients) == 1 {
 		beaconBlock, err = gc.fetchProposal(ctx, gc.clients[0], slot, sig, graffiti)
 		if err != nil {
-			return nil, DataVersionNil, err
+			return nil, nil, err
 		}
 	} else {
 		// For multiple clients, race them in parallel for the fastest response
 		beaconBlock, err = gc.getProposalParallel(ctx, slot, sig, graffiti)
 		if err != nil {
-			return nil, DataVersionNil, err
+			return nil, nil, err
 		}
 	}
 
 	// Check and log if fee recipient is missing (for both single and multi-client paths)
 	feeRecipient, err := beaconBlock.FeeRecipient()
 	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("failed to get fee recipient: %w", err)
+		return nil, nil, fmt.Errorf("failed to get fee recipient: %w", err)
 	}
 	if feeRecipient.IsZero() {
 		gc.log.Warn("proposal missing fee recipient - fees will be burned",
@@ -114,88 +115,31 @@ func (gc *GoClient) GetBeaconBlock(
 			zap.Bool("blinded", beaconBlock.Blinded))
 	}
 
-	if beaconBlock.Blinded {
-		switch beaconBlock.Version {
-		case spec.DataVersionCapella:
-			if beaconBlock.CapellaBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block is nil")
-			}
-			if beaconBlock.CapellaBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block body is nil")
-			}
-			if beaconBlock.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block execution payload header is nil")
-			}
-			return beaconBlock.CapellaBlinded, beaconBlock.Version, nil
-		case spec.DataVersionDeneb:
-			if beaconBlock.DenebBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block contents is nil")
-			}
-			if beaconBlock.DenebBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block body is nil")
-			}
-			if beaconBlock.DenebBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
-			}
-			return beaconBlock.DenebBlinded, beaconBlock.Version, nil
-		case spec.DataVersionElectra:
-			if beaconBlock.ElectraBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block is nil")
-			}
-			if beaconBlock.ElectraBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block body is nil")
-			}
-			if beaconBlock.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block execution payload header is nil")
-			}
-			return beaconBlock.ElectraBlinded, beaconBlock.Version, nil
-		default:
-			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
-		}
-	}
-
+	// Note: FeeRecipient() above already validates payload presence (ExecutionPayload/ExecutionPayloadHeader),
+	// so we don't need explicit payload checks in this switch statement
 	switch beaconBlock.Version {
 	case spec.DataVersionCapella:
-		if beaconBlock.Capella == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block is nil")
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.CapellaBlinded, nil
 		}
-		if beaconBlock.Capella.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
-		}
-		if beaconBlock.Capella.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
-		}
-		return beaconBlock.Capella, beaconBlock.Version, nil
+		return beaconBlock, beaconBlock.Capella, nil
 	case spec.DataVersionDeneb:
-		if beaconBlock.Deneb == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.DenebBlinded, nil
 		}
-		if beaconBlock.Deneb.Block == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block is nil")
-		}
-		if beaconBlock.Deneb.Block.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
-		}
-		if beaconBlock.Deneb.Block.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
-		}
-		return beaconBlock.Deneb, beaconBlock.Version, nil
+		return beaconBlock, beaconBlock.Deneb, nil
 	case spec.DataVersionElectra:
-		if beaconBlock.Electra == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block contents is nil")
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.ElectraBlinded, nil
 		}
-		if beaconBlock.Electra.Block == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block is nil")
+		return beaconBlock, beaconBlock.Electra, nil
+	case spec.DataVersionFulu:
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.FuluBlinded, nil
 		}
-		if beaconBlock.Electra.Block.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block body is nil")
-		}
-		if beaconBlock.Electra.Block.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block execution payload is nil")
-		}
-		return beaconBlock.Electra, beaconBlock.Version, nil
+		return beaconBlock, beaconBlock.Fulu, nil
 	default:
-		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
+		return nil, nil, fmt.Errorf("unknown block version %d", beaconBlock.Version)
 	}
 }
 
@@ -258,57 +202,86 @@ func (gc *GoClient) getProposalParallel(
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
-func (gc *GoClient) SubmitBlindedBeaconBlock(
+// SubmitBeaconBlock submit the block to the node
+func (gc *GoClient) SubmitBeaconBlock(
 	ctx context.Context,
-	block *api.VersionedBlindedProposal,
+	block *api.VersionedProposal,
 	sig phase0.BLSSignature,
 ) error {
-	signedBlock := &api.VersionedSignedBlindedProposal{
-		Version: block.Version,
+	if block.Blinded {
+		return gc.submitBlindedBlock(ctx, block, sig)
 	}
-	switch block.Version {
+	return gc.submitRegularBlock(ctx, block, sig)
+}
+
+// submitBlindedBlock handles submission of blinded blocks
+func (gc *GoClient) submitBlindedBlock(
+	ctx context.Context,
+	block *api.VersionedProposal,
+	sig phase0.BLSSignature,
+) error {
+	version := block.Version
+	signedBlindedBlock := &api.VersionedSignedBlindedProposal{
+		Version: version,
+	}
+	switch version {
 	case spec.DataVersionCapella:
-		if block.Capella == nil {
-			return fmt.Errorf("capella blinded block is nil")
+		if block.CapellaBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
 		}
-		signedBlock.Capella = &apiv1capella.SignedBlindedBeaconBlock{
-			Message: block.Capella,
+		signedBlindedBlock.Capella = &apiv1capella.SignedBlindedBeaconBlock{
+			Message:   block.CapellaBlinded,
+			Signature: sig,
 		}
-		copy(signedBlock.Capella.Signature[:], sig[:])
 	case spec.DataVersionDeneb:
-		if block.Deneb == nil {
-			return fmt.Errorf("deneb block contents is nil")
+		if block.DenebBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
 		}
-		if block.Deneb.Body == nil {
-			return fmt.Errorf("deneb block body is nil")
+		if block.DenebBlinded.Body == nil {
+			return fmt.Errorf("%s blinded block body is nil", version.String())
 		}
-		if block.Deneb.Body.ExecutionPayloadHeader == nil {
-			return fmt.Errorf("deneb block execution payload header is nil")
+		if block.DenebBlinded.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("%s blinded block execution payload header is nil", version.String())
 		}
-		signedBlock.Deneb = &apiv1deneb.SignedBlindedBeaconBlock{
-			Message: block.Deneb,
+		signedBlindedBlock.Deneb = &apiv1deneb.SignedBlindedBeaconBlock{
+			Message:   block.DenebBlinded,
+			Signature: sig,
 		}
-		copy(signedBlock.Deneb.Signature[:], sig[:])
 	case spec.DataVersionElectra:
-		if block.Electra == nil {
-			return fmt.Errorf("electra block contents is nil")
+		if block.ElectraBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
 		}
-		if block.Electra.Body == nil {
-			return fmt.Errorf("electra block body is nil")
+		if block.ElectraBlinded.Body == nil {
+			return fmt.Errorf("%s blinded block body is nil", version.String())
 		}
-		if block.Electra.Body.ExecutionPayloadHeader == nil {
-			return fmt.Errorf("electra block execution payload header is nil")
+		if block.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("%s blinded block execution payload header is nil", version.String())
 		}
-		signedBlock.Electra = &apiv1electra.SignedBlindedBeaconBlock{
-			Message: block.Electra,
+		signedBlindedBlock.Electra = &apiv1electra.SignedBlindedBeaconBlock{
+			Message:   block.ElectraBlinded,
+			Signature: sig,
 		}
-		copy(signedBlock.Electra.Signature[:], sig[:])
+	case spec.DataVersionFulu:
+		if block.FuluBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
+		}
+		if block.FuluBlinded.Body == nil {
+			return fmt.Errorf("%s blinded block body is nil", version.String())
+		}
+		if block.FuluBlinded.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("%s blinded block execution payload header is nil", version.String())
+		}
+		// Fulu reuses Electra's block types as per consensus spec
+		signedBlindedBlock.Fulu = &apiv1electra.SignedBlindedBeaconBlock{
+			Message:   block.FuluBlinded,
+			Signature: sig,
+		}
 	default:
-		return fmt.Errorf("unknown block version")
+		return fmt.Errorf("unknown blinded block version %d", version)
 	}
 
 	opts := &api.SubmitBlindedProposalOpts{
-		Proposal: signedBlock,
+		Proposal: signedBlindedBlock,
 	}
 
 	return gc.multiClientSubmit(ctx, "SubmitBlindedProposal", func(ctx context.Context, client Client) error {
@@ -316,68 +289,91 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(
 	})
 }
 
-// SubmitBeaconBlock submit the block to the node
-func (gc *GoClient) SubmitBeaconBlock(
+// submitRegularBlock handles submission of regular (non-blinded) blocks
+func (gc *GoClient) submitRegularBlock(
 	ctx context.Context,
 	block *api.VersionedProposal,
 	sig phase0.BLSSignature,
 ) error {
+	version := block.Version
 	signedBlock := &api.VersionedSignedProposal{
-		Version: block.Version,
+		Version: version,
 	}
-	switch block.Version {
+	switch version {
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
-			return fmt.Errorf("capella block is nil")
+			return fmt.Errorf("%s block is nil", version.String())
 		}
 		signedBlock.Capella = &capella.SignedBeaconBlock{
-			Message: block.Capella,
+			Message:   block.Capella,
+			Signature: sig,
 		}
-		copy(signedBlock.Capella.Signature[:], sig[:])
 	case spec.DataVersionDeneb:
 		if block.Deneb == nil {
-			return fmt.Errorf("deneb block contents is nil")
+			return fmt.Errorf("%s block contents is nil", version.String())
 		}
 		if block.Deneb.Block == nil {
-			return fmt.Errorf("deneb block is nil")
+			return fmt.Errorf("%s block is nil", version.String())
 		}
 		if block.Deneb.Block.Body == nil {
-			return fmt.Errorf("deneb block body is nil")
+			return fmt.Errorf("%s block body is nil", version.String())
 		}
 		if block.Deneb.Block.Body.ExecutionPayload == nil {
-			return fmt.Errorf("deneb block execution payload header is nil")
+			return fmt.Errorf("%s block execution payload is nil", version.String())
 		}
 		signedBlock.Deneb = &apiv1deneb.SignedBlockContents{
 			SignedBlock: &deneb.SignedBeaconBlock{
-				Message: block.Deneb.Block,
+				Message:   block.Deneb.Block,
+				Signature: sig,
 			},
 			KZGProofs: block.Deneb.KZGProofs,
 			Blobs:     block.Deneb.Blobs,
 		}
-		copy(signedBlock.Deneb.SignedBlock.Signature[:], sig[:])
 	case spec.DataVersionElectra:
 		if block.Electra == nil {
-			return fmt.Errorf("electra block contents is nil")
+			return fmt.Errorf("%s block contents is nil", version.String())
 		}
 		if block.Electra.Block == nil {
-			return fmt.Errorf("electra block is nil")
+			return fmt.Errorf("%s block is nil", version.String())
 		}
 		if block.Electra.Block.Body == nil {
-			return fmt.Errorf("electra block body is nil")
+			return fmt.Errorf("%s block body is nil", version.String())
 		}
 		if block.Electra.Block.Body.ExecutionPayload == nil {
-			return fmt.Errorf("electra block execution payload header is nil")
+			return fmt.Errorf("%s block execution payload is nil", version.String())
 		}
 		signedBlock.Electra = &apiv1electra.SignedBlockContents{
 			SignedBlock: &electra.SignedBeaconBlock{
-				Message: block.Electra.Block,
+				Message:   block.Electra.Block,
+				Signature: sig,
 			},
 			KZGProofs: block.Electra.KZGProofs,
 			Blobs:     block.Electra.Blobs,
 		}
-		copy(signedBlock.Electra.SignedBlock.Signature[:], sig[:])
+	case spec.DataVersionFulu:
+		if block.Fulu == nil {
+			return fmt.Errorf("%s block contents is nil", version.String())
+		}
+		if block.Fulu.Block == nil {
+			return fmt.Errorf("%s block is nil", version.String())
+		}
+		if block.Fulu.Block.Body == nil {
+			return fmt.Errorf("%s block body is nil", version.String())
+		}
+		if block.Fulu.Block.Body.ExecutionPayload == nil {
+			return fmt.Errorf("%s block execution payload is nil", version.String())
+		}
+		signedBlock.Fulu = &apiv1fulu.SignedBlockContents{
+			// Fulu reuses Electra's block types as per consensus spec
+			SignedBlock: &electra.SignedBeaconBlock{
+				Message:   block.Fulu.Block,
+				Signature: sig,
+			},
+			KZGProofs: block.Fulu.KZGProofs,
+			Blobs:     block.Fulu.Blobs,
+		}
 	default:
-		return fmt.Errorf("unknown block version")
+		return fmt.Errorf("unknown block version %d", version)
 	}
 
 	opts := &api.SubmitProposalOpts{

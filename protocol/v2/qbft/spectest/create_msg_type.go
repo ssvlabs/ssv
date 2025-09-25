@@ -1,7 +1,9 @@
 package qbft
 
 import (
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -10,8 +12,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 type CreateMsgSpecTest struct {
@@ -26,6 +26,46 @@ type CreateMsgSpecTest struct {
 	ExpectedRoot                                     string
 	ExpectedState                                    spectypes.Root `json:"-"` // Field is ignored by encoding/json"
 	ExpectedError                                    string
+}
+
+// UnmarshalJSON implements json.Unmarshaler to handle the Value field as hex and StateValue as base64
+func (test *CreateMsgSpecTest) UnmarshalJSON(data []byte) error {
+	// Create an alias to prevent recursion
+	type Alias CreateMsgSpecTest
+	aux := &struct {
+		Value      string `json:"Value"`      // Accept Value as hex string
+		StateValue string `json:"StateValue"` // Accept StateValue as base64 string
+		*Alias
+	}{
+		Alias: (*Alias)(test),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Convert the hex string Value to [32]byte
+	if aux.Value != "" {
+		decoded, err := hex.DecodeString(aux.Value)
+		if err != nil {
+			return errors.Wrap(err, "failed to decode Value hex string")
+		}
+		if len(decoded) != 32 {
+			return errors.Errorf("Value must be 32 bytes, got %d", len(decoded))
+		}
+		copy(test.Value[:], decoded)
+	}
+
+	// Convert the base64 string StateValue to []byte
+	if aux.StateValue != "" {
+		decoded, err := base64.StdEncoding.DecodeString(aux.StateValue)
+		if err != nil {
+			return errors.Wrap(err, "failed to decode StateValue base64 string")
+		}
+		test.StateValue = decoded
+	}
+
+	return nil
 }
 
 func (test *CreateMsgSpecTest) TestName() string {
@@ -60,72 +100,69 @@ func (test *CreateMsgSpecTest) RunCreateMsg(t *testing.T) {
 
 func createCommit(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := spectestingutils.Testing4SharesSet()
-	signer := spectestingutils.NewOperatorSigner(ks, 1)
-	inst := instance.NewInstance(nil, nil, nil, 0, signer)
-	inst.State = &specqbft.State{
+	state := &specqbft.State{
 		CommitteeMember: spectestingutils.TestingCommitteeMember(ks),
-		ID:              []byte{1, 2, 3, 4},
+		ID:              spectestingutils.TestingIdentifier,
+		Round:           test.Round,
 	}
+	signer := spectestingutils.TestingOperatorSigner(ks)
 
-	return inst.CreateCommit(test.Value)
+	return specqbft.CreateCommit(state, signer, test.Value)
 }
 
 func createPrepare(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := spectestingutils.Testing4SharesSet()
-
-	signer := spectestingutils.NewOperatorSigner(ks, 1)
-	inst := instance.NewInstance(nil, nil, nil, 0, signer)
-	inst.State = &specqbft.State{
+	state := &specqbft.State{
 		CommitteeMember: spectestingutils.TestingCommitteeMember(ks),
-		ID:              []byte{1, 2, 3, 4},
+		ID:              spectestingutils.TestingIdentifier,
+		Round:           test.Round,
 	}
+	signer := spectestingutils.TestingOperatorSigner(ks)
 
-	return inst.CreatePrepare(test.Round, test.Value)
+	return specqbft.CreatePrepare(state, signer, test.Round, test.Value)
 }
 
 func createProposal(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := spectestingutils.Testing4SharesSet()
-
-	signer := spectestingutils.NewOperatorSigner(ks, 1)
-	inst := instance.NewInstance(nil, nil, nil, 0, signer)
-	inst.State = &specqbft.State{
+	state := &specqbft.State{
 		CommitteeMember: spectestingutils.TestingCommitteeMember(ks),
-		ID:              []byte{1, 2, 3, 4},
+		ID:              spectestingutils.TestingIdentifier,
+		Round:           test.Round,
 	}
+	signer := spectestingutils.TestingOperatorSigner(ks)
 
-	return inst.CreateProposal(
-		test.Value[:],
+	// Use StateValue (full data) instead of Value (which is already a hash)
+	return specqbft.CreateProposal(state, signer, test.StateValue,
 		spectestingutils.ToProcessingMessages(test.RoundChangeJustifications),
-		spectestingutils.ToProcessingMessages(test.PrepareJustifications),
-	)
+		spectestingutils.ToProcessingMessages(test.PrepareJustifications))
 }
 
 func createRoundChange(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := spectestingutils.Testing4SharesSet()
-
-	signer := spectestingutils.NewOperatorSigner(ks, 1)
-	inst := instance.NewInstance(nil, nil, nil, 0, signer)
-	inst.State = &specqbft.State{
+	state := &specqbft.State{
 		CommitteeMember:  spectestingutils.TestingCommitteeMember(ks),
-		ID:               []byte{1, 2, 3, 4},
+		ID:               spectestingutils.TestingIdentifier,
 		PrepareContainer: specqbft.NewMsgContainer(),
+		Round:            test.Round,
 	}
+	signer := spectestingutils.TestingOperatorSigner(ks)
 
 	if len(test.PrepareJustifications) > 0 {
 		prepareMsg, err := specqbft.DecodeMessage(test.PrepareJustifications[0].SSVMessage.Data)
 		if err != nil {
 			return nil, err
 		}
-		inst.State.LastPreparedRound = prepareMsg.Round
-		inst.State.LastPreparedValue = test.StateValue
+		state.LastPreparedRound = prepareMsg.Round
+		state.LastPreparedValue = test.StateValue
 
 		for _, msg := range test.PrepareJustifications {
-			_, err := inst.State.PrepareContainer.AddFirstMsgForSignerAndRound(spectestingutils.ToProcessingMessage(msg))
+			_, err := state.PrepareContainer.AddFirstMsgForSignerAndRound(spectestingutils.ToProcessingMessage(msg))
 			if err != nil {
 				return nil, errors.Wrap(err, "could not add first message for signer")
 			}
 		}
 	}
 
-	return inst.CreateRoundChange(1)
+	// Use test.Round as the new round parameter and StateValue as instance start value
+	return specqbft.CreateRoundChange(state, signer, test.Round, test.StateValue)
 }

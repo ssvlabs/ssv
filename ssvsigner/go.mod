@@ -15,7 +15,7 @@ go 1.24
 
 require (
 	github.com/alecthomas/kong v1.8.1
-	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
+	github.com/attestantio/go-eth2-client v0.27.0
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/docker/docker v28.3.2+incompatible
 	github.com/docker/go-connections v0.5.0
@@ -29,9 +29,9 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/sourcegraph/conc v0.3.0
-	github.com/ssvlabs/eth2-key-manager v1.5.5
+	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv v1.2.1-0.20250904093034-64dc248758c3
-	github.com/ssvlabs/ssv-spec v1.1.3
+	github.com/ssvlabs/ssv-spec v1.1.4
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/valyala/fasthttp v1.58.0
@@ -157,3 +157,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 )
+
+// Using local SSV module to maintain alignment with the parent package during active development.
+// This avoids circular dependency issues where ssvsigner would need to reference specific SSV commits
+// that subsequently change. When ssvsigner is extracted to a separate repository, this will be
+// replaced with explicit version management.
+replace github.com/ssvlabs/ssv => ../
