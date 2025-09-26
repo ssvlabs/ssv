@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -19,26 +19,26 @@ func signBeaconObject(
 	ctx context.Context,
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
-	root ssz.HashRoot,
-	slot spec.Slot,
-	signatureDomain spec.DomainType,
+	obj ssz.HashRoot,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
 	epoch := runner.GetNetworkConfig().EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	return signAsValidator(ctx, runner, duty.ValidatorIndex, root, slot, signatureDomain, domain)
+	return signAsValidator(ctx, runner, duty.ValidatorIndex, obj, slot, signatureDomain, domain)
 }
 
 func signAsValidator(
 	ctx context.Context,
 	runner Runner,
-	validatorIndex spec.ValidatorIndex,
-	root ssz.HashRoot,
-	slot spec.Slot,
-	signatureDomain spec.DomainType,
-	domain spec.Domain,
+	validatorIndex phase0.ValidatorIndex,
+	obj ssz.HashRoot,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
+	domain phase0.Domain,
 ) (*spectypes.PartialSignatureMessage, error) {
 	share, ok := runner.GetShares()[validatorIndex]
 	if !ok {
@@ -46,9 +46,9 @@ func signAsValidator(
 	}
 	sig, r, err := runner.GetSigner().SignBeaconObject(
 		ctx,
-		root,
+		obj,
 		domain,
-		spec.BLSPubKey(share.SharePubKey),
+		phase0.BLSPubKey(share.SharePubKey),
 		slot,
 		signatureDomain,
 	)
@@ -65,7 +65,10 @@ func signAsValidator(
 }
 
 // Validate message content without verifying signatures
-func (b *BaseRunner) validatePartialSigMsg(psigMsgs *spectypes.PartialSignatureMessages, expectedSlot spec.Slot) error {
+func (b *BaseRunner) validatePartialSigMsg(
+	psigMsgs *spectypes.PartialSignatureMessages,
+	expectedSlot phase0.Slot,
+) error {
 	if err := psigMsgs.Validate(); err != nil {
 		return errors.Wrap(err, "PartialSignatureMessages invalid")
 	}
