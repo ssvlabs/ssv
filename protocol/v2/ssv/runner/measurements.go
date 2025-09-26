@@ -41,49 +41,33 @@ func (cm *dutyMeasurements) TotalDutyTime() time.Duration {
 }
 
 func (cm *dutyMeasurements) StartPreConsensus() {
-	if cm != nil {
-		cm.preConsensusStart = time.Now()
-	}
+	cm.preConsensusStart = time.Now()
 }
 
 func (cm *dutyMeasurements) EndPreConsensus() {
-	if cm != nil {
-		cm.preConsensusDuration = time.Since(cm.preConsensusStart)
-	}
+	cm.preConsensusDuration = time.Since(cm.preConsensusStart)
 }
 
 func (cm *dutyMeasurements) StartConsensus() {
-	if cm != nil {
-		cm.consensusStart = time.Now()
-	}
+	cm.consensusStart = time.Now()
 }
 
 func (cm *dutyMeasurements) EndConsensus() {
-	if cm != nil {
-		cm.consensusDuration = time.Since(cm.consensusStart)
-	}
+	cm.consensusDuration = time.Since(cm.consensusStart)
 }
 
 func (cm *dutyMeasurements) StartPostConsensus() {
-	if cm != nil {
-		cm.postConsensusStart = time.Now()
-	}
+	cm.postConsensusStart = time.Now()
 }
 
 func (cm *dutyMeasurements) EndPostConsensus() {
-	if cm != nil {
-		cm.postConsensusDuration = time.Since(cm.postConsensusStart)
-	}
+	cm.postConsensusDuration = time.Since(cm.postConsensusStart)
 }
 
 func (cm *dutyMeasurements) StartDutyFlow() {
-	if cm != nil {
-		cm.dutyStart = time.Now()
-	}
+	cm.dutyStart = time.Now()
 }
 
 func (cm *dutyMeasurements) EndDutyFlow() {
-	if cm != nil {
-		cm.dutyDuration = time.Since(cm.dutyStart)
-	}
+	cm.dutyDuration = time.Since(cm.dutyStart)
 }
