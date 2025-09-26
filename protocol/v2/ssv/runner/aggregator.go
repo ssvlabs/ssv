@@ -39,7 +39,7 @@ type AggregatorRunner struct {
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-	measurements   measurementsStore
+	measurements   *dutyMeasurements
 
 	// IsAggregator returns true if the signature is from the input validator. The committee
 	// count is provided as an argument rather than imported implementation from spec. Having

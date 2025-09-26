@@ -38,7 +38,7 @@ type ProposerRunner struct {
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
 	valCheck            specqbft.ProposedValueCheckF
-	measurements        measurementsStore
+	measurements        *dutyMeasurements
 	graffiti            []byte
 
 	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
@@ -374,7 +374,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	copy(specSig[:], sig)
 
 	logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
-		zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)))
+		zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
+	)
 
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 

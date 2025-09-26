@@ -59,7 +59,7 @@ func NewController(
 	}
 }
 
-// StartNewInstance will start a new QBFT instance, if can't will return error
+// StartNewInstance will attempt to start a new QBFT instance.
 func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
@@ -80,13 +80,10 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 
 	c.Height = height
 
-	newInstance := c.addAndStoreNewInstance()
-
-	const startingNewQBFTInstanceEvent = "starting new QBFT instance"
-	logger.Debug(startingNewQBFTInstanceEvent)
-	span.AddEvent(startingNewQBFTInstanceEvent)
-
+	newInstance := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	c.StoredInstances.addNewInstance(newInstance)
 	newInstance.Start(ctx, logger, value, height)
+
 	c.forceStopAllInstanceExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")
@@ -192,13 +189,6 @@ func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
 		return true
 	}
 	return false
-}
-
-// addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
-func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
-	c.StoredInstances.addNewInstance(i)
-	return i
 }
 
 // GetRoot returns the state's deterministic root

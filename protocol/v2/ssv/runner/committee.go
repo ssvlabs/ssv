@@ -54,7 +54,7 @@ type CommitteeRunner struct {
 	valCheck            specqbft.ProposedValueCheckF
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
-	measurements        measurementsStore
+	measurements        *dutyMeasurements
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 }
@@ -888,7 +888,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		cr.measurements.EndDutyFlow()
 		const dutyFinishedEvent = "successfully finished duty processing (absolute success)"
 		logger.Info(dutyFinishedEvent,
-			fields.PreConsensusTime(cr.measurements.PreConsensusTime()),
 			fields.ConsensusTime(cr.measurements.ConsensusTime()),
 			fields.PostConsensusTime(cr.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
@@ -902,7 +901,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	cr.measurements.EndDutyFlow()
 	const dutyFinishedEvent = "successfully finished duty processing (partial success)"
 	logger.Info(dutyFinishedEvent,
-		fields.PreConsensusTime(cr.measurements.PreConsensusTime()),
 		fields.ConsensusTime(cr.measurements.ConsensusTime()),
 		fields.PostConsensusTime(cr.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
@@ -963,7 +961,7 @@ func findValidators(
 	committeeMap map[phase0.ValidatorIndex][32]byte) (spectypes.BeaconRole, []phase0.ValidatorIndex, bool) {
 	var validators []phase0.ValidatorIndex
 
-	// look for the expectedRoot in attestationMap
+	// look for the expectedRoot in the attestationMap
 	for validator, root := range attestationMap {
 		if root == expectedRoot {
 			validators = append(validators, validator)
@@ -972,7 +970,7 @@ func findValidators(
 	if len(validators) > 0 {
 		return spectypes.BNRoleAttester, validators, true
 	}
-	// look for the expectedRoot in committeeMap
+	// look for the expectedRoot in the committeeMap
 	for validator, root := range committeeMap {
 		if root == expectedRoot {
 			validators = append(validators, validator)
@@ -984,12 +982,12 @@ func findValidators(
 	return spectypes.BNRoleUnknown, nil, false
 }
 
-// Unneeded since no preconsensus phase
+// expectedPreConsensusRootsAndDomain is not needed because there is no pre-consensus phase.
 func (cr *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no pre consensus roots for committee runner")
 }
 
-// This function signature returns only one domain type... but we can have mixed domains
+// expectedPostConsensusRootsAndDomain signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
@@ -1004,7 +1002,6 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
 	duty := cr.BaseRunner.State.StartingDuty
-	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(beaconVoteData); err != nil {

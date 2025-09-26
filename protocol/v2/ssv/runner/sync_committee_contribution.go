@@ -36,7 +36,7 @@ type SyncCommitteeAggregatorRunner struct {
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-	measurements   measurementsStore
+	measurements   dutyMeasurements
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -68,7 +68,7 @@ func NewSyncCommitteeAggregatorRunner(
 		signer:         signer,
 		valCheck:       valCheck,
 		operatorSigner: operatorSigner,
-		measurements:   newMeasurementsStore(),
+		measurements:   *newMeasurementsStore(),
 	}, nil
 }
 
@@ -148,8 +148,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		const dutyFinishedNoProofsEvent = "successfully finished duty processing (no selection proofs)"
 		logger.Info(dutyFinishedNoProofsEvent,
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 		)
