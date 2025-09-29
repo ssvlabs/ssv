@@ -61,5 +61,13 @@ var MainnetBeaconConfig = &networkconfig.Beacon{
 			PreviousVersion: phase0.Version{0x04, 0x00, 0x00, 0x00},
 			CurrentVersion:  phase0.Version{0x05, 0x00, 0x00, 0x00}, // ELECTRA_FORK_VERSION: 0x05000000
 		},
+		// Fulu @ epoch 420000
+		spec.DataVersionFulu: {
+			// TODO(fulu): Update to real Fulu fork epoch once officially scheduled.
+			// Currently using placeholder epoch 420000 for testing purposes.
+			Epoch:           phase0.Epoch(420000),
+			PreviousVersion: phase0.Version{0x05, 0x00, 0x00, 0x00},
+			CurrentVersion:  phase0.Version{0x06, 0x00, 0x00, 0x00}, // FULU_FORK_VERSION: 0x06000000
+		},
 	},
 }

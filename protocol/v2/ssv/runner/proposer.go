@@ -8,14 +8,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
-	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
-	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
-	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	"github.com/attestantio/go-eth2-client/spec/capella"
-	"github.com/attestantio/go-eth2-client/spec/deneb"
-	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -168,7 +161,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+	vBlk, obj, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		const errMsg = "failed to get beacon block"
 
@@ -180,18 +173,32 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	// Log essentials about the retrieved block.
-	blockSummary, summarizeErr := summarizeBlock(obj)
-	const eventMsg = "🧊 got beacon block proposal"
-	logger.Info(eventMsg,
-		zap.String("block_hash", blockSummary.Hash.String()),
-		zap.Stringer("fee_recipient", blockSummary.FeeRecipient),
-		zap.Bool("blinded", blockSummary.Blinded),
+	logFields := []zap.Field{
+		zap.String("version", vBlk.Version.String()),
+		zap.Bool("blinded", vBlk.Blinded),
 		zap.Duration("proposer_delay", r.proposerDelay),
 		fields.Took(time.Since(start)),
-		zap.NamedError("summarize_err", summarizeErr))
+	}
+
+	blockHash, err := extractBlockHash(vBlk)
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("blockHash_err", err))
+	} else {
+		logFields = append(logFields, fields.BlockHash(blockHash))
+	}
+
+	feeRecipient, err := vBlk.FeeRecipient()
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
+	} else {
+		logFields = append(logFields, fields.FeeRecipient(feeRecipient[:]))
+	}
+
+	const eventMsg = "🧊 got beacon block proposal"
+	logger.Info(eventMsg, logFields...)
 	span.AddEvent(eventMsg, trace.WithAttributes(
-		observability.BeaconBlockHashAttribute(blockSummary.Hash),
-		observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
+		observability.BeaconBlockHashAttribute(blockHash),
+		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
 	))
 
 	byts, err := obj.MarshalSSZ()
@@ -200,7 +207,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 	input := &spectypes.ValidatorConsensusData{
 		Duty:    *duty,
-		Version: ver,
+		Version: vBlk.Version,
 		DataSSZ: byts,
 	}
 
@@ -252,18 +259,15 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
-	if r.decidedBlindedBlock() {
+	versionedBlock, blkToSign, err := cd.GetBlockData()
+	if err != nil {
+		return traces.Errorf(span, "could not get block data from consensus data: %w", err)
+	}
+
+	if versionedBlock.Blinded {
 		span.AddEvent("decided has a blinded block")
-		_, blkToSign, err = cd.GetBlindedBlockData()
-		if err != nil {
-			return traces.Errorf(span, "could not get blinded block data: %w", err)
-		}
 	} else {
-		span.AddEvent("decided does not have a blinded block. Getting block data")
-		_, blkToSign, err = cd.GetBlockData()
-		if err != nil {
-			return traces.Errorf(span, "could not get block data: %w", err)
-		}
+		span.AddEvent("decided has a vanilla block")
 	}
 
 	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
@@ -384,70 +388,50 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
 		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
-		zap.Bool("blinded", r.decidedBlindedBlock()),
 	)
-	var (
-		bSummary     blockSummary
-		summarizeErr error
-	)
-	if r.decidedBlindedBlock() {
-		vBlindedBlk, _, err := validatorConsensusData.GetBlindedBlockData()
-		if err != nil {
-			return traces.Errorf(span, "could not get blinded block: %w", err)
-		}
 
-		bSummary, summarizeErr = summarizeBlock(vBlindedBlk)
-		logger = logger.With(
-			fields.BlockHash(bSummary.Hash),
-			zap.NamedError("summarize_err", summarizeErr),
-		)
+	vBlk, _, err := validatorConsensusData.GetBlockData()
+	if err != nil {
+		return traces.Errorf(span, "could not get block data from consensus data: %w", err)
+	}
 
-		if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(ctx, vBlindedBlk, specSig); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+	loggerFields := []zap.Field{
+		zap.String("version", vBlk.Version.String()),
+		zap.Bool("blinded", vBlk.Blinded),
+	}
 
-			const errMsg = "could not submit blinded Beacon block"
-			logger.Error(errMsg, fields.SubmissionTime(time.Since(start)), zap.Error(err))
-			return traces.Errorf(span, "%s: %w", errMsg, err)
-		}
+	blockHash, err := extractBlockHash(vBlk)
+	if err != nil {
+		loggerFields = append(loggerFields, zap.NamedError("blockHash_err", err))
 	} else {
-		vBlk, _, err := validatorConsensusData.GetBlockData()
-		if err != nil {
-			return traces.Errorf(span, "could not get block: %w", err)
-		}
-		bSummary, summarizeErr = summarizeBlock(vBlk)
-		logger = logger.With(
-			fields.BlockHash(bSummary.Hash),
-			zap.NamedError("summarize_err", summarizeErr),
-		)
+		loggerFields = append(loggerFields, fields.BlockHash(blockHash))
+	}
 
-		if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+	logger = logger.With(loggerFields...)
 
-			const errMsg = "could not submit Beacon block"
-			logger.Error(errMsg,
-				fields.SubmissionTime(time.Since(start)),
-				zap.Error(err))
-			return traces.Errorf(span, "%s: %w", errMsg, err)
-		}
+	if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+
+		const errMsg = "could not submit beacon block"
+		logger.Error(errMsg,
+			fields.SubmissionTime(time.Since(start)),
+			zap.Error(err))
+		return traces.Errorf(span, "%s: %w", errMsg, err)
 	}
 
 	const eventMsg = "✅ successfully submitted block proposal"
 	span.AddEvent(eventMsg, trace.WithAttributes(
 		observability.BeaconSlotAttribute(r.BaseRunner.State.StartingDuty.DutySlot()),
 		observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
-		observability.BeaconBlockHashAttribute(bSummary.Hash),
-		observability.BeaconBlockIsBlindedAttribute(bSummary.Blinded),
+		observability.BeaconBlockHashAttribute(blockHash),
+		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
 	))
 	logger.Info(eventMsg,
 		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
 		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
-		zap.String("block_hash", bSummary.Hash.String()),
-		zap.Bool("blinded", bSummary.Blinded),
 		fields.Took(time.Since(start)),
-		zap.NamedError("summarize_err", summarizeErr),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-	)
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()))
 
 	r.GetState().Finished = true
 	r.measurements.EndDutyFlow()
@@ -464,18 +448,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	return nil
 }
 
-// decidedBlindedBlock returns true if decided value has a blinded block, false if regular block
-// WARNING!! should be called after decided only
-func (r *ProposerRunner) decidedBlindedBlock() bool {
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
-	if err != nil {
-		return false
-	}
-	_, _, err = validatorConsensusData.GetBlindedBlockData()
-	return err == nil
-}
-
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
@@ -487,14 +459,6 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not create consensus data")
-	}
-
-	if r.decidedBlindedBlock() {
-		_, data, err := validatorConsensusData.GetBlindedBlockData()
-		if err != nil {
-			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block data")
-		}
-		return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 	}
 
 	_, data, err := validatorConsensusData.GetBlockData()
@@ -671,119 +635,71 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-// blockSummary contains essentials about a block. Useful for logging and zero fee recipient check
-type blockSummary struct {
-	Hash         phase0.Hash32
-	Blinded      bool
-	Version      spec.DataVersion
-	FeeRecipient bellatrix.ExecutionAddress
-}
-
-// summarizeBlock returns a blockSummary for the given block.
-func summarizeBlock(block any) (summary blockSummary, err error) {
-	if block == nil {
-		return summary, fmt.Errorf("block is nil")
-	}
-	switch b := block.(type) {
-	case *api.VersionedProposal:
-		if b.Blinded {
-			switch b.Version {
-			case spec.DataVersionCapella:
-				return summarizeBlock(b.CapellaBlinded)
-			case spec.DataVersionDeneb:
-				return summarizeBlock(b.DenebBlinded)
-			case spec.DataVersionElectra:
-				return summarizeBlock(b.ElectraBlinded)
-			default:
-				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
-			}
-		}
-		switch b.Version {
-		case spec.DataVersionCapella:
-			return summarizeBlock(b.Capella)
-		case spec.DataVersionDeneb:
-			if b.Deneb == nil {
-				return summary, fmt.Errorf("deneb block contents is nil")
-			}
-			return summarizeBlock(b.Deneb.Block)
-		case spec.DataVersionElectra:
-			if b.Electra == nil {
-				return summary, fmt.Errorf("electra block contents is nil")
-			}
-			return summarizeBlock(b.Electra.Block)
-		default:
-			return summary, fmt.Errorf("unsupported block version %d", b.Version)
-		}
-
-	case *api.VersionedBlindedProposal:
-		switch b.Version {
-		case spec.DataVersionCapella:
-			return summarizeBlock(b.Capella)
-		case spec.DataVersionDeneb:
-			return summarizeBlock(b.Deneb)
-		case spec.DataVersionElectra:
-			return summarizeBlock(b.Electra)
-		default:
-			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
-		}
-
-	case *capella.BeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return summary, fmt.Errorf("block, body or execution payload is nil")
-		}
-		summary.Hash = b.Body.ExecutionPayload.BlockHash
-		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
-		summary.Version = spec.DataVersionCapella
-
-	case *deneb.BeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return summary, fmt.Errorf("block, body or execution payload is nil")
-		}
-		summary.Hash = b.Body.ExecutionPayload.BlockHash
-		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
-		summary.Version = spec.DataVersionDeneb
-
-	case *electra.BeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return summary, fmt.Errorf("block, body or execution payload is nil")
-		}
-		summary.Hash = b.Body.ExecutionPayload.BlockHash
-		summary.FeeRecipient = b.Body.ExecutionPayload.FeeRecipient
-		summary.Version = spec.DataVersionElectra
-
-	case *apiv1electra.BlockContents:
-		return summarizeBlock(b.Block)
-
-	case *apiv1deneb.BlockContents:
-		return summarizeBlock(b.Block)
-
-	case *apiv1capella.BlindedBeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return summary, fmt.Errorf("block, body or execution payload header is nil")
-		}
-		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
-		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
-		summary.Blinded = true
-		summary.Version = spec.DataVersionCapella
-
-	case *apiv1deneb.BlindedBeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return summary, fmt.Errorf("block, body or execution payload header is nil")
-		}
-		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
-		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
-		summary.Blinded = true
-		summary.Version = spec.DataVersionDeneb
-
-	case *apiv1electra.BlindedBeaconBlock:
-		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return summary, fmt.Errorf("block, body or execution payload header is nil")
-		}
-		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
-		summary.FeeRecipient = b.Body.ExecutionPayloadHeader.FeeRecipient
-		summary.Blinded = true
-		summary.Version = spec.DataVersionElectra
+// extractBlockHash extracts the block hash from a VersionedProposal.
+// It handles both regular and blinded blocks across all supported versions.
+func extractBlockHash(vBlk *api.VersionedProposal) (phase0.Hash32, error) {
+	if vBlk == nil {
+		return phase0.Hash32{}, fmt.Errorf("block is nil")
 	}
 
-	return summary, nil
+	switch vBlk.Version {
+	case spec.DataVersionCapella:
+		if vBlk.Blinded {
+			if vBlk.CapellaBlinded == nil || vBlk.CapellaBlinded.Body == nil ||
+				vBlk.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
+				return phase0.Hash32{}, fmt.Errorf("capella blinded block data missing")
+			}
+			return vBlk.CapellaBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+		}
+		if vBlk.Capella == nil || vBlk.Capella.Body == nil ||
+			vBlk.Capella.Body.ExecutionPayload == nil {
+			return phase0.Hash32{}, fmt.Errorf("capella block data missing")
+		}
+		return vBlk.Capella.Body.ExecutionPayload.BlockHash, nil
+
+	case spec.DataVersionDeneb:
+		if vBlk.Blinded {
+			if vBlk.DenebBlinded == nil || vBlk.DenebBlinded.Body == nil ||
+				vBlk.DenebBlinded.Body.ExecutionPayloadHeader == nil {
+				return phase0.Hash32{}, fmt.Errorf("deneb blinded block data missing")
+			}
+			return vBlk.DenebBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+		}
+		if vBlk.Deneb == nil || vBlk.Deneb.Block == nil || vBlk.Deneb.Block.Body == nil ||
+			vBlk.Deneb.Block.Body.ExecutionPayload == nil {
+			return phase0.Hash32{}, fmt.Errorf("deneb block data missing")
+		}
+		return vBlk.Deneb.Block.Body.ExecutionPayload.BlockHash, nil
+
+	case spec.DataVersionElectra:
+		if vBlk.Blinded {
+			if vBlk.ElectraBlinded == nil || vBlk.ElectraBlinded.Body == nil ||
+				vBlk.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
+				return phase0.Hash32{}, fmt.Errorf("electra blinded block data missing")
+			}
+			return vBlk.ElectraBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+		}
+		if vBlk.Electra == nil || vBlk.Electra.Block == nil || vBlk.Electra.Block.Body == nil ||
+			vBlk.Electra.Block.Body.ExecutionPayload == nil {
+			return phase0.Hash32{}, fmt.Errorf("electra block data missing")
+		}
+		return vBlk.Electra.Block.Body.ExecutionPayload.BlockHash, nil
+
+	case spec.DataVersionFulu:
+		if vBlk.Blinded {
+			if vBlk.FuluBlinded == nil || vBlk.FuluBlinded.Body == nil ||
+				vBlk.FuluBlinded.Body.ExecutionPayloadHeader == nil {
+				return phase0.Hash32{}, fmt.Errorf("fulu blinded block data missing")
+			}
+			return vBlk.FuluBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+		}
+		if vBlk.Fulu == nil || vBlk.Fulu.Block == nil || vBlk.Fulu.Block.Body == nil ||
+			vBlk.Fulu.Block.Body.ExecutionPayload == nil {
+			return phase0.Hash32{}, fmt.Errorf("fulu block data missing")
+		}
+		return vBlk.Fulu.Block.Body.ExecutionPayload.BlockHash, nil
+
+	default:
+		return phase0.Hash32{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
+	}
 }

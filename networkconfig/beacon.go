@@ -138,6 +138,7 @@ func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 		spec.DataVersionCapella,
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
+		spec.DataVersionFulu,
 	}
 
 	for i, v := range versions {

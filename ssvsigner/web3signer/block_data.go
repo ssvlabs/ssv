@@ -15,16 +15,16 @@ import (
 )
 
 // ConvertBlockToBeaconBlockData converts various block types to Web3Signer BeaconBlockData format
-func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
+func ConvertBlockToBeaconBlockData(obj ssz.HashRoot, version spec.DataVersion) (*BeaconBlockData, error) {
 	switch v := obj.(type) {
 	case *capella.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash beacon block (capella): %w", err)
+			return nil, fmt.Errorf("could not hash beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionCapella),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -37,11 +37,11 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 	case *deneb.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash beacon block (deneb): %w", err)
+			return nil, fmt.Errorf("could not hash beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionDeneb),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -52,13 +52,15 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}, nil
 
 	case *electra.BeaconBlock:
+		// Note: Fulu reuses Electra's block types, so this case handles both
+		// Electra (version=DataVersionElectra) and Fulu (version=DataVersionFulu)
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash beacon block (electra): %w", err)
+			return nil, fmt.Errorf("could not hash beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionElectra),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -71,11 +73,11 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 	case *apiv1capella.BlindedBeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash blinded beacon block (capella): %w", err)
+			return nil, fmt.Errorf("could not hash blinded beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionCapella),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -88,11 +90,11 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 	case *apiv1deneb.BlindedBeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash blinded beacon block (deneb): %w", err)
+			return nil, fmt.Errorf("could not hash blinded beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionDeneb),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -103,13 +105,15 @@ func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 		}, nil
 
 	case *apiv1electra.BlindedBeaconBlock:
+		// Note: Fulu reuses Electra's blinded block types, so this case handles both
+		// Electra (version=DataVersionElectra) and Fulu (version=DataVersionFulu)
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
-			return nil, fmt.Errorf("could not hash blinded beacon block (electra): %w", err)
+			return nil, fmt.Errorf("could not hash blinded beacon block (%s): %w", version.String(), err)
 		}
 
 		return &BeaconBlockData{
-			Version: DataVersion(spec.DataVersionElectra),
+			Version: DataVersion(version),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,

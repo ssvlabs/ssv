@@ -111,7 +111,8 @@ func (s *E2ETestSuite) SignWeb3Signer(
 		req.Attestation = data
 
 	case spectypes.DomainProposer:
-		beaconBlockData, err := web3signer.ConvertBlockToBeaconBlockData(obj)
+		version, _ := s.env.GetBeaconConfig().ForkAtEpoch(epoch)
+		beaconBlockData, err := web3signer.ConvertBlockToBeaconBlockData(obj, version)
 		if err != nil {
 			return nil, phase0.Root{}, err
 		}

@@ -101,11 +101,11 @@ func (m *MockProposerCalls) EXPECT() *MockProposerCallsMockRecorder {
 }
 
 // GetBeaconBlock mocks base method.
-func (m *MockProposerCalls) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (m *MockProposerCalls) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBeaconBlock", ctx, slot, graffiti, randao)
-	ret0, _ := ret[0].(ssz.Marshaler)
-	ret1, _ := ret[1].(spec.DataVersion)
+	ret0, _ := ret[0].(*api.VersionedProposal)
+	ret1, _ := ret[1].(ssz.Marshaler)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -128,20 +128,6 @@ func (m *MockProposerCalls) SubmitBeaconBlock(ctx context.Context, block *api.Ve
 func (mr *MockProposerCallsMockRecorder) SubmitBeaconBlock(ctx, block, sig any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconBlock", reflect.TypeOf((*MockProposerCalls)(nil).SubmitBeaconBlock), ctx, block, sig)
-}
-
-// SubmitBlindedBeaconBlock mocks base method.
-func (m *MockProposerCalls) SubmitBlindedBeaconBlock(ctx context.Context, block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitBlindedBeaconBlock", ctx, block, sig)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubmitBlindedBeaconBlock indicates an expected call of SubmitBlindedBeaconBlock.
-func (mr *MockProposerCallsMockRecorder) SubmitBlindedBeaconBlock(ctx, block, sig any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBlindedBeaconBlock", reflect.TypeOf((*MockProposerCalls)(nil).SubmitBlindedBeaconBlock), ctx, block, sig)
 }
 
 // MockAggregatorCalls is a mock of AggregatorCalls interface.
@@ -782,11 +768,11 @@ func (mr *MockBeaconNodeMockRecorder) GetAttestationData(ctx, slot any) *gomock.
 }
 
 // GetBeaconBlock mocks base method.
-func (m *MockBeaconNode) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (m *MockBeaconNode) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBeaconBlock", ctx, slot, graffiti, randao)
-	ret0, _ := ret[0].(ssz.Marshaler)
-	ret1, _ := ret[1].(spec.DataVersion)
+	ret0, _ := ret[0].(*api.VersionedProposal)
+	ret1, _ := ret[1].(ssz.Marshaler)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -925,20 +911,6 @@ func (m *MockBeaconNode) SubmitBeaconCommitteeSubscriptions(ctx context.Context,
 func (mr *MockBeaconNodeMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, subscription any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconCommitteeSubscriptions", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBeaconCommitteeSubscriptions), ctx, subscription)
-}
-
-// SubmitBlindedBeaconBlock mocks base method.
-func (m *MockBeaconNode) SubmitBlindedBeaconBlock(ctx context.Context, block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitBlindedBeaconBlock", ctx, block, sig)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubmitBlindedBeaconBlock indicates an expected call of SubmitBlindedBeaconBlock.
-func (mr *MockBeaconNodeMockRecorder) SubmitBlindedBeaconBlock(ctx, block, sig any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBlindedBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBlindedBeaconBlock), ctx, block, sig)
 }
 
 // SubmitProposalPreparations mocks base method.

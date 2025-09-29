@@ -136,23 +136,15 @@ func (v *proposerChecker) CheckValue(value []byte) error {
 		return err
 	}
 
-	var block interface {
-		Slot() (phase0.Slot, error)
+	blockData, _, err := cd.GetBlockData()
+	if err != nil {
+		return errors.Wrap(err, "could not get block data")
 	}
 
-	if blockData, _, err := cd.GetBlindedBlockData(); err == nil {
-		block = blockData
-	} else if blockData, _, err := cd.GetBlockData(); err == nil {
-		block = blockData
-	} else {
-		return errors.New("no block data")
-	}
-
-	slot, err := block.Slot()
+	slot, err := blockData.Slot()
 	if err != nil {
 		return errors.Wrap(err, "failed to get slot from block data")
 	}
-
 	return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
 }
 
