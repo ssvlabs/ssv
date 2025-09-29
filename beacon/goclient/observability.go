@@ -61,7 +61,9 @@ var (
 func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,
-	routeName, clientAddr, httpMethod string,
+	routeName string,
+	client interface{ Address() string },
+	httpMethod string,
 	maybeFallback bool, // whether this request might have undergone a fallback (true means maybe, not a 100% yes)
 	duration time.Duration,
 	err error,
@@ -72,7 +74,7 @@ func recordRequest(
 	if err != nil || duration > 1*time.Millisecond {
 		logger.Debug("CL request done",
 			zap.String("route_name", routeName),
-			zap.String("client_addr", clientAddr),
+			zap.String("client_addr", client.Address()),
 			zap.String("http_method", httpMethod),
 			zap.Bool("maybe_fallback", maybeFallback),
 			fields.Took(duration),
@@ -83,7 +85,7 @@ func recordRequest(
 
 	// Build metric attributes, add error-code attribute in case there is an error.
 	attr := []attribute.KeyValue{
-		semconv.ServerAddress(clientAddr),
+		semconv.ServerAddress(client.Address()),
 		semconv.HTTPRequestMethodKey.String(httpMethod),
 		attribute.String("http.route_name", routeName),
 	}

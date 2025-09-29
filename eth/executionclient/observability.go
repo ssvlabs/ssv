@@ -102,7 +102,8 @@ var (
 func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,
-	routeName, clientAddr string,
+	routeName string,
+	client interface{ Address() string },
 	duration time.Duration,
 	err error,
 ) {
@@ -112,7 +113,7 @@ func recordRequest(
 	if err != nil || duration > 1*time.Millisecond {
 		logger.Debug("EL request done",
 			zap.String("route_name", routeName),
-			zap.String("client_addr", clientAddr),
+			zap.String("client_addr", client.Address()),
 			fields.Took(duration),
 			zap.Bool("success", err == nil),
 			zap.Error(err),
@@ -121,7 +122,7 @@ func recordRequest(
 
 	// Build metric attributes, add error-code attribute in case there is an error.
 	attr := []attribute.KeyValue{
-		semconv.ServerAddress(clientAddr),
+		semconv.ServerAddress(client.Address()),
 		attribute.String("rpc.route_name", routeName),
 	}
 	if err != nil {

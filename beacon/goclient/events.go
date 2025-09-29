@@ -109,7 +109,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 	subscribeToEvents := func() error {
 		reqStart := time.Now()
 		err := gc.multiClient.Events(ctx, opts)
-		recordRequest(ctx, logger, "Events", http.MethodGet, gc.multiClient.Address(), true, time.Since(reqStart), err)
+		recordRequest(ctx, logger, "Events", gc.multiClient, http.MethodGet, true, time.Since(reqStart), err)
 		if err != nil {
 			return errMultiClient(fmt.Errorf("request events: %w", err), "Events")
 		}
@@ -123,7 +123,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 			for _, client := range gc.clients {
 				reqStart := time.Now()
 				err := client.Events(ctx, opts)
-				recordRequest(ctx, logger, "Events", client.Address(), http.MethodGet, false, time.Since(reqStart), err)
+				recordRequest(ctx, logger, "Events", client, http.MethodGet, false, time.Since(reqStart), err)
 				if err != nil {
 					errs = errors.Join(errs, errSingleClient(fmt.Errorf("request events: %w", err), client.Address(), "Events"))
 					continue
