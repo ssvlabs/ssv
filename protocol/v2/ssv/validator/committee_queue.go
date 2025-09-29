@@ -184,28 +184,28 @@ func (c *Committee) ConsumeQueue(
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
-			logger = loggerWithMessageFields(logger, msg).
+			eLogger := loggerWithMessageFields(logger, msg).
 				With(zap.String("message_identifier", string(c.messageID(msg)))).
 				With(zap.Int("attempt", msgRetryCnt+1))
 
 			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
-				logger.Error("❗ "+couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
+				eLogger.Error("❗ "+couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
 			case errors.Is(err, &runner.RetryableError{}) && msgRetryCnt < retryCount:
-				logger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
+				eLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
-						logger.Error("❗ not gonna replay message because the queue is full",
+						eLogger.Error("❗ not gonna replay message because the queue is full",
 							zap.String("message_identifier", string(c.messageID(msg))),
 							fields.MessageType(msg.MsgType),
 						)
 					}
 				}(msg)
 			default:
-				logger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+				eLogger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 			}
 
 			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
