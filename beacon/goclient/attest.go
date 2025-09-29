@@ -39,7 +39,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequest(ctx, gc.log, "AttesterDuties", http.MethodPost, gc.multiClient.Name(), true, time.Since(start), err)
+	recordRequest(ctx, gc.log, "AttesterDuties", http.MethodPost, gc.multiClient.Address(), true, time.Since(start), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch attester duties: %w", err), "AttesterDuties")
 	}
@@ -250,7 +250,7 @@ func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot)
 		Slot:           slot,
 		CommitteeIndex: 0,
 	})
-	recordRequest(ctx, logger, "AttestationData", http.MethodGet, gc.multiClient.Name(), true, time.Since(attDataReqStart), err)
+	recordRequest(ctx, logger, "AttestationData", http.MethodGet, gc.multiClient.Address(), true, time.Since(attDataReqStart), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("get attestation data: %w", err), "AttestationData")
 	}
@@ -477,7 +477,7 @@ func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec
 
 	start := time.Now()
 	err := gc.multiClient.SubmitAttestations(ctx, opts)
-	recordRequest(ctx, gc.log, "SubmitAttestations", http.MethodPost, gc.multiClient.Name(), true, time.Since(start), err)
+	recordRequest(ctx, gc.log, "SubmitAttestations", http.MethodPost, gc.multiClient.Address(), true, time.Since(start), err)
 	if err != nil {
 		return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
 	}

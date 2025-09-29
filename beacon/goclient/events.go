@@ -109,7 +109,7 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 	subscribeToEvents := func() error {
 		reqStart := time.Now()
 		err := gc.multiClient.Events(ctx, opts)
-		recordRequest(ctx, logger, "Events", http.MethodGet, gc.multiClient.Name(), true, time.Since(reqStart), err)
+		recordRequest(ctx, logger, "Events", http.MethodGet, gc.multiClient.Address(), true, time.Since(reqStart), err)
 		if err != nil {
 			return errMultiClient(fmt.Errorf("request events: %w", err), "Events")
 		}

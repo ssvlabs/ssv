@@ -54,7 +54,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 		AttestationDataRoot: root,
 		CommitteeIndex:      committeeIndex,
 	})
-	recordRequest(ctx, gc.log, "AggregateAttestation", http.MethodGet, gc.multiClient.Name(), true, time.Since(aggDataReqStart), err)
+	recordRequest(ctx, gc.log, "AggregateAttestation", http.MethodGet, gc.multiClient.Address(), true, time.Since(aggDataReqStart), err)
 	if err != nil {
 		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch aggregate attestation: %w", err), "AggregateAttestation")
 	}
@@ -145,7 +145,7 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 ) error {
 	start := time.Now()
 	err := gc.multiClient.SubmitAggregateAttestations(ctx, &api.SubmitAggregateAttestationsOpts{SignedAggregateAndProofs: []*spec.VersionedSignedAggregateAndProof{msg}})
-	recordRequest(ctx, gc.log, "SubmitAggregateAttestations", http.MethodPost, gc.multiClient.Name(), true, time.Since(start), err)
+	recordRequest(ctx, gc.log, "SubmitAggregateAttestations", http.MethodPost, gc.multiClient.Address(), true, time.Since(start), err)
 	if err != nil {
 		return errMultiClient(fmt.Errorf("submit aggregate attestations: %w", err), "SubmitAggregateAttestations")
 	}

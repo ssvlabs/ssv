@@ -32,7 +32,7 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequest(ctx, gc.log, "ProposerDuties", http.MethodGet, gc.multiClient.Name(), true, time.Since(start), err)
+	recordRequest(ctx, gc.log, "ProposerDuties", http.MethodGet, gc.multiClient.Address(), true, time.Since(start), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch proposer duties: %w", err), "ProposerDuties")
 	}

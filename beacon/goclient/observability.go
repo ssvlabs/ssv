@@ -62,7 +62,7 @@ func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,
 	routeName, clientAddr, httpMethod string,
-	maybeFallback bool,
+	maybeFallback bool, // whether this request might have undergone a fallback (true means maybe, not a 100% yes)
 	duration time.Duration,
 	err error,
 ) {
@@ -71,8 +71,8 @@ func recordRequest(
 	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
 		logger.Debug("CL request done",
-			zap.String("client_addr", clientAddr),
 			zap.String("route_name", routeName),
+			zap.String("client_addr", clientAddr),
 			zap.String("http_method", httpMethod),
 			zap.Bool("maybe_fallback", maybeFallback),
 			fields.Took(duration),

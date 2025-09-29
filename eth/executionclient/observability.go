@@ -111,8 +111,8 @@ func recordRequest(
 	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
 		logger.Debug("EL request done",
-			zap.String("client_addr", clientAddr),
 			zap.String("route_name", routeName),
+			zap.String("client_addr", clientAddr),
 			fields.Took(duration),
 			zap.Bool("success", err == nil),
 			zap.Error(err),
