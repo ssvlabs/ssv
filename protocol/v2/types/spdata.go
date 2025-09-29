@@ -9,4 +9,5 @@ import (
 type SlashingProtectionData struct {
 	SourceEpoch phase0.Epoch
 	TargetEpoch phase0.Epoch
+	TargetRoot  phase0.Root
 }

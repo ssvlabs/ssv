@@ -57,6 +57,10 @@ func (v *voteChecker) CheckValueWithSP(value []byte, spData *ssvtypes.SlashingPr
 		return err
 	}
 
+	if bv.Target.Root != spData.TargetRoot {
+		return errors.New("beacon vote target root doesn't satisfy slashing protection data")
+	}
+
 	// Implemented according to https://github.com/ssvlabs/SIPs/discussions/70
 	if bv.Source.Epoch != spData.SourceEpoch {
 		return errors.New("beacon vote source epoch doesn't satisfy slashing protection data")

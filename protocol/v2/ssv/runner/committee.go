@@ -1082,6 +1082,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	spData := &ssvtypes.SlashingProtectionData{
 		SourceEpoch: attData.Source.Epoch,
 		TargetEpoch: attData.Target.Epoch,
+		TargetRoot:  attData.Target.Root,
 	}
 
 	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote, spData); err != nil {
