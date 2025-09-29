@@ -164,7 +164,6 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	_ = c.getQueue(duty.Slot)
 
 	// Prunes all expired committee runners, when new runner is created
-	logger = logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
 	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
 		span.RecordError(err)
 		logger.Error("couldn't prune expired committee runners", zap.Error(err))
