@@ -25,7 +25,7 @@ func (gc *GoClient) GetValidatorData(
 		PubKeys: validatorPubKeys,
 		Common:  api.CommonOpts{Timeout: gc.longTimeout},
 	})
-	recordMultiClientRequest(ctx, gc.log, "Validators", http.MethodPost, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "Validators", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch validators: %w", err), "Validators")
 	}
@@ -44,7 +44,7 @@ func (gc *GoClient) SubmitValidatorRegistrations(ctx context.Context, registrati
 	for chunk := range slices.Chunk(registrations, 500) {
 		reqStart := time.Now()
 		err := gc.multiClient.SubmitValidatorRegistrations(ctx, chunk)
-		recordMultiClientRequest(ctx, gc.log, "SubmitValidatorRegistrations", http.MethodPost, time.Since(reqStart), err)
+		recordRequest(ctx, gc.log, "SubmitValidatorRegistrations", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
 		if err != nil {
 			return errMultiClient(fmt.Errorf("submit validator registrations (chunk size = %d): %w", len(chunk), err), "SubmitValidatorRegistrations")
 		}

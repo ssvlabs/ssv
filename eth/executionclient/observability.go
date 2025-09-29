@@ -99,10 +99,11 @@ var (
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordSingleClientRequest(
+func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,
-	routeName, clientAddr string,
+	routeName string,
+	client interface{ Address() string },
 	duration time.Duration,
 	err error,
 ) {
@@ -110,18 +111,18 @@ func recordSingleClientRequest(
 	// to it (there are too many requests being made to log them every time, some requests don't even result
 	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
-		logger.Debug("EL single-client request done",
-			zap.String("client_addr", clientAddr),
+		logger.Debug("EL request done",
 			zap.String("route_name", routeName),
+			zap.String("client_addr", client.Address()),
+			fields.Took(duration),
 			zap.Bool("success", err == nil),
 			zap.Error(err),
-			fields.Took(duration),
 		)
 	}
 
 	// Build metric attributes, add error-code attribute in case there is an error.
 	attr := []attribute.KeyValue{
-		semconv.ServerAddress(clientAddr),
+		semconv.ServerAddress(client.Address()),
 		attribute.String("rpc.route_name", routeName),
 	}
 	if err != nil {
