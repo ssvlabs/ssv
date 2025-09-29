@@ -33,6 +33,8 @@ type Instance struct {
 
 	forceStop  bool
 	StartValue []byte
+	// spData is used for spectypes.BeaconVote, it contains source and target epochs from the duty encoded in StartValue
+	spData *ssvtypes.SlashingProtectionData
 
 	metrics *metricsRecorder
 }
@@ -73,7 +75,13 @@ func (i *Instance) ForceStop() {
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(
+	ctx context.Context,
+	logger *zap.Logger,
+	value []byte,
+	height specqbft.Height,
+	spData *ssvtypes.SlashingProtectionData,
+) {
 	i.startOnce.Do(func() {
 		_, span := tracer.Start(ctx,
 			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
@@ -83,6 +91,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
+		i.spData = spData
 		i.metrics.Start()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 

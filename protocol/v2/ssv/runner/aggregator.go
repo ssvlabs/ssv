@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -38,7 +39,7 @@ type AggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
+	valCheck       ssv.ValueChecker
 	measurements   measurementsStore
 
 	// IsAggregator returns true if the signature is from the input validator. The committee
@@ -66,7 +67,7 @@ func NewAggregatorRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	highestDecidedSlot phase0.Slot,
 ) (*AggregatorRunner, error) {
 	if len(share) != 1 {
@@ -185,7 +186,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		DataSSZ: byts,
 	}
 
-	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, nil); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
@@ -204,7 +205,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValCheckF(), signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValChecker().CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -487,7 +488,7 @@ func (r *AggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (r *AggregatorRunner) GetValChecker() ssv.ValueChecker {
 	return r.valCheck
 }
 
