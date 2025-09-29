@@ -58,10 +58,11 @@ var (
 			metric.WithDescription("beacon client selections for attestation data")))
 )
 
-func recordSingleClientRequest(
+func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,
 	routeName, clientAddr, httpMethod string,
+	maybeFallback bool,
 	duration time.Duration,
 	err error,
 ) {
@@ -69,62 +70,20 @@ func recordSingleClientRequest(
 	// to it (there are too many requests being made to log them every time, some requests don't even result
 	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
-		logger.Debug("CL single-client request done",
+		logger.Debug("CL request done",
 			zap.String("client_addr", clientAddr),
 			zap.String("route_name", routeName),
 			zap.String("http_method", httpMethod),
+			zap.Bool("maybe_fallback", maybeFallback),
+			fields.Took(duration),
 			zap.Bool("success", err == nil),
 			zap.Error(err),
-			fields.Took(duration),
 		)
 	}
 
 	// Build metric attributes, add error-code attribute in case there is an error.
 	attr := []attribute.KeyValue{
 		semconv.ServerAddress(clientAddr),
-		semconv.HTTPRequestMethodKey.String(httpMethod),
-		attribute.String("http.route_name", routeName),
-	}
-	if err != nil {
-		// Error code of 0 signifies the presence of some error, see if we can clarify if further by using
-		// api error codes.
-		errCode := 0
-		var apiErr *eth2api.Error
-		if errors.As(err, &apiErr) {
-			errCode = apiErr.StatusCode
-		}
-		attr = append(attr, attribute.Int("http.response.error_status_code", errCode))
-	}
-	// Record the request as a metric.
-	requestDurationHistogram.Record(
-		ctx,
-		duration.Seconds(),
-		metric.WithAttributes(attr...))
-}
-
-func recordMultiClientRequest(
-	ctx context.Context,
-	logger *zap.Logger,
-	routeName, httpMethod string,
-	duration time.Duration,
-	err error,
-) {
-	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
-	// to it (there are too many requests being made to log them every time, some requests don't even result
-	// into a network-based call due to caching implemented for some routes).
-	if err != nil || duration > 1*time.Millisecond {
-		logger.Debug("CL multi-client request done",
-			zap.String("route_name", routeName),
-			zap.String("http_method", httpMethod),
-			zap.Bool("success", err == nil),
-			zap.Error(err),
-			fields.Took(duration),
-		)
-	}
-
-	// Build metric attributes, add error-code attribute in case there is an error.
-	attr := []attribute.KeyValue{
-		semconv.ServerAddress("multi-client"),
 		semconv.HTTPRequestMethodKey.String(httpMethod),
 		attribute.String("http.route_name", routeName),
 	}

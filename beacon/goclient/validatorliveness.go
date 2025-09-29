@@ -17,7 +17,7 @@ func (gc *GoClient) ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, v
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordMultiClientRequest(ctx, gc.log, "ValidatorLiveness", http.MethodPost, time.Since(start), err)
+	recordRequest(ctx, gc.log, "ValidatorLiveness", http.MethodPost, gc.multiClient.Name(), true, time.Since(start), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch validator liveness: %w", err), "ValidatorLiveness")
 	}

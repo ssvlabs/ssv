@@ -12,7 +12,7 @@ import (
 func (gc *GoClient) SubmitVoluntaryExit(ctx context.Context, voluntaryExit *phase0.SignedVoluntaryExit) error {
 	reqStart := time.Now()
 	err := gc.multiClient.SubmitVoluntaryExit(ctx, voluntaryExit)
-	recordMultiClientRequest(ctx, gc.log, "SubmitVoluntaryExit", http.MethodPost, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "SubmitVoluntaryExit", http.MethodPost, gc.multiClient.Name(), true, time.Since(reqStart), err)
 	if err != nil {
 		return errMultiClient(fmt.Errorf("submit voluntary exit: %w", err), "SubmitVoluntaryExit")
 	}

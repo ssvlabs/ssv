@@ -16,7 +16,7 @@ import (
 func (gc *GoClient) genesisForClient(ctx context.Context, provider client.Service) (*apiv1.Genesis, error) {
 	start := time.Now()
 	genesisResp, err := provider.(client.GenesisProvider).Genesis(ctx, &api.GenesisOpts{})
-	recordSingleClientRequest(ctx, gc.log, "Genesis", provider.Address(), http.MethodGet, time.Since(start), err)
+	recordRequest(ctx, gc.log, "Genesis", provider.Address(), http.MethodGet, false, time.Since(start), err)
 	if err != nil {
 		return nil, errSingleClient(fmt.Errorf("fetch genesis: %w", err), provider.Address(), "Genesis")
 	}

@@ -32,7 +32,7 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordMultiClientRequest(ctx, gc.log, "ProposerDuties", http.MethodGet, time.Since(start), err)
+	recordRequest(ctx, gc.log, "ProposerDuties", http.MethodGet, gc.multiClient.Name(), true, time.Since(start), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch proposer duties: %w", err), "ProposerDuties")
 	}
@@ -60,7 +60,7 @@ func (gc *GoClient) fetchProposal(
 		RandaoReveal: sig,
 		Graffiti:     graffiti,
 	})
-	recordSingleClientRequest(ctx, gc.log, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "Proposal", client.Address(), http.MethodGet, false, time.Since(reqStart), err)
 	if err != nil {
 		return nil, errSingleClient(fmt.Errorf("fetch proposal: %w", err), client.Address(), "Proposal")
 	}

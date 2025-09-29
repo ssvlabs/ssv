@@ -455,7 +455,7 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 func (gc *GoClient) checkNodeHealth(ctx context.Context, client Client) error {
 	reqStart := time.Now()
 	nodeSyncingResp, err := client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
-	recordSingleClientRequest(ctx, gc.log, "NodeSyncing", client.Address(), http.MethodGet, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "NodeSyncing", client.Address(), http.MethodGet, false, time.Since(reqStart), err)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return nil // already found healthy nodes

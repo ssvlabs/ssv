@@ -128,7 +128,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 ) {
 	start := time.Now()
 	currentBlock, err := ec.client.BlockNumber(ctx)
-	recordSingleClientRequest(ctx, ec.logger, "BlockNumber", ec.nodeAddr, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "BlockNumber", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		return nil, nil, ec.errSingleClient(fmt.Errorf("get current block: %w", err), "eth_blockNumber")
 	}
@@ -367,7 +367,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 
 	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
-	recordSingleClientRequest(ctx, ec.logger, "SyncProgress", ec.nodeAddr, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "SyncProgress", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 		return ec.errSingleClient(fmt.Errorf("get sync progress: %w", err), "eth_syncing")
@@ -396,7 +396,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
 	start := time.Now()
 	h, err := ec.client.HeaderByNumber(ctx, blockNumber)
-	recordSingleClientRequest(ctx, ec.logger, "HeaderByNumber", ec.nodeAddr, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "HeaderByNumber", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		return nil, ec.errSingleClient(fmt.Errorf("get header by block number %s: %w", blockNumber, err), "eth_getBlockByNumber")
 	}
@@ -406,7 +406,7 @@ func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.
 func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
 	start := time.Now()
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
-	recordSingleClientRequest(ctx, ec.logger, "SubscribeFilterLogs", ec.nodeAddr, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "SubscribeFilterLogs", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		return nil, ec.errSingleClient(fmt.Errorf("subscribe to filtered logs (query=%s): %w", q, err), "logs")
 	}
@@ -416,7 +416,7 @@ func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.F
 func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
 	start := time.Now()
 	logs, err := ec.client.FilterLogs(ctx, q)
-	recordSingleClientRequest(ctx, ec.logger, "FilterLogs", ec.nodeAddr, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "FilterLogs", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		return nil, ec.errSingleClient(fmt.Errorf("get filtered logs (query=%s): %w", q, err), "eth_getLogs")
 	}
@@ -461,7 +461,7 @@ func (ec *ExecutionClient) streamLogsToChan(
 	// So we can restart from this block once everything is good.
 	start := time.Now()
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
-	recordSingleClientRequest(ctx, ec.logger, "SubscribeNewHead", ec.nodeAddr, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "SubscribeNewHead", ec.nodeAddr, time.Since(start), err)
 	if err != nil {
 		return 0, false, ec.errSingleClient(fmt.Errorf("subscribe new head: %w", err), "newHeads")
 	}
@@ -518,7 +518,7 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	defer cancel()
 	reqStart := time.Now()
 	c, err := ethclient.DialContext(reqCtx, ec.nodeAddr)
-	recordSingleClientRequest(ctx, ec.logger, "DialContext", ec.nodeAddr, time.Since(reqStart), err)
+	recordRequest(ctx, ec.logger, "DialContext", ec.nodeAddr, time.Since(reqStart), err)
 	if err != nil {
 		return ec.errSingleClient(fmt.Errorf("ethclient dial: %w", err), "dial")
 	}
@@ -535,7 +535,7 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	start := time.Now()
 	chainID, err := ec.client.ChainID(ctx)
-	recordSingleClientRequest(ctx, ec.logger, "ChainID", ec.nodeAddr, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "ChainID", ec.nodeAddr, time.Since(start), err)
 	if chainID == nil {
 		return nil, ec.errSingleClient(fmt.Errorf("chain id response is nil"), "eth_chainId")
 	}

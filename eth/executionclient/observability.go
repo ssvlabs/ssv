@@ -99,7 +99,7 @@ var (
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordSingleClientRequest(
+func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,
 	routeName, clientAddr string,
@@ -110,12 +110,12 @@ func recordSingleClientRequest(
 	// to it (there are too many requests being made to log them every time, some requests don't even result
 	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
-		logger.Debug("EL single-client request done",
+		logger.Debug("EL request done",
 			zap.String("client_addr", clientAddr),
 			zap.String("route_name", routeName),
+			fields.Took(duration),
 			zap.Bool("success", err == nil),
 			zap.Error(err),
-			fields.Took(duration),
 		)
 	}
 

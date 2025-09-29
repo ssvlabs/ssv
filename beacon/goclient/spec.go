@@ -35,7 +35,7 @@ func (gc *GoClient) BeaconConfig() *networkconfig.Beacon {
 func (gc *GoClient) fetchNodeVersion(ctx context.Context, client *eth2clienthttp.Service) (string, error) {
 	start := time.Now()
 	nodeVersionResp, err := client.NodeVersion(ctx, &api.NodeVersionOpts{})
-	recordSingleClientRequest(ctx, gc.log, "NodeVersion", client.Address(), http.MethodGet, time.Since(start), err)
+	recordRequest(ctx, gc.log, "NodeVersion", client.Address(), http.MethodGet, false, time.Since(start), err)
 	if err != nil {
 		return "", errSingleClient(fmt.Errorf("fetch node version response: %w", err), client.Address(), "NodeVersion")
 	}
@@ -52,7 +52,7 @@ func (gc *GoClient) fetchNodeVersion(ctx context.Context, client *eth2clienthttp
 func (gc *GoClient) specForClient(ctx context.Context, provider client.Service) (map[string]any, error) {
 	start := time.Now()
 	specResponse, err := provider.(client.SpecProvider).Spec(ctx, &api.SpecOpts{})
-	recordSingleClientRequest(ctx, gc.log, "Spec", provider.Address(), http.MethodGet, time.Since(start), err)
+	recordRequest(ctx, gc.log, "Spec", provider.Address(), http.MethodGet, false, time.Since(start), err)
 	if err != nil {
 		return nil, errSingleClient(fmt.Errorf("fetch spec response: %w", err), provider.Address(), "Spec")
 	}
