@@ -18,7 +18,7 @@ var FusakaDevnet3SSV = &SSV{
 		// SSV Labs
 		"enr:-Ja4QGIbNK5LuceDavwE2wRbngOBcXMOKoPHY-tLGeYzJk6TWD7Xb66apMDTyVRNZJv-odvScdILwdZpvwbeKOn_85yGAZl1aDFMgmlkgnY0gmlwhErcHL-Jc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
-//	TotalEthereumValidators: 1781, // active_validators from https://sepolia.beaconcha.in/index/data on Mar 20, 2025
+	TotalEthereumValidators: 919, // https://dora.fusaka-devnet-3.ethpandaops.io/validator/918 is the last validator on Sep 30th, 2025
 	Forks: SSVForks{
 		Alan:       0,
 		GasLimit36: 0,
