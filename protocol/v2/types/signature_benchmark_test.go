@@ -91,8 +91,7 @@ func BenchmarkVerifyBLS(b *testing.B) {
 	msg := []byte("This is some test data for verification.")
 	sig := secKey.SignByte(msg)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if !sig.VerifyByte(pubKey, msg) {
 			b.Fatal("Verification failed")
 		}
@@ -100,8 +99,7 @@ func BenchmarkVerifyBLS(b *testing.B) {
 }
 
 func BenchmarkVerifyPKCS1v15(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], signature)
 		if err != nil {
 			b.Fatal(err)
@@ -110,8 +108,7 @@ func BenchmarkVerifyPKCS1v15(b *testing.B) {
 }
 
 func BenchmarkVerifyPKCS1v15FastHash(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := rsa.VerifyPKCS1v15(publicKeyFast, crypto.MD5, hashedFast[:], signatureFast)
 		if err != nil {
 			b.Fatal(err)
@@ -124,8 +121,8 @@ func BenchmarkVerifyPSS(b *testing.B) {
 		SaltLength: rsa.PSSSaltLengthAuto,
 		Hash:       crypto.SHA256,
 	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		err := rsa.VerifyPSS(publicKeyPSS, crypto.SHA256, hashedPSS[:], pssSignature, pssOptions)
 		if err != nil {
 			b.Fatal(err)
@@ -138,15 +135,13 @@ func BenchmarkSignBLS(b *testing.B) {
 	secKey.SetByCSPRNG()
 	msg := []byte("This is some test data for verification.")
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = secKey.SignByte(msg)
 	}
 }
 
 func BenchmarkSignPKCS1v15(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed[:])
 		if err != nil {
 			b.Fatal(err)
@@ -155,8 +150,7 @@ func BenchmarkSignPKCS1v15(b *testing.B) {
 }
 
 func BenchmarkSignPKCS1v15FastHash(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := rsa.SignPKCS1v15(rand.Reader, privateKeyFast, crypto.MD5, hashedFast[:])
 		if err != nil {
 			b.Fatal(err)
@@ -165,8 +159,7 @@ func BenchmarkSignPKCS1v15FastHash(b *testing.B) {
 }
 
 func BenchmarkSignPSS(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		pssOptions := &rsa.PSSOptions{
 			SaltLength: rsa.PSSSaltLengthAuto,
 			Hash:       crypto.SHA256,

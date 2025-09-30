@@ -467,8 +467,7 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 
 	b.Logf("Total committees: %d", len(committees))
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		store := createValidatorStore(shares)
 		b.StartTimer()
@@ -560,8 +559,7 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 
 	pubKeys := slices.Collect(maps.Keys(shares))
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		randomShares := make([]*ssvtypes.SSVShare, 500)
 		first := rand.Intn(len(pubKeys))
 		for j := 0; j < 500; j++ {
