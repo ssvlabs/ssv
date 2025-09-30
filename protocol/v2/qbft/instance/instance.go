@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -31,10 +32,9 @@ type Instance struct {
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
 
-	forceStop  bool
-	StartValue []byte
-	// spData is used for spectypes.BeaconVote, it contains source and target epochs from the duty encoded in StartValue
-	spData *ssvtypes.SlashingProtectionData
+	forceStop    bool
+	StartValue   []byte
+	valueChecker ssv.ValueChecker
 
 	metrics *metricsRecorder
 }
@@ -80,7 +80,7 @@ func (i *Instance) Start(
 	logger *zap.Logger,
 	value []byte,
 	height specqbft.Height,
-	spData *ssvtypes.SlashingProtectionData,
+	valueChecker ssv.ValueChecker,
 ) {
 	i.startOnce.Do(func() {
 		_, span := tracer.Start(ctx,
@@ -91,7 +91,7 @@ func (i *Instance) Start(
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
-		i.spData = spData
+		i.valueChecker = valueChecker
 		i.metrics.Start()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 

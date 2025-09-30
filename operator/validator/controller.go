@@ -1030,11 +1030,10 @@ func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
 ) validator.CommitteeRunnerFunc {
-	buildController := func(role spectypes.RunnerRole, valueChecker ssv.ValueChecker) *qbftcontroller.Controller {
+	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
-			ValueChecker: valueChecker,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
@@ -1055,18 +1054,15 @@ func SetupCommitteeRunners(
 		attestingValidators []phase0.BLSPubKey,
 		dutyGuard runner.CommitteeDutyGuard,
 	) (*runner.CommitteeRunner, error) {
-		// Create a committee runner.
-		epoch := options.NetworkConfig.EstimatedEpochAtSlot(slot)
-		valCheck := ssv.NewVoteChecker(options.Signer, slot, attestingValidators, epoch)
 		crunner, err := runner.NewCommitteeRunner(
 			options.NetworkConfig,
 			shares,
-			buildController(spectypes.RoleCommittee, valCheck),
+			attestingValidators,
+			buildController(spectypes.RoleCommittee),
 			options.Beacon,
 			options.Network,
 			options.Signer,
 			options.OperatorSigner,
-			valCheck,
 			dutyGuard,
 			options.DoppelgangerHandler,
 		)
@@ -1095,11 +1091,10 @@ func SetupRunners(
 		spectypes.RoleVoluntaryExit,
 	}
 
-	buildController := func(role spectypes.RunnerRole, valueChecker ssv.ValueChecker) *qbftcontroller.Controller {
+	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
-			ValueChecker: valueChecker, // is set per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
@@ -1123,15 +1118,15 @@ func SetupRunners(
 		switch role {
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
-			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
+			qbftCtrl := buildController(spectypes.RoleProposer)
 			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay)
 		case spectypes.RoleAggregator:
 			aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
-			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueChecker)
+			qbftCtrl := buildController(spectypes.RoleAggregator)
 			runners[role], err = runner.NewAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueChecker, 0)
 		case spectypes.RoleSyncCommitteeContribution:
 			syncCommitteeContributionValueChecker := ssv.NewSyncCommitteeContributionChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
-			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueChecker)
+			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueChecker, 0)
 		case spectypes.RoleValidatorRegistration:
 			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, validatorRegistrationSubmitter, validatorStore, options.GasLimit)
