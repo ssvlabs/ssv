@@ -38,9 +38,11 @@ type ProposerRunner struct {
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
-	valCheck            ssv.ValueChecker
 	measurements        measurementsStore
 	graffiti            []byte
+
+	// valCheck is used to validate the qbft-value(s) proposed by other Operators.
+	valCheck ssv.ValueChecker
 
 	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
 	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract

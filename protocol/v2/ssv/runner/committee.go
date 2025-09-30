@@ -60,7 +60,7 @@ type CommitteeRunner struct {
 	doppelgangerHandler DoppelgangerProvider
 	measurements        measurementsStore
 
-	// valCheck is different for every duty CommitteeRunner executes.
+	// valCheck is used to validate the qbft-value(s) proposed by other Operators.
 	valCheck ssv.ValueChecker
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}

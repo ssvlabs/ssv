@@ -39,8 +39,10 @@ type AggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       ssv.ValueChecker
 	measurements   measurementsStore
+
+	// valCheck is used to validate the qbft-value(s) proposed by other Operators.
+	valCheck ssv.ValueChecker
 
 	// IsAggregator returns true if the signature is from the input validator. The committee
 	// count is provided as an argument rather than imported implementation from spec. Having

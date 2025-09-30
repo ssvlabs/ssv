@@ -36,8 +36,10 @@ type SyncCommitteeAggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       ssv.ValueChecker
 	measurements   measurementsStore
+
+	// valCheck is used to validate the qbft-value(s) proposed by other Operators.
+	valCheck ssv.ValueChecker
 }
 
 func NewSyncCommitteeAggregatorRunner(
