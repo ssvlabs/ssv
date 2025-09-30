@@ -22,7 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -297,10 +296,6 @@ func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
 }
 func (r *VoluntaryExitRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *VoluntaryExitRunner) GetValChecker() ssv.ValueChecker {
-	return nopValueChecker{}
 }
 
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {

@@ -36,8 +36,10 @@ type SyncCommitteeAggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       ssv.ValueChecker
 	measurements   measurementsStore
+
+	// valCheck is used to validate the qbft-value(s) proposed by other Operators.
+	valCheck ssv.ValueChecker
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -175,7 +177,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	r.measurements.StartConsensus()
-	if err := r.BaseRunner.decide(ctx, logger, r, input.Duty.Slot, input, nil); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, input.Duty.Slot, input, r.valCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
@@ -194,7 +196,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValChecker().CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.valCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -590,10 +592,6 @@ func (r *SyncCommitteeAggregatorRunner) GetShare() *spectypes.Share {
 
 func (r *SyncCommitteeAggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *SyncCommitteeAggregatorRunner) GetValChecker() ssv.ValueChecker {
-	return r.valCheck
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {

@@ -232,6 +232,7 @@ var baseCommitteeWithRunnerSample = func(
 		r, err := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
+			[]phase0.BLSPubKey{spectestingutils.TestingValidatorPubKey},
 			controller.NewController(
 				runnerSample.BaseRunner.QBFTController.Identifier,
 				runnerSample.BaseRunner.QBFTController.CommitteeMember,
@@ -243,7 +244,6 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetNetwork(),
 			runnerSample.GetSigner(),
 			runnerSample.GetOperatorSigner(),
-			runnerSample.GetValChecker(),
 			committeeDutyGuard,
 			runnerSample.GetDoppelgangerHandler(),
 		)
