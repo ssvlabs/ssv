@@ -403,11 +403,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
-			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
-			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot)
-			logger = logger.With(fields.DutyID(committeeDutyID))
-			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
+			logger.Debug("pruning expired committee runner", zap.Uint64("prune_slot", uint64(slot)))
 			delete(c.Runners, slot)
 			delete(c.Queues, slot)
 		}
