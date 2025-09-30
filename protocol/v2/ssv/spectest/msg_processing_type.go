@@ -4,24 +4,20 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -65,15 +61,15 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
 	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
-	if len(test.Runner.GetBaseRunner().Share) == 0 {
+	if len(test.Runner.GetShares()) == 0 {
 		panic("No share in base runner for tests")
 	}
-	for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for _, validatorShare := range test.Runner.GetShares() {
 		share = validatorShare
 		break
 	}
 
-	for valIdx, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for valIdx, validatorShare := range test.Runner.GetShares() {
 		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
@@ -122,14 +118,14 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
-				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+				for _, validatorShare := range test.Runner.GetShares() {
 					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}
 		}
 	default:
 		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
-		v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
+		v.DutyRunners[test.Runner.GetRole()] = test.Runner
 		v.Network = test.Runner.GetNetwork()
 
 		if !test.DontStartDuty {
@@ -161,7 +157,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	}
 
 	network := &spectestingutils.TestingNetwork{}
-	var beaconNetwork *tests.TestingBeaconNodeWrapped
+	var beaconNetwork *protocoltesting.BeaconNodeWrapped
 	var committee []*spectypes.Operator
 
 	switch test.Runner.(type) {
@@ -172,12 +168,12 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			break
 		}
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork = runnerInstance.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		committee = c.CommitteeMember.Committee
 	default:
 		network = v.Network.(*spectestingutils.TestingNetwork)
 		committee = v.Operator.Committee
-		beaconNetwork = test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		beaconNetwork = test.Runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 	}
 
 	// test output message
@@ -196,21 +192,6 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	}
 }
 
-//func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
-//	broadcastedRoots := test.Runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).GetBroadcastedRoots()
-//	require.Len(t, broadcastedRoots, len(test.BeaconBroadcastedRoots))
-//	for _, r1 := range test.BeaconBroadcastedRoots {
-//		found := false
-//		for _, r2 := range broadcastedRoots {
-//			if r1 == hex.EncodeToString(r2[:]) {
-//				found = true
-//				break
-//			}
-//		}
-//		require.Truef(t, found, "broadcasted beacon root not found")
-//	}
-//}
-
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testType := reflect.TypeOf(test).String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
@@ -218,31 +199,8 @@ func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 }
 
 func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name string, testType string) {
-	var r runner.Runner
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		r = &runner.CommitteeRunner{}
-	case *runner.AggregatorRunner:
-		r = &runner.AggregatorRunner{}
-	case *runner.ProposerRunner:
-		r = &runner.ProposerRunner{}
-	case *runner.SyncCommitteeAggregatorRunner:
-		r = &runner.SyncCommitteeAggregatorRunner{}
-	case *runner.ValidatorRegistrationRunner:
-		r = &runner.ValidatorRegistrationRunner{}
-	case *runner.VoluntaryExitRunner:
-		r = &runner.VoluntaryExitRunner{}
-	default:
-		t.Fatalf("unknown runner type")
-	}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
-	require.NoError(t, err)
-	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
-	require.NoError(t, err)
+	r := runnerForTest(t, test.Runner, name, testType)
 
-	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
-
-	// override
 	test.PostDutyRunnerState = r
 
 	root, err := r.GetRoot()
@@ -297,7 +255,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().NetworkConfig,
+		runnerSample.BaseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

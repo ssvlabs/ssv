@@ -21,7 +21,6 @@ var MainnetBeaconConfig = &networkconfig.Beacon{
 	SyncCommitteeSubnetCount:             4,
 	TargetAggregatorsPerSyncSubcommittee: 16,
 	TargetAggregatorsPerCommittee:        16,
-	IntervalsPerSlot:                     3,
 	GenesisForkVersion:                   spectypes.MainNetwork.ForkVersion(),
 	GenesisTime:                          time.Unix(int64(spectypes.MainNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95")),
@@ -61,6 +60,14 @@ var MainnetBeaconConfig = &networkconfig.Beacon{
 			Epoch:           phase0.Epoch(364032),
 			PreviousVersion: phase0.Version{0x04, 0x00, 0x00, 0x00},
 			CurrentVersion:  phase0.Version{0x05, 0x00, 0x00, 0x00}, // ELECTRA_FORK_VERSION: 0x05000000
+		},
+		// Fulu @ epoch 420000
+		spec.DataVersionFulu: {
+			// TODO(fulu): Update to real Fulu fork epoch once officially scheduled.
+			// Currently using placeholder epoch 420000 for testing purposes.
+			Epoch:           phase0.Epoch(420000),
+			PreviousVersion: phase0.Version{0x05, 0x00, 0x00, 0x00},
+			CurrentVersion:  phase0.Version{0x06, 0x00, 0x00, 0x00}, // FULU_FORK_VERSION: 0x06000000
 		},
 	},
 }

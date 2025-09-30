@@ -35,24 +35,13 @@ func TestDiffer(t *testing.T) {
 				specSig := phase0.BLSSignature{}
 				copy(specSig[:], sig)
 		
-				if r.decidedBlindedBlock() {
-					vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
-					if err != nil {
-						return errors.Wrap(err, "could not get blinded block")
-					}
-		
-					if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
-						return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
-					}
-				} else {
-					vBlk, _, err := r.GetState().DecidedValue.GetBlockData()
-					if err != nil {
-						return errors.Wrap(err, "could not get block")
-					}
-		
-					if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
-						return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
-					}
+				vBlk, _, err := r.GetState().DecidedValue.GetBlockData()
+				if err != nil {
+					return errors.Wrap(err, "could not get block")
+				}
+
+				if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
+					return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 				}
 			}
 			r.GetState().Finished = true
@@ -77,22 +66,12 @@ func TestDiffer(t *testing.T) {
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
-		if r.decidedBlindedBlock() {
-			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
-			if err != nil {
-				return errors.Wrap(err, "could not get blinded block")
-			}
-			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
-			}
-		} else {
-			vBlk, _, err := r.GetState().DecidedValue.GetBlockData()
-			if err != nil {
-				return errors.Wrap(err, "could not get block")
-			}
-			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
-			}
+		vBlk, _, err := r.GetState().DecidedValue.GetBlockData()
+		if err != nil {
+			return errors.Wrap(err, "could not get block")
+		}
+		if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
 	}
 	r.GetState().Finished = true

@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"time"
 
 	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
@@ -34,9 +35,8 @@ var (
 			metric.WithDescription("total number of duties executed by scheduler")))
 )
 
-func recordDutyExecuted(ctx context.Context, role types.RunnerRole) {
-	dutiesExecutedCounter.Add(ctx, 1,
-		metric.WithAttributes(
-			observability.RunnerRoleAttribute(role),
-		))
+func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay time.Duration) {
+	runnerRoleAttr := metric.WithAttributes(observability.RunnerRoleAttribute(role))
+	dutiesExecutedCounter.Add(ctx, 1, runnerRoleAttr)
+	slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
 }

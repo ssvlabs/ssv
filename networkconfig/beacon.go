@@ -21,7 +21,6 @@ type Beacon struct {
 	SyncCommitteeSubnetCount             uint64
 	TargetAggregatorsPerSyncSubcommittee uint64
 	TargetAggregatorsPerCommittee        uint64
-	IntervalsPerSlot                     uint64
 	GenesisForkVersion                   phase0.Version
 	GenesisTime                          time.Time
 	GenesisValidatorsRoot                phase0.Root
@@ -119,10 +118,9 @@ func (b *Beacon) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 }
 
 func (b *Beacon) IntervalDuration() time.Duration {
-	if b.IntervalsPerSlot > math.MaxInt64 {
-		panic("intervals per slot out of range")
-	}
-	return b.SlotDuration / time.Duration(b.IntervalsPerSlot) // #nosec G115: intervals per slot cannot exceed math.MaxInt64
+	// intervalsPerSlot is always 3 as per https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/fork-choice.md#constant
+	const intervalsPerSlot = 3
+	return b.SlotDuration / intervalsPerSlot
 }
 
 func (b *Beacon) EpochDuration() time.Duration {
@@ -140,6 +138,7 @@ func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 		spec.DataVersionCapella,
 		spec.DataVersionDeneb,
 		spec.DataVersionElectra,
+		spec.DataVersionFulu,
 	}
 
 	for i, v := range versions {
@@ -183,9 +182,6 @@ func (b *Beacon) AssertSame(other *Beacon) error {
 	}
 	if b.TargetAggregatorsPerCommittee != other.TargetAggregatorsPerCommittee {
 		return fmt.Errorf("different TargetAggregatorsPerCommittee")
-	}
-	if b.IntervalsPerSlot != other.IntervalsPerSlot {
-		return fmt.Errorf("different IntervalsPerSlot")
 	}
 	if b.GenesisForkVersion != other.GenesisForkVersion {
 		return fmt.Errorf("different GenesisForkVersion")

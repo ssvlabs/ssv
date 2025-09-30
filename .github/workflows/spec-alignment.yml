@@ -1,6 +1,10 @@
 name: Spec Alignment
 
 on:
+  push:
+    branches:
+      - stage
+      - main
   pull_request:
     types: [opened, synchronize]
 

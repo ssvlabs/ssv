@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
+	eth2api "github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
@@ -56,22 +58,48 @@ var (
 			metric.WithDescription("beacon client selections for attestation data")))
 )
 
-func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, err error) {
-	attr := []attribute.KeyValue{
-		semconv.ServerAddress(serverAddr),
-		semconv.HTTPRequestMethodKey.String(requestMethod),
-		attribute.String("http.route_name", routeName),
+func recordRequest(
+	ctx context.Context,
+	logger *zap.Logger,
+	routeName string,
+	client interface{ Address() string },
+	httpMethod string,
+	maybeFallback bool, // whether this request might have undergone a fallback (true means maybe, not a 100% yes)
+	duration time.Duration,
+	err error,
+) {
+	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
+	// to it (there are too many requests being made to log them every time, some requests don't even result
+	// into a network-based call due to caching implemented for some routes).
+	if err != nil || duration > 1*time.Millisecond {
+		logger.Debug("CL request done",
+			zap.String("route_name", routeName),
+			zap.String("client_addr", client.Address()),
+			zap.String("http_method", httpMethod),
+			zap.Bool("maybe_fallback", maybeFallback),
+			fields.Took(duration),
+			zap.Bool("success", err == nil),
+			zap.Error(err),
+		)
 	}
 
-	var apiErr api.Error
-	if !errors.As(err, &apiErr) {
-		requestDurationHistogram.Record(
-			ctx,
-			duration.Seconds(),
-			metric.WithAttributes(attr...))
-		return
+	// Build metric attributes, add error-code attribute in case there is an error.
+	attr := []attribute.KeyValue{
+		semconv.ServerAddress(client.Address()),
+		semconv.HTTPRequestMethodKey.String(httpMethod),
+		attribute.String("http.route_name", routeName),
 	}
-	attr = append(attr, attribute.Int("http.response.error_status_code", apiErr.StatusCode))
+	if err != nil {
+		// Error code of 0 signifies the presence of some error, see if we can clarify if further by using
+		// api error codes.
+		errCode := 0
+		var apiErr *eth2api.Error
+		if errors.As(err, &apiErr) {
+			errCode = apiErr.StatusCode
+		}
+		attr = append(attr, attribute.Int("http.response.error_status_code", errCode))
+	}
+	// Record the request as a metric.
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),

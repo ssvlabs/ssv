@@ -26,19 +26,18 @@ const (
 	defaultStalenessThreshold = 300 * time.Second
 )
 
-var (
-	// ErrNodeNotReady is returned when node is not ready.
-	ErrNodeNotReady = fmt.Errorf("node not ready")
-)
-
 type ExecutionClient interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
-	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logsCh <-chan executionclient.BlockLogs, errsCh <-chan error, err error)
+	StreamLogs(ctx context.Context, fromBlock uint64) (logsCh chan executionclient.BlockLogs)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error)
 }
 
 type EventHandler interface {
-	HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
+	HandleBlockEventsStream(
+		ctx context.Context,
+		logStreamCh <-chan executionclient.BlockLogs,
+		executeTasks bool,
+	) (lastProcessedBlock uint64, progressed bool, err error)
 }
 
 // EventSyncer syncs registry contract events from the given ExecutionClient
@@ -90,10 +89,10 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return fmt.Errorf("syncing is stuck at block %d", lastProcessedBlock.Uint64())
 	}
 
-	return es.blockBelowThreshold(ctx, lastProcessedBlock)
+	return es.ensureBlockAboveThreshold(ctx, lastProcessedBlock)
 }
 
-func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) error {
+func (es *EventSyncer) ensureBlockAboveThreshold(ctx context.Context, block *big.Int) error {
 	header, err := es.executionClient.HeaderByNumber(ctx, block)
 	if err != nil {
 		return fmt.Errorf("failed to get header for block %d: %w", block, err)
@@ -107,64 +106,89 @@ func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) 
 	return nil
 }
 
+func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
+	lastProcessedBlock uint64,
+	progressed bool,
+	err error,
+	retryable bool,
+) {
+	fetchLogsCh, fetchErrCh, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
+	if errors.Is(err, executionclient.ErrNothingToSync) {
+		// Nothing to sync, should keep ongoing sync from the given fromBlock.
+		return 0, false, executionclient.ErrNothingToSync, false
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("failed to fetch historical events: %w", err), true
+	}
+
+	// Process all the logs fetched until there are no more.
+	lastProcessedBlock, progressed, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogsCh, false)
+	if err != nil {
+		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), true
+	}
+
+	// Check there were no fetch-related errors.
+	var errs error
+	for err := range fetchErrCh {
+		errs = errors.Join(errs, err)
+	}
+	if errs != nil {
+		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), true
+	}
+
+	// Sanity-check we are not replaying events - this should never happen!
+	if lastProcessedBlock < fromBlock {
+		return lastProcessedBlock, progressed, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock), false
+	}
+
+	err = es.ensureBlockAboveThreshold(ctx, new(big.Int).SetUint64(lastProcessedBlock))
+	if err != nil {
+		return lastProcessedBlock, progressed, err, true
+	}
+
+	return lastProcessedBlock, progressed, nil, false
+}
+
 // SyncHistory reads and processes historical events since the given fromBlock.
-func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, err error) {
+func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, errs error) {
 	const maxTries = 3
-	var prevProcessedBlock uint64
 	for i := 0; i < maxTries; i++ {
-		fetchLogs, fetchError, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
-		if errors.Is(err, executionclient.ErrNothingToSync) {
-			// Nothing to sync, should keep ongoing sync from the given fromBlock.
-			return 0, executionclient.ErrNothingToSync
-		}
-		if err != nil {
-			return 0, fmt.Errorf("failed to fetch historical events: %w", err)
-		}
-
-		lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogs, false)
-		if err != nil {
-			return 0, fmt.Errorf("handle historical block events: %w", err)
-		}
-		// TODO: (Alan) should it really be here?
-		if err := <-fetchError; err != nil {
-			return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
-		}
-		if lastProcessedBlock == 0 {
-			return 0, fmt.Errorf("handle historical block events: lastProcessedBlock is 0")
-		}
-		if lastProcessedBlock < fromBlock {
-			// Event replay: this should never happen!
-			return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
-		}
-
-		if lastProcessedBlock == prevProcessedBlock {
-			// Not advancing, so can't sync any further.
-			break
-		}
-		prevProcessedBlock = lastProcessedBlock
-
-		err = es.blockBelowThreshold(ctx, new(big.Int).SetUint64(lastProcessedBlock))
+		lpb, progressed, err, retryable := es.syncHistory(ctx, fromBlock)
 		if err == nil {
-			// Successfully synced up to a fresh block.
-			es.logger.Info("finished syncing historical events",
-				zap.Uint64("from_block", fromBlock),
-				zap.Uint64("last_processed_block", lastProcessedBlock))
-
+			// Success, errors encountered so far (if any) don't matter, no need to log them.
+			lastProcessedBlock = lpb
 			return lastProcessedBlock, nil
 		}
 
-		fromBlock = lastProcessedBlock + 1
-		es.logger.Info("finished syncing up to a stale block, resuming", zap.Uint64("from_block", fromBlock))
+		// Encountered an error, let's see if we can retry it.
+		errs = errors.Join(errs, fmt.Errorf("sync history (from_block=%d): %w", fromBlock, err))
+		if !retryable {
+			break
+		}
+
+		// Update the fromBlock, but only if we've got some progress (otherwise retry with previous fromBlock value).
+		if progressed {
+			fromBlock = lpb + 1
+		}
+
+		continue
 	}
 
-	return 0, fmt.Errorf("highest block is too old (%d)", lastProcessedBlock)
+	return 0, fmt.Errorf("event syncer: couldn't sync history events: %w", errs)
 }
 
 // SyncOngoing streams and processes ongoing events as they come since the given fromBlock.
 func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error {
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
-	logStream := es.executionClient.StreamLogs(ctx, fromBlock)
-	_, err := es.eventHandler.HandleBlockEventsStream(ctx, logStream, true)
-	return err
+	logStreamCh := es.executionClient.StreamLogs(ctx, fromBlock)
+	lastProcessedBlock, progressed, err := es.eventHandler.HandleBlockEventsStream(ctx, logStreamCh, true)
+	if err != nil {
+		if progressed {
+			return fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err)
+		}
+		return fmt.Errorf("handle block events stream, couldn't progress at all: %w", err)
+	}
+
+	return nil
 }

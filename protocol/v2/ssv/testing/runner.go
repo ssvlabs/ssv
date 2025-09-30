@@ -5,14 +5,14 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/doppelganger"
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
@@ -20,7 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -117,9 +117,6 @@ var ConstructBaseRunner = func(
 	shareMap[share.ValidatorIndex] = share
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
-	rStorage := mocks.NewMockrecipientsStorage()
-	rStorage.FeeRecipient = share.FeeRecipientAddress
-
 	var r runner.Runner
 	var err error
 
@@ -129,7 +126,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -142,7 +139,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -162,7 +159,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -177,7 +174,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -185,24 +182,24 @@ var ConstructBaseRunner = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
-		beaconNode := tests.NewTestingBeaconNodeWrapped()
+		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			common.Address{},
 			beaconNode,
 			net,
 			km,
 			opSigner,
-			rStorage,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			mockFeeProvider,
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -212,7 +209,7 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -392,7 +389,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -405,7 +402,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -425,7 +422,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -440,7 +437,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -448,24 +445,24 @@ var ConstructBaseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
-		beaconNode := tests.NewTestingBeaconNodeWrapped()
+		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+		mockFeeProvider := &mocks.FeeRecipientProvider{}
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			common.Address{},
 			beaconNode,
 			net,
 			km,
 			opSigner,
-			nil, // recipientStorage is unused in these tests
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			mockFeeProvider,
 			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
@@ -475,7 +472,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
-			tests.NewTestingBeaconNodeWrapped(),
+			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,

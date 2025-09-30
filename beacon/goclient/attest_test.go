@@ -86,8 +86,7 @@ var (
 				"SYNC_COMMITTEE_SIZE": "512",
 				"SYNC_COMMITTEE_SUBNET_COUNT": "4",
 				"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
-				"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
-				"INTERVALS_PER_SLOT": "3"
+				"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16"
 			}
 		}`),
 	}
@@ -198,7 +197,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 		require.Nil(t, response)
 		require.Equal(t, DataVersionNil, dataVersion)
 		require.Error(t, err)
-		require.Equal(t, err.Error(), "failed to get attestation data: GET failed with status 500")
+		require.Equal(t, "multi-client request -> AttestationData: get attestation data: GET failed with status 500", err.Error())
 	})
 
 	t.Run("concurrency: race conditions and deadlocks", func(t *testing.T) {
