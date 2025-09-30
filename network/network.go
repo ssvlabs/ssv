@@ -53,6 +53,14 @@ type P2PNetwork interface {
 	PeersByTopic() map[string][]peer.ID
 	// Peers returns all peers we are connected to
 	Peers() []peer.ID
+	// Pinned exposes pinned peers manager
+	Pinned() PinnedPeers
+}
+
+type PinnedPeers interface {
+	ListPinned() []peer.AddrInfo
+	PinPeer(peer.AddrInfo) error
+	UnpinPeer(peer.ID) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:
