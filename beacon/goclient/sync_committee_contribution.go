@@ -57,7 +57,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(ctx, &api.BeaconBlockRootOpts{
 		Block: fmt.Sprint(slot),
 	})
-	recordMultiClientRequest(ctx, gc.log, "BeaconBlockRoot", http.MethodGet, time.Since(scDataReqStart), err)
+	recordRequest(ctx, gc.log, "BeaconBlockRoot", gc.multiClient, http.MethodGet, true, time.Since(scDataReqStart), err)
 	if err != nil {
 		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch beacon block root: %w", err), "BeaconBlockRoot")
 	}
@@ -88,7 +88,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 				SubcommitteeIndex: subnetIDs[index],
 				BeaconBlockRoot:   *blockRoot,
 			})
-			recordMultiClientRequest(ctx, gc.log, "SyncCommitteeContribution", http.MethodGet, time.Since(start), err)
+			recordRequest(ctx, gc.log, "SyncCommitteeContribution", gc.multiClient, http.MethodGet, true, time.Since(start), err)
 			if err != nil {
 				return errMultiClient(fmt.Errorf("fetch sync committee contribution: %w", err), "SyncCommitteeContribution")
 			}
@@ -121,7 +121,7 @@ func (gc *GoClient) SubmitSignedContributionAndProof(
 ) error {
 	start := time.Now()
 	err := gc.multiClient.SubmitSyncCommitteeContributions(ctx, []*altair.SignedContributionAndProof{contribution})
-	recordMultiClientRequest(ctx, gc.log, "SubmitSyncCommitteeContributions", http.MethodPost, time.Since(start), err)
+	recordRequest(ctx, gc.log, "SubmitSyncCommitteeContributions", gc.multiClient, http.MethodPost, true, time.Since(start), err)
 	if err != nil {
 		return errMultiClient(fmt.Errorf("submit sync committee contributions: %w", err), "SubmitSyncCommitteeContributions")
 	}
