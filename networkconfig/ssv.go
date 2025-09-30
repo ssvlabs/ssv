@@ -13,13 +13,14 @@ import (
 )
 
 var supportedSSVConfigs = map[string]*SSV{
-	MainnetSSV.Name:      MainnetSSV,
-	HoleskySSV.Name:      HoleskySSV,
-	HoleskyStageSSV.Name: HoleskyStageSSV,
-	LocalTestnetSSV.Name: LocalTestnetSSV,
-	HoodiSSV.Name:        HoodiSSV,
-	HoodiStageSSV.Name:   HoodiStageSSV,
-	SepoliaSSV.Name:      SepoliaSSV,
+	MainnetSSV.Name:       MainnetSSV,
+	HoleskySSV.Name:       HoleskySSV,
+	HoleskyStageSSV.Name:  HoleskyStageSSV,
+	LocalTestnetSSV.Name:  LocalTestnetSSV,
+	HoodiSSV.Name:         HoodiSSV,
+	HoodiStageSSV.Name:    HoodiStageSSV,
+	SepoliaSSV.Name:       SepoliaSSV,
+	FusakaDevnet3SSV.Name: FusakaDevnet3SSV,
 }
 
 func SSVConfigByName(name string) (*SSV, error) {
