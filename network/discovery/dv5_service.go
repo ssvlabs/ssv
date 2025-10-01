@@ -439,10 +439,11 @@ func (dvs *DiscV5Service) PublishENR() {
 
 	// Log metrics.
 	dvs.logger.Debug("done publishing ENR",
-		fields.Duration(start),
+		fields.Took(time.Since(start)),
 		zap.Int("unique_peers", len(peerIDs)),
 		zap.Int("pings", pings),
-		zap.Int("errors", errs))
+		zap.Int("errors", errs),
+	)
 }
 
 func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {

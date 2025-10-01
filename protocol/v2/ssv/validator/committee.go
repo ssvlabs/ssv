@@ -164,7 +164,6 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	_ = c.getQueue(duty.Slot)
 
 	// Prunes all expired committee runners, when new runner is created
-	logger = logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
 	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
 		span.RecordError(err)
 		logger.Error("couldn't prune expired committee runners", zap.Error(err))
@@ -299,13 +298,22 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		if err := qbftMsg.Validate(); err != nil {
 			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
+
 		c.mtx.RLock()
 		r, exists := c.Runners[slot]
 		c.mtx.RUnlock()
 		if !exists {
 			return traces.Errorf(span, "no runner found for message's slot")
 		}
-		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
+
+		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
+
+		if err := r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
+			return traces.Error(span, err)
+		}
+
+		span.SetStatus(codes.Ok, "")
+		return nil
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -331,21 +339,59 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
 				return traces.Error(span, err)
 			}
-			span.SetStatus(codes.Ok, "")
-			return nil
 		}
-	case message.SSVEventMsgType:
-		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
-		}
+
 		span.SetStatus(codes.Ok, "")
 		return nil
+	case message.SSVEventMsgType:
+		eventMsg, ok := msg.Body.(*types.EventMsg)
+		if !ok {
+			return traces.Error(span, fmt.Errorf("could not decode event message"))
+		}
+
+		span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
+
+		switch eventMsg.Type {
+		case types.Timeout:
+			slot, err := msg.Slot()
+			if err != nil {
+				return traces.Errorf(span, "could not get slot from message: %w", err)
+			}
+
+			c.mtx.RLock()
+			dutyRunner, found := c.Runners[slot]
+			c.mtx.RUnlock()
+
+			if !found {
+				return traces.Errorf(span, "no committee runner or queue found for slot")
+			}
+
+			timeoutData, err := eventMsg.GetTimeoutData()
+			if err != nil {
+				return traces.Errorf(span, "get timeout data: %w", err)
+			}
+
+			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
+
+			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
+				return traces.Errorf(span, "timeout event: %w", err)
+			}
+
+			span.SetStatus(codes.Ok, "")
+			return nil
+		case types.ExecuteDuty:
+			if err := c.OnExecuteDuty(ctx, logger, eventMsg); err != nil {
+				return traces.Errorf(span, "execute duty event: %w", err)
+			}
+
+			span.SetStatus(codes.Ok, "")
+			return nil
+		default:
+			return traces.Errorf(span, "unknown event msg - %s", eventMsg.Type.String())
+		}
 	default:
 		return traces.Errorf(span, "unknown message type: %d", msgType)
 	}
-
-	span.SetStatus(codes.Ok, "")
-	return nil
 }
 
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
@@ -357,11 +403,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
-			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
-			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot)
-			logger = logger.With(fields.DutyID(committeeDutyID))
-			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
+			logger.Debug("pruning expired committee runner", zap.Uint64("prune_slot", uint64(slot)))
 			delete(c.Runners, slot)
 			delete(c.Queues, slot)
 		}

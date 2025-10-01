@@ -71,7 +71,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -889,18 +888,19 @@ func applyMigrations(
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	start := time.Now()
+
+	logger.Debug("running full GC cycle...")
 
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 
-	logger.Debug("running full GC cycle...", fields.Duration(start))
+	start := time.Now()
 
 	if err := db.FullGC(ctx); err != nil {
 		return fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
-	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+	logger.Debug("post-migrations garbage collection completed", fields.Took(time.Since(start)))
 
 	return nil
 }
@@ -1203,7 +1203,7 @@ func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores,
 	threshold := slot - phase0.Slot(retain)
 
 	// async perform initial slot gc
-	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -1215,7 +1215,7 @@ func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores,
 	wg.Wait()
 
 	// start background job for removing old slots on every tick
-	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
+	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
 		go store.PruneContinously(ctx, slotTickerProvider, phase0.Slot(retain))
 		return nil
 	})

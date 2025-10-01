@@ -1,4 +1,4 @@
-package testing
+package storage
 
 import (
 	"crypto/rsa"
@@ -17,7 +17,6 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 )
 
@@ -62,8 +61,8 @@ func CreateMultipleStoredInstances(
 	start specqbft.Height,
 	end specqbft.Height,
 	generator MsgGenerator,
-) ([]*qbftstorage.StoredInstance, error) {
-	results := make([]*qbftstorage.StoredInstance, 0)
+) ([]*StoredInstance, error) {
+	results := make([]*StoredInstance, 0)
 	for i := start; i <= end; i++ {
 		signers, msg := generator(i)
 		if msg == nil {
@@ -76,7 +75,7 @@ func CreateMultipleStoredInstances(
 			return nil, err
 		}
 
-		results = append(results, &qbftstorage.StoredInstance{
+		results = append(results, &StoredInstance{
 			State: &specqbft.State{
 				ID:                   qbftMsg.Identifier,
 				Round:                qbftMsg.Round,

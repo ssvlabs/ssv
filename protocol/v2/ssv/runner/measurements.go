@@ -4,8 +4,8 @@ import (
 	"time"
 )
 
-// measurementsStore stores consensus durations
-type measurementsStore struct {
+// dutyMeasurements stores duty-related & consensus-related durations.
+type dutyMeasurements struct {
 	preConsensusStart     time.Time
 	consensusStart        time.Time
 	postConsensusStart    time.Time
@@ -16,102 +16,58 @@ type measurementsStore struct {
 	dutyDuration          time.Duration
 }
 
-func NewMeasurementsStore() measurementsStore {
-	return measurementsStore{}
+func newMeasurementsStore() *dutyMeasurements {
+	return &dutyMeasurements{}
 }
 
-func (cm *measurementsStore) PreConsensusTime() time.Duration {
+func (cm *dutyMeasurements) PreConsensusTime() time.Duration {
 	return cm.preConsensusDuration
 }
-func (cm *measurementsStore) ConsensusTime() time.Duration {
+
+func (cm *dutyMeasurements) ConsensusTime() time.Duration {
 	return cm.consensusDuration
 }
-func (cm *measurementsStore) PostConsensusTime() time.Duration {
+
+func (cm *dutyMeasurements) PostConsensusTime() time.Duration {
 	return cm.postConsensusDuration
 }
-func (cm *measurementsStore) TotalDutyTime() time.Duration {
-	return cm.dutyDuration
-}
 
-func (cm *measurementsStore) TotalConsensusTime() time.Duration {
+func (cm *dutyMeasurements) TotalConsensusTime() time.Duration {
 	return cm.preConsensusDuration + cm.consensusDuration + cm.postConsensusDuration
 }
 
-// StartPreConsensus stores pre-consensus start time.
-func (cm *measurementsStore) StartPreConsensus() {
-	if cm != nil {
-		cm.preConsensusStart = time.Now()
-	}
+func (cm *dutyMeasurements) TotalDutyTime() time.Duration {
+	return cm.dutyDuration
 }
 
-// EndPreConsensus sends metrics for pre-consensus duration.
-func (cm *measurementsStore) EndPreConsensus() {
-	if cm != nil && !cm.preConsensusStart.IsZero() {
-		duration := time.Since(cm.preConsensusStart)
-		cm.preConsensusDuration = duration
-		cm.preConsensusStart = time.Time{}
-	}
+func (cm *dutyMeasurements) StartPreConsensus() {
+	cm.preConsensusStart = time.Now()
 }
 
-// StartConsensus stores consensus start time.
-func (cm *measurementsStore) StartConsensus() {
-	if cm != nil {
-		cm.consensusStart = time.Now()
-	}
+func (cm *dutyMeasurements) EndPreConsensus() {
+	cm.preConsensusDuration = time.Since(cm.preConsensusStart)
 }
 
-// EndConsensus sends metrics for consensus duration.
-func (cm *measurementsStore) EndConsensus() {
-	if cm != nil && !cm.consensusStart.IsZero() {
-		duration := time.Since(cm.consensusStart)
-		cm.consensusDuration = duration
-		cm.consensusStart = time.Time{}
-	}
+func (cm *dutyMeasurements) StartConsensus() {
+	cm.consensusStart = time.Now()
 }
 
-// StartPostConsensus stores post-consensus start time.
-func (cm *measurementsStore) StartPostConsensus() {
-	if cm != nil {
-		cm.postConsensusStart = time.Now()
-	}
+func (cm *dutyMeasurements) EndConsensus() {
+	cm.consensusDuration = time.Since(cm.consensusStart)
 }
 
-// EndPostConsensus sends metrics for post-consensus duration.
-func (cm *measurementsStore) EndPostConsensus() {
-	if cm != nil && !cm.postConsensusStart.IsZero() {
-		duration := time.Since(cm.postConsensusStart)
-		cm.postConsensusDuration = duration
-		cm.postConsensusStart = time.Time{}
-	}
+func (cm *dutyMeasurements) StartPostConsensus() {
+	cm.postConsensusStart = time.Now()
 }
 
-// StartDutyFlow stores duty full flow start time.
-func (cm *measurementsStore) StartDutyFlow() {
-	if cm != nil {
-		cm.dutyStart = time.Now()
-		cm.dutyDuration = 0
-	}
+func (cm *dutyMeasurements) EndPostConsensus() {
+	cm.postConsensusDuration = time.Since(cm.postConsensusStart)
 }
 
-// PauseDutyFlow stores duty full flow cumulative duration with ability to continue the flow.
-func (cm *measurementsStore) PauseDutyFlow() {
-	if cm != nil {
-		cm.dutyDuration += time.Since(cm.dutyStart)
-		cm.dutyStart = time.Time{}
-	}
+func (cm *dutyMeasurements) StartDutyFlow() {
+	cm.dutyStart = time.Now()
 }
 
-// ContinueDutyFlow continues measuring duty full flow duration.
-func (cm *measurementsStore) ContinueDutyFlow() {
-	if cm != nil {
-		cm.dutyStart = time.Now()
-	}
-}
-
-// EndDutyFlow sends metrics for duty full flow duration.
-func (cm *measurementsStore) EndDutyFlow() {
-	if cm != nil && !cm.dutyStart.IsZero() {
-		cm.dutyDuration += time.Since(cm.dutyStart)
-		cm.dutyStart = time.Time{}
-	}
+func (cm *dutyMeasurements) EndDutyFlow() {
+	cm.dutyDuration = time.Since(cm.dutyStart)
 }

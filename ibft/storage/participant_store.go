@@ -1,4 +1,4 @@
-package qbftstorage
+package storage
 
 import (
 	"context"

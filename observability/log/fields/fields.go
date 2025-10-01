@@ -39,6 +39,7 @@ const (
 	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldPostConsensusTime   = "post_consensus_time"
 	FieldConsensusTime       = "consensus_time"
+	FieldConsensusRounds     = "consensus_rounds"
 	FieldBlockTime           = "block_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
@@ -71,7 +72,6 @@ const (
 	FieldRunnerRole          = "runner_role"
 	FieldSlot                = "slot"
 	FieldSlotStartTime       = "slot_start_time"
-	FieldSubmissionTime      = "submission_time"
 	FieldTotalConsensusTime  = "total_consensus_time"
 	FieldTotalDutyTime       = "total_duty_time"
 	FieldSubnets             = "subnets"
@@ -156,10 +156,6 @@ func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
 }
 
-func Duration(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
-}
-
 func CurrentSlot(slot phase0.Slot) zapcore.Field {
 	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(slot)})
 }
@@ -241,31 +237,31 @@ func Topic(val string) zap.Field {
 }
 
 func PreConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldPreConsensusTime, utils.FormatDuration(val))
+	return zap.String(FieldPreConsensusTime, durationToSecondsStr(val))
 }
 
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldConsensusTime, durationToSecondsStr(val))
+}
+
+func ConsensusRounds(val uint64) zap.Field {
+	return zap.Uint64(FieldConsensusRounds, val)
 }
 
 func PostConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldPostConsensusTime, utils.FormatDuration(val))
+	return zap.String(FieldPostConsensusTime, durationToSecondsStr(val))
 }
 
 func BlockTime(val time.Duration) zap.Field {
-	return zap.String(FieldBlockTime, utils.FormatDuration(val))
-}
-
-func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, utils.FormatDuration(val))
+	return zap.String(FieldBlockTime, durationToSecondsStr(val))
 }
 
 func TotalConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldTotalConsensusTime, utils.FormatDuration(val))
+	return zap.String(FieldTotalConsensusTime, durationToSecondsStr(val))
 }
 
 func TotalDutyTime(val time.Duration) zap.Field {
-	return zap.String(FieldTotalDutyTime, utils.FormatDuration(val))
+	return zap.String(FieldTotalDutyTime, durationToSecondsStr(val))
 }
 
 func DutyID(val string) zap.Field {
@@ -328,4 +324,9 @@ func Owner(addr common.Address) zap.Field {
 
 func Type(v any) zapcore.Field {
 	return zap.String(FieldType, fmt.Sprintf("%T", v))
+}
+
+func durationToSecondsStr(val time.Duration) string {
+	valStr := strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
+	return valStr + "s"
 }

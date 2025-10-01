@@ -7,9 +7,9 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType string) runner.Runner {
@@ -31,7 +31,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 	default:
 		t.Fatalf("unknown runner type")
 	}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)

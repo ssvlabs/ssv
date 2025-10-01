@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/storage"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -108,7 +107,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	for _, role := range roles {
 		pk := sks[1].GetPublicKey()
 		ssvConfig := networkconfig.TestNetwork.SSV
-		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		decided250Seq, err := qbftstorage.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 			return oids, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     height,

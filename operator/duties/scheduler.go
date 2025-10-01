@@ -393,7 +393,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 	}
 }
 
-// ExecuteDuties tries to execute the given duties
+// ExecuteDuties tries to execute the provided validator duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "scheduler.execute_duties"),
@@ -402,8 +402,11 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	defer span.End()
 
 	for _, duty := range duties {
-		duty := duty
 		logger := s.loggerWithDutyContext(duty)
+
+		const eventMsg = "🔧 executing validator duty"
+		logger.Debug(eventMsg)
+		span.AddEvent(eventMsg)
 
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
@@ -417,9 +420,6 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		}
 
 		go func(ctx context.Context) {
-			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(duty.Slot)
-			}
 			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 			s.dutyExecutor.ExecuteDuty(ctx, duty)
 		}(ctx)
@@ -428,18 +428,18 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	span.SetStatus(codes.Ok, "")
 }
 
-// ExecuteCommitteeDuties tries to execute the given committee duties
+// ExecuteCommitteeDuties tries to execute the provided committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"))
 	defer span.End()
 
 	for _, committee := range duties {
 		duty := committee.duty
+
 		logger := s.loggerWithCommitteeDutyContext(committee)
 
 		const eventMsg = "🔧 executing committee duty"
-		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties))
+		logger.Debug(eventMsg, fields.Duties(s.beaconConfig.EstimatedEpochAtSlot(duty.Slot), duty.ValidatorDuties))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.CommitteeIDAttribute(committee.id),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
@@ -455,7 +455,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		}
 
 		go func(ctx context.Context) {
-			s.waitOneThirdOrValidBlock(duty.Slot)
+			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, committee.id, duty)
 		}(ctx)
@@ -495,19 +495,33 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty)
 // advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,
 // meaning s.headSlot value can never decrease) and notify the go-routines waiting for it to happen.
 func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
+	s.logger.Debug("advancing head slot (maybe)")
+	defer s.logger.Debug("advancing head slot (done)")
+
 	s.waitCond.L.Lock()
 	if slot > s.headSlot {
+		s.logger.Debug("advancing head slot",
+			zap.Uint64("prev_head_slot", uint64(s.headSlot)),
+			zap.Uint64("slot", uint64(slot)),
+		)
 		s.headSlot = slot
 		s.waitCond.Broadcast()
 	}
 	s.waitCond.L.Unlock()
 }
 
-// waitOneThirdOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
-// slot start time), or for head block event that might come in even sooner than one-third of the slot passes.
-func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
+// waitOneThirdIntoSlotOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
+// slot start time), or for a head block event that might come in even sooner than one-third of the slot passes.
+func (s *Scheduler) waitOneThirdIntoSlotOrValidBlock(slot phase0.Slot) {
+	s.logger.Debug("waiting 1/3 into slot (maybe)")
+	defer s.logger.Debug("waiting 1/3 into slot (done)")
+
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
+		s.logger.Debug("waiting 1/3 into slot",
+			zap.Uint64("current_head_slot", uint64(s.headSlot)),
+			zap.Uint64("slot", uint64(slot)),
+		)
 		s.waitCond.Wait()
 	}
 	s.waitCond.L.Unlock()

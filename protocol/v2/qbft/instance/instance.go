@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -29,7 +28,6 @@ type Instance struct {
 	signer ssvtypes.OperatorSigner
 
 	processMsgF *spectypes.ThreadSafeF
-	startOnce   sync.Once
 
 	forceStop  bool
 	StartValue []byte
@@ -74,57 +72,52 @@ func (i *Instance) ForceStop() {
 
 // Start is an interface implementation
 func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
-	i.startOnce.Do(func() {
-		_, span := tracer.Start(ctx,
-			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
-			trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
-		defer span.End()
+	_, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+	defer span.End()
 
-		i.StartValue = value
-		i.bumpToRound(specqbft.FirstRound)
-		i.State.Height = height
-		i.metrics.Start()
-		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
+	proposerID := i.proposer(specqbft.FirstRound)
 
-		logger = logger.With(
-			fields.QBFTRound(i.State.Round),
-			fields.QBFTHeight(i.State.Height))
+	const startingQBFTInstanceEvent = "ℹ️ starting QBFT instance"
+	logger.Debug(startingQBFTInstanceEvent, zap.Uint64("leader", proposerID))
+	span.AddEvent(startingQBFTInstanceEvent, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
 
-		proposerID := i.proposer(specqbft.FirstRound)
-		const eventMsg = "ℹ️ starting QBFT instance"
-		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
-		span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
+	i.StartValue = value
+	i.bumpToRound(specqbft.FirstRound)
+	i.State.Height = height
+	i.metrics.Start()
+	i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
-		// propose if this node is the proposer
-		if proposerID == i.State.CommitteeMember.OperatorID {
-			proposal, err := i.CreateProposal(i.StartValue, nil, nil)
-			if err != nil {
-				logger.Warn("❗ failed to create proposal", zap.Error(err))
-				span.SetStatus(codes.Error, err.Error())
-				return
-				// TODO align spec to add else to avoid broadcast errored proposal
-			}
-
-			r, err := specqbft.HashDataRoot(i.StartValue) // TODO (better than decoding?)
-			if err != nil {
-				logger.Warn("❗ failed to hash input data", zap.Error(err))
-				span.SetStatus(codes.Error, err.Error())
-				return
-			}
-
-			logger = logger.With(fields.Root(r))
-			const eventMsg = "📢 leader broadcasting proposal message"
-			logger.Debug(eventMsg)
-			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
-
-			if err := i.Broadcast(proposal); err != nil {
-				logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
-				span.RecordError(err)
-			}
+	// propose if this node is the proposer
+	if proposerID == i.State.CommitteeMember.OperatorID {
+		proposal, err := i.CreateProposal(i.StartValue, nil, nil)
+		if err != nil {
+			logger.Warn("❗ failed to create proposal", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
+			return
+			// TODO align spec to add else to avoid broadcast errored proposal
 		}
 
-		span.SetStatus(codes.Ok, "")
-	})
+		r, err := specqbft.HashDataRoot(i.StartValue) // TODO (better than decoding?)
+		if err != nil {
+			logger.Warn("❗ failed to hash input data", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
+			return
+		}
+
+		logger = logger.With(fields.Root(r))
+		const eventMsg = "📢 leader broadcasting proposal message"
+		logger.Debug(eventMsg)
+		span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
+
+		if err := i.Broadcast(proposal); err != nil {
+			logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
+			span.RecordError(err)
+		}
+	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {

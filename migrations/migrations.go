@@ -8,12 +8,13 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -103,7 +104,7 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 		}
 		applied++
 
-		logger.Debug("migration applied successfully", fields.Name(migration.Name), fields.Duration(start))
+		logger.Debug("migration applied successfully", fields.Name(migration.Name), fields.Took(time.Since(start)))
 	}
 
 	logger.Info("applied migrations successfully", fields.Count(applied))

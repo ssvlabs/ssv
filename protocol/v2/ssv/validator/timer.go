@@ -90,13 +90,9 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		c.mtx.RLock() // read-lock for c.Queues, c.Runners
 		defer c.mtx.RUnlock()
 
-		// only run if the validator is started
-		//if v.state != uint32(Started) {
-		//	return
-		//}
 		dr := c.Runners[phase0.Slot(height)]
 		if dr == nil { // only happens when we prune expired runners
-			logger.Debug("❗no committee runner found for slot", fields.Slot(phase0.Slot(height)))
+			logger.Debug("❗no committee runner found for slot")
 			return
 		}
 
@@ -118,10 +114,8 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		}
 
 		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
-			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.RunnerRole(identifier.GetRoleType()))
+			logger.Warn("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
 		}
-		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}
 }
 
