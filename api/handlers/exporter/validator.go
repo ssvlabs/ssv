@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
@@ -77,7 +78,12 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return toApiError(errs)
 	}
 
-	return api.Render(w, r, toValidatorTraceResponse(results, errs))
+	// Build schedule from disk, read-only.
+	schedule := e.buildValidatorSchedule(&request, indices)
+
+	resp := toValidatorTraceResponse(results, errs)
+	resp.Schedule = schedule
+	return api.Render(w, r, resp)
 }
 
 func validateValidatorRequest(request *ValidatorTracesRequest) error {
@@ -196,6 +202,61 @@ func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *
 	}
 	r.Errors = toStrings(errs)
 	return r
+}
+
+// buildValidatorSchedule reads the compact on-disk schedule and returns a filtered
+// per-validator schedule for the requested roles and slot range.
+func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices []phase0.ValidatorIndex) []ValidatorSchedule {
+	out := make([]ValidatorSchedule, 0)
+	// Build a quick lookup for requested roles.
+	roleWanted := map[spectypes.BeaconRole]struct{}{}
+	for _, r := range req.Roles {
+		roleWanted[spectypes.BeaconRole(r)] = struct{}{}
+	}
+
+	// If no filters provided, we’ll include all indices present in the schedule per slot.
+	filter := req.hasFilters()
+
+	for s := req.From; s <= req.To; s++ {
+		slot := phase0.Slot(s)
+		sched, err := e.traceStore.GetScheduled(slot)
+		if err != nil {
+			continue
+		}
+
+		// Determine which indices to include.
+		var idxs []phase0.ValidatorIndex
+		if filter {
+			idxs = indices
+		} else {
+			idxs = make([]phase0.ValidatorIndex, 0, len(sched))
+			for idx := range sched {
+				idxs = append(idxs, idx)
+			}
+		}
+
+		for _, idx := range idxs {
+			mask, ok := sched[idx]
+			if !ok {
+				continue
+			}
+			roles := make([]string, 0, len(req.Roles))
+			for role := range roleWanted {
+				if rolemask.Has(mask, role) {
+					roles = append(roles, role.String())
+				}
+			}
+			if len(roles) == 0 {
+				continue
+			}
+			out = append(out, ValidatorSchedule{
+				Slot:      uint64(slot),
+				Validator: uint64(idx),
+				Roles:     roles,
+			})
+		}
+	}
+	return out
 }
 
 // === Shared validator traces helpers ===

@@ -303,6 +303,10 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
 			b.WriteString(", ")
 		}
 		b.WriteString(BuildDutyID(epoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
+		if i >= 10 {
+			b.WriteString(", (truncated) ...")
+			break
+		}
 	}
 	return zap.String(FieldDuties, b.String())
 }

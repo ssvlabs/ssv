@@ -21,14 +21,16 @@ import (
 type ProposerHandler struct {
 	baseHandler
 
-	duties     *dutystore.Duties[eth2apiv1.ProposerDuty]
-	fetchFirst bool
+	duties       *dutystore.Duties[eth2apiv1.ProposerDuty]
+	fetchFirst   bool
+	exporterMode bool
 }
 
-func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
+func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty], exporterMode bool) *ProposerHandler {
 	return &ProposerHandler{
-		duties:     duties,
-		fetchFirst: true,
+		duties:       duties,
+		fetchFirst:   true,
+		exporterMode: exporterMode,
 	}
 }
 
@@ -144,6 +146,10 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	if h.exporterMode {
+		return
+	}
+
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.execute"),
 		trace.WithAttributes(
