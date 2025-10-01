@@ -186,6 +186,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		DataSSZ: byts,
 	}
 
+	r.measurements.StartConsensus()
+
 	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
@@ -452,8 +454,6 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	if err != nil {
 		return traces.Errorf(span, "could not encode selection proof partial signature message: %w", err)
 	}
-
-	r.measurements.StartConsensus()
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,

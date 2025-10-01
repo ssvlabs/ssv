@@ -1115,13 +1115,13 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	logger.Debug(attestationDataFetchedEvent, fields.Took(time.Since(start)))
 	span.AddEvent(attestationDataFetchedEvent)
 
-	cr.measurements.StartConsensus()
-
 	vote := &spectypes.BeaconVote{
 		BlockRoot: attData.BeaconBlockRoot,
 		Source:    attData.Source,
 		Target:    attData.Target,
 	}
+
+	cr.measurements.StartConsensus()
 
 	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
 		return traces.Errorf(span, "failed to start new duty runner instance: %w", err)
