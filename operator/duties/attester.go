@@ -276,7 +276,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
 		fields.Duties(epoch, specDuties),
-		fields.Duration(start))
+		fields.Took(time.Since(start)),
+	)
 
 	// calculate subscriptions
 	subscriptions := calculateSubscriptionInfo(duties, slot)

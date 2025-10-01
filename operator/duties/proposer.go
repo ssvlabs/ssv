@@ -233,7 +233,8 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
 		fields.Duties(epoch, specDuties),
-		fields.Duration(start))
+		fields.Took(time.Since(start)),
+	)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

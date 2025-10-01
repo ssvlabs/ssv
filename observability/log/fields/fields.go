@@ -156,10 +156,6 @@ func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
 }
 
-func Duration(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
-}
-
 func CurrentSlot(slot phase0.Slot) zapcore.Field {
 	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(slot)})
 }

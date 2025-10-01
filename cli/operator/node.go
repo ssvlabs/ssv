@@ -888,18 +888,19 @@ func applyMigrations(
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	start := time.Now()
+
+	logger.Debug("running full GC cycle...")
 
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 
-	logger.Debug("running full GC cycle...", fields.Duration(start))
+	start := time.Now()
 
 	if err := db.FullGC(ctx); err != nil {
 		return fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
-	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+	logger.Debug("post-migrations garbage collection completed", fields.Took(time.Since(start)))
 
 	return nil
 }

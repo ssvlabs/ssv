@@ -320,7 +320,8 @@ func (h *SyncCommitteeHandler) prepareDutiesResultLog(period uint64, duties []*e
 		fields.Count(len(duties)),
 		zap.String("period", fmt.Sprintf("p%v", period)),
 		zap.Any("duties", b.String()),
-		fields.Duration(start))
+		fields.Took(time.Since(start)),
+	)
 }
 
 func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
