@@ -74,7 +74,7 @@ func (ods *operatorDataStore) SetOperatorData(od *registrystorage.OperatorData) 
 	}
 }
 
-// setOperatorIDReady marks the operator ID as ready and notifies waiting goroutines.
+// setOperatorIDReady marks the operator ID as ready.
 func (ods *operatorDataStore) setOperatorIDReady() {
 	ods.operatorIDReady = true
 }
