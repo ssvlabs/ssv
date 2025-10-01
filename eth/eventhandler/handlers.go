@@ -64,8 +64,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return fmt.Errorf("could not check if operator exists: %w", err)
 	}
 	if existsById {
-		logger.Warn("malformed event: operator ID already exists",
-			fields.OperatorID(event.OperatorId))
+		logger.Warn("malformed event: operator ID already exists")
 		return &MalformedEventError{Err: ErrOperatorIDAlreadyExists}
 	}
 

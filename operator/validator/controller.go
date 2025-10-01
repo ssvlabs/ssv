@@ -798,26 +798,28 @@ func (c *Controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			return nil, fmt.Errorf("could not get operator data: %w", err)
 		}
 
-		operator := &spectypes.Operator{
-			OperatorID: cm.Signer,
-		}
-
 		if !found {
 			c.logger.Warn(
 				"operator data not found, validator will only start if the number of available operators is greater than or equal to the committee quorum",
 				fields.OperatorID(cm.Signer),
 				fields.CommitteeID(share.CommitteeID()),
 			)
-		} else {
-			activeOperators++
-
-			operatorPEM, err := base64.StdEncoding.DecodeString(opdata.PublicKey)
-			if err != nil {
-				return nil, fmt.Errorf("could not decode public key: %w", err)
-			}
-
-			operator.SSVOperatorPubKey = operatorPEM
+			operators = append(operators, &spectypes.Operator{
+				OperatorID: cm.Signer,
+			})
+			continue
 		}
+
+		activeOperators++
+
+		operator := &spectypes.Operator{
+			OperatorID: cm.Signer,
+		}
+		operatorPEM, err := base64.StdEncoding.DecodeString(opdata.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("could not decode public key: %w", err)
+		}
+		operator.SSVOperatorPubKey = operatorPEM
 
 		operators = append(operators, operator)
 	}
