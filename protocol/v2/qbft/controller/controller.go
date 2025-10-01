@@ -60,22 +60,27 @@ func NewController(
 }
 
 // StartNewInstance will attempt to start a new QBFT instance.
-func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
+func (c *Controller) StartNewInstance(
+	ctx context.Context,
+	logger *zap.Logger,
+	height specqbft.Height,
+	value []byte,
+) (*instance.Instance, error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return traces.Errorf(span, "value invalid: %w", err)
+		return nil, traces.Errorf(span, "value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		return traces.Errorf(span, "attempting to start an instance with a past height")
+		return nil, traces.Errorf(span, "attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return traces.Errorf(span, "instance already running")
+		return nil, traces.Errorf(span, "instance already running")
 	}
 
 	c.Height = height
@@ -83,11 +88,11 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 	newInstance := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
 	c.StoredInstances.addNewInstance(newInstance)
 	newInstance.Start(ctx, logger, value, height)
-
 	c.forceStopAllInstanceExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+
+	return newInstance, nil
 }
 
 func (c *Controller) forceStopAllInstanceExceptCurrent() {

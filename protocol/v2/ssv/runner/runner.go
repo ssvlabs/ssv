@@ -412,17 +412,17 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		return traces.Errorf(span, "input data invalid: %w", err)
 	}
 
-	if err := b.QBFTController.StartNewInstance(
+	newInstance, err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
 		specqbft.Height(slot),
 		byts,
-	); err != nil {
+	)
+	if err != nil {
 		return traces.Errorf(span, "could not start new QBFT instance: %w", err)
 	}
-	newInstance := b.QBFTController.StoredInstances.FindInstance(b.QBFTController.Height)
 	if newInstance == nil {
-		return traces.Errorf(span, "could not find newly created QBFT instance")
+		return traces.Errorf(span, "could not start new QBFT instance: instance is nil")
 	}
 
 	b.State.RunningInstance = newInstance
