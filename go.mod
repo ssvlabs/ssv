@@ -3,6 +3,7 @@ module github.com/ssvlabs/ssv
 go 1.24.0
 
 require (
+	github.com/RoaringBitmap/roaring v1.9.4
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.27.0
 	github.com/brianvoe/gofakeit/v7 v7.2.1
@@ -68,6 +69,7 @@ require (
 	github.com/ethereum/c-kzg-4844/v2 v2.1.3 // indirect
 	github.com/ethereum/go-bigmodexpfix v0.0.0-20250911101455-f9e208c548ab // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
+	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pion/stun/v2 v2.0.0 // indirect
 	github.com/pion/transport/v3 v3.0.7 // indirect
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3 // indirect

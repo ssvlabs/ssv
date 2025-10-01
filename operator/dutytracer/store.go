@@ -38,6 +38,10 @@ type DutyTraceStore interface {
 	GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
 	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error)
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error)
+
+	// Compact scheduled duties I/O
+	SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]uint8) error
+	GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error)
 }
 
 func (c *Collector) GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {

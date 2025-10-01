@@ -24,6 +24,22 @@ definitions:
           type: integer
         type: array
     type: object
+  exporter.CommitteeSchedule:
+    properties:
+      committeeID:
+        format: hex
+        type: string
+      roles:
+        additionalProperties:
+          items:
+            format: int64
+            type: integer
+          type: array
+        type: object
+      slot:
+        format: int64
+        type: integer
+    type: object
   exporter.CommitteeTrace:
     properties:
       attester:
@@ -98,6 +114,12 @@ definitions:
         - committee duty missing for slot 123456
         items:
           type: string
+        type: array
+      schedule:
+        description: Schedule lists requested duties unioned at the committee-level
+          by role.
+        items:
+          $ref: '#/definitions/exporter.CommitteeSchedule'
         type: array
     type: object
   exporter.Decided:
@@ -305,6 +327,19 @@ definitions:
           type: string
         type: array
     type: object
+  exporter.ValidatorSchedule:
+    properties:
+      roles:
+        items:
+          type: string
+        type: array
+      slot:
+        format: int64
+        type: integer
+      validator:
+        format: int64
+        type: integer
+    type: object
   exporter.ValidatorTrace:
     properties:
       committeeID:
@@ -409,6 +444,12 @@ definitions:
         - duty data unavailable for slot 123457
         items:
           type: string
+        type: array
+      schedule:
+        description: Schedule lists requested duties per validator within the requested
+          slot range.
+        items:
+          $ref: '#/definitions/exporter.ValidatorSchedule'
         type: array
     type: object
 info:

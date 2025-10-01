@@ -44,6 +44,8 @@ func (r *ValidatorTracesRequest) hasFilters() bool {
 type ValidatorTracesResponse struct {
 	// Data contains the list of validator duty traces matching the request.
 	Data []ValidatorTrace `json:"data"`
+	// Schedule lists requested duties per validator within the requested slot range.
+	Schedule []ValidatorSchedule `json:"schedule"`
 	// Errors lists non-fatal issues encountered while building the response (duties not found, enrichment errors, etc.).
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"duty data unavailable for slot 123457"`
 }
@@ -87,4 +89,12 @@ func toValidatorTrace(t *exporter.ValidatorDutyTrace) ValidatorTrace {
 type validatorDutyTraceWithCommitteeID struct {
 	exporter.ValidatorDutyTrace
 	CommitteeID *spectypes.CommitteeID
+}
+
+// ValidatorSchedule is a compact, user-friendly representation of scheduled duties
+// for a single validator at a given slot.
+type ValidatorSchedule struct {
+	Slot      uint64   `json:"slot" format:"int64"`
+	Validator uint64   `json:"validator" format:"int64"`
+	Roles     []string `json:"roles"`
 }

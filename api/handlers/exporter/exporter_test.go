@@ -499,6 +499,9 @@ type mockTraceStore struct {
 	GetCommitteeDecidedsFunc    func(slot phase0.Slot, index phase0.ValidatorIndex, _ ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	// added to satisfy dutyTraceStore interface for schedule and committee links
+	GetCommitteeDutyLinksFunc func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
+	GetScheduledFunc          func(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error)
 }
 
 func newMockTraceStore() *mockTraceStore {
@@ -577,6 +580,20 @@ func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spec
 	key := fmt.Sprintf("%d", slot)
 	src := m.committeeDecideds[key]
 	return append([]dutytracer.ParticipantsRangeIndexEntry(nil), src...), nil
+}
+
+func (m *mockTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+	if m.GetCommitteeDutyLinksFunc != nil {
+		return m.GetCommitteeDutyLinksFunc(slot)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+	if m.GetScheduledFunc != nil {
+		return m.GetScheduledFunc(slot)
+	}
+	return map[phase0.ValidatorIndex]uint8{}, nil
 }
 
 func (m *mockTraceStore) AddValidatorDecided(role spectypes.BeaconRole, slot phase0.Slot, signers []uint64) {

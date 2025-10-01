@@ -627,6 +627,29 @@
                 }
             }
         },
+        "exporter.CommitteeSchedule": {
+            "type": "object",
+            "properties": {
+                "committeeID": {
+                    "type": "string",
+                    "format": "hex"
+                },
+                "roles": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                },
+                "slot": {
+                    "type": "integer",
+                    "format": "int64"
+                }
+            }
+        },
         "exporter.CommitteeTrace": {
             "type": "object",
             "properties": {
@@ -721,6 +744,13 @@
                     "example": [
                         "committee duty missing for slot 123456"
                     ]
+                },
+                "schedule": {
+                    "description": "Schedule lists requested duties unioned at the committee-level by role.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.CommitteeSchedule"
+                    }
                 }
             }
         },
@@ -993,6 +1023,25 @@
                 }
             }
         },
+        "exporter.ValidatorSchedule": {
+            "type": "object",
+            "properties": {
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "slot": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "validator": {
+                    "type": "integer",
+                    "format": "int64"
+                }
+            }
+        },
         "exporter.ValidatorTrace": {
             "type": "object",
             "properties": {
@@ -1126,6 +1175,13 @@
                     "example": [
                         "duty data unavailable for slot 123457"
                     ]
+                },
+                "schedule": {
+                    "description": "Schedule lists requested duties per validator within the requested slot range.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.ValidatorSchedule"
+                    }
                 }
             }
         }

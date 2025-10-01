@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	store "github.com/ssvlabs/ssv/exporter/store"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -191,6 +192,41 @@ func TestSaveValidatorDuties(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace2, traces[0]))
+}
+
+func TestSaveScheduledDuties(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+	slot := phase0.Slot(42)
+
+	initial := map[phase0.ValidatorIndex]uint8{
+		1: rolemask.BitAttester | rolemask.BitProposer,
+	}
+	require.NoError(t, s.SaveScheduled(slot, initial))
+
+	update := map[phase0.ValidatorIndex]uint8{
+		1: rolemask.BitAggregator,
+		2: rolemask.BitSyncCommittee,
+	}
+	require.NoError(t, s.SaveScheduled(slot, update))
+
+	sched, err := s.GetScheduled(slot)
+	require.NoError(t, err)
+	require.Len(t, sched, 2)
+	assert.Equal(t, rolemask.BitAttester|rolemask.BitProposer|rolemask.BitAggregator, sched[1])
+	assert.Equal(t, rolemask.BitSyncCommittee, sched[2])
+
+	attesters, err := s.GetScheduledRole(slot, spectypes.BNRoleAttester)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []phase0.ValidatorIndex{1}, attesters)
+
+	syncers, err := s.GetScheduledRole(slot, spectypes.BNRoleSyncCommittee)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []phase0.ValidatorIndex{2}, syncers)
 }
 
 func makeVTrace(slot phase0.Slot) *exporter.ValidatorDutyTrace {
