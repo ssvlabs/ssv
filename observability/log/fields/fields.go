@@ -241,7 +241,7 @@ func PreConsensusTime(val time.Duration) zap.Field {
 }
 
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldConsensusTime, durationToSecondsStr(val))
 }
 
 func ConsensusRounds(val uint64) zap.Field {
