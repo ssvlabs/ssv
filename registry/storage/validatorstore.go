@@ -39,7 +39,7 @@ type BaseValidatorStore interface {
 type ValidatorStore interface {
 	BaseValidatorStore
 
-	WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore
+	WithOperatorID(spectypes.OperatorID) SelfValidatorStore
 }
 
 type SelfValidatorStore interface {

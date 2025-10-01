@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -45,7 +46,8 @@ type Options struct {
 }
 
 type Node struct {
-	logger           *zap.Logger
+	logger *zap.Logger
+
 	network          *networkconfig.Network
 	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
@@ -63,8 +65,8 @@ type Node struct {
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
-	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
+func New(logger *zap.Logger, operatorId spectypes.OperatorID, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+	selfValidatorStore := opts.ValidatorStore.WithOperatorID(operatorId)
 
 	feeRecipientCtrl := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
 		Ctx:                opts.Context,
@@ -76,7 +78,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 	})
 
 	node := &Node{
-		logger:           logger.Named(log.NameOperator),
+		logger:           logger.Named(log.NameOperator).With(fields.OperatorID(operatorId)),
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
 		exporterOptions:  exporterOpts,
@@ -119,12 +121,11 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start(ctx context.Context) error {
-	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+	n.logger.Info("starting operator node")
 
 	go func() {
 		err := n.startWSServer()
 		if err != nil {
-			// TODO: think if we need to panic
 			return
 		}
 	}()
@@ -196,6 +197,8 @@ func (n *Node) Start(ctx context.Context) error {
 			n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
 		}
 	}()
+
+	n.logger.Info("operator node has been started")
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))

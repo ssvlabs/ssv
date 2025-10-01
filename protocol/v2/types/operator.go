@@ -24,18 +24,18 @@ type OperatorSigner interface {
 
 type SsvOperatorSigner struct {
 	keys.OperatorSigner
-	GetOperatorIdF func() spectypes.OperatorID
+	operatorId spectypes.OperatorID
 }
 
-func NewSsvOperatorSigner(operatorSigner keys.OperatorSigner, getOperatorId func() spectypes.OperatorID) *SsvOperatorSigner {
+func NewSsvOperatorSigner(operatorSigner keys.OperatorSigner, operatorId spectypes.OperatorID) *SsvOperatorSigner {
 	return &SsvOperatorSigner{
 		OperatorSigner: operatorSigner,
-		GetOperatorIdF: getOperatorId,
+		operatorId:     operatorId,
 	}
 }
 
 func (s *SsvOperatorSigner) GetOperatorID() spectypes.OperatorID {
-	return s.GetOperatorIdF()
+	return s.operatorId
 }
 
 func (s *SsvOperatorSigner) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte, error) {

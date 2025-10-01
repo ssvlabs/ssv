@@ -39,9 +39,6 @@ var (
 	ErrValidatorShareNotFound       = fmt.Errorf("validator share not found")
 )
 
-// TODO: make sure all handlers are tested properly:
-// set up a mock DB where we test that after running the handler we check that the DB state is as expected
-
 func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := eh.logger.With(
 		fields.EventName(OperatorAdded),
@@ -65,7 +62,8 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	}
 	if existsById {
 		logger.Warn("malformed event: operator ID already exists",
-			fields.OperatorID(event.OperatorId))
+			fields.OperatorID(event.OperatorId),
+		)
 		return &MalformedEventError{Err: ErrOperatorIDAlreadyExists}
 	}
 
@@ -76,7 +74,8 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	}
 	if pubkeyExists {
 		logger.Warn("malformed event: operator public key already exists",
-			fields.OperatorPubKey(operatorData.PublicKey))
+			fields.OperatorPubKey(operatorData.PublicKey),
+		)
 		return &MalformedEventError{Err: ErrOperatorPubkeyAlreadyExists}
 	}
 

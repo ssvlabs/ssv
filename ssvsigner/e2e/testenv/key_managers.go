@@ -3,7 +3,6 @@ package testenv
 import (
 	"fmt"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
@@ -71,7 +70,7 @@ func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
 		env.beaconConfig,
 		env, // TestEnvironment implements signerClient interface by delegating to ssvSignerClient
 		env.remoteDB,
-		func() spectypes.OperatorID { return 1 }, // operator ID getter
+		1,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create remote key manager: %w", err)

@@ -37,7 +37,7 @@ type RemoteKeyManager struct {
 	beaconConfig *networkconfig.Beacon
 	signerClient signerClient
 
-	getOperatorId     func() spectypes.OperatorID
+	operatorId        spectypes.OperatorID
 	operatorPubKey    keys.OperatorPublicKey
 	signLocksMu       sync.RWMutex
 	signLocks         map[signKey]*sync.RWMutex
@@ -61,7 +61,7 @@ func NewRemoteKeyManager(
 	beaconConfig *networkconfig.Beacon,
 	signerClient signerClient,
 	db basedb.Database,
-	getOperatorId func() spectypes.OperatorID,
+	operatorId spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
 	signerStore := NewSignerStorage(db, beaconConfig, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
@@ -81,7 +81,7 @@ func NewRemoteKeyManager(
 		beaconConfig:      beaconConfig,
 		signerClient:      signerClient,
 		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
-		getOperatorId:     getOperatorId,
+		operatorId:        operatorId,
 		operatorPubKey:    operatorPubKey,
 		signLocks:         map[signKey]*sync.RWMutex{},
 	}, nil
@@ -480,7 +480,7 @@ func (km *RemoteKeyManager) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte
 }
 
 func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
-	return km.getOperatorId()
+	return km.operatorId()
 }
 
 type lockOperation int

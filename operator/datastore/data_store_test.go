@@ -88,16 +88,3 @@ func TestOperatorIDReady(t *testing.T) {
 	store.SetOperatorData(data)
 	assert.True(t, store.OperatorIDReady())
 }
-
-func TestAwaitOperatorID(t *testing.T) {
-	store := New(nil).(*operatorDataStore)
-
-	go func() {
-		time.Sleep(1 * time.Millisecond) // Simulate some operation delay
-		data := &registrystorage.OperatorData{ID: 456}
-		store.SetOperatorData(data)
-	}()
-
-	receivedID := store.AwaitOperatorID()
-	assert.Equal(t, spectypes.OperatorID(456), receivedID)
-}

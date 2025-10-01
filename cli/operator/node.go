@@ -336,7 +336,8 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
-		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
+		operatorId := operatorDataStore.GetOperatorID()
+		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorId)
 		validatorRegistrationSubmitter := runner.NewVRSubmitter(cmd.Context(), logger, networkConfig.Beacon, consensusClient, validatorProvider)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
@@ -382,7 +383,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var keyManager ekm.KeyManager
-
 		if usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
@@ -390,7 +390,7 @@ var StartNodeCmd = &cobra.Command{
 				networkConfig.Beacon,
 				ssvSignerClient,
 				db,
-				operatorDataStore.GetOperatorID,
+				operatorId,
 			)
 			if err != nil {
 				logger.Fatal("could not create remote key manager", zap.Error(err))
@@ -407,11 +407,11 @@ var StartNodeCmd = &cobra.Command{
 
 			keyManager = localKeyManager
 			cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
-			cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
+			cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorId)
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorDataStore.GetOperatorData().PublicKey)
+		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorPubKeyHash(operatorDataStore.GetOperatorData().PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.NetworkConfig = networkConfig
@@ -562,7 +562,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
+		operatorNode := operator.New(logger, operatorId, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go func() {
@@ -588,6 +588,7 @@ var StartNodeCmd = &cobra.Command{
 		eventSyncer := syncContractEvents(
 			cmd.Context(),
 			logger,
+			operatorId,
 			executionClient,
 			validatorCtrl,
 			networkConfig,
@@ -607,7 +608,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if usingSSVSigner {
-			ensureNoMissingKeys(cmd.Context(), logger, nodeStorage, operatorDataStore, ssvSignerClient)
+			ensureNoMissingKeys(cmd.Context(), logger, nodeStorage, operatorId, ssvSignerClient)
 		}
 
 		// Increase MaxPeers if the operator is subscribed to many subnets.
@@ -619,7 +620,7 @@ var StartNodeCmd = &cobra.Command{
 				idealPeersPerSubnet = 3
 			)
 			start := time.Now()
-			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
+			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorId)
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
@@ -689,17 +690,13 @@ func ensureNoMissingKeys(
 	ctx context.Context,
 	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
-	operatorDataStore operatordatastore.OperatorDataStore,
+	operatorId spectypes.OperatorID,
 	ssvSignerClient *ssvsigner.Client,
 ) {
-	if operatorDataStore.GetOperatorID() == 0 {
-		logger.Fatal("operator ID is not ready")
-	}
-
 	shares := nodeStorage.Shares().List(
 		nil,
 		registrystorage.ByNotLiquidated(),
-		registrystorage.ByOperatorID(operatorDataStore.GetOperatorID()),
+		registrystorage.ByOperatorID(operatorId),
 	)
 	if len(shares) == 0 {
 		return
@@ -1070,6 +1067,7 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
+	operatorId spectypes.OperatorID,
 	executionClient executionclient.Provider,
 	validatorCtrl *validator.Controller,
 	networkConfig *networkconfig.Network,
@@ -1162,10 +1160,9 @@ func syncContractEvents(
 
 		operatorValidators := 0
 		liquidatedValidators := 0
-		operatorID := operatorDataStore.GetOperatorID()
 		if operatorDataStore.OperatorIDReady() {
 			for _, share := range shares {
-				if share.BelongsToOperator(operatorID) {
+				if share.BelongsToOperator(operatorId) {
 					operatorValidators++
 				}
 				if share.Liquidated {
@@ -1174,7 +1171,7 @@ func syncContractEvents(
 			}
 		}
 		logger.Info("historical registry sync stats",
-			zap.Uint64("my_operator_id", operatorID),
+			zap.Uint64("my_operator_id", operatorId),
 			zap.Int("operators", len(operators)),
 			zap.Int("validators", len(shares)),
 			zap.Int("liquidated_validators", liquidatedValidators),

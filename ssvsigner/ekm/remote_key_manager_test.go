@@ -59,7 +59,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -89,7 +89,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -113,7 +113,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignWithMockedOperatorKey() {
 	rm := &RemoteKeyManager{
 		logger:         s.logger,
 		signerClient:   s.client,
-		getOperatorId:  func() spectypes.OperatorID { return 1 },
+		operatorId:     1,
 		operatorPubKey: &MockOperatorPublicKey{},
 		signLocks:      map[signKey]*sync.RWMutex{},
 	}
@@ -141,7 +141,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 		signerClient:      mockRemoteSigner,
 		slashingProtector: mockSlashingProtector,
 		operatorPubKey:    mockOperatorPublicKey,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
@@ -167,7 +167,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -593,7 +593,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -634,7 +634,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -675,7 +675,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -716,7 +716,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -778,7 +778,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -840,7 +840,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -904,7 +904,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -968,7 +968,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1057,7 +1057,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1148,7 +1148,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1178,7 +1178,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1204,7 +1204,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1234,7 +1234,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -1258,7 +1258,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1285,7 +1285,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1312,7 +1312,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorId:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
 			signLocks:         map[signKey]*sync.RWMutex{},
@@ -1344,7 +1344,7 @@ func (s *RemoteKeyManagerTestSuite) TestGetOperatorID() {
 	expectedOperatorID := spectypes.OperatorID(42)
 
 	rm := &RemoteKeyManager{
-		getOperatorId: func() spectypes.OperatorID { return expectedOperatorID },
+		operatorId: expectedOperatorID,
 	}
 
 	result := rm.GetOperatorID()
@@ -1355,11 +1355,11 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
 	mockRemoteSigner := new(MockRemoteSigner)
 
 	rm := &RemoteKeyManager{
-		logger:        zap.NewNop(),
-		beaconConfig:  testNetCfg,
-		signerClient:  mockRemoteSigner,
-		getOperatorId: func() spectypes.OperatorID { return 1 },
-		signLocks:     map[signKey]*sync.RWMutex{},
+		logger:       zap.NewNop(),
+		beaconConfig: testNetCfg,
+		signerClient: mockRemoteSigner,
+		operatorId:   1,
+		signLocks:    map[signKey]*sync.RWMutex{},
 	}
 
 	message := &spectypes.SSVMessage{
@@ -1416,7 +1416,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -1506,7 +1506,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -1656,7 +1656,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
-		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		operatorId:        1,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -1768,17 +1768,13 @@ QwIDAQAB
 
 	logger, _ := zap.NewDevelopment()
 
-	getOperatorId := func() spectypes.OperatorID {
-		return 42
-	}
-
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
 		testNetCfg,
 		s.client,
 		s.db,
-		getOperatorId,
+		42,
 	)
 
 	s.NoError(err)
@@ -1796,17 +1792,13 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 
 	logger, _ := zap.NewDevelopment()
 
-	getOperatorId := func() spectypes.OperatorID {
-		return 42
-	}
-
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
 		testNetCfg,
 		s.client,
 		s.db,
-		getOperatorId,
+		42,
 	)
 
 	s.ErrorContains(err, "extract operator public key")
@@ -1823,17 +1815,13 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 
 	logger, _ := zap.NewDevelopment()
 
-	getOperatorId := func() spectypes.OperatorID {
-		return 42
-	}
-
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
 		testNetCfg,
 		s.client,
 		s.db,
-		getOperatorId,
+		42,
 	)
 
 	s.ErrorContains(err, "get operator identity")

@@ -89,7 +89,7 @@ func TestNewController(t *testing.T) {
 		FullNode:          true,
 		Network:           network,
 		OperatorDataStore: operatorDataStore,
-		OperatorSigner:    types.NewSsvOperatorSigner(operatorSigner, operatorDataStore.GetOperatorID),
+		OperatorSigner:    types.NewSsvOperatorSigner(operatorSigner, operatorDataStore.GetOperatorID()),
 		RegistryStorage:   registryStorage,
 		Context:           t.Context(),
 	}
