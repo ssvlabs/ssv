@@ -113,7 +113,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
 	signer := signedMsg.Messages[0].Signer
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.bState().StartingDuty.(*spectypes.ValidatorDuty)
 
 	logger.Debug("🧩 got partial RANDAO signatures", zap.Uint64("signer", signer))
 
@@ -132,15 +132,15 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	// randao is relevant only for block proposals, no need to check type
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.bState().ReconstructBeaconSig(r.bState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.bState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	logger.Debug(
 		"🧩 reconstructed partial RANDAO signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		zap.Uint64s("signers", getPreConsensusSigners(r.bState(), root)),
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 	)
 
@@ -163,7 +163,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty = r.bState().StartingDuty.(*spectypes.ValidatorDuty)
 	vBlk, obj, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		const errMsg = "failed to get beacon block"
@@ -364,23 +364,23 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	root := roots[0]
 
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	sig, err := r.bState().ReconstructBeaconSig(r.bState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.bState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return traces.Errorf(span, "got post-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
 
 	logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
-		zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
+		zap.Uint64s("signers", getPostConsensusProposerSigners(r.bState(), root)),
 	)
 
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
+	err = validatorConsensusData.Decode(r.bState().DecidedValue)
 	if err != nil {
 		return traces.Errorf(span, "could not decode consensus data: %w", err)
 	}
@@ -427,16 +427,17 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	))
 	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
 
-	r.GetState().Finished = true
+	r.bState().Finished = true
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()), spectypes.BNRoleProposer)
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleProposer, r.bState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().StartingDuty.DutySlot()), spectypes.BNRoleProposer)
 
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.ConsensusRounds(uint64(r.bState().RunningInstance.State.Round)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
@@ -448,14 +449,14 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().StartingDuty.DutySlot())
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
+	err := validatorConsensusData.Decode(r.bState().DecidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not create consensus data")
 	}
@@ -598,7 +599,7 @@ func (r *ProposerRunner) GetShare() *spectypes.Share {
 	return nil
 }
 
-func (r *ProposerRunner) GetState() *State {
+func (r *ProposerRunner) bState() *State {
 	return r.BaseRunner.State
 }
 

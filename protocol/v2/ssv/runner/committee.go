@@ -248,6 +248,10 @@ func (cr *CommitteeRunner) GetBeaconSigner() ekm.BeaconSigner {
 	return cr.signer
 }
 
+func (r *CommitteeRunner) bState() *State {
+	return r.BaseRunner.State
+}
+
 func (cr *CommitteeRunner) HasRunningDuty() bool {
 	return cr.BaseRunner.hasRunningDuty()
 }
@@ -889,6 +893,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		const dutyFinishedEvent = "successfully finished duty processing (absolute success)"
 		logger.Info(dutyFinishedEvent,
 			fields.ConsensusTime(cr.measurements.ConsensusTime()),
+			fields.ConsensusRounds(uint64(cr.bState().RunningInstance.State.Round)),
 			fields.PostConsensusTime(cr.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
 			fields.TotalDutyTime(cr.measurements.TotalDutyTime()),
@@ -902,6 +907,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	const dutyFinishedEvent = "successfully finished duty processing (partial success)"
 	logger.Info(dutyFinishedEvent,
 		fields.ConsensusTime(cr.measurements.ConsensusTime()),
+		fields.ConsensusRounds(uint64(cr.bState().RunningInstance.State.Round)),
 		fields.PostConsensusTime(cr.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(cr.measurements.TotalDutyTime()),

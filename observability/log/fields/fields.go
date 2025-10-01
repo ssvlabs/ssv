@@ -39,6 +39,7 @@ const (
 	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldPostConsensusTime   = "post_consensus_time"
 	FieldConsensusTime       = "consensus_time"
+	FieldConsensusRounds     = "consensus_rounds"
 	FieldBlockTime           = "block_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
@@ -245,6 +246,10 @@ func PreConsensusTime(val time.Duration) zap.Field {
 
 func ConsensusTime(val time.Duration) zap.Field {
 	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+}
+
+func ConsensusRounds(val uint64) zap.Field {
+	return zap.Uint64(FieldConsensusRounds, val)
 }
 
 func PostConsensusTime(val time.Duration) zap.Field {

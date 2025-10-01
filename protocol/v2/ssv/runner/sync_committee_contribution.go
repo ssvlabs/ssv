@@ -102,7 +102,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		return nil
 	}
 
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().StartingDuty.DutySlot())
 	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleSyncCommitteeContribution, attributeConsensusPhasePreConsensus)
 
 	r.measurements.EndPreConsensus()
@@ -117,11 +117,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	for i, root := range roots {
 		// reconstruct selection proof sig
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+		sig, err := r.bState().ReconstructBeaconSig(r.bState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+				r.BaseRunner.FallBackAndVerifyEachSignature(r.bState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
 			return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 		}
@@ -136,14 +136,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 		// fetch sync committee contribution
 		span.AddEvent("fetching sync committee subnet ID")
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices[i]))
+		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.bState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices[i]))
 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
 	}
 
 	if len(selectionProofs) == 0 {
-		r.GetState().Finished = true
+		r.bState().Finished = true
 		r.measurements.EndDutyFlow()
 		const dutyFinishedNoProofsEvent = "successfully finished duty processing (no selection proofs)"
 		logger.Info(dutyFinishedNoProofsEvent,
@@ -156,7 +156,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		return nil
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.bState().StartingDuty.(*spectypes.ValidatorDuty)
 
 	span.AddEvent("fetching sync committee contributions")
 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(ctx, duty.DutySlot(), selectionProofs, subnets)
@@ -320,7 +320,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 	// get contributions
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
+	err = validatorConsensusData.Decode(r.bState().DecidedValue)
 	if err != nil {
 		return traces.Errorf(span, "could not decode validator consensus data: %w", err)
 	}
@@ -337,11 +337,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	start := time.Now()
 	for _, root := range roots {
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+		sig, err := r.bState().ReconstructBeaconSig(r.bState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+				r.BaseRunner.FallBackAndVerifyEachSignature(r.bState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
 			return traces.Errorf(span, "got post-consensus quorum but it has invalid signatures: %w", err)
 		}
@@ -359,7 +359,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 				continue // not the correct root
 			}
 
-			signedContrib, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+			signedContrib, err := r.bState().ReconstructBeaconSig(r.bState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 			if err != nil {
 				return traces.Errorf(span, "could not reconstruct contribution and proof sig: %w", err)
 			}
@@ -397,22 +397,22 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 	const submittedSyncCommitteeEvent = "✅ successfully submitted sync committee contributions"
 	span.AddEvent(submittedSyncCommitteeEvent)
-	logger.Debug(
-		submittedSyncCommitteeEvent,
+	logger.Debug(submittedSyncCommitteeEvent,
 		zap.Uint32("submitted_contributions", successfullySubmittedContributions),
 		fields.Took(time.Since(start)),
 	)
 
-	r.GetState().Finished = true
+	r.bState().Finished = true
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()), spectypes.BNRoleSyncCommitteeContribution)
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommitteeContribution, r.bState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().StartingDuty.DutySlot()), spectypes.BNRoleSyncCommitteeContribution)
 
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.ConsensusRounds(uint64(r.bState().RunningInstance.State.Round)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
@@ -429,12 +429,12 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 	proof phase0.BLSSignature,
 ) (*altair.ContributionAndProof, phase0.Root, error) {
 	contribAndProof := &altair.ContributionAndProof{
-		AggregatorIndex: r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex,
+		AggregatorIndex: r.bState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex,
 		Contribution:    &contrib,
 		SelectionProof:  proof,
 	}
 
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().StartingDuty.DutySlot())
 	dContribAndProof, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
 		return nil, phase0.Root{}, errors.Wrap(err, "could not get domain data")
@@ -448,10 +448,10 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 
 func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	sszIndexes := make([]ssz.HashRoot, 0)
-	for _, index := range r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
+	for _, index := range r.bState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
-			Slot:              r.GetState().StartingDuty.DutySlot(),
+			Slot:              r.bState().StartingDuty.DutySlot(),
 			SubcommitteeIndex: subnet,
 		}
 		sszIndexes = append(sszIndexes, data)
@@ -463,7 +463,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	// get contributions
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
+	err := validatorConsensusData.Decode(r.bState().DecidedValue)
 	if err != nil {
 		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
 	}
@@ -506,7 +506,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	for _, index := range r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
+	for _, index := range r.bState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              duty.DutySlot(),
@@ -613,7 +613,7 @@ func (r *SyncCommitteeAggregatorRunner) GetShare() *spectypes.Share {
 	return nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetState() *State {
+func (r *SyncCommitteeAggregatorRunner) bState() *State {
 	return r.BaseRunner.State
 }
 
