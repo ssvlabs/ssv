@@ -57,7 +57,7 @@ func BenchmarkTracer(b *testing.B) {
 
 			b.ResetTimer()
 			for b.Loop() {
-				collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+				collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 				var wg sync.WaitGroup
 				for _, msg := range traces[:actualCount] {

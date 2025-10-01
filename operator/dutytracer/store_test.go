@@ -34,7 +34,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	dutyStore := store.New(db)
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -134,7 +134,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// setup validator index mapping
 	index1 := setupValidatorStoreMock(vstore, 1)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -319,7 +319,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 			ValidatorPubKey: validatorPK7,
 		},
 	})
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	// Create a new trace
 	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
@@ -384,7 +384,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	index1 := setupValidatorStoreMock(vstore, 1)
 	index2 := setupValidatorStoreMock(vstore, 2)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	slot4 := phase0.Slot(4)
 

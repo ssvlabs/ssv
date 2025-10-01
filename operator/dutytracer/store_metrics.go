@@ -94,6 +94,22 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*exporte
 	return d.Store.GetCommitteeDuties(slot)
 }
 
+func (d *DutyTraceStoreMetrics) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]uint8) error {
+	start := time.Now()
+	defer func() {
+		record("schedule", "save", start)
+	}()
+	return d.Store.SaveScheduled(slot, schedule)
+}
+
+func (d *DutyTraceStoreMetrics) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+	start := time.Now()
+	defer func() {
+		record("schedule", "get", start)
+	}()
+	return d.Store.GetScheduled(slot)
+}
+
 func (d *DutyTraceStoreMetrics) SaveValidatorDuties(duties []*exporter.ValidatorDutyTrace) error {
 	start := time.Now()
 	defer func() {

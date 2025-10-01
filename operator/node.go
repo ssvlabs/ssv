@@ -66,6 +66,18 @@ type Node struct {
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
 
+	// Prepare scheduler wiring; in exporter mode we swap to AllShares provider,
+	// a prefetching beacon adapter, and a no-op executor.
+	var schedulerBeacon duties.BeaconNode = opts.BeaconNode
+	validatorProvider := any(selfValidatorStore).(duties.ValidatorProvider)
+	dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
+
+	if exporterOpts.Enabled {
+		validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
+		dutyExecutor = duties.NewNoopExecutor()
+		schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
+	}
+
 	feeRecipientCtrl := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
 		Ctx:                opts.Context,
 		BeaconClient:       opts.BeaconNode,
@@ -88,18 +100,19 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(logger, &duties.SchedulerOptions{
 			Ctx:                     opts.Context,
-			BeaconNode:              opts.BeaconNode,
+			BeaconNode:              schedulerBeacon,
 			ExecutionClient:         opts.ExecutionClient,
 			BeaconConfig:            opts.NetworkConfig.Beacon,
-			ValidatorProvider:       selfValidatorStore,
+			ValidatorProvider:       validatorProvider,
 			ValidatorController:     opts.ValidatorController,
-			DutyExecutor:            opts.ValidatorController,
+			DutyExecutor:            dutyExecutor,
 			IndicesChg:              opts.ValidatorController.IndicesChangeChan(),
 			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
 			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
 			DutyStore:               opts.DutyStore,
 			SlotTickerProvider:      slotTickerProvider,
 			P2PNetwork:              opts.P2PNetwork,
+			ExporterMode:            exporterOpts.Enabled,
 		}),
 		feeRecipientCtrl: feeRecipientCtrl,
 

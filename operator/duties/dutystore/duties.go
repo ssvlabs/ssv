@@ -75,6 +75,27 @@ func (d *Duties[D]) ValidatorDuty(epoch phase0.Epoch, slot phase0.Slot, validato
 	return descriptor.Duty
 }
 
+// SlotIndices returns all validator indices that have a duty at the given (epoch, slot).
+// It does not filter by InCommittee.
+func (d *Duties[D]) SlotIndices(epoch phase0.Epoch, slot phase0.Slot) []phase0.ValidatorIndex {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	slotMap, ok := d.m[epoch]
+	if !ok {
+		return nil
+	}
+	descriptorMap, ok := slotMap[slot]
+	if !ok {
+		return nil
+	}
+	out := make([]phase0.ValidatorIndex, 0, len(descriptorMap))
+	for idx := range descriptorMap {
+		out = append(out, idx)
+	}
+	return out
+}
+
 func (d *Duties[D]) Set(epoch phase0.Epoch, duties []StoreDuty[D]) {
 	mapped := make(map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
 	for _, duty := range duties {

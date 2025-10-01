@@ -89,6 +89,10 @@ type SchedulerOptions struct {
 	SlotTickerProvider      slotticker.Provider
 	DutyStore               *dutystore.Store
 	P2PNetwork              network.P2PNetwork
+	// ExporterMode disables handlers that make sense only for operators
+	// executing duties (e.g., validator registration). When true, scheduler
+	// still fetches/stores duties for all validators but does not execute them.
+	ExporterMode bool
 }
 
 type Scheduler struct {
@@ -116,6 +120,8 @@ type Scheduler struct {
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
+
+	exporterMode bool
 }
 
 func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
@@ -136,19 +142,30 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
 
-		handlers: []dutyHandler{
-			NewAttesterHandler(dutyStore.Attester),
-			NewProposerHandler(dutyStore.Proposer),
-			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
-			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
-			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
-			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
-		},
+		handlers: []dutyHandler{},
 
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
+
+	// Assemble handlers; in exporter mode, omit registration handler.
+	s.handlers = append(s.handlers,
+		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
+		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
+		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
+		NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+	)
+	if !opts.ExporterMode {
+		s.handlers = append(s.handlers,
+			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
+			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
+		)
+	}
+
+	s.exporterMode = opts.ExporterMode
+
+	// Handlers receive exporterMode via constructors; no runtime type-switch needed.
 
 	return s
 }
@@ -395,6 +412,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
+	if s.exporterMode {
+		// In exporter mode we do not execute; suppress execution logs.
+		return
+	}
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "scheduler.execute_duties"),
 		trace.WithAttributes(observability.DutyCountAttribute(len(duties))),
@@ -430,6 +451,9 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
+	if s.exporterMode {
+		return
+	}
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"))
 	defer span.End()
 

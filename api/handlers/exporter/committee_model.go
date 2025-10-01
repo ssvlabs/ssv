@@ -34,6 +34,8 @@ func (req *CommitteeTracesRequest) parseCommitteeIds() []spectypes.CommitteeID {
 type CommitteeTracesResponse struct {
 	// Data contains the list of committee duty traces matching the request.
 	Data []CommitteeTrace `json:"data"`
+	// Schedule lists requested duties unioned at the committee-level by role.
+	Schedule []CommitteeSchedule `json:"schedule"`
 	// Errors lists non-fatal issues encountered while building the response (duties not found, enrichment errors, etc.).
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"committee duty missing for slot 123456"`
 }
@@ -90,4 +92,11 @@ func toCommitteePost(m []*exporter.SignerData) (out []CommitteeMessage) {
 		})
 	}
 	return
+}
+
+// CommitteeSchedule presents per-committee scheduled roles as role->indices for a slot.
+type CommitteeSchedule struct {
+	Slot        uint64              `json:"slot" format:"int64"`
+	CommitteeID string              `json:"committeeID" format:"hex"`
+	Roles       map[string][]uint64 `json:"roles"`
 }
