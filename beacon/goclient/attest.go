@@ -39,7 +39,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordMultiClientRequest(ctx, gc.log, "AttesterDuties", http.MethodPost, time.Since(start), err)
+	recordRequest(ctx, gc.log, "AttesterDuties", gc.multiClient, http.MethodPost, true, time.Since(start), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch attester duties: %w", err), "AttesterDuties")
 	}
@@ -250,7 +250,7 @@ func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot)
 		Slot:           slot,
 		CommitteeIndex: 0,
 	})
-	recordMultiClientRequest(ctx, logger, "AttestationData", http.MethodGet, time.Since(attDataReqStart), err)
+	recordRequest(ctx, logger, "AttestationData", gc.multiClient, http.MethodGet, true, time.Since(attDataReqStart), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("get attestation data: %w", err), "AttestationData")
 	}
@@ -285,7 +285,7 @@ func (gc *GoClient) fetchWeightedAttestationData(
 		Slot:           slot,
 		CommitteeIndex: 0,
 	})
-	recordSingleClientRequest(ctx, logger, "AttestationData", client.Address(), http.MethodGet, time.Since(reqStart), err)
+	recordRequest(ctx, logger, "AttestationData", client, http.MethodGet, false, time.Since(reqStart), err)
 	if err != nil {
 		errCh <- &attestationDataError{
 			clientAddr: client.Address(),
@@ -447,7 +447,7 @@ func (gc *GoClient) multiClientSubmit(
 		p.Go(func(ctx context.Context) error {
 			start := time.Now()
 			err := submitFunc(ctx, client)
-			recordSingleClientRequest(ctx, gc.log, routeName, client.Address(), http.MethodPost, time.Since(start), err)
+			recordRequest(ctx, gc.log, routeName, client, http.MethodPost, false, time.Since(start), err)
 			if err != nil {
 				return errSingleClient(fmt.Errorf("failed to submit: %w", err), client.Address(), routeName)
 			}
@@ -477,7 +477,7 @@ func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec
 
 	start := time.Now()
 	err := gc.multiClient.SubmitAttestations(ctx, opts)
-	recordMultiClientRequest(ctx, gc.log, "SubmitAttestations", http.MethodPost, time.Since(start), err)
+	recordRequest(ctx, gc.log, "SubmitAttestations", gc.multiClient, http.MethodPost, true, time.Since(start), err)
 	if err != nil {
 		return errMultiClient(fmt.Errorf("submit attestations: %w", err), "SubmitAttestations")
 	}

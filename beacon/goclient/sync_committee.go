@@ -19,7 +19,7 @@ func (gc *GoClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordMultiClientRequest(ctx, gc.log, "SyncCommitteeDuties", http.MethodPost, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "SyncCommitteeDuties", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("fetch sync committee duties: %w", err), "SyncCommitteeDuties")
 	}
@@ -43,7 +43,7 @@ func (gc *GoClient) SubmitSyncMessages(ctx context.Context, msgs []*altair.SyncC
 
 	reqStart := time.Now()
 	err := gc.multiClient.SubmitSyncCommitteeMessages(ctx, msgs)
-	recordMultiClientRequest(ctx, gc.log, "SubmitSyncCommitteeMessages", http.MethodPost, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "SubmitSyncCommitteeMessages", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
 	if err != nil {
 		return errMultiClient(fmt.Errorf("submit sync committee messages: %w", err), "SubmitSyncCommitteeMessages")
 	}

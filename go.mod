@@ -1,6 +1,6 @@
 module github.com/ssvlabs/ssv
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/aquasecurity/table v1.8.0
@@ -11,7 +11,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dgraph-io/ristretto v0.1.1
-	github.com/ethereum/go-ethereum v1.16.2
+	github.com/ethereum/go-ethereum v1.16.4
 	github.com/ferranbt/fastssz v0.1.4
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
@@ -62,9 +62,11 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2 // indirect
-	github.com/crate-crypto/go-eth-kzg v1.3.0 // indirect
+	github.com/crate-crypto/go-eth-kzg v1.4.0 // indirect
+	github.com/dchest/siphash v1.2.3 // indirect
 	github.com/emicklei/dot v1.6.4 // indirect
-	github.com/ethereum/c-kzg-4844/v2 v2.1.0 // indirect
+	github.com/ethereum/c-kzg-4844/v2 v2.1.3 // indirect
+	github.com/ethereum/go-bigmodexpfix v0.0.0-20250911101455-f9e208c548ab // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
 	github.com/pion/stun/v2 v2.0.0 // indirect
 	github.com/pion/transport/v3 v3.0.7 // indirect
@@ -134,7 +136,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.1-0.20230522191255-76236955d466 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/glog v1.2.4 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -146,7 +148,7 @@ require (
 	github.com/hashicorp/go-bexpr v0.1.10 // indirect
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
-	github.com/holiman/billy v0.0.0-20240216141850-2abb0c79d3c4 // indirect
+	github.com/holiman/billy v0.0.0-20250707135307-f2f9b9aae7db // indirect
 	github.com/holiman/bloomfilter/v2 v2.0.3 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/huandu/go-clone v1.6.0 // indirect
@@ -243,7 +245,7 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/supranational/blst v0.3.14 // indirect
+	github.com/supranational/blst v0.3.16-0.20250831170142-f48500c1fdbe // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect
@@ -267,7 +269,7 @@ require (
 	go.uber.org/fx v1.22.2 // indirect
 	golang.org/x/crypto v0.39.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/term v0.32.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
