@@ -115,11 +115,7 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	All valid future msgs are saved in a container and might be referenced later if/when a not-future message arrives.
 	All other msgs (not future or decided) are processed normally by an existing instance (if found).
 	*/
-	isDecided, err := c.IsDecidedMsg(msg)
-	if err != nil {
-		return nil, err
-	}
-	if isDecided {
+	if c.isDecidedMsg(msg) {
 		return c.UponDecided(msg)
 	}
 
@@ -152,7 +148,6 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 		return nil, errors.Wrap(err, "could not process msg")
 	}
 
-	// save the highest Decided
 	if !decided {
 		return nil, nil
 	}

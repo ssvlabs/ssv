@@ -278,6 +278,11 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, nil
 	}
 
+	// Check if QBFT has decided.
+	if decidedMsg == nil {
+		return false, nil, nil
+	}
+
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
 		return false, nil, err
 	}
@@ -344,10 +349,6 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectypes.SignedSSVMessage) (bool, error) {
-	if signedMessage == nil {
-		return false, nil
-	}
-
 	if signedMessage.SSVMessage == nil {
 		return false, errors.New("ssv message is nil")
 	}
