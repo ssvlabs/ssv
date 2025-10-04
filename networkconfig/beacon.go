@@ -65,6 +65,11 @@ func (b *Beacon) EstimatedSlotAtTime(time time.Time) phase0.Slot {
 	return phase0.Slot(timeAfterGenesis / b.SlotDuration) // #nosec G115: genesis can't be negative
 }
 
+// EstimatedTimeIntoSlot returns the duration passed since EstimatedCurrentSlot.
+func (b *Beacon) EstimatedTimeIntoSlot() time.Duration {
+	return time.Since(b.TimeAtSlot(b.EstimatedCurrentSlot()))
+}
+
 // EstimatedCurrentEpoch estimates the current epoch
 // https://github.com/ethereum/eth2.0-specs/blob/dev/specs/phase0/beacon-chain.md#compute_start_slot_at_epoch
 func (b *Beacon) EstimatedCurrentEpoch() phase0.Epoch {
@@ -105,11 +110,11 @@ func (b *Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
 
 func (b *Beacon) EpochStartTime(epoch phase0.Epoch) time.Time {
 	firstSlot := b.FirstSlotAtEpoch(epoch)
-	t := b.EstimatedTimeAtSlot(firstSlot)
+	t := b.TimeAtSlot(firstSlot)
 	return t
 }
 
-func (b *Beacon) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
+func (b *Beacon) TimeAtSlot(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
 		panic(fmt.Sprintf("slot %d out of range", slot))
 	}

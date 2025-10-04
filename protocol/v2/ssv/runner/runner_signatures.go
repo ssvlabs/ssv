@@ -65,19 +65,25 @@ func signAsValidator(
 }
 
 // Validate message content without verifying signatures
-func (b *BaseRunner) validatePartialSigMsgForSlot(
+func (b *BaseRunner) validatePartialSigMsg(
 	psigMsgs *spectypes.PartialSignatureMessages,
-	slot phase0.Slot,
+	expectedSlot phase0.Slot,
 ) error {
 	if err := psigMsgs.Validate(); err != nil {
 		return errors.Wrap(err, "PartialSignatureMessages invalid")
 	}
 
-	if psigMsgs.Slot != slot {
-		return errors.New("invalid partial sig slot")
+	if psigMsgs.Slot < expectedSlot {
+		// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
+		// and we cannot process it anymore
+		return fmt.Errorf("invalid partial sig slot: %d, want: %d", psigMsgs.Slot, expectedSlot)
 	}
 
-	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate())
+	if psigMsgs.Slot > expectedSlot {
+		return NewRetryableError(fmt.Errorf("%w, message slot: %d, want slot: %d", ErrFuturePartialSigMsg, psigMsgs.Slot, expectedSlot))
+	}
+
+	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate()).
 	msgSigner := psigMsgs.Messages[0].Signer
 
 	// Get committee (unique for runner)

@@ -36,10 +36,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-var (
-	ErrNoValidDuties = errors.New("no valid duties")
-)
-
 type CommitteeDutyGuard interface {
 	StartDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
 	ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
@@ -428,8 +424,8 @@ listener:
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
 		cr.BaseRunner.State.Finished = true
-		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
-		return ErrNoValidDuties
+		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
+		return ErrNoValidDutiesToExecute
 	}
 
 	// Avoid sending an empty message if all attester duties were blocked due to Doppelganger protection
@@ -590,8 +586,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 	if len(beaconObjects) == 0 {
 		cr.BaseRunner.State.Finished = true
-		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
-		return ErrNoValidDuties
+		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
+		return ErrNoValidDutiesToExecute
 	}
 
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)

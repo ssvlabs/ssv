@@ -102,7 +102,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
-			err = test.Committee.ProcessMessage(context.TODO(), msg)
+			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
 				lastErr = err
 			}

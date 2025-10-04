@@ -261,15 +261,25 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
+	if errors.Is(err, &controller.RetryableError{}) {
+		return false, nil, NewRetryableError(err)
+	}
 	if err != nil {
 		return false, nil, err
 	}
 
-	// we allow all consensus msgs to be processed, once the process finishes, we check if there is
-	// an actual running duty - we consider this messaged "processed" (we might or might not get another
-	// message, hopefully we are running the duty by that time to finish the processing below)
+	// TODO: since we can replay runner messages now (implemented in https://github.com/ssvlabs/ssv/pull/2445),
+	// we don't need to have this ad-hoc handling for consensus messages (where we "apply the message-effects to
+	// the best extent we can") anymore - instead we could return `ErrNoRunningDuty` so that the message will be
+	// replayed later (and hopefully the duty will be running by that time). We cannot really progress without
+	// running duty either way.
 	if !b.hasRunningDuty() {
-		logger.Debug("no running duty")
+		logger.Debug("no running duty, applied consensus message but cannot progress further")
+		return false, nil, nil
+	}
+
+	// Check if QBFT has decided.
+	if decidedMsg == nil {
 		return false, nil, nil
 	}
 
@@ -339,10 +349,6 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectypes.SignedSSVMessage) (bool, error) {
-	if signedMessage == nil {
-		return false, nil
-	}
-
 	if signedMessage.SSVMessage == nil {
 		return false, errors.New("ssv message is nil")
 	}

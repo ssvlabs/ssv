@@ -197,7 +197,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
-			return errors.New("did not receive proposal for this round")
+			return NewRetryableError(ErrNoProposalForCurrentRound)
 		}
 
 		return i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(
@@ -208,7 +208,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
-			return errors.New("did not receive proposal for this round")
+			return NewRetryableError(ErrNoProposalForCurrentRound)
 		}
 		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:

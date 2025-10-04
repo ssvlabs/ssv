@@ -33,4 +33,5 @@ const (
 	NameConsensusClient        = "ConsensusClient"
 	NameMigrations             = "Migrations"
 	NameControllerTaskExecutor = "ControllerTaskExecutor"
+	NameSSVMessageQueue        = "SSVMessageQueue"
 )

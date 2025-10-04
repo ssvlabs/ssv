@@ -3,6 +3,7 @@ package stringer
 import (
 	"encoding/hex"
 	"strconv"
+	"time"
 )
 
 type HexStringer struct {
@@ -27,4 +28,13 @@ type Float64Stringer struct {
 
 func (h Float64Stringer) String() string {
 	return strconv.FormatFloat(h.Val, 'f', -1, 64)
+}
+
+type DynamicDurationMs struct {
+	ValFn func() time.Duration
+}
+
+func (s DynamicDurationMs) String() string {
+	valStr := strconv.FormatInt(s.ValFn().Milliseconds(), 10)
+	return valStr + "ms"
 }
