@@ -13,6 +13,14 @@ func (h HexStringer) String() string {
 	return hex.EncodeToString(h.Val)
 }
 
+type Int64Stringer struct {
+	Val int64
+}
+
+func (h Int64Stringer) String() string {
+	return strconv.FormatInt(h.Val, 10)
+}
+
 type Uint64Stringer struct {
 	Val uint64
 }
