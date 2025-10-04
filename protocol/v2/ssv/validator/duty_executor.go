@@ -12,14 +12,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (v *Validator) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) error {
+func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.DomainType)
 	if err != nil {
 		return fmt.Errorf("create duty execute msg: %w", err)
@@ -72,7 +71,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	return nil
 }
 
-func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	ssvMsg, err := createCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.DomainType)
 	if err != nil {
 		return fmt.Errorf("create committee duty: %w", err)
@@ -83,17 +82,6 @@ func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDu
 	}
 
 	dec.TraceContext = ctx
-
-	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	committeeOpIDs := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-	committeeDutyID := fields.BuildCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot)
-	logger := c.logger.
-		With(fields.DutyID(committeeDutyID)).
-		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.CurrentSlot(c.networkConfig.EstimatedCurrentSlot())).
-		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(dutyEpoch)).
-		With(fields.SlotStartTime(c.networkConfig.SlotStartTime(duty.Slot)))
 
 	return c.OnExecuteDuty(ctx, logger, dec.Body.(*types.EventMsg))
 }
@@ -124,7 +112,7 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	}
 
 	span.AddEvent("start consume queue")
-	if err := c.StartConsumeQueue(ctx, logger, duty); err != nil {
+	if err := c.StartQueueConsumer(ctx, logger, duty); err != nil {
 		return traces.Errorf(span, "could not start committee consume queue: %w", err)
 	}
 

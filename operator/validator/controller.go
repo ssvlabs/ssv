@@ -604,7 +604,7 @@ func (c *Controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-func (c *Controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty) {
+func (c *Controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
 	dutyID := fields.BuildDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
@@ -622,14 +622,6 @@ func (c *Controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorD
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	logger := c.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.Epoch(dutyEpoch)).
-		With(fields.Slot(duty.Slot)).
-		With(fields.ValidatorIndex(duty.ValidatorIndex)).
-		With(fields.Validator(duty.PubKey[:])).
-		With(fields.DutyID(dutyID))
-
 	v, ok := c.GetValidator(spectypes.ValidatorPK(duty.PubKey))
 	if !ok {
 		eventMsg := fmt.Sprintf("could not find validator: %s", duty.PubKey.String())
@@ -640,7 +632,7 @@ func (c *Controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorD
 	}
 
 	span.AddEvent("executing validator duty")
-	if err := v.ExecuteDuty(ctx, duty); err != nil {
+	if err := v.ExecuteDuty(ctx, logger, duty); err != nil {
 		logger.Error("could not execute validator duty", zap.Error(err))
 		span.SetStatus(codes.Error, err.Error())
 		return
@@ -649,7 +641,7 @@ func (c *Controller) ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorD
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 	cm, ok := c.validatorsMap.GetCommittee(committeeID)
 	if !ok {
 		const eventMsg = "could not find committee"
@@ -676,15 +668,8 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spect
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	logger := c.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.Epoch(dutyEpoch)).
-		With(fields.Slot(duty.Slot)).
-		With(fields.CommitteeID(committeeID)).
-		With(fields.DutyID(dutyID))
-
 	span.AddEvent("executing committee duty")
-	if err := cm.ExecuteDuty(ctx, duty); err != nil {
+	if err := cm.ExecuteDuty(ctx, logger, duty); err != nil {
 		logger.Error("could not execute committee duty", zap.Error(err))
 		span.SetStatus(codes.Error, err.Error())
 		return

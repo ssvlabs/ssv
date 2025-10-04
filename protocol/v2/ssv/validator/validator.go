@@ -2,10 +2,8 @@ package validator
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -20,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -123,126 +120,5 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	}
 
 	span.SetStatus(codes.Ok, "")
-	return nil
-}
-
-// ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
-	msgType := msg.GetType()
-	msgID := msg.GetID()
-
-	// Validate message (+ verify SignedSSVMessage's signature)
-	if msgType != message.SSVEventMsgType {
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
-		}
-		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
-		}
-	}
-
-	slot, err := msg.Slot()
-	if err != nil {
-		return fmt.Errorf("couldn't get message slot: %w", err)
-	}
-	dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
-
-	logger := v.logger.
-		With(fields.MessageType(msgType)).
-		With(fields.MessageID(msgID)).
-		With(fields.RunnerRole(msgID.GetRoleType())).
-		With(fields.Slot(slot)).
-		With(fields.DutyID(dutyID))
-
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "process_message"),
-		trace.WithAttributes(
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.ValidatorMsgIDAttribute(msgID),
-			observability.RunnerRoleAttribute(msgID.GetRoleType()),
-			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
-		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
-	defer span.End()
-
-	// Get runner
-	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-	if dutyRunner == nil {
-		return traces.Errorf(span, "could not get duty runner for msg ID %v", msgID)
-	}
-
-	// Validate message for runner
-	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return traces.Errorf(span, "message invalid for msg ID %v: %w", msgID, err)
-	}
-	switch msgType {
-	case spectypes.SSVConsensusMsgType:
-		qbftMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok {
-			return traces.Errorf(span, "could not decode consensus message from network message")
-		}
-
-		if err := qbftMsg.Validate(); err != nil {
-			return traces.Errorf(span, "invalid QBFT Message: %w", err)
-		}
-
-		logger = logger.With(fields.QBFTHeight(qbftMsg.Height))
-
-		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
-			return traces.Error(span, err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
-		if !ok {
-			return traces.Errorf(span, "could not decode post consensus message from network message")
-		}
-
-		span.SetAttributes(observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type))
-
-		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
-		}
-
-		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
-		}
-
-		if signedMsg.Type == spectypes.PostConsensusPartialSig {
-			span.AddEvent("processing post-consensus message")
-			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
-				return traces.Error(span, err)
-			}
-			span.SetStatus(codes.Ok, "")
-			return nil
-		}
-		span.AddEvent("processing pre-consensus message")
-		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
-			return traces.Error(span, err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	case message.SSVEventMsgType:
-		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	default:
-		return traces.Errorf(span, "unknown message type %d", msgType)
-	}
-}
-
-func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
-	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
-		return errors.New("msg ID doesn't match validator ID")
-	}
-
-	if len(msg.GetData()) == 0 {
-		return errors.New("msg data is invalid")
-	}
-
 	return nil
 }

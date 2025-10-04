@@ -82,13 +82,13 @@ func runConsumeQueueAsync(
 	committee *Committee,
 	q queueContainer,
 	logger *zap.Logger,
-	handler func(context.Context, *queue.SSVMessage) error,
+	handler MessageHandler,
 	committeeRunner *runner.CommitteeRunner,
 ) {
 	t.Helper()
 
 	go func() {
-		committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+		committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
 	}()
 }
 
@@ -135,10 +135,10 @@ func collectMessagesFromQueue(t *testing.T, msgChannel <-chan *queue.SSVMessage,
 
 // setupMessageCollection creates a message channel and handler function for queue message processing.
 // It returns the message channel and the handler function that adds messages to this channel.
-func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.Context, *queue.SSVMessage) error) {
+func setupMessageCollection(capacity int) (chan *queue.SSVMessage, MessageHandler) {
 	msgChannel := make(chan *queue.SSVMessage, max(1, capacity))
 
-	handler := func(ctx context.Context, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		msgChannel <- msg
 		return nil
 	}
@@ -284,7 +284,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 	assert.Equal(t, specqbft.PrepareMsgType, receivedMessages[1].Body.(*specqbft.Message).MsgType)
 }
 
-// TestStartConsumeQueue tests the StartConsumeQueue method, which orchestrates queue processing
+// TestStartConsumeQueue tests the StartQueueConsumer method, which orchestrates queue processing
 // for a specific slot. This test verifies error handling in various scenarios:
 // - Missing queue for a slot
 // - Missing runner for a slot
@@ -292,9 +292,9 @@ func TestConsumeQueueBasic(t *testing.T) {
 //
 // Flow:
 // 1. Set up a committee with a queue for a specific slot and a corresponding runner
-// 2. Test scenario 1: Call StartConsumeQueue with a duty for a nonexistent slot (should error)
-// 3. Test scenario 2: Delete runner and call StartConsumeQueue for the existing slot (should error)
-// 4. Test scenario 3: Restore runner and call StartConsumeQueue for the valid slot (should succeed)
+// 2. Test scenario 1: Call StartQueueConsumer with a duty for a nonexistent slot (should error)
+// 3. Test scenario 2: Delete runner and call StartQueueConsumer for the existing slot (should error)
+// 4. Test scenario 3: Restore runner and call StartQueueConsumer for the valid slot (should succeed)
 func TestStartConsumeQueue(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -329,16 +329,16 @@ func TestStartConsumeQueue(t *testing.T) {
 	duty := &spectypes.CommitteeDuty{
 		Slot: phase0.Slot(124),
 	}
-	err := committee.StartConsumeQueue(t.Context(), logger, duty)
+	err := committee.StartQueueConsumer(t.Context(), logger, duty)
 	assert.Error(t, err)
 
 	duty.Slot = slot
 	delete(committee.Runners, slot)
-	err = committee.StartConsumeQueue(t.Context(), logger, duty)
+	err = committee.StartQueueConsumer(t.Context(), logger, duty)
 	assert.Error(t, err)
 
 	committee.Runners[slot] = committeeRunner
-	err = committee.StartConsumeQueue(t.Context(), logger, duty)
+	err = committee.StartQueueConsumer(t.Context(), logger, duty)
 	assert.NoError(t, err)
 }
 
@@ -663,7 +663,7 @@ func TestChangingFilterState(t *testing.T) {
 		defer cancel()
 
 		var seen *queue.SSVMessage
-		handler := func(_ context.Context, m *queue.SSVMessage) error {
+		handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
 			seen = m
 			// Return error to make ConsumeQueue exit early after processing one message.
 			// This is intentional for this test which just needs to check if a message was filtered.
@@ -682,7 +682,7 @@ func TestChangingFilterState(t *testing.T) {
 		q.Q.TryPush(prepareMsg)
 
 		c := &Committee{}
-		c.ConsumeQueue(ctx, q, logger, handler, rnr)
+		c.ConsumeQueue(ctx, logger, q, handler, rnr)
 		return seen
 	}
 
@@ -831,7 +831,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
 
-			handler := func(ctx context.Context, msg *queue.SSVMessage) error {
+			handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 				msgChannel <- msg
 				return nil
 			}
@@ -1087,7 +1087,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 
 	msgChannel := make(chan *queue.SSVMessage, len(testMessages))
 
-	handler := func(ctx context.Context, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		msgChannel <- msg
 		return nil
 	}
@@ -1282,7 +1282,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	}
 
 	var processedMessagesCount int32
-	handler := func(ctx context.Context, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		atomic.AddInt32(&processedMessagesCount, 1)
 		if msg.MsgID == msg1.MsgID { // Return error after processing the first message
 			return runner.ErrNoValidDutiesToExecute
@@ -1295,7 +1295,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	// The ConsumeQueue method itself is designed to break its processing loop and return nil
 	// when its handler signals ErrNoValidDutiesToExecute, treating it as a normal stop condition for the queue.
 	// Thus, we expect no error from the ConsumeQueue call.
-	committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+	committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&processedMessagesCount))
 	assert.Equal(t, 2, q.Q.Len())
@@ -1446,14 +1446,14 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 
 	// --- Drain the queue, capturing the priority bucket of each popped message ---
 	bucketChan := make(chan int, len(allMsgs))
-	handler := func(_ context.Context, m *queue.SSVMessage) error {
+	handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
 		bucketChan <- priority(m)
 		return nil
 	}
 
 	go func() {
 		defer close(bucketChan)
-		committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
+		committee.ConsumeQueue(ctx, logger, qc, handler, committee.Runners[slot])
 	}()
 
 	// Wait for exactly len(allMsgs) messages (or fail on timeout)
@@ -1742,7 +1742,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			handlerCalled    = make(chan struct{}, queueCapacity*3)
 		)
 
-		processFn := func(_ context.Context, msg *queue.SSVMessage) error {
+		processFn := func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 			processMsgsMutex.Lock()
 			processedMsgs = append(processedMsgs, msg)
 			processMsgsMutex.Unlock()
@@ -1756,7 +1756,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		go func() {
 			defer consumerWg.Done()
-			committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
+			committee.ConsumeQueue(consumerCtx, logger, q, processFn, committeeRunner)
 		}()
 
 		// Fill with filtered Prepare messages
@@ -1811,7 +1811,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		go func() {
 			defer consumer2Wg.Done()
-			committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
+			committee.ConsumeQueue(consumer2Ctx, logger, q, processFn, committeeRunner)
 		}()
 
 		// Observe how many of the old Prepares now drain

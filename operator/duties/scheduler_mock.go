@@ -20,6 +20,7 @@ import (
 	types0 "github.com/ssvlabs/ssv-spec/types"
 	types1 "github.com/ssvlabs/ssv/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockDutiesExecutor is a mock of DutiesExecutor interface.
@@ -95,27 +96,27 @@ func (m *MockDutyExecutor) EXPECT() *MockDutyExecutorMockRecorder {
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteCommitteeDuty(ctx context.Context, committeeID types0.CommitteeID, duty *types0.CommitteeDuty) {
+func (m *MockDutyExecutor) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID types0.CommitteeID, duty *types0.CommitteeDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteCommitteeDuty", ctx, committeeID, duty)
+	m.ctrl.Call(m, "ExecuteCommitteeDuty", ctx, logger, committeeID, duty)
 }
 
 // ExecuteCommitteeDuty indicates an expected call of ExecuteCommitteeDuty.
-func (mr *MockDutyExecutorMockRecorder) ExecuteCommitteeDuty(ctx, committeeID, duty any) *gomock.Call {
+func (mr *MockDutyExecutorMockRecorder) ExecuteCommitteeDuty(ctx, logger, committeeID, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteCommitteeDuty), ctx, committeeID, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteCommitteeDuty), ctx, logger, committeeID, duty)
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteDuty(ctx context.Context, duty *types0.ValidatorDuty) {
+func (m *MockDutyExecutor) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *types0.ValidatorDuty) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteDuty", ctx, duty)
+	m.ctrl.Call(m, "ExecuteDuty", ctx, logger, duty)
 }
 
 // ExecuteDuty indicates an expected call of ExecuteDuty.
-func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(ctx, duty any) *gomock.Call {
+func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(ctx, logger, duty any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteDuty), ctx, duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteDuty), ctx, logger, duty)
 }
 
 // MockBeaconNode is a mock of BeaconNode interface.

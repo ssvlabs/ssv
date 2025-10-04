@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -16,7 +15,7 @@ import (
 
 // MessageHandler process the provided message. Message processing can fail with retryable or
 // non-retryable error (can be checked via `errors.Is(err, &runner.RetryableError{})`).
-type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
+type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
 type msgIDType string
 
@@ -42,15 +41,12 @@ func messageID(msg *queue.SSVMessage, logger *zap.Logger) msgIDType {
 	return idUndefined
 }
 
-func loggerWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logger {
+func logWithMessageMetadata(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logger {
 	logger = logger.With(fields.MessageType(msg.MsgType))
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
 		logger = logger.With(
-			fields.Slot(phase0.Slot(qbftMsg.Height)),
-			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
-			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
 			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		)
@@ -63,7 +59,6 @@ func loggerWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) *zap.Log
 		logger = logger.With(
 			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
 			zap.Uint64("signer", signer),
-			fields.Slot(psm.Slot),
 		)
 	}
 

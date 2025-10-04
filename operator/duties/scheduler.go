@@ -45,8 +45,8 @@ type DutiesExecutor interface {
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
-	ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty)
-	ExecuteCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
+	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 }
 
 type BeaconNode interface {
@@ -421,7 +421,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
 			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
-			s.dutyExecutor.ExecuteDuty(ctx, duty)
+			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}(ctx)
 	}
 
@@ -457,7 +457,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		go func(ctx context.Context) {
 			s.waitOneThirdOrValidBlock(duty.Slot)
 			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
-			s.dutyExecutor.ExecuteCommitteeDuty(ctx, committee.id, duty)
+			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}(ctx)
 	}
 
@@ -466,30 +466,35 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
+	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
+
 	return s.logger.
-		With(fields.BeaconRole(duty.Type)).
-		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
+		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.beaconConfig.EstimatedEpochAtSlot(duty.Slot))).
+		With(fields.DutyID(dutyID)).
 		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
+		With(fields.ValidatorIndex(duty.ValidatorIndex)).
+		With(fields.EstimatedCurrentEpoch(s.beaconConfig.EstimatedCurrentEpoch())).
+		With(fields.EstimatedCurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
+		With(fields.EstimatedTimeIntoSlot(s.beaconConfig.EstimatedTimeIntoSlot()))
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
+
 	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
 	return s.logger.
-		With(fields.CommitteeID(committeeDuty.id)).
-		With(fields.DutyID(committeeDutyID)).
 		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(dutyEpoch)).
-		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
+		With(fields.DutyID(committeeDutyID)).
+		With(fields.CommitteeID(committeeDuty.id)).
+		With(fields.EstimatedCurrentEpoch(s.beaconConfig.EstimatedCurrentEpoch())).
+		With(fields.EstimatedCurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
+		With(fields.EstimatedTimeIntoSlot(s.beaconConfig.EstimatedTimeIntoSlot()))
 }
 
 // advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,

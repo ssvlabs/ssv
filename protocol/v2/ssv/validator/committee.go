@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -20,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -234,112 +232,6 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 	}
 
 	return shares, attesters, runnableDuty, nil
-}
-
-// ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
-	msgType := msg.GetType()
-	msgID := msg.GetID()
-
-	// Validate message (+ verify SignedSSVMessage's signature)
-	if msgType != message.SSVEventMsgType {
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
-		}
-		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
-		}
-		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			// TODO - we should improve this error message as is suggested by the commented-out code here
-			// (and also remove nolint annotation), currently we cannot do it due to spec-tests expecting
-			// this exact format we are stuck with.
-			//return fmt.Errorf("SSVMessage invalid: %w", err)
-			return fmt.Errorf("Message invalid: %w", err) //nolint:staticcheck
-		}
-	}
-
-	slot, err := msg.Slot()
-	if err != nil {
-		return fmt.Errorf("couldn't get message slot: %w", err)
-	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
-
-	logger := c.logger.
-		With(fields.MessageType(msgType)).
-		With(fields.MessageID(msgID)).
-		With(fields.RunnerRole(msgID.GetRoleType())).
-		With(fields.Slot(slot)).
-		With(fields.DutyID(dutyID))
-
-	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
-		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
-		trace.WithAttributes(
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.ValidatorMsgIDAttribute(msgID),
-			observability.RunnerRoleAttribute(msgID.GetRoleType()),
-			observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
-			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
-		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
-	defer span.End()
-
-	switch msgType {
-	case spectypes.SSVConsensusMsgType:
-		qbftMsg := &qbft.Message{}
-		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return traces.Errorf(span, "could not decode consensus Message: %w", err)
-		}
-		if err := qbftMsg.Validate(); err != nil {
-			return traces.Errorf(span, "invalid QBFT Message: %w", err)
-		}
-		c.mtx.RLock()
-		r, exists := c.Runners[slot]
-		c.mtx.RUnlock()
-		if !exists {
-			return traces.Errorf(span, "no runner found for message's slot")
-		}
-		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
-	case spectypes.SSVPartialSignatureMsgType:
-		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return traces.Errorf(span, "could not decode PartialSignatureMessages: %w", err)
-		}
-
-		// Validate
-		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
-		}
-
-		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
-		}
-
-		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			c.mtx.RLock()
-			r, exists := c.Runners[pSigMessages.Slot]
-			c.mtx.RUnlock()
-			if !exists {
-				return traces.Errorf(span, "no runner found for message's slot")
-			}
-			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
-				return traces.Error(span, err)
-			}
-			span.SetStatus(codes.Ok, "")
-			return nil
-		}
-	case message.SSVEventMsgType:
-		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	default:
-		return traces.Errorf(span, "unknown message type: %d", msgType)
-	}
-
-	span.SetStatus(codes.Ok, "")
-	return nil
 }
 
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
