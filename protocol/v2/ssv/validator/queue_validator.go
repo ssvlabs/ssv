@@ -350,7 +350,9 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 		With(fields.DutyID(dutyID)).
 		With(fields.EstimatedCurrentEpoch(v.NetworkConfig.EstimatedCurrentEpoch())).
 		With(fields.EstimatedCurrentSlot(v.NetworkConfig.EstimatedCurrentSlot())).
-		With(fields.EstimatedTimeIntoSlot(v.NetworkConfig.EstimatedTimeIntoSlot()))
+		With(fields.EstimatedTimeIntoSlot(func() time.Duration {
+			return v.NetworkConfig.EstimatedTimeIntoSlot()
+		}))
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)

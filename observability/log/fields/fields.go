@@ -282,10 +282,10 @@ func EstimatedCurrentSlot(val phase0.Slot) zapcore.Field {
 	return zap.Stringer(FieldEstimatedCurrentSlot, stringer.Uint64Stringer{Val: uint64(val)})
 }
 
-func EstimatedTimeIntoSlot(val time.Duration) zapcore.Field {
+func EstimatedTimeIntoSlot(valFn func() time.Duration) zapcore.Field {
 	return zap.Stringer(
 		FieldEstimatedTimeIntoSlot,
-		stringer.Int64Stringer{Val: val.Milliseconds()},
+		stringer.DynamicDurationMs{ValFn: valFn},
 	)
 }
 
