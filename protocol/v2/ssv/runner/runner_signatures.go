@@ -87,7 +87,15 @@ func (b *BaseRunner) validatePartialSigMsg(
 	msgSigner := psigMsgs.Messages[0].Signer
 
 	// Get committee (unique for runner)
-	committee := b.Share[0].Committee
+	var shareSample *spectypes.Share
+	for _, share := range b.Share {
+		shareSample = share
+		break
+	}
+	if shareSample == nil {
+		return errors.New("can not get committee because there is no share in runner")
+	}
+	committee := shareSample.Committee
 
 	// Check if signer is in committee
 	signerInCommittee := false
