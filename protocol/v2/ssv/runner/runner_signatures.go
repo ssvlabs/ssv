@@ -154,8 +154,12 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
-		err = b.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot,
-			b.Share[msg.ValidatorIndex].Committee)
+		err = b.verifyBeaconPartialSignature(
+			msg.Signer,
+			previousSignature,
+			msg.SigningRoot,
+			b.Share[msg.ValidatorIndex].Committee,
+		)
 		if err == nil {
 			// Keep the previous signature since it's correct
 			return
@@ -166,8 +170,12 @@ func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContaine
 	container.Remove(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 
 	// Hold the new signature, if correct
-	err = b.verifyBeaconPartialSignature(msg.Signer, msg.PartialSignature, msg.SigningRoot,
-		b.Share[msg.ValidatorIndex].Committee)
+	err = b.verifyBeaconPartialSignature(
+		msg.Signer,
+		msg.PartialSignature,
+		msg.SigningRoot,
+		b.Share[msg.ValidatorIndex].Committee,
+	)
 	if err == nil {
 		container.AddSignature(msg)
 	}
