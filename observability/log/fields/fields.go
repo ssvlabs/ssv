@@ -43,7 +43,6 @@ const (
 	FieldCount                 = "count"
 	FieldEstimatedCurrentEpoch = "estimated_current_epoch"
 	FieldEstimatedCurrentSlot  = "estimated_current_slot"
-	FieldEstimatedTimeIntoSlot = "estimated_time_into_slot"
 	FieldDomain                = "domain"
 	FieldDuration              = "duration"
 	FieldDuties                = "duties"
@@ -280,13 +279,6 @@ func EstimatedCurrentEpoch(val phase0.Epoch) zapcore.Field {
 
 func EstimatedCurrentSlot(val phase0.Slot) zapcore.Field {
 	return zap.Stringer(FieldEstimatedCurrentSlot, stringer.Uint64Stringer{Val: uint64(val)})
-}
-
-func EstimatedTimeIntoSlot(valFn func() time.Duration) zapcore.Field {
-	return zap.Stringer(
-		FieldEstimatedTimeIntoSlot,
-		stringer.DynamicDurationMs{ValFn: valFn},
-	)
 }
 
 func Domain(val spectypes.DomainType) zap.Field {
