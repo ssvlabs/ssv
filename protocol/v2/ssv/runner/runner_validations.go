@@ -54,29 +54,25 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		return NewRetryableError(ErrNoRunningDuty)
 	}
 
-	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
-	if len(b.State.DecidedValue) == 0 {
-		return fmt.Errorf("no decided value")
-	}
-
 	if b.State.RunningInstance == nil {
 		return NewRetryableError(ErrInstanceNotFound)
 	}
+
+	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
-	if !decided {
-		return fmt.Errorf("no decided value")
+	if !decided || len(b.State.DecidedValue) == 0 {
+		// We cannot process this message without having a decided value, calling validatePartialSigMsg
+		// in case it can provide us with a more precise error (+ figure out whether the error is
+		// retryable or not). Otherwise, treat it as a retryable error.
+		err := b.validatePartialSigMsg(psigMsgs, b.State.StartingDuty.DutySlot())
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrNoDecidedValue, err)
+		}
+		return NewRetryableError(ErrNoDecidedValue)
 	}
 
-	// TODO: (Alan) maybe nicer to do this without switch
-	switch runner.(type) {
-	case *CommitteeRunner:
-		decidedValue := &spectypes.BeaconVote{}
-		if err := decidedValue.Decode(decidedValueBytes); err != nil {
-			return errors.Wrap(err, "failed to parse decided value to BeaconVote")
-		}
-
-		return b.validatePartialSigMsg(psigMsgs, b.State.StartingDuty.DutySlot())
-	default:
+	// Validate the message differently depending on a message type.
+	validateMsg := func() error {
 		decidedValue := &spectypes.ValidatorConsensusData{}
 		if err := decidedValue.Decode(decidedValueBytes); err != nil {
 			return errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
@@ -97,6 +93,22 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 
 		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
 	}
+	if runner.GetRole() == spectypes.RoleCommittee {
+		validateMsg = func() error {
+			decidedValue := &spectypes.BeaconVote{}
+			if err := decidedValue.Decode(decidedValueBytes); err != nil {
+				return errors.Wrap(err, "failed to parse decided value to BeaconVote")
+			}
+
+			return b.validatePartialSigMsg(psigMsgs, b.State.StartingDuty.DutySlot())
+		}
+	}
+	err := validateMsg()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (b *BaseRunner) validateDecidedConsensusData(valueCheckFn specqbft.ProposedValueCheckF, val spectypes.Encoder) error {

@@ -19,6 +19,9 @@ var (
 	// ErrInstanceNotFound means we might not have started the QBFT instance yet, while another operator already did
 	// + sent this message to us.
 	ErrInstanceNotFound = fmt.Errorf("instance not found")
+	// ErrNoDecidedValue means we might not have finished the QBFT consensus phase yet, while another operator
+	// already did + sent this message to us.
+	ErrNoDecidedValue = fmt.Errorf("no decided value")
 )
 
 // RetryableError is an error-wrapper to indicate that wrapped error is retryable.
