@@ -50,6 +50,13 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 }
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
+	slot := b.State.StartingDuty.DutySlot()
+
+	err := b.validatePartialSigMsg(psigMsgs, slot)
+	if err != nil {
+		return err
+	}
+
 	if !b.hasRunningDuty() {
 		return NewRetryableError(ErrNoRunningDuty)
 	}
@@ -61,13 +68,6 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
 	if !decided || len(b.State.DecidedValue) == 0 {
-		// We cannot process this message without having a decided value, calling validatePartialSigMsg
-		// in case it can provide us with a more precise error (+ figure out whether the error is
-		// retryable or not). Otherwise, treat it as a retryable error.
-		err := b.validatePartialSigMsg(psigMsgs, b.State.StartingDuty.DutySlot())
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrNoDecidedValue, err)
-		}
 		return NewRetryableError(ErrNoDecidedValue)
 	}
 
@@ -76,10 +76,6 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		decidedValue := &spectypes.ValidatorConsensusData{}
 		if err := decidedValue.Decode(decidedValueBytes); err != nil {
 			return errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
-		}
-
-		if err := b.validatePartialSigMsg(psigMsgs, decidedValue.Duty.Slot); err != nil {
-			return err
 		}
 
 		if err := b.validateValidatorIndexInPartialSigMsg(psigMsgs); err != nil {
@@ -100,11 +96,10 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 				return errors.Wrap(err, "failed to parse decided value to BeaconVote")
 			}
 
-			return b.validatePartialSigMsg(psigMsgs, b.State.StartingDuty.DutySlot())
+			return nil
 		}
 	}
-	err := validateMsg()
-	if err != nil {
+	if err = validateMsg(); err != nil {
 		return err
 	}
 
