@@ -93,7 +93,7 @@ func (b *BaseRunner) validatePartialSigMsg(
 		break
 	}
 	if shareSample == nil {
-		return errors.New("can not get committee because there is no share in runner")
+		return errors.New("can not get committee because there is not a single Share in runner")
 	}
 	committee := shareSample.Committee
 
