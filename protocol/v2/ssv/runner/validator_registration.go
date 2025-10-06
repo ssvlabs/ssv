@@ -132,7 +132,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	registration, err := r.buildValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
+	registration, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
 	if err != nil {
 		return traces.Errorf(span, "could not calculate validator registration: %w", err)
 	}
@@ -175,10 +175,10 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
+	if r.BaseRunner.State == nil || r.BaseRunner.State.CurrentDuty == nil {
 		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
 	}
-	vr, err := r.buildValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
+	vr, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}

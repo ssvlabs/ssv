@@ -64,7 +64,7 @@ func signAsValidator(
 	}, nil
 }
 
-// Validate message content without verifying signatures
+// Validate message content without verifying signatures and slot.
 func (b *BaseRunner) validatePartialSigMsg(
 	psigMsgs *spectypes.PartialSignatureMessages,
 	expectedSlot phase0.Slot,

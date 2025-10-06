@@ -113,7 +113,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
 	signer := signedMsg.Messages[0].Signer
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.GetState().CurrentDuty.(*spectypes.ValidatorDuty)
 
 	logger.Debug("🧩 got partial RANDAO signatures", zap.Uint64("signer", signer))
 
@@ -159,7 +159,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty = r.GetState().CurrentDuty.(*spectypes.ValidatorDuty)
 	vBlk, obj, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		const errMsg = "failed to get beacon block"
@@ -269,7 +269,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		span.AddEvent("decided has a vanilla block")
 	}
 
-	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.BaseRunner.State.CurrentDuty.(*spectypes.ValidatorDuty)
 	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
@@ -420,7 +420,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	const eventMsg = "✅ successfully submitted block proposal"
 	span.AddEvent(eventMsg, trace.WithAttributes(
-		observability.BeaconSlotAttribute(r.BaseRunner.State.StartingDuty.DutySlot()),
+		observability.BeaconSlotAttribute(r.BaseRunner.State.CurrentDuty.DutySlot()),
 		observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
 		observability.BeaconBlockHashAttribute(blockHash),
 		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
@@ -439,7 +439,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	recordSuccessfulSubmission(
 		ctx,
 		1,
-		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().CurrentDuty.DutySlot()),
 		spectypes.BNRoleProposer,
 	)
 
@@ -448,7 +448,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().CurrentDuty.DutySlot())
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 

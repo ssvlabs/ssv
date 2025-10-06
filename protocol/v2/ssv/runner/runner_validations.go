@@ -25,7 +25,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return NewRetryableError(ErrNoRunningDuty)
 	}
 
-	if err := b.validatePartialSigMsg(signedMsg, b.State.StartingDuty.DutySlot()); err != nil {
+	if err := b.validatePartialSigMsg(signedMsg, b.State.CurrentDuty.DutySlot()); err != nil {
 		return err
 	}
 
@@ -50,9 +50,9 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 }
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
-	slot := b.State.StartingDuty.DutySlot()
+	expectedSlot := b.State.CurrentDuty.DutySlot()
 
-	err := b.validatePartialSigMsg(psigMsgs, slot)
+	err := b.validatePartialSigMsg(psigMsgs, expectedSlot)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 
 	// convert expected roots to map and mark unique roots when verified
 	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
-		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.StartingDuty.DutySlot())
+		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get pre consensus root domain")

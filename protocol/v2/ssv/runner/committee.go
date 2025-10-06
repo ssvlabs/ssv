@@ -281,7 +281,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	cr.measurements.StartPostConsensus()
 
-	duty := cr.BaseRunner.State.StartingDuty
+	duty := cr.BaseRunner.State.CurrentDuty
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
 		Slot:     duty.DutySlot(),
@@ -770,7 +770,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			recordSuccessfulSubmission(
 				ctx,
 				uint32(attestationsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.CurrentDuty.DutySlot()),
 				spectypes.BNRoleAttester,
 			)
 		}
@@ -787,7 +787,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		))
 
 		logger.Info(eventMsg,
-			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot())),
+			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.CurrentDuty.DutySlot())),
 			fields.QBFTHeight(cr.BaseRunner.QBFTController.Height),
 			fields.QBFTRound(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
@@ -827,13 +827,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			recordSuccessfulSubmission(
 				ctx,
 				uint32(syncMsgsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.CurrentDuty.DutySlot()),
 				spectypes.BNRoleSyncCommittee,
 			)
 		}
 		const eventMsg = "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),
+			observability.BeaconSlotAttribute(cr.BaseRunner.State.CurrentDuty.DutySlot()),
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
 			observability.ValidatorCountAttribute(len(syncCommitteeMessages)),
@@ -959,7 +959,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
-	duty := cr.BaseRunner.State.StartingDuty
+	duty := cr.BaseRunner.State.CurrentDuty
 	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
