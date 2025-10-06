@@ -60,8 +60,8 @@ type CommitteeRunner struct {
 	doppelgangerHandler DoppelgangerProvider
 	measurements        measurementsStore
 
-	// valCheck is used to validate the qbft-value(s) proposed by other Operators.
-	valCheck ssv.ValueChecker
+	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
+	ValCheck ssv.ValueChecker
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 }
@@ -171,7 +171,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		network:        cr.network,
 		signer:         cr.signer,
 		operatorSigner: cr.operatorSigner,
-		valCheck:       cr.valCheck,
+		valCheck:       cr.ValCheck,
 	}
 
 	byts, err := json.Marshal(alias)
@@ -201,7 +201,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	cr.network = aux.network
 	cr.signer = aux.signer
 	cr.operatorSigner = aux.operatorSigner
-	cr.valCheck = aux.valCheck
+	cr.ValCheck = aux.valCheck
 	return nil
 }
 
@@ -272,7 +272,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr.valCheck.CheckValue, msg, &spectypes.BeaconVote{})
+	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr.ValCheck.CheckValue, msg, &spectypes.BeaconVote{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -1083,7 +1083,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Target:    attData.Target,
 	}
 
-	cr.valCheck = ssv.NewVoteChecker(
+	cr.ValCheck = ssv.NewVoteChecker(
 		cr.signer,
 		slot,
 		cr.attestingValidators,
@@ -1091,7 +1091,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		vote,
 	)
 
-	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote, cr.valCheck); err != nil {
+	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote, cr.ValCheck); err != nil {
 		return traces.Errorf(span, "failed to start new duty runner instance: %w", err)
 	}
 

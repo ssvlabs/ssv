@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -73,9 +74,49 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
+	switch test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		if test.Runner.(*runner.CommitteeRunner).ValCheck == nil {
+			test.Runner.(*runner.CommitteeRunner).ValCheck = qbfttesting.TestingValueChecker{}
+		}
+		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
+			if inst.ValueChecker == nil {
+				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			}
+		}
+	case *runner.AggregatorRunner:
+		if test.Runner.(*runner.AggregatorRunner).ValCheck == nil {
+			test.Runner.(*runner.AggregatorRunner).ValCheck = qbfttesting.TestingValueChecker{}
+		}
+		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
+			if inst.ValueChecker == nil {
+				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			}
+		}
+	case *runner.ProposerRunner:
+		if test.Runner.(*runner.ProposerRunner).ValCheck == nil {
+			test.Runner.(*runner.ProposerRunner).ValCheck = qbfttesting.TestingValueChecker{}
+		}
+		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
+			if inst.ValueChecker == nil {
+				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			}
+		}
+	case *runner.SyncCommitteeAggregatorRunner:
+		if test.Runner.(*runner.SyncCommitteeAggregatorRunner).ValCheck == nil {
+			test.Runner.(*runner.SyncCommitteeAggregatorRunner).ValCheck = qbfttesting.TestingValueChecker{}
+		}
+		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
+			if inst.ValueChecker == nil {
+				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			}
+		}
+	}
+
 	var v *validator.Validator
 	var c *validator.Committee
 	var lastErr error
+
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
 		guard := validator.NewCommitteeDutyGuard()
@@ -228,11 +269,16 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
-	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
+	createRunnerF := func(
+		_ phase0.Slot,
+		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
+		attestingValidators []phase0.BLSPubKey,
+		_ runner.CommitteeDutyGuard,
+	) (*runner.CommitteeRunner, error) {
 		r, err := runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			[]phase0.BLSPubKey{spectestingutils.TestingValidatorPubKey},
+			attestingValidators,
 			controller.NewController(
 				runnerSample.BaseRunner.QBFTController.Identifier,
 				runnerSample.BaseRunner.QBFTController.CommitteeMember,

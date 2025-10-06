@@ -131,7 +131,7 @@ var ConstructBaseRunner = func(
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			[]phase0.BLSPubKey{spectestingutils.TestingValidatorPubKey},
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
@@ -214,7 +214,7 @@ var ConstructBaseRunner = func(
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			[]phase0.BLSPubKey{spectestingutils.TestingValidatorPubKey},
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
@@ -320,6 +320,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	dutyGuard := validator.NewCommitteeDutyGuard()
 	dgHandler := doppelganger.NoOpHandler{}
 
+	sharePubKeys := make([]phase0.BLSPubKey, 0)
 	if len(shareMap) > 0 {
 		var keySetInstance *spectestingutils.TestKeySet
 		var shareInstance *spectypes.Share
@@ -329,7 +330,6 @@ var ConstructBaseRunnerWithShareMap = func(
 			break
 		}
 
-		sharePubKeys := make([]phase0.BLSPubKey, 0)
 		for _, share := range shareMap {
 			sharePubKeys = append(sharePubKeys, phase0.BLSPubKey(share.SharePubKey))
 		}
@@ -393,7 +393,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			[]phase0.BLSPubKey{spectestingutils.TestingValidatorPubKey},
+			sharePubKeys,
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
@@ -476,7 +476,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			[]phase0.BLSPubKey{spectestingutils.TestingValidatorPubKey},
+			sharePubKeys,
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,

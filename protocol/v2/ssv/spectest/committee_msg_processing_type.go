@@ -13,13 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/ssv"
+	spec "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -57,7 +58,9 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 
 	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
-	for _, runner := range test.Committee.Runners {
+	for i, runner := range test.Committee.Runners {
+		runner.ValCheck = qbfttesting.TestingValueChecker{}
+		test.Committee.Runners[i] = runner
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
@@ -69,6 +72,12 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 
 	// test beacon broadcasted msgs
 	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
+
+	for _, r := range test.Committee.Runners {
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = nil
+		}
+	}
 
 	// post root
 	postRoot, err := test.Committee.GetRoot()
@@ -173,7 +182,7 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 }
 
 func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
-	specCommittee := &ssv.Committee{}
+	specCommittee := &spec.Committee{}
 	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	specCommittee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, specCommittee)
@@ -185,8 +194,13 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	for _, r := range committee.Runners {
+	for i, r := range committee.Runners {
 		r.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		r.ValCheck = qbfttesting.TestingValueChecker{}
+		committee.Runners[i] = r
+	}
+	for i := range test.Committee.Runners {
+		test.Committee.Runners[i].ValCheck = qbfttesting.TestingValueChecker{}
 	}
 
 	root, err := committee.GetRoot()

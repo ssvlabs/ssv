@@ -49,6 +49,10 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 		require.NoError(t, lastErr)
 	}
 
+	if r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.State.RunningInstance != nil {
+		r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.State.RunningInstance.ValueChecker = nil
+	}
+
 	// post root
 	postRoot, err := r.GetStateRoot()
 	require.NoError(t, err)

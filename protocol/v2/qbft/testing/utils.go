@@ -1,6 +1,9 @@
 package testing
 
 import (
+	"bytes"
+
+	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -12,6 +15,20 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
+
+type TestingValueChecker struct{}
+
+func (TestingValueChecker) CheckValue(data []byte) error {
+	if bytes.Equal(data, TestingInvalidValueCheck) {
+		return errors.New("invalid value")
+	}
+
+	// as a base validation we do not accept nil values
+	if len(data) == 0 {
+		return errors.New("invalid value")
+	}
+	return nil
+}
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *qbft.Config {
 	return &qbft.Config{

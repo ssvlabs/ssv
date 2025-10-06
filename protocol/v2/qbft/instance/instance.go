@@ -34,7 +34,7 @@ type Instance struct {
 
 	forceStop    bool
 	StartValue   []byte
-	valueChecker ssv.ValueChecker
+	ValueChecker ssv.ValueChecker
 
 	metrics *metricsRecorder
 }
@@ -91,7 +91,7 @@ func (i *Instance) Start(
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
-		i.valueChecker = valueChecker
+		i.ValueChecker = valueChecker
 		i.metrics.Start()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 

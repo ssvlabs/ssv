@@ -145,8 +145,14 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, nil)
+func runInstanceWithData(
+	t *testing.T,
+	logger *zap.Logger,
+	height specqbft.Height,
+	contr *controller.Controller,
+	runData *spectests.RunInstanceData,
+) error {
+	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, qbfttesting.TestingValueChecker{})
 	var lastErr error
 	if err != nil {
 		lastErr = err
@@ -159,6 +165,10 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 	}
 
 	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
+
+	for _, inst := range contr.StoredInstances {
+		inst.ValueChecker = nil
+	}
 
 	// test root
 	r, err := contr.GetRoot()

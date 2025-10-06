@@ -211,11 +211,3 @@ func checkValidatorConsensusData(
 
 	return cd, nil
 }
-
-type noOpValueChecker struct{}
-
-func NewNoOpValueChecker() ValueChecker {
-	return &noOpValueChecker{}
-}
-
-func (*noOpValueChecker) CheckValue(value []byte) error { return nil }
