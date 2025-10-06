@@ -73,16 +73,6 @@ func (b *BaseRunner) validatePartialSigMsg(
 		return errors.Wrap(err, "PartialSignatureMessages invalid")
 	}
 
-	if psigMsgs.Slot < expectedSlot {
-		// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
-		// and we cannot process it anymore
-		return fmt.Errorf("invalid partial sig slot: %d, want: %d", psigMsgs.Slot, expectedSlot)
-	}
-
-	if psigMsgs.Slot > expectedSlot {
-		return NewRetryableError(fmt.Errorf("%w, message slot: %d, want slot: %d", ErrFuturePartialSigMsg, psigMsgs.Slot, expectedSlot))
-	}
-
 	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate()).
 	msgSigner := psigMsgs.Messages[0].Signer
 
@@ -107,6 +97,20 @@ func (b *BaseRunner) validatePartialSigMsg(
 	}
 	if !signerInCommittee {
 		return errors.New("unknown signer")
+	}
+
+	if psigMsgs.Slot < expectedSlot {
+		// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
+		// and we cannot process it anymore
+		return fmt.Errorf("invalid partial sig slot: %d, want at least: %d", psigMsgs.Slot, expectedSlot)
+	}
+	if psigMsgs.Slot > expectedSlot {
+		return NewRetryableError(fmt.Errorf(
+			"%w, message slot: %d, want at most: %d",
+			ErrFuturePartialSigMsg,
+			psigMsgs.Slot,
+			expectedSlot,
+		))
 	}
 
 	return nil

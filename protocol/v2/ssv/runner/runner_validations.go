@@ -19,13 +19,13 @@ import (
 func (b *BaseRunner) ValidatePreConsensusMsg(
 	ctx context.Context,
 	runner Runner,
-	signedMsg *spectypes.PartialSignatureMessages,
+	psigMsgs *spectypes.PartialSignatureMessages,
 ) error {
 	if !b.hasRunningDuty() {
 		return NewRetryableError(ErrNoRunningDuty)
 	}
 
-	if err := b.validatePartialSigMsg(signedMsg, b.State.CurrentDuty.DutySlot()); err != nil {
+	if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
 		return err
 	}
 
@@ -34,7 +34,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
 	}
 
-	return b.verifyExpectedRoot(ctx, runner, signedMsg, roots, domain)
+	return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
 }
 
 // Verify each signature in container removing the invalid ones
@@ -50,15 +50,34 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 }
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
-	expectedSlot := b.State.CurrentDuty.DutySlot()
-
-	err := b.validatePartialSigMsg(psigMsgs, expectedSlot)
-	if err != nil {
-		return err
-	}
-
 	if !b.hasRunningDuty() {
 		return NewRetryableError(ErrNoRunningDuty)
+	}
+
+	// slotIsRelevant ensures the post-consensus message slot is relevant (eg. we might have already moved on
+	// to another duty that's targeting the next slot but received a post-consensus message relevant for the
+	// duty from the previous slot), this is a relaxed check that helps to filter out inappropriate messages
+	// as soon as possible, the exact slot validation occurs below.
+	slotIsRelevant := func(slot phase0.Slot) error {
+		minSlot := b.State.CurrentDuty.DutySlot() - 1
+		maxSlot := b.State.CurrentDuty.DutySlot()
+		if psigMsgs.Slot < minSlot {
+			// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
+			// and we cannot process it anymore
+			return fmt.Errorf("invalid partial sig slot: %d, want at least: %d", psigMsgs.Slot, minSlot)
+		}
+		if psigMsgs.Slot > maxSlot {
+			return NewRetryableError(fmt.Errorf(
+				"%w, message slot: %d, want at most: %d",
+				ErrFuturePartialSigMsg,
+				psigMsgs.Slot,
+				maxSlot,
+			))
+		}
+		return nil
+	}
+	if err := slotIsRelevant(psigMsgs.Slot); err != nil {
+		return err
 	}
 
 	if b.State.RunningInstance == nil {
@@ -71,11 +90,18 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		return NewRetryableError(ErrNoDecidedValue)
 	}
 
-	// Validate the message differently depending on a message type.
+	// Validate the post-consensus message differently depending on a message type.
 	validateMsg := func() error {
 		decidedValue := &spectypes.ValidatorConsensusData{}
 		if err := decidedValue.Decode(decidedValueBytes); err != nil {
 			return errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
+		}
+
+		// Use the slot we have in decidedValue since b.State.CurrentDuty might have already moved on
+		// to another duty (hence we shouldn't be using it).
+		expectedSlot := decidedValue.Duty.Slot
+		if err := b.validatePartialSigMsg(psigMsgs, expectedSlot); err != nil {
+			return err
 		}
 
 		if err := b.validateValidatorIndexInPartialSigMsg(psigMsgs); err != nil {
@@ -96,10 +122,13 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 				return errors.Wrap(err, "failed to parse decided value to BeaconVote")
 			}
 
-			return nil
+			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
+			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
+			expectedSlot := b.State.CurrentDuty.DutySlot()
+			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
-	if err = validateMsg(); err != nil {
+	if err := validateMsg(); err != nil {
 		return err
 	}
 
