@@ -54,10 +54,10 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		return NewRetryableError(ErrNoRunningDuty)
 	}
 
-	// slotIsRelevant ensures the post-consensus message slot is relevant (eg. we might have already moved on
-	// to another duty that's targeting the next slot but received a post-consensus message relevant for the
-	// duty from the previous slot), this is a relaxed check that helps to filter out inappropriate messages
-	// as soon as possible, the exact slot validation occurs below.
+	// slotIsRelevant ensures the post-consensus message is even remotely relevant (eg. we might have already
+	// moved on to another duty that's targeting the next slot but received a post-consensus message relevant
+	// for the duty from the previous slot), this is a relaxed check that helps to filter out inappropriate
+	// messages as soon as possible, the exact slot validation occurs below.
 	slotIsRelevant := func(slot phase0.Slot) error {
 		minSlot := b.State.CurrentDuty.DutySlot() - 1
 		maxSlot := b.State.CurrentDuty.DutySlot()
