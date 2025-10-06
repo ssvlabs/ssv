@@ -67,7 +67,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		}
 		if psigMsgs.Slot > maxSlot {
 			return NewRetryableError(fmt.Errorf(
-				"%w, message slot: %d, want at most: %d",
+				"%w: message slot: %d, want at most: %d",
 				ErrFuturePartialSigMsg,
 				psigMsgs.Slot,
 				maxSlot,
