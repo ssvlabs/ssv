@@ -3,6 +3,7 @@ package spectest
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -165,7 +166,7 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 	for _, test := range tests.Tests {
 		err := test.runPreTesting(logger)
 		if err != nil && test.ExpectedError != err.Error() {
-			return nil, err
+			return nil, fmt.Errorf("expected error: %s, got: %s", test.ExpectedError, err)
 		}
 		ret[test.Name] = test.Committee
 	}
