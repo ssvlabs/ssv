@@ -62,8 +62,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		minSlot := b.State.CurrentDuty.DutySlot() - 1
 		maxSlot := b.State.CurrentDuty.DutySlot()
 		if psigMsgs.Slot < minSlot {
-			// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
-			// and we cannot process it anymore
+			// This message is targeting a slot that's already too far in the past to matter.
 			return fmt.Errorf("invalid partial sig slot: %d, want at least: %d", psigMsgs.Slot, minSlot)
 		}
 		if psigMsgs.Slot > maxSlot {

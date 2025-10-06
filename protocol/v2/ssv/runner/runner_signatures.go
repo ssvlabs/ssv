@@ -100,8 +100,7 @@ func (b *BaseRunner) validatePartialSigMsg(
 	}
 
 	if psigMsgs.Slot < expectedSlot {
-		// this message is targeting a slot that's already passed - our runner has advanced to the next slot already,
-		// and we cannot process it anymore
+		// This message is targeting a slot that's already passed - our runner cannot process it anymore
 		return fmt.Errorf("invalid partial sig slot: %d, expected slot: %d", psigMsgs.Slot, expectedSlot)
 	}
 	if psigMsgs.Slot > expectedSlot {
