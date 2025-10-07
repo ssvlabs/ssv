@@ -58,9 +58,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 
 	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
-	for i, runner := range test.Committee.Runners {
-		runner.ValCheck = qbfttesting.TestingValueChecker{}
-		test.Committee.Runners[i] = runner
+	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
@@ -194,10 +192,9 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	for i, r := range committee.Runners {
-		r.BaseRunner.NetworkConfig = networkconfig.TestNetwork
-		r.ValCheck = qbfttesting.TestingValueChecker{}
-		committee.Runners[i] = r
+	for i := range committee.Runners {
+		committee.Runners[i].BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		committee.Runners[i].ValCheck = qbfttesting.TestingValueChecker{}
 	}
 	for i := range test.Committee.Runners {
 		test.Committee.Runners[i].ValCheck = qbfttesting.TestingValueChecker{}

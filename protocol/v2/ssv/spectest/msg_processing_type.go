@@ -76,36 +76,24 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		if test.Runner.(*runner.CommitteeRunner).ValCheck == nil {
-			test.Runner.(*runner.CommitteeRunner).ValCheck = qbfttesting.TestingValueChecker{}
-		}
 		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = qbfttesting.TestingValueChecker{}
 			}
 		}
 	case *runner.AggregatorRunner:
-		if test.Runner.(*runner.AggregatorRunner).ValCheck == nil {
-			test.Runner.(*runner.AggregatorRunner).ValCheck = qbfttesting.TestingValueChecker{}
-		}
 		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = qbfttesting.TestingValueChecker{}
 			}
 		}
 	case *runner.ProposerRunner:
-		if test.Runner.(*runner.ProposerRunner).ValCheck == nil {
-			test.Runner.(*runner.ProposerRunner).ValCheck = qbfttesting.TestingValueChecker{}
-		}
 		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = qbfttesting.TestingValueChecker{}
 			}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
-		if test.Runner.(*runner.SyncCommitteeAggregatorRunner).ValCheck == nil {
-			test.Runner.(*runner.SyncCommitteeAggregatorRunner).ValCheck = qbfttesting.TestingValueChecker{}
-		}
 		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = qbfttesting.TestingValueChecker{}
