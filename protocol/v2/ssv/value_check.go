@@ -46,7 +46,7 @@ func NewVoteChecker(
 func (v *voteChecker) CheckValue(value []byte) error {
 	bv := spectypes.BeaconVote{}
 	if err := bv.Decode(value); err != nil {
-		return errors.Wrap(err, "failed decoding beacon vote")
+		return fmt.Errorf("failed decoding beacon vote: %w", err)
 	}
 
 	if bv.Target.Epoch > v.estimatedCurrentEpoch+1 {
@@ -122,12 +122,12 @@ func (v *proposerChecker) CheckValue(value []byte) error {
 
 	blockData, _, err := cd.GetBlockData()
 	if err != nil {
-		return errors.Wrap(err, "could not get block data")
+		return fmt.Errorf("could not get block data: %w", err)
 	}
 
 	slot, err := blockData.Slot()
 	if err != nil {
-		return errors.Wrap(err, "failed to get slot from block data")
+		return fmt.Errorf("failed to get slot from block data: %w", err)
 	}
 	return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
 }
