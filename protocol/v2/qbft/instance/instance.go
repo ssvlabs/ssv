@@ -34,7 +34,7 @@ type Instance struct {
 
 	forceStop    bool
 	StartValue   []byte
-	ValueChecker ssv.ValueChecker
+	ValueChecker ssv.ValueChecker `json:"-"`
 
 	metrics *metricsRecorder
 }
