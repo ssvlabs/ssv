@@ -38,9 +38,11 @@ type ProposerRunner struct {
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
-	valCheck            ssv.ValueChecker
 	measurements        measurementsStore
 	graffiti            []byte
+
+	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
+	ValCheck ssv.ValueChecker
 
 	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
 	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
@@ -81,7 +83,7 @@ func NewProposerRunner(
 		signer:              signer,
 		operatorSigner:      operatorSigner,
 		doppelgangerHandler: doppelgangerHandler,
-		valCheck:            valCheck,
+		ValCheck:            valCheck,
 		measurements:        NewMeasurementsStore(),
 		graffiti:            graffiti,
 
@@ -213,7 +215,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	r.measurements.StartConsensus()
 
-	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, nil); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, r.ValCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
@@ -232,7 +234,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValChecker().CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -601,10 +603,6 @@ func (r *ProposerRunner) GetShare() *spectypes.Share {
 
 func (r *ProposerRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *ProposerRunner) GetValChecker() ssv.ValueChecker {
-	return r.valCheck
 }
 
 func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {

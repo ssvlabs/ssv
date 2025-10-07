@@ -39,8 +39,10 @@ type AggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       ssv.ValueChecker
 	measurements   measurementsStore
+
+	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
+	ValCheck ssv.ValueChecker
 
 	// IsAggregator returns true if the signature is from the input validator. The committee
 	// count is provided as an argument rather than imported implementation from spec. Having
@@ -87,7 +89,7 @@ func NewAggregatorRunner(
 		network:        network,
 		signer:         signer,
 		operatorSigner: operatorSigner,
-		valCheck:       valCheck,
+		ValCheck:       valCheck,
 		measurements:   NewMeasurementsStore(),
 
 		IsAggregator: isAggregatorFn(),
@@ -186,7 +188,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		DataSSZ: byts,
 	}
 
-	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, nil); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, r.ValCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
@@ -205,7 +207,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValChecker().CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -486,10 +488,6 @@ func (r *AggregatorRunner) GetShare() *spectypes.Share {
 
 func (r *AggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *AggregatorRunner) GetValChecker() ssv.ValueChecker {
-	return r.valCheck
 }
 
 func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {

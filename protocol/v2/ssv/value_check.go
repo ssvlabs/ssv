@@ -10,19 +10,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 type ValueChecker interface {
 	CheckValue(value []byte) error
-}
-
-type VoteChecker interface {
-	ValueChecker
-	CheckValueWithSP(value []byte, spData *ssvtypes.SlashingProtectionData) error
 }
 
 type voteChecker struct {
@@ -30,6 +24,7 @@ type voteChecker struct {
 	slot                  phase0.Slot
 	sharePublicKeys       []phase0.BLSPubKey
 	estimatedCurrentEpoch phase0.Epoch
+	expectedVote          *spectypes.BeaconVote
 }
 
 func NewVoteChecker(
@@ -37,54 +32,29 @@ func NewVoteChecker(
 	slot phase0.Slot,
 	sharePublicKeys []phase0.BLSPubKey,
 	estimatedCurrentEpoch phase0.Epoch,
-) VoteChecker {
+	expectedVote *spectypes.BeaconVote,
+) ValueChecker {
 	return &voteChecker{
 		signer:                signer,
 		slot:                  slot,
 		sharePublicKeys:       sharePublicKeys,
 		estimatedCurrentEpoch: estimatedCurrentEpoch,
+		expectedVote:          expectedVote,
 	}
 }
 
 func (v *voteChecker) CheckValue(value []byte) error {
-	_, err := v.checkValue(value)
-	return err
-}
-
-func (v *voteChecker) CheckValueWithSP(value []byte, spData *ssvtypes.SlashingProtectionData) error {
-	bv, err := v.checkValue(value)
-	if err != nil {
-		return err
-	}
-
-	if bv.Target.Root != spData.TargetRoot {
-		return errors.New("beacon vote target root doesn't satisfy slashing protection data")
-	}
-
-	// Implemented according to https://github.com/ssvlabs/SIPs/discussions/70
-	if bv.Source.Epoch != spData.SourceEpoch {
-		return errors.New("beacon vote source epoch doesn't satisfy slashing protection data")
-	}
-
-	if bv.Target.Epoch != spData.TargetEpoch {
-		return errors.New("beacon vote target epoch doesn't satisfy slashing protection data")
-	}
-
-	return nil
-}
-
-func (v *voteChecker) checkValue(value []byte) (*spectypes.BeaconVote, error) {
 	bv := spectypes.BeaconVote{}
 	if err := bv.Decode(value); err != nil {
-		return nil, errors.Wrap(err, "failed decoding beacon vote")
+		return errors.Wrap(err, "failed decoding beacon vote")
 	}
 
 	if bv.Target.Epoch > v.estimatedCurrentEpoch+1 {
-		return nil, errors.New("attestation data target epoch is into far future")
+		return errors.New("attestation data target epoch is into far future")
 	}
 
 	if bv.Source.Epoch >= bv.Target.Epoch {
-		return nil, errors.New("attestation data source >= target")
+		return errors.New("attestation data source >= target")
 	}
 
 	attestationData := &phase0.AttestationData{
@@ -100,10 +70,24 @@ func (v *voteChecker) checkValue(value []byte) (*spectypes.BeaconVote, error) {
 
 	for _, sharePublicKey := range v.sharePublicKeys {
 		if err := v.signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &bv, nil
+
+	if bv.Target.Root != v.expectedVote.Target.Root {
+		return errors.New("beacon vote target root doesn't satisfy slashing protection data")
+	}
+
+	// Implemented according to https://github.com/ssvlabs/SIPs/discussions/70
+	if bv.Source.Epoch != v.expectedVote.Source.Epoch {
+		return errors.New("beacon vote source epoch doesn't satisfy slashing protection data")
+	}
+
+	if bv.Target.Epoch != v.expectedVote.Target.Epoch {
+		return errors.New("beacon vote target epoch doesn't satisfy slashing protection data")
+	}
+
+	return nil
 }
 
 type proposerChecker struct {

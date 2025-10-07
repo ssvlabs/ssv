@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -66,6 +67,12 @@ var baseRunner = func(logger *zap.Logger, role spectypes.RunnerRole, keySet *spe
 	return runner
 }
 
+var vote = &spectypes.BeaconVote{
+	BlockRoot: spectestingutils.TestingAttestationData(spec.DataVersionPhase0).BeaconBlockRoot,
+	Source:    spectestingutils.TestingAttestationData(spec.DataVersionPhase0).Source,
+	Target:    spectestingutils.TestingAttestationData(spec.DataVersionPhase0).Target,
+}
+
 var ConstructBaseRunner = func(
 	logger *zap.Logger,
 	role spectypes.RunnerRole,
@@ -83,7 +90,7 @@ var ConstructBaseRunner = func(
 	switch role {
 	case spectypes.RoleCommittee:
 		valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch)
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch, vote)
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
@@ -99,7 +106,6 @@ var ConstructBaseRunner = func(
 	}
 
 	config := testing.TestingConfig(logger, keySet)
-	config.ValueChecker = valCheck
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
 	}
@@ -120,18 +126,17 @@ var ConstructBaseRunner = func(
 
 	var r runner.Runner
 	var err error
-
 	switch role {
 	case spectypes.RoleCommittee:
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
-			valCheck,
 			dutyGuard,
 			dgHandler,
 		)
@@ -209,12 +214,12 @@ var ConstructBaseRunner = func(
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
-			valCheck,
 			dutyGuard,
 			dgHandler,
 		)
@@ -315,6 +320,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	dutyGuard := validator.NewCommitteeDutyGuard()
 	dgHandler := doppelganger.NoOpHandler{}
 
+	sharePubKeys := make([]phase0.BLSPubKey, 0)
 	if len(shareMap) > 0 {
 		var keySetInstance *spectestingutils.TestKeySet
 		var shareInstance *spectypes.Share
@@ -324,7 +330,6 @@ var ConstructBaseRunnerWithShareMap = func(
 			break
 		}
 
-		sharePubKeys := make([]phase0.BLSPubKey, 0)
 		for _, share := range shareMap {
 			sharePubKeys = append(sharePubKeys, phase0.BLSPubKey(share.SharePubKey))
 		}
@@ -352,7 +357,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		switch role {
 		case spectypes.RoleCommittee:
 			valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-				sharePubKeys, spectestingutils.TestingDutyEpoch)
+				sharePubKeys, spectestingutils.TestingDutyEpoch, vote)
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
@@ -367,7 +372,6 @@ var ConstructBaseRunnerWithShareMap = func(
 		}
 
 		config := testing.TestingConfig(logger, keySetInstance)
-		config.ValueChecker = valCheck
 		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		}
@@ -389,12 +393,12 @@ var ConstructBaseRunnerWithShareMap = func(
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
+			sharePubKeys,
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
-			valCheck,
 			dutyGuard,
 			dgHandler,
 		)
@@ -472,12 +476,12 @@ var ConstructBaseRunnerWithShareMap = func(
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
+			sharePubKeys,
 			contr,
 			protocoltesting.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
-			valCheck,
 			dutyGuard,
 			dgHandler,
 		)

@@ -35,7 +35,6 @@ type Getters interface {
 	GetLastRound() specqbft.Round
 	GetStateRoot() ([32]byte, error)
 	GetBeaconNode() beacon.BeaconNode
-	GetValChecker() ssv.ValueChecker
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
@@ -378,7 +377,7 @@ func (b *BaseRunner) decide(
 	runner Runner,
 	slot phase0.Slot,
 	input spectypes.Encoder,
-	spData *ssvtypes.SlashingProtectionData,
+	valueChecker ssv.ValueChecker,
 ) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
@@ -392,7 +391,7 @@ func (b *BaseRunner) decide(
 		return traces.Errorf(span, "could not encode input data for consensus: %w", err)
 	}
 
-	if err := runner.GetValChecker().CheckValue(byts); err != nil {
+	if err := valueChecker.CheckValue(byts); err != nil {
 		return traces.Errorf(span, "input data invalid: %w", err)
 	}
 
@@ -402,7 +401,7 @@ func (b *BaseRunner) decide(
 		logger,
 		specqbft.Height(slot),
 		byts,
-		spData,
+		valueChecker,
 	); err != nil {
 		return traces.Errorf(span, "could not start new QBFT instance: %w", err)
 	}
@@ -451,7 +450,3 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
 	return b.QBFTController.OnTimeout(ctx, logger, msg)
 }
-
-type nopValueChecker struct{}
-
-func (nopValueChecker) CheckValue(value []byte) error { return nil }
