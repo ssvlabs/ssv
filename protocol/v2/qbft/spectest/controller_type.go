@@ -166,10 +166,6 @@ func runInstanceWithData(
 
 	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
 
-	for _, inst := range contr.StoredInstances {
-		inst.ValueChecker = nil
-	}
-
 	// test root
 	r, err := contr.GetRoot()
 	require.NoError(t, err)

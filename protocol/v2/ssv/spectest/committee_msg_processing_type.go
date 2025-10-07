@@ -71,12 +71,6 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	// test beacon broadcasted msgs
 	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
 
-	for _, r := range test.Committee.Runners {
-		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = nil
-		}
-	}
-
 	// post root
 	postRoot, err := test.Committee.GetRoot()
 	require.NoError(t, err)
