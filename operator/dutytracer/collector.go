@@ -946,7 +946,7 @@ func (c *Collector) signersToKey(signers []spectypes.OperatorID) string {
 }
 
 // SaveScheduled stores a compact schedule map for a slot (pass-through to disk store).
-func (c *Collector) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]uint8) error {
+func (c *Collector) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {
 	if c.store == nil {
 		return fmt.Errorf("store not initialized")
 	}
@@ -954,7 +954,7 @@ func (c *Collector) SaveScheduled(slot phase0.Slot, schedule map[phase0.Validato
 }
 
 // GetScheduled loads the compact schedule for a slot (pass-through to disk store).
-func (c *Collector) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+func (c *Collector) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 	if c.store == nil {
 		return nil, fmt.Errorf("store not initialized")
 	}
@@ -995,7 +995,7 @@ func (c *Collector) startScheduleFiller(ctx context.Context, tickerProvider slot
 // for (ATTESTER, PROPOSER, SYNC_COMMITTEE). Idempotent and best-effort.
 func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 	epoch := c.beacon.EstimatedEpochAtSlot(slot)
-	schedule := make(map[phase0.ValidatorIndex]uint8)
+	schedule := make(map[phase0.ValidatorIndex]rolemask.Mask)
 
 	// Attester indices for this slot (InCommittee only)
 	if c.duties.Attester != nil {

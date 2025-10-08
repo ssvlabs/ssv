@@ -502,7 +502,7 @@ type mockTraceStore struct {
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	// added to satisfy dutyTraceStore interface for schedule and committee links
 	GetCommitteeDutyLinksFunc func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
-	GetScheduledFunc          func(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error)
+	GetScheduledFunc          func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
 }
 
 func newMockTraceStore() *mockTraceStore {
@@ -590,11 +590,11 @@ func (m *mockTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.Co
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+func (m *mockTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 	if m.GetScheduledFunc != nil {
 		return m.GetScheduledFunc(slot)
 	}
-	return map[phase0.ValidatorIndex]uint8{}, nil
+	return map[phase0.ValidatorIndex]rolemask.Mask{}, nil
 }
 
 func (m *mockTraceStore) AddValidatorDecided(role spectypes.BeaconRole, slot phase0.Slot, signers []uint64) {
@@ -1309,11 +1309,11 @@ func TestExporterCommitteeTraces(t *testing.T) {
 					}
 					return traces, nil
 				}
-				store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+				store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 					if slot != 100 {
 						return nil, nil
 					}
-					return map[phase0.ValidatorIndex]uint8{
+					return map[phase0.ValidatorIndex]rolemask.Mask{
 						phase0.ValidatorIndex(1): rolemask.BitAttester | rolemask.BitAggregator,
 						phase0.ValidatorIndex(2): rolemask.BitAggregator,
 					}, nil
@@ -1541,15 +1541,15 @@ func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
 		Roles: api.RoleSlice{api.Role(spectypes.BNRoleAttester), api.Role(spectypes.BNRoleProposer)},
 	}
 
-	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 		switch slot {
 		case 10:
-			return map[phase0.ValidatorIndex]uint8{
+			return map[phase0.ValidatorIndex]rolemask.Mask{
 				1: rolemask.BitAttester | rolemask.BitProposer,
 				2: rolemask.BitProposer,
 			}, nil
 		case 11:
-			return map[phase0.ValidatorIndex]uint8{
+			return map[phase0.ValidatorIndex]rolemask.Mask{
 				1: rolemask.BitProposer,
 			}, nil
 		default:
@@ -1580,11 +1580,11 @@ func TestExporterBuildValidatorSchedule_Filtered(t *testing.T) {
 		Indices: api.Uint64Slice{1},
 	}
 
-	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 		if slot != 10 {
 			return nil, nil
 		}
-		return map[phase0.ValidatorIndex]uint8{
+		return map[phase0.ValidatorIndex]rolemask.Mask{
 			1: rolemask.BitAttester | rolemask.BitAggregator,
 			2: rolemask.BitAttester,
 		}, nil

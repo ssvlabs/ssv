@@ -12,6 +12,10 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 )
 
+// MaxCommitteesPerSlot reflects the consensus spec upper bound (64).
+// Exposed here for sizing slices without depending on a beacon config value.
+const MaxCommitteesPerSlot = 64
+
 // CommitteesForEpoch fetches all committees for an epoch and caches them.
 func (gc *GoClient) CommitteesForEpoch(ctx context.Context, epoch phase0.Epoch) ([]*eth2apiv1.BeaconCommittee, error) {
 	if gc.committeesCache != nil {
@@ -50,7 +54,7 @@ func (gc *GoClient) CommitteesForSlot(ctx context.Context, slot phase0.Slot) ([]
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*eth2apiv1.BeaconCommittee, 0, 8)
+	out := make([]*eth2apiv1.BeaconCommittee, 0, MaxCommitteesPerSlot)
 	for _, c := range all {
 		if c != nil && c.Slot == slot {
 			out = append(out, c)

@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
 )
 
@@ -94,7 +95,7 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*exporte
 	return d.Store.GetCommitteeDuties(slot)
 }
 
-func (d *DutyTraceStoreMetrics) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]uint8) error {
+func (d *DutyTraceStoreMetrics) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {
 	start := time.Now()
 	defer func() {
 		record("schedule", "save", start)
@@ -102,7 +103,7 @@ func (d *DutyTraceStoreMetrics) SaveScheduled(slot phase0.Slot, schedule map[pha
 	return d.Store.SaveScheduled(slot, schedule)
 }
 
-func (d *DutyTraceStoreMetrics) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+func (d *DutyTraceStoreMetrics) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 	start := time.Now()
 	defer func() {
 		record("schedule", "get", start)

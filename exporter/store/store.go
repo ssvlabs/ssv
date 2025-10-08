@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RoaringBitmap/roaring/roaring64"
+	"github.com/RoaringBitmap/roaring/v2/roaring64"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
 
@@ -24,6 +24,8 @@ const (
 	committeeDutyTraceKey      = "cd"
 	validatorCommitteeIndexKey = "vc"
 	scheduledDutyKey           = "sd"
+	// slotKeyLen is the number of bytes used to encode a slot in keys.
+	slotKeyLen = 4
 )
 
 type DutyTraceStore struct {
@@ -355,12 +357,12 @@ func (s *DutyTraceStore) DeleteScheduledSlot(slot phase0.Slot) error {
 }
 
 // SaveScheduled stores a compact map (validator index -> role mask) for a slot.
-func (s *DutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]uint8) error {
+func (s *DutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {
 	if len(schedule) == 0 {
 		return nil
 	}
-	for _, role := range rolemask.All() {
-		bit, _ := rolemask.BitOf(role)
+	// Iterate roles together with their mask bit to avoid extra lookups.
+	for role, bit := range rolemask.AllWithBits() {
 		bm := roaring64.NewBitmap()
 		for idx, m := range schedule {
 			if m&bit != 0 {
@@ -392,11 +394,11 @@ func (s *DutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0.Val
 }
 
 // GetScheduled returns compact schedule map for a slot.
-func (s *DutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
-	out := make(map[phase0.ValidatorIndex]uint8)
+func (s *DutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	out := make(map[phase0.ValidatorIndex]rolemask.Mask)
 	var errs *multierror.Error
-	for _, role := range rolemask.All() {
-		bit, _ := rolemask.BitOf(role)
+	// Iterate roles together with their mask bit to avoid extra lookups.
+	for role, bit := range rolemask.AllWithBits() {
 		prefix := s.makeScheduledRolePrefix(slot, role)
 		obj, found, err := s.db.Get(prefix, nil)
 		if err != nil {
@@ -453,10 +455,17 @@ func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot) []byte {
 }
 
 func (s *DutyTraceStore) makeScheduledRolePrefix(slot phase0.Slot, role spectypes.BeaconRole) []byte {
-	prefix := make([]byte, 0, len(scheduledDutyKey)+4+1)
+	prefix := make([]byte, 0, len(scheduledDutyKey)+slotKeyLen+1)
 	prefix = append(prefix, []byte(scheduledDutyKey)...)
 	prefix = append(prefix, slotToByteSlice(slot)...)
-	prefix = append(prefix, byte(role&0xff))
+	// Use the mask bit as the role discriminator in the key (instead of the
+	// raw role value) to avoid depending on role numeric width.
+	if b, ok := rolemask.BitOf(role); ok {
+		prefix = append(prefix, b)
+	} else {
+		// Unknown roles should not appear here; keep a stable suffix anyway.
+		prefix = append(prefix, 0)
+	}
 	return prefix
 }
 

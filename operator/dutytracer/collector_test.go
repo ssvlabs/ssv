@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -1546,7 +1547,7 @@ type mockDutyTraceStore struct {
 	err                     error
 	committeeDutyTrace      *exporter.CommitteeDutyTrace
 	saveCommitteeDutyLinkFn func(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
-	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]uint8
+	scheduled               map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error {
@@ -1600,11 +1601,11 @@ func (m *mockDutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporte
 	return nil, m.err
 }
 
-func (m *mockDutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]uint8) error {
+func (m *mockDutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {
 	if m.scheduled == nil {
-		m.scheduled = make(map[phase0.Slot]map[phase0.ValidatorIndex]uint8)
+		m.scheduled = make(map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask)
 	}
-	copied := make(map[phase0.ValidatorIndex]uint8, len(schedule))
+	copied := make(map[phase0.ValidatorIndex]rolemask.Mask, len(schedule))
 	for k, v := range schedule {
 		copied[k] = v
 	}
@@ -1612,7 +1613,7 @@ func (m *mockDutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0
 	return m.err
 }
 
-func (m *mockDutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error) {
+func (m *mockDutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
 	if m.scheduled == nil {
 		return nil, m.err
 	}
@@ -1620,7 +1621,7 @@ func (m *mockDutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.Validato
 	if !ok {
 		return nil, m.err
 	}
-	copyMap := make(map[phase0.ValidatorIndex]uint8, len(sched))
+	copyMap := make(map[phase0.ValidatorIndex]rolemask.Mask, len(sched))
 	for k, v := range sched {
 		copyMap[k] = v
 	}

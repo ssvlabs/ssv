@@ -203,12 +203,12 @@ func TestSaveScheduledDuties(t *testing.T) {
 	s := store.New(db)
 	slot := phase0.Slot(42)
 
-	initial := map[phase0.ValidatorIndex]uint8{
+	initial := map[phase0.ValidatorIndex]rolemask.Mask{
 		1: rolemask.BitAttester | rolemask.BitProposer,
 	}
 	require.NoError(t, s.SaveScheduled(slot, initial))
 
-	update := map[phase0.ValidatorIndex]uint8{
+	update := map[phase0.ValidatorIndex]rolemask.Mask{
 		1: rolemask.BitAggregator,
 		2: rolemask.BitSyncCommittee,
 	}
@@ -257,7 +257,7 @@ func TestSaveScheduledMergesExistingBitmaps(t *testing.T) {
 
 	require.NoError(t, s.SetScheduledRole(slot, spectypes.BNRoleAggregator, []phase0.ValidatorIndex{9}))
 
-	schedule := map[phase0.ValidatorIndex]uint8{
+	schedule := map[phase0.ValidatorIndex]rolemask.Mask{
 		5: rolemask.BitAggregator | rolemask.BitProposer,
 	}
 	require.NoError(t, s.SaveScheduled(slot, schedule))

@@ -221,6 +221,7 @@ func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices [
 		slot := phase0.Slot(s)
 		sched, err := e.traceStore.GetScheduled(slot)
 		if err != nil {
+			e.logger.Debug("get scheduled failed", zap.Error(err), fields.Slot(slot))
 			continue
 		}
 
@@ -247,6 +248,11 @@ func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices [
 				}
 			}
 			if len(roles) == 0 {
+				// If the request specified explicit indices/pubkeys, include the
+				// validator entry with empty roles to make absence explicit.
+				if filter {
+					out = append(out, ValidatorSchedule{Slot: uint64(slot), Validator: uint64(idx), Roles: roles})
+				}
 				continue
 			}
 			out = append(out, ValidatorSchedule{

@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -40,8 +41,8 @@ type DutyTraceStore interface {
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error)
 
 	// Compact scheduled duties I/O
-	SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]uint8) error
-	GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]uint8, error)
+	SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error
+	GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
 }
 
 func (c *Collector) GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
