@@ -6,8 +6,8 @@
 # SSV Node
 
 [![API Reference](https://img.shields.io/badge/API%20Reference-blue)](https://pkg.go.dev/github.com/ssvlabs/ssv)
-![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml/badge.svg?branch=main)
-![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml/badge.svg?branch=main)
+[![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml/badge.svg?branch=main)](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml)
+[![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml)
 [![Coverage Status](https://codecov.io/gh/ssvlabs/ssv/branch/main/graph/badge.svg)](https://codecov.io/gh/ssvlabs/ssv/tree/main)
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/ssvnetworkofficial)
 
