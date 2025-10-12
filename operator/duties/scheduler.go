@@ -149,24 +149,23 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
 
-	// Assemble handlers; in exporter mode, omit registration handler.
+	s.exporterMode = opts.ExporterMode
+
+	// These handlers fetch & record duties from the beacon node and are needed in both operator & exporter modes.
+	// When adding a new handler here, ensure it supports both modes.
 	s.handlers = append(s.handlers,
 		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
-		NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 	)
+	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
 		s.handlers = append(s.handlers,
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 		)
 	}
-
-	s.exporterMode = opts.ExporterMode
-
-	// Handlers receive exporterMode via constructors; no runtime type-switch needed.
-
 	return s
 }
 
@@ -413,8 +412,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
 	if s.exporterMode {
-		// In exporter mode we do not execute; suppress execution logs.
-		return
+		// We never execute duties in exporter mode. The handler should skip calling this method.
+		// Keeping check here to detect programming mistakes.
+		s.logger.Error("ExecuteDuties should not be called in exporter mode. Possible code error in duty handlers?")
+		return // early return is fine, we don't need to return an error
 	}
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "scheduler.execute_duties"),
@@ -452,7 +453,10 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
 	if s.exporterMode {
-		return
+		// We never execute duties in exporter mode. The handler should skip calling this method.
+		// Keeping check here to detect programming mistakes.
+		s.logger.Error("ExecuteCommitteeDuties should not be called in exporter mode. Possible code error in duty handlers?")
+		return // early return is fine, we don't need to return an error
 	}
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"))
 	defer span.End()
