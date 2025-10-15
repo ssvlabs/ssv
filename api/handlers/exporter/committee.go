@@ -132,7 +132,7 @@ func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesRequest) []Committ
 		slot := phase0.Slot(s)
 		sched, err := e.traceStore.GetScheduled(slot)
 		if err != nil {
-			e.logger.Debug("get scheduled failed", zap.Error(err), fields.Slot(slot))
+			e.logger.Warn("get scheduled failed", zap.Error(err), fields.Slot(slot))
 			continue
 		}
 		if len(sched) == 0 {
@@ -140,7 +140,7 @@ func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesRequest) []Committ
 		}
 		links, err := e.traceStore.GetCommitteeDutyLinks(slot)
 		if err != nil {
-			e.logger.Debug("get committee links failed", zap.Error(err), fields.Slot(slot))
+			e.logger.Warn("get committee links failed", zap.Error(err), fields.Slot(slot))
 			continue
 		}
 		if len(links) == 0 {

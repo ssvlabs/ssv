@@ -208,7 +208,8 @@ func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *
 // per-validator schedule for the requested roles and slot range.
 func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices []phase0.ValidatorIndex) []ValidatorSchedule {
 	out := make([]ValidatorSchedule, 0)
-	// Build a quick lookup for requested roles.
+
+	// Deduplicate requested roles (idiomatic way is to build a map in ~O(n) cost).
 	roleWanted := map[spectypes.BeaconRole]struct{}{}
 	for _, r := range req.Roles {
 		roleWanted[spectypes.BeaconRole(r)] = struct{}{}
@@ -221,7 +222,7 @@ func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices [
 		slot := phase0.Slot(s)
 		sched, err := e.traceStore.GetScheduled(slot)
 		if err != nil {
-			e.logger.Debug("get scheduled failed", zap.Error(err), fields.Slot(slot))
+			e.logger.Warn("get scheduled failed", zap.Error(err), fields.Slot(slot))
 			continue
 		}
 
