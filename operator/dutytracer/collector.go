@@ -1032,8 +1032,6 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 	return c.store.SaveScheduled(slot, schedule)
 }
 
-// (backfill helpers removed; schedule is enqueued only for current and previous slot via worker)
-
 // runScheduleWorker performs schedule computations and DB writes off the hot path.
 func (c *Collector) runScheduleWorker(ctx context.Context) {
 	for {

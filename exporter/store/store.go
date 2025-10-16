@@ -266,8 +266,6 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 	return
 }
 
-// Scheduled duties: per (slot, role) roaring64 bitmap of validator indices
-
 // SetScheduledRole overwrites scheduled indices for a (slot, role).
 func (s *DutyTraceStore) SetScheduledRole(slot phase0.Slot, role spectypes.BeaconRole, indices []phase0.ValidatorIndex) error {
 	prefix := s.makeScheduledRolePrefix(slot, role)

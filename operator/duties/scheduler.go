@@ -467,7 +467,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		const eventMsg = "🔧 executing committee duty"
 		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties))
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.CommitteeIDAttribute(committee.id),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),

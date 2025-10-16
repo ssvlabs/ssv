@@ -17,14 +17,13 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
-// prefetchingBeacon adapts the scheduler BeaconNode interface, prefetching
-// epoch/period data and serving handler calls from cache. It instruments
-// network request duration and processing time.
-
 type validatorPubkeyProvider interface {
 	ValidatorPubkey(index phase0.ValidatorIndex) (spectypes.ValidatorPK, bool)
 }
 
+// prefetchingBeacon adapts the scheduler BeaconNode interface, prefetching
+// epoch/period data and serving handler calls from cache. It instruments
+// network request duration and processing time.
 type prefetchingBeacon struct {
 	log    *zap.Logger
 	inner  beaconprotocol.BeaconNode

@@ -277,10 +277,14 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(epoch, storeDuties)
 
+	truncate := -1
+	if h.exporterMode {
+		truncate = 10
+	}
 	h.logger.Debug("🗂 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.Duties(epoch, specDuties),
+		fields.Duties(epoch, specDuties, truncate),
 		fields.Duration(start))
 
 	// Further processing is not needed in exporter mode, terminate early
