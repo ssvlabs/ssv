@@ -13,9 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -135,7 +133,7 @@ func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.Executi
 	if blinded {
 		// Get a blinded block from ssv-spec testing utilities
 		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
-		block := versionedBlinded.Electra
+		block := versionedBlinded.ElectraBlinded
 
 		// Modify the fields we need for our test
 		block.Slot = slot
@@ -183,16 +181,12 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		randao := getTestRANDAO()
 
 		// Should get block successfully but fee recipient should be zero
-		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
-		require.NotNil(t, block)
-		require.Equal(t, spec.DataVersionElectra, version)
+		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
+		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
-		// Verify fee recipient is zero by checking the block
-		versionedProposal := &api.VersionedProposal{
-			Version: version,
-			Electra: block.(*apiv1electra.BlockContents),
-		}
 		feeRecipient, err := versionedProposal.FeeRecipient()
 		require.NoError(t, err)
 		require.True(t, feeRecipient.IsZero(), "fee recipient should be zero")
@@ -213,16 +207,12 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
-		require.NotNil(t, block)
-		require.Equal(t, spec.DataVersionElectra, version)
+		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
+		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
-		// Verify fee recipient is non-zero
-		versionedProposal := &api.VersionedProposal{
-			Version: version,
-			Electra: block.(*apiv1electra.BlockContents),
-		}
 		feeRecipient, err := versionedProposal.FeeRecipient()
 		require.NoError(t, err)
 		require.False(t, feeRecipient.IsZero(), "fee recipient should not be zero")
@@ -246,18 +236,16 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
-		require.NotNil(t, block)
-		require.Equal(t, spec.DataVersionElectra, version)
+		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
+		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
-		// Verify it's actually a blinded block
-		blindedBlock, ok := block.(*apiv1electra.BlindedBeaconBlock)
-		require.True(t, ok, "should return a blinded block")
-		require.NotNil(t, blindedBlock.Body.ExecutionPayloadHeader, "blinded block should have execution payload header")
-
-		// Verify fee recipient is zero in the blinded block
-		require.True(t, blindedBlock.Body.ExecutionPayloadHeader.FeeRecipient.IsZero(), "fee recipient should be zero")
+		require.True(t, versionedProposal.Blinded, "should return a blinded block")
+		feeRecipient, err := versionedProposal.FeeRecipient()
+		require.NoError(t, err)
+		require.True(t, feeRecipient.IsZero(), "fee recipient should be zero")
 	})
 
 	t.Run("blinded block with non-zero fee recipient", func(t *testing.T) {
@@ -276,18 +264,17 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.NoError(t, err)
-		require.NotNil(t, block)
-		require.Equal(t, spec.DataVersionElectra, version)
+		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
+		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
-		// Verify it's actually a blinded block
-		blindedBlock, ok := block.(*apiv1electra.BlindedBeaconBlock)
-		require.True(t, ok, "should return a blinded block")
-		require.NotNil(t, blindedBlock.Body.ExecutionPayloadHeader, "blinded block should have execution payload header")
-
-		// Verify fee recipient matches expected value
-		require.Equal(t, nonZeroFeeRecipient, blindedBlock.Body.ExecutionPayloadHeader.FeeRecipient)
+		require.True(t, versionedProposal.Blinded, "should return a blinded block")
+		feeRecipient, err := versionedProposal.FeeRecipient()
+		require.NoError(t, err)
+		require.False(t, feeRecipient.IsZero(), "fee recipient should not be zero")
+		require.Equal(t, nonZeroFeeRecipient, feeRecipient)
 	})
 
 	t.Run("handles proposal endpoint error", func(t *testing.T) {
@@ -304,10 +291,10 @@ func TestGetBeaconBlock_FeeRecipientValidation(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.Error(t, err)
-		require.Nil(t, block)
-		require.Equal(t, DataVersionNil, version)
+		require.Nil(t, versionedProposal)
+		require.Nil(t, marshaledBlk)
 	})
 }
 
@@ -357,7 +344,7 @@ func TestSubmitProposalPreparationBatches(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "partially submitted preparations: 1000/1500")
+		require.Contains(t, err.Error(), "partially submitted proposal preparations: 1000/1500")
 		require.Equal(t, []int{0, 1, 2}, processedBatches, "all batches should be attempted")
 	})
 
@@ -376,7 +363,7 @@ func TestSubmitProposalPreparationBatches(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to submit any preparations")
+		require.Contains(t, err.Error(), fmt.Sprintf("failed to submit any of %d proposal preparations", len(preparations)))
 		require.Equal(t, 1, attemptCount, "should attempt once")
 	})
 
@@ -432,18 +419,14 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		randao := getTestRANDAO()
 
 		startTime := time.Now()
-		block, version, err := client.GetBeaconBlock(t.Context(), testSlot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), testSlot, graffiti, randao)
 		elapsed := time.Since(startTime)
 
 		require.NoError(t, err)
-		require.NotNil(t, block)
-		require.Equal(t, spec.DataVersionElectra, version)
+		require.NotNil(t, versionedProposal)
+		require.NotNil(t, marshaledBlk)
+		require.Equal(t, spec.DataVersionElectra, versionedProposal.Version)
 
-		// Verify we got the fee recipient from the fastest server (server2)
-		versionedProposal := &api.VersionedProposal{
-			Version: version,
-			Electra: block.(*apiv1electra.BlockContents),
-		}
 		actualFeeRecipient, err := versionedProposal.FeeRecipient()
 		require.NoError(t, err)
 
@@ -471,10 +454,10 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		cancelCtx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		block, version, err := client.GetBeaconBlock(cancelCtx, slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(cancelCtx, slot, graffiti, randao)
 		require.Error(t, err)
-		require.Nil(t, block)
-		require.Equal(t, DataVersionNil, version)
+		require.Nil(t, versionedProposal)
+		require.Nil(t, marshaledBlk)
 	})
 
 	t.Run("handles all clients failing", func(t *testing.T) {
@@ -496,11 +479,11 @@ func TestGetProposalParallel_MultiClient(t *testing.T) {
 		graffiti := []byte(testGraffiti)
 		randao := getTestRANDAO()
 
-		block, version, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
+		versionedProposal, marshaledBlk, err := client.GetBeaconBlock(t.Context(), slot, graffiti, randao)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "all 2 clients failed")
-		require.Nil(t, block)
-		require.Equal(t, DataVersionNil, version)
+		require.Nil(t, versionedProposal)
+		require.Nil(t, marshaledBlk)
 	})
 }
 

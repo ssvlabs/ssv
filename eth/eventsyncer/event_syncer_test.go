@@ -82,13 +82,6 @@ func TestEventSyncer(t *testing.T) {
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
 	require.NoError(t, err)
 
-	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
-	require.NoError(t, err)
-
-	err = client.Healthy(ctx)
-	require.NoError(t, err)
-
 	// Generate operator key
 	opPubKey, _, err := rsaencryption.GenerateKeyPairPEM()
 	require.NoError(t, err)
@@ -111,32 +104,84 @@ func TestEventSyncer(t *testing.T) {
 		}
 		require.Equal(t, uint64(0x1), receipt.Status)
 	}
-	db, err := kv.NewInMemory(logger, basedb.Options{
-		Ctx: ctx,
+
+	t.Run("client closed", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{
+			Ctx: ctx,
+		})
+		require.NoError(t, err)
+		privateKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+		nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
+		require.NoError(t, err)
+
+		eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
+
+		addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
+		client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+		require.NoError(t, err)
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+
+		eventSyncer := New(
+			nodeStorage,
+			client,
+			eh,
+			WithLogger(logger),
+		)
+		eventSyncer.stalenessThreshold = time.Second * 10
+
+		err = nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
+		require.NoError(t, err)
+		err = eventSyncer.Healthy(ctx)
+		require.NoError(t, err)
+
+		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
+		require.NoError(t, err)
+		require.NoError(t, client.Close())
+		require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
 	})
-	require.NoError(t, err)
-	privateKey, err := keys.GeneratePrivateKey()
-	require.NoError(t, err)
-	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
-	require.NoError(t, err)
 
-	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
-	eventSyncer := New(
-		nodeStorage,
-		client,
-		eh,
-		WithLogger(logger),
-	)
-	eventSyncer.stalenessThreshold = time.Second * 10
+	t.Run("context canceled", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{
+			Ctx: ctx,
+		})
+		require.NoError(t, err)
+		privateKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+		nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
+		require.NoError(t, err)
 
-	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
-	err = eventSyncer.Healthy(ctx)
-	require.NoError(t, err)
+		eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
 
-	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
-	require.NoError(t, err)
-	require.NoError(t, client.Close())
-	require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
+		addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
+		client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+		require.NoError(t, err)
+
+		err = client.Healthy(ctx)
+		require.NoError(t, err)
+
+		eventSyncer := New(
+			nodeStorage,
+			client,
+			eh,
+			WithLogger(logger),
+		)
+		eventSyncer.stalenessThreshold = time.Second * 10
+
+		err = nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
+		require.NoError(t, err)
+
+		err = eventSyncer.Healthy(ctx)
+		require.NoError(t, err)
+
+		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
+		require.NoError(t, err)
+
+		cancel()
+		require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
+	})
 }
 
 func setupEventHandler(
@@ -241,21 +286,21 @@ func TestBlockBelowThreshold(t *testing.T) {
 	t.Run("fails on EC error", func(t *testing.T) {
 		err1 := errors.New("ec err")
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(nil, err1)
-		err := s.blockBelowThreshold(ctx, big.NewInt(1))
+		err := s.ensureBlockAboveThreshold(ctx, big.NewInt(1))
 		require.ErrorIs(t, err, err1)
 	})
 
 	t.Run("fails if outside threshold", func(t *testing.T) {
 		header := &ethtypes.Header{Time: uint64(time.Now().Add(-(defaultStalenessThreshold + time.Second)).Unix())}
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
-		err := s.blockBelowThreshold(ctx, big.NewInt(1))
+		err := s.ensureBlockAboveThreshold(ctx, big.NewInt(1))
 		require.Error(t, err)
 	})
 
 	t.Run("success", func(t *testing.T) {
 		header := &ethtypes.Header{Time: uint64(time.Now().Add(-(defaultStalenessThreshold - time.Second)).Unix())}
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
-		err := s.blockBelowThreshold(ctx, big.NewInt(1))
+		err := s.ensureBlockAboveThreshold(ctx, big.NewInt(1))
 		require.NoError(t, err)
 	})
 }

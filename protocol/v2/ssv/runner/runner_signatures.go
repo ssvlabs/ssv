@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -15,27 +15,40 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (b *BaseRunner) signBeaconObject(
+func signBeaconObject(
 	ctx context.Context,
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
 	obj ssz.HashRoot,
-	slot spec.Slot,
-	signatureDomain spec.DomainType,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
+	epoch := runner.GetNetworkConfig().EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get beacon domain")
+		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
-		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
+	return signAsValidator(ctx, runner, duty.ValidatorIndex, obj, slot, signatureDomain, domain)
+}
+
+func signAsValidator(
+	ctx context.Context,
+	runner Runner,
+	validatorIndex phase0.ValidatorIndex,
+	obj ssz.HashRoot,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
+	domain phase0.Domain,
+) (*spectypes.PartialSignatureMessage, error) {
+	share, ok := runner.GetShares()[validatorIndex]
+	if !ok {
+		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
 	sig, r, err := runner.GetSigner().SignBeaconObject(
 		ctx,
 		obj,
 		domain,
-		spec.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
+		phase0.BLSPubKey(share.SharePubKey),
 		slot,
 		signatureDomain,
 	)
@@ -47,27 +60,14 @@ func (b *BaseRunner) signBeaconObject(
 		PartialSignature: sig,
 		SigningRoot:      r,
 		Signer:           runner.GetOperatorSigner().GetOperatorID(),
-		ValidatorIndex:   duty.ValidatorIndex,
+		ValidatorIndex:   validatorIndex,
 	}, nil
 }
-
-//func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
-//	signature, err := runner.GetSigner().SignBeaconObject(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
-//	if err != nil {
-//		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
-//	}
-//
-//	return &spectypes.SignedPartialSignatureMessage{
-//		Message:   *msg,
-//		Signature: signature,
-//		Signer:    b.Share.OperatorID,
-//	}, nil
-//}
 
 // Validate message content without verifying signatures
 func (b *BaseRunner) validatePartialSigMsgForSlot(
 	psigMsgs *spectypes.PartialSignatureMessages,
-	slot spec.Slot,
+	slot phase0.Slot,
 ) error {
 	if err := psigMsgs.Validate(); err != nil {
 		return errors.Wrap(err, "PartialSignatureMessages invalid")

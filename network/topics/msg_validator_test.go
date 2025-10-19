@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -56,7 +55,6 @@ func TestMsgValidator(t *testing.T) {
 		ns,
 		dutystore.New(),
 		signatureVerifier,
-		phase0.Epoch(0),
 		validation.WithLogger(logger),
 	)
 

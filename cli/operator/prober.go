@@ -9,10 +9,18 @@ import (
 	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
+// List of prober prober-nodes.
 const (
 	clNodeName          = "consensus client"
 	elNodeName          = "execution client"
 	eventSyncerNodeName = "event-syncer"
+)
+
+// Common prober parameters we use for various prober-nodes.
+const (
+	proberHealthcheckTimeout = 10 * time.Second
+	proberRetriesMax         = 5
+	proberRetryDelay         = 10 * time.Second
 )
 
 func startNodeProber(ctx context.Context, logger *zap.Logger, p *nodeprobe.Prober) {
