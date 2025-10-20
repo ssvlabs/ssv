@@ -39,18 +39,10 @@ func (bn *BeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch,
 	return bn.Bn.DomainData(epoch, domain)
 }
 func (bn *BeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	v, err := bn.Bn.SyncCommitteeSubnetID(index)
-	if err != nil {
-		panic("unexpected error from SyncCommitteeSubnetID")
-	}
-	return v
+	return bn.Bn.SyncCommitteeSubnetID(index)
 }
 func (bn *BeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
-	v, err := bn.Bn.IsSyncCommitteeAggregator(proof)
-	if err != nil {
-		panic("unexpected error from IsSyncCommitteeAggregator")
-	}
-	return v
+	return bn.Bn.IsSyncCommitteeAggregator(proof)
 }
 func (bn *BeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)

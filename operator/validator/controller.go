@@ -177,9 +177,11 @@ type controller struct {
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
 	committeesObserversMutex sync.Mutex
 
-	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
-	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
+	attesterRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	beaconVoteRoots      *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
 
 	domainCache *validator.DomainCache
 
@@ -257,7 +259,13 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		attesterRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
+		aggregatorRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
 		syncCommRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
+		syncCommContribRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
@@ -278,7 +286,9 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	go ctrl.committeesObservers.Start()
 	// Delete old root and domain entries.
 	go ctrl.attesterRoots.Start()
+	go ctrl.aggregatorRoots.Start()
 	go ctrl.syncCommRoots.Start()
+	go ctrl.syncCommContribRoots.Start()
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 
@@ -376,18 +386,20 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 	item := c.committeesObservers.Get(ssvMsg.GetID())
 	if item == nil || item.Value() == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
-			Logger:            c.logger,
-			BeaconConfig:      c.networkConfig.Beacon,
-			ValidatorStore:    c.validatorStore,
-			Network:           c.validatorCommonOpts.Network,
-			Storage:           c.validatorCommonOpts.Storage,
-			FullNode:          c.validatorCommonOpts.FullNode,
-			OperatorSigner:    c.validatorCommonOpts.OperatorSigner,
-			NewDecidedHandler: c.validatorCommonOpts.NewDecidedHandler,
-			AttesterRoots:     c.attesterRoots,
-			SyncCommRoots:     c.syncCommRoots,
-			DomainCache:       c.domainCache,
-			BeaconVoteRoots:   c.beaconVoteRoots,
+			Logger:               c.logger,
+			BeaconConfig:         c.networkConfig.Beacon,
+			ValidatorStore:       c.validatorStore,
+			Network:              c.validatorCommonOpts.Network,
+			Storage:              c.validatorCommonOpts.Storage,
+			FullNode:             c.validatorCommonOpts.FullNode,
+			OperatorSigner:       c.validatorCommonOpts.OperatorSigner,
+			NewDecidedHandler:    c.validatorCommonOpts.NewDecidedHandler,
+			AttesterRoots:        c.attesterRoots,
+			AggregatorRoots:      c.aggregatorRoots,
+			SyncCommRoots:        c.syncCommRoots,
+			SyncCommContribRoots: c.syncCommContribRoots,
+			DomainCache:          c.domainCache,
+			BeaconVoteRoots:      c.beaconVoteRoots,
 		}
 
 		ncv = validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions)

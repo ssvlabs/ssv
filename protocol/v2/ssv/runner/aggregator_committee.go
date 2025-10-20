@@ -17,13 +17,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -355,7 +355,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 		rootSet[root] = struct{}{}
 	}
 
-	var sortedRoots [][32]byte
+	sortedRoots := make([][32]byte, 0, len(rootSet))
 	for root := range rootSet {
 		sortedRoots = append(sortedRoots, root)
 	}
@@ -808,7 +808,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 		deduplicatedRoots[root] = struct{}{}
 	}
 
-	var sortedRoots [][32]byte
+	sortedRoots := make([][32]byte, 0, len(deduplicatedRoots))
 	for root := range deduplicatedRoots {
 		sortedRoots = append(sortedRoots, root)
 	}
@@ -868,7 +868,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 
 				share := r.BaseRunner.Share[validatorIndex]
 				if share == nil {
-					//continue // TODO: handle that nil share is ok
+					return // TODO: make sure we handle this logic
 				}
 
 				pubKey := share.ValidatorPubKey
@@ -1056,7 +1056,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomain(context.
 func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(ctx context.Context) (
 	aggregatorMap map[phase0.ValidatorIndex][32]byte,
 	contributionMap map[phase0.ValidatorIndex]map[uint64][32]byte,
-	error error,
+	err error,
 ) {
 	aggregatorMap = make(map[phase0.ValidatorIndex][32]byte)
 	contributionMap = make(map[phase0.ValidatorIndex]map[uint64][32]byte)

@@ -744,6 +744,8 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 	switch r {
 	case spectypes.RoleCommittee:
 		return spectypes.BNRoleUnknown, errors.New("unexpected committee role")
+	case spectypes.RoleAggregatorCommittee:
+		return spectypes.BNRoleUnknown, errors.New("unexpected aggregator committee role")
 	case spectypes.RoleProposer:
 		bnRole = spectypes.BNRoleProposer
 	case spectypes.RoleAggregator:

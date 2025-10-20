@@ -40,7 +40,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	switch role {
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + LateSlotAllowance
-	case spectypes.RoleCommittee, spectypes.RoleAggregator:
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, spectypes.RoleAggregator:
 		ttl = mv.maxStoredSlots()
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0

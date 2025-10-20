@@ -32,15 +32,17 @@ import (
 type CommitteeObserver struct {
 	sync.Mutex
 
-	msgID             spectypes.MessageID
-	logger            *zap.Logger
-	Storage           *storage.ParticipantStores
-	beaconConfig      *networkconfig.Beacon
-	ValidatorStore    registrystorage.ValidatorStore
-	newDecidedHandler qbftcontroller.NewDecidedHandler
-	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache       *DomainCache
+	msgID                spectypes.MessageID
+	logger               *zap.Logger
+	Storage              *storage.ParticipantStores
+	beaconConfig         *networkconfig.Beacon
+	ValidatorStore       registrystorage.ValidatorStore
+	newDecidedHandler    qbftcontroller.NewDecidedHandler
+	attesterRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache          *DomainCache
 
 	// cache to identify and skip duplicate computations of attester/sync committee roots
 	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
@@ -57,34 +59,38 @@ type BeaconVoteCacheKey struct {
 }
 
 type CommitteeObserverOptions struct {
-	FullNode          bool
-	Logger            *zap.Logger
-	BeaconConfig      *networkconfig.Beacon
-	Network           specqbft.Network
-	Storage           *storage.ParticipantStores
-	OperatorSigner    ssvtypes.OperatorSigner
-	NewDecidedHandler qbftcontroller.NewDecidedHandler
-	ValidatorStore    registrystorage.ValidatorStore
-	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	BeaconVoteRoots   *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
-	DomainCache       *DomainCache
+	FullNode             bool
+	Logger               *zap.Logger
+	BeaconConfig         *networkconfig.Beacon
+	Network              specqbft.Network
+	Storage              *storage.ParticipantStores
+	OperatorSigner       ssvtypes.OperatorSigner
+	NewDecidedHandler    qbftcontroller.NewDecidedHandler
+	ValidatorStore       registrystorage.ValidatorStore
+	AttesterRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	AggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
+	SyncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	SyncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	BeaconVoteRoots      *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
+	DomainCache          *DomainCache
 }
 
 func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
 	// TODO: does the specific operator matters?
 
 	co := &CommitteeObserver{
-		msgID:             msgID,
-		logger:            opts.Logger,
-		Storage:           opts.Storage,
-		beaconConfig:      opts.BeaconConfig,
-		ValidatorStore:    opts.ValidatorStore,
-		newDecidedHandler: opts.NewDecidedHandler,
-		attesterRoots:     opts.AttesterRoots,
-		syncCommRoots:     opts.SyncCommRoots,
-		domainCache:       opts.DomainCache,
-		beaconVoteRoots:   opts.BeaconVoteRoots,
+		msgID:                msgID,
+		logger:               opts.Logger,
+		Storage:              opts.Storage,
+		beaconConfig:         opts.BeaconConfig,
+		ValidatorStore:       opts.ValidatorStore,
+		newDecidedHandler:    opts.NewDecidedHandler,
+		attesterRoots:        opts.AttesterRoots,
+		aggregatorRoots:      opts.AggregatorRoots,
+		syncCommRoots:        opts.SyncCommRoots,
+		syncCommContribRoots: opts.SyncCommContribRoots,
+		domainCache:          opts.DomainCache,
+		beaconVoteRoots:      opts.BeaconVoteRoots,
 	}
 
 	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
@@ -207,6 +213,20 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 			return []spectypes.BeaconRole{spectypes.BNRoleAttester}
 		case syncCommittee != nil:
 			return []spectypes.BeaconRole{spectypes.BNRoleSyncCommittee}
+		default:
+			return nil
+		}
+	case spectypes.RoleAggregatorCommittee:
+		aggregator := ncv.aggregatorRoots.Get(root)
+		syncCommitteeContrib := ncv.syncCommRoots.Get(root)
+
+		switch {
+		case aggregator != nil && syncCommitteeContrib != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution}
+		case aggregator != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
+		case syncCommitteeContrib != nil:
+			return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
 		default:
 			return nil
 		}
