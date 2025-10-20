@@ -24,7 +24,8 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
+	meter  = otel.Meter(observabilityName)
 
 	peersConnectedGauge = metrics.New(
 		meter.Int64Gauge(

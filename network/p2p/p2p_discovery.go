@@ -8,19 +8,26 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oleiade/lane/v2"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/async"
 )
 
 func (n *p2pNetwork) startDiscovery() error {
 	startTime := time.Now()
+	_, span := tracer.Start(n.ctx, observability.InstrumentName(observabilityNamespace, "discovery.start"))
+	defer span.End()
 
 	connector, err := n.getConnector()
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -28,13 +35,20 @@ func (n *p2pNetwork) startDiscovery() error {
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
 	go n.bootstrapDiscovery(connectorProposals)
 	go func() {
+		// Trace proposals arriving from discovery bootstrap and being recorded in the pool.
+		_, gspan := tracer.Start(n.ctx, observability.InstrumentName(observabilityNamespace, "discovery.proposals"))
+		defer gspan.End()
 		for proposal := range connectorProposals {
+			gspan.AddEvent("proposal_observed", trace.WithAttributes(
+				attribute.String("ssv.p2p.peer.id", proposal.ID.String()),
+			))
 			discoveredPeer := discovery.DiscoveredPeer{
 				AddrInfo: proposal,
 				Tries:    0,
 			}
 			n.discoveredPeersPool.Set(proposal.ID, discoveredPeer)
 		}
+		gspan.SetStatus(codes.Ok, "")
 	}()
 
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
@@ -46,9 +60,14 @@ func (n *p2pNetwork) startDiscovery() error {
 	// - repeat those steps from above N times (depending on how many connection slots we have available),
 	//   also taking into account "peersToConnect" set of peers on each consecutive iteration
 	async.Interval(n.ctx, 15*time.Second, func() {
+		_, selSpan := tracer.Start(n.ctx, observability.InstrumentName(observabilityNamespace, "discovery.peer_selection"))
+		defer selSpan.End()
 		// Collect enough peers first to increase the quality of peer selection.
 		const minDiscoveryTime = 1 * time.Minute
 		if time.Since(startTime) < minDiscoveryTime {
+			selSpan.AddEvent("skip_min_discovery_time", trace.WithAttributes(
+				attribute.Int64("ssv.p2p.discovery.elapsed_sec", int64(time.Since(startTime).Seconds())),
+			))
 			return
 		}
 
@@ -62,6 +81,11 @@ func (n *p2pNetwork) startDiscovery() error {
 				zap.Int("outbound_peers", outbound),
 				zap.Int("max_peers", n.cfg.MaxPeers),
 			)
+			selSpan.AddEvent("skip_no_vacant_slots", trace.WithAttributes(
+				attribute.Int("inbound", inbound),
+				attribute.Int("outbound", outbound),
+				attribute.Int("max_peers", n.cfg.MaxPeers),
+			))
 			return
 		}
 
@@ -86,6 +110,10 @@ func (n *p2pNetwork) startDiscovery() error {
 		n.logger.Debug("selecting discovered peers",
 			zap.Int("pool_size", n.discoveredPeersPool.SlowLen()),
 			zap.String("own_subnet_peers", currentSubnetPeers.String()))
+		selSpan.SetAttributes(
+			attribute.Int("pool_size", n.discoveredPeersPool.SlowLen()),
+			attribute.String("ssv.p2p.own_subnet_peers", currentSubnetPeers.String()),
+		)
 
 		// Limit new connections to the remaining outbound slots.
 		maxPeersToConnect := max(vacantOutboundSlots, 1)
@@ -132,6 +160,7 @@ func (n *p2pNetwork) startDiscovery() error {
 			bestPeer, _, ok := peersByPriority.Pop()
 			if !ok {
 				// No more peers.
+				selSpan.AddEvent("no_candidates")
 				break
 			}
 
@@ -154,6 +183,14 @@ func (n *p2pNetwork) startDiscovery() error {
 				zap.Float64("max_score", maxScore),
 				zap.String("iteration", fmt.Sprintf("%d of %d", i, maxPeersToConnect)),
 			)
+			selSpan.AddEvent("best_peer_selected", trace.WithAttributes(
+				attribute.String("ssv.p2p.peer.id", bestPeer.ID.String()),
+				attribute.String("peer_subnets", bestPeerSubnets.String()),
+				attribute.Int("sample_size", int(peersByPriority.Size())),
+				attribute.Float64("min_score", minScore),
+				attribute.Float64("max_score", maxScore),
+				attribute.String("iteration", fmt.Sprintf("%d/%d", i, maxPeersToConnect)),
+			))
 		}
 
 		// Forward the selected peers for connection, incrementing the retry counter.
@@ -164,12 +201,18 @@ func (n *p2pNetwork) startDiscovery() error {
 				LastTry:  time.Now(),
 			})
 			connector <- p.AddrInfo
+			selSpan.AddEvent("peer_connect_proposed", trace.WithAttributes(
+				attribute.String("ssv.p2p.peer.id", p.ID.String()),
+			))
 		}
 		n.logger.Info(
 			"proposed discovered peers",
 			zap.Int("count", len(peersToConnect)),
 		)
+		selSpan.SetAttributes(attribute.Int("proposed_count", len(peersToConnect)))
+		selSpan.SetStatus(codes.Ok, "")
 	})
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
