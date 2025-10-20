@@ -6,26 +6,23 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	types "github.com/wealdtech/go-eth2-types/v2"
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -222,6 +219,13 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 	vDuty *spectypes.ValidatorDuty,
 	aggregatorData *spectypes.AggregatorCommitteeConsensusData,
 ) (bool, error) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.process_aggregator_selection_proof"),
+		trace.WithAttributes(
+		// TODO
+		))
+	defer span.End()
+
 	isAggregator := r.beacon.IsAggregator(ctx, vDuty.Slot, vDuty.CommitteeIndex, vDuty.CommitteeLength, selectionProof[:])
 	if !isAggregator {
 		return false, nil
@@ -229,12 +233,12 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 
 	// TODO: waitToSlotTwoThirds(vDuty.Slot)
 
-	attestation, err := r.beacon.GetAggregateAttestation(vDuty.Slot, vDuty.CommitteeIndex)
+	attestation, err := r.beacon.GetAggregateAttestation(ctx, vDuty.Slot, vDuty.CommitteeIndex)
 	if err != nil {
-		return true, errors.Wrap(err, "failed to get aggregate attestation")
+		return true, traces.Errorf(span, "failed to get aggregate attestation: %w", err)
 	}
 
-	aggregatorData.Aggregators = append(aggregatorData.Aggregators, types.AssignedAggregator{
+	aggregatorData.Aggregators = append(aggregatorData.Aggregators, spectypes.AssignedAggregator{
 		ValidatorIndex: vDuty.ValidatorIndex,
 		SelectionProof: selectionProof,
 		CommitteeIndex: uint64(vDuty.CommitteeIndex),
@@ -243,11 +247,69 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 	// Marshal attestation for storage
 	attestationBytes, err := attestation.MarshalSSZ()
 	if err != nil {
-		return true, errors.Wrap(err, "failed to marshal attestation")
+		return true, traces.Errorf(span, "failed to marshal attestation: %w", err)
 	}
 
 	aggregatorData.AggregatorsCommitteeIndexes = append(aggregatorData.AggregatorsCommitteeIndexes, uint64(vDuty.CommitteeIndex))
 	aggregatorData.Attestations = append(aggregatorData.Attestations, attestationBytes)
+
+	return true, nil
+}
+
+// processSyncCommitteeSelectionProof handles sync committee selection proofs with known index
+func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
+	ctx context.Context,
+	selectionProof phase0.BLSSignature,
+	syncCommitteeIndex uint64,
+	vDuty *spectypes.ValidatorDuty,
+	aggregatorData *spectypes.AggregatorCommitteeConsensusData,
+) (bool, error) {
+	subnetID := r.beacon.SyncCommitteeSubnetID(phase0.CommitteeIndex(syncCommitteeIndex))
+
+	isAggregator := r.beacon.IsSyncCommitteeAggregator(selectionProof[:])
+
+	if !isAggregator {
+		return false, nil // Not selected as sync committee aggregator
+	}
+
+	// Check if we already have a contribution for this sync committee subnet ID
+	for _, existingSubnet := range aggregatorData.SyncCommitteeSubnets {
+		if existingSubnet == subnetID {
+			// Contribution already exists for this subnet—skip duplicate.
+			return true, nil
+		}
+	}
+
+	contributions, _, err := r.GetBeaconNode().GetSyncCommitteeContribution(
+		ctx, vDuty.Slot, []phase0.BLSSignature{selectionProof}, []uint64{subnetID})
+	if err != nil {
+		return true, err
+	}
+
+	// Type assertion to get the actual Contributions object
+	contribs, ok := contributions.(*spectypes.Contributions)
+	if !ok {
+		return true, errors.Errorf("unexpected contributions type: %T", contributions)
+	}
+
+	if len(*contribs) == 0 {
+		return true, errors.New("no contributions found")
+	}
+
+	// Append the contribution(s)
+	for _, contrib := range *contribs {
+		if contrib.Contribution.SubcommitteeIndex != subnetID {
+			continue
+		}
+
+		aggregatorData.Contributors = append(aggregatorData.Contributors, spectypes.AssignedAggregator{
+			ValidatorIndex: vDuty.ValidatorIndex,
+			SelectionProof: selectionProof,
+		})
+
+		aggregatorData.SyncCommitteeSubnets = append(aggregatorData.SyncCommitteeSubnets, subnetID)
+		aggregatorData.SyncCommitteeContributions = append(aggregatorData.SyncCommitteeContributions, contrib.Contribution)
+	}
 
 	return true, nil
 }
@@ -281,9 +343,10 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 	}
 
 	duty := r.BaseRunner.State.StartingDuty.(*spectypes.AggregatorCommitteeDuty)
-	//epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	dataVersion, _ := r.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
 	aggregatorData := &spectypes.AggregatorCommitteeConsensusData{
-		//Version: r.beacon.DataVersion(epoch),
+		Version: dataVersion,
 	}
 	hasAnyAggregator := false
 
@@ -305,7 +368,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 
 	var anyErr error
 	for _, root := range sortedRoots {
-		metadataList, found := findValidatorsForPreConsensusRoot(root, aggregatorMap, contributionMap)
+		metadataList, found := r.findValidatorsForPreConsensusRoot(root, aggregatorMap, contributionMap)
 		if !found {
 			// Edge case: since operators may have divergent sets of validators,
 			// it's possible that an operator doesn't have the validator associated to a root.
@@ -363,26 +426,26 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 			case spectypes.BNRoleAggregator:
 				vDuty := r.findValidatorDuty(duty, validatorIndex, spectypes.BNRoleAggregator)
 				if vDuty != nil {
-					isAggregator, err := r.processAggregatorSelectionProof(blsSig, vDuty, aggregatorData)
+					isAggregator, err := r.processAggregatorSelectionProof(ctx, blsSig, vDuty, aggregatorData)
 					if err == nil {
 						if isAggregator {
 							hasAnyAggregator = true
 						}
 					} else {
-						anyErr = errors.Wrap(err, "failed to process aggregator selection proof")
+						anyErr = traces.Errorf(span, "failed to process aggregator selection proof: %w", err)
 					}
 				}
 
 			case spectypes.BNRoleSyncCommitteeContribution:
 				vDuty := r.findValidatorDuty(duty, validatorIndex, spectypes.BNRoleSyncCommitteeContribution)
 				if vDuty != nil {
-					isAggregator, err := r.processSyncCommitteeSelectionProof(blsSig, metadata.SyncCommitteeIndex, vDuty, aggregatorData)
+					isAggregator, err := r.processSyncCommitteeSelectionProof(ctx, blsSig, metadata.SyncCommitteeIndex, vDuty, aggregatorData)
 					if err == nil {
 						if isAggregator {
 							hasAnyAggregator = true
 						}
 					} else {
-						anyErr = errors.Wrap(err, "failed to process sync committee selection proof")
+						anyErr = traces.Errorf(span, "failed to process sync committee selection proof: %w", err)
 					}
 				}
 
@@ -393,55 +456,25 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 		}
 	}
 
-	// only 1 root, verified by expectedPreConsensusRootsAndDomain
-	root := roots[0]
-
-	// reconstruct selection proof sig
-	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
-	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
+	// Early exit if no aggregators selected
+	if !hasAnyAggregator {
+		r.BaseRunner.State.Finished = true
+		if anyErr != nil {
+			return anyErr
+		}
+		return nil
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	span.SetAttributes(
-		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
-		observability.ValidatorIndexAttribute(duty.ValidatorIndex),
-	)
-
-	const eventMsg = "🧩 got partial signature quorum"
-	span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorSignerAttribute(signedMsg.Messages[0].Signer)))
-	logger.Debug(eventMsg,
-		zap.Any("signer", signedMsg.Messages[0].Signer), // TODO: always 1?
-		fields.Slot(duty.Slot),
-	)
-
-	r.measurements.PauseDutyFlow()
-
-	span.AddEvent("submitting aggregate and proof",
-		trace.WithAttributes(
-			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
-			observability.ValidatorIndexAttribute(duty.ValidatorIndex)))
-	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
-	if err != nil {
-		return traces.Errorf(span, "failed to submit aggregate and proof: %w", err)
-	}
-	r.measurements.ContinueDutyFlow()
-
-	byts, err := res.MarshalSSZ()
-	if err != nil {
-		return traces.Errorf(span, "could not marshal aggregate and proof: %w", err)
-	}
-	input := &spectypes.ValidatorConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: byts,
+	if err := aggregatorData.Validate(); err != nil {
+		return traces.Errorf(span, "invalid aggregator consensus data: %w", err)
 	}
 
-	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
-		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
+	if err := r.BaseRunner.decide(ctx, logger, r, r.BaseRunner.State.StartingDuty.DutySlot(), aggregatorData); err != nil {
+		return traces.Errorf(span, "failed to start consensus")
+	}
+
+	if anyErr != nil {
+		return anyErr
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -757,9 +790,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 		return nil
 	}
 
-	span.AddEvent("getting attestations, sync committees and root beacon objects")
+	span.AddEvent("getting aggregations, sync committee contributions and root beacon objects")
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
-	attestationMap, committeeMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
+	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
 		return traces.Errorf(span, "could not get expected post consensus roots and beacon objects: %w", err)
 	}
@@ -769,27 +802,30 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 		return ErrNoValidDuties
 	}
 
-	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
-	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
-
 	// Get unique roots to avoid repetition
 	deduplicatedRoots := make(map[[32]byte]struct{})
 	for _, root := range roots {
 		deduplicatedRoots[root] = struct{}{}
 	}
 
+	var sortedRoots [][32]byte
+	for root := range deduplicatedRoots {
+		sortedRoots = append(sortedRoots, root)
+	}
+	sort.Slice(sortedRoots, func(i, j int) bool {
+		return bytes.Compare(sortedRoots[i][:], sortedRoots[j][:]) < 0
+	})
+
 	var executionErr error
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(deduplicatedRoots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
-	for root := range deduplicatedRoots {
+	for _, root := range sortedRoots {
 		// Get validators related to the given root
-		role, validators, found := findValidators(root, attestationMap, committeeMap)
+		role, validators, found := r.findValidatorsForPostConsensusRoot(root, aggregatorMap, contributionMap)
 
 		if !found {
-			// Edge case: since operators may have divergent sets of validators,
-			// it's possible that an operator doesn't have the validator associated to a root.
-			// In this case, we simply continue.
+			// Edge case: operator doesn't have the validator associated to a root
 			continue
 		}
 		const eventMsg = "found validators for root"
@@ -815,7 +851,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 			signatureCh = make(chan signatureResult, len(validators))
 		)
 
-		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
+		span.AddEvent("constructing sync committee contribution and aggregations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
 			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
 			if !r.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root) {
@@ -831,6 +867,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
+				if share == nil {
+					//continue // TODO: handle that nil share is ok
+				}
 
 				pubKey := share.ValidatorPubKey
 				vlogger := logger.With(zap.Uint64("validator_index", uint64(validatorIndex)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
@@ -886,21 +925,38 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 					continue
 				}
 
-				// Store objects for multiple submission
-				if role == spectypes.BNRoleSyncCommittee {
-					syncMsg := sszObject.(*altair.SyncCommitteeMessage)
-					syncMsg.Signature = signatureResult.signature
-
-					syncCommitteeMessagesToSubmit[signatureResult.validatorIndex] = syncMsg
-				} else if role == spectypes.BNRoleAttester {
-					att := sszObject.(*spec.VersionedAttestation)
-					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
+				switch role {
+				case spectypes.BNRoleAggregator:
+					aggregateAndProof := sszObject.(*spec.VersionedAggregateAndProof)
+					signedAgg, err := r.constructSignedAggregateAndProof(aggregateAndProof, signatureResult.signature)
 					if err != nil {
-						executionErr = fmt.Errorf("could not insert signature in versioned attestation")
+						executionErr = fmt.Errorf("failed to construct signed aggregate and proof: %w", err)
 						continue
 					}
 
-					attestationsToSubmit[signatureResult.validatorIndex] = att
+					if err := r.beacon.SubmitSignedAggregateSelectionProof(ctx, signedAgg); err != nil {
+						executionErr = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
+						continue
+					}
+
+					r.RecordSubmission(spectypes.BNRoleAggregator, signatureResult.validatorIndex, root)
+
+				case spectypes.BNRoleSyncCommitteeContribution:
+					contribAndProof := sszObject.(*altair.ContributionAndProof)
+					signedContrib := &altair.SignedContributionAndProof{
+						Message:   contribAndProof,
+						Signature: signatureResult.signature,
+					}
+
+					if err := r.beacon.SubmitSignedContributionAndProof(ctx, signedContrib); err != nil {
+						executionErr = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
+						continue
+					}
+
+					r.RecordSubmission(spectypes.BNRoleSyncCommitteeContribution, signatureResult.validatorIndex, root)
+
+				default:
+					return errors.Errorf("unexpected role type in post-consensus: %v", role)
 				}
 			}
 		}
@@ -916,120 +972,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 
 	logger = logger.With(fields.PostConsensusTime(r.measurements.PostConsensusTime()))
 
-	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
-	for _, att := range attestationsToSubmit {
-		if att != nil && att.ValidatorIndex != nil {
-			attestations = append(attestations, att)
-		}
-	}
-
 	r.measurements.EndDutyFlow()
-
-	if len(attestations) > 0 {
-		span.AddEvent("submitting attestations")
-		submissionStart := time.Now()
-
-		// Submit multiple attestations
-		if err := r.beacon.SubmitAttestations(ctx, attestations); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
-
-			const errMsg = "could not submit attestations"
-			logger.Error(errMsg, zap.Error(err))
-			return traces.Errorf(span, "%s: %w", errMsg, err)
-		}
-
-		recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAttester, r.BaseRunner.State.RunningInstance.State.Round)
-
-		attestationsCount := len(attestations)
-		if attestationsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(
-				ctx,
-				uint32(attestationsCount),
-				r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleAttester,
-			)
-		}
-
-		attData, err := attestations[0].Data()
-		if err != nil {
-			return traces.Errorf(span, "could not get attestation data: %w", err)
-		}
-		const eventMsg = "✅ successfully submitted attestations"
-		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.BeaconBlockRootAttribute(attData.BeaconBlockRoot),
-			observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
-			observability.ValidatorCountAttribute(attestationsCount),
-		))
-
-		logger.Info(eventMsg,
-			fields.Epoch(r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetBaseRunner().State.StartingDuty.DutySlot())),
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.BaseRunner.State.RunningInstance.State.Round),
-			fields.BlockRoot(attData.BeaconBlockRoot),
-			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-			fields.Count(attestationsCount),
-		)
-
-		// Record successful submissions
-		for validator := range attestationsToSubmit {
-			r.RecordSubmission(spectypes.BNRoleAttester, validator)
-		}
-	}
-
-	// Submit multiple sync committee
-	syncCommitteeMessages := make([]*altair.SyncCommitteeMessage, 0, len(syncCommitteeMessagesToSubmit))
-	for _, syncMsg := range syncCommitteeMessagesToSubmit {
-		syncCommitteeMessages = append(syncCommitteeMessages, syncMsg)
-	}
-
-	if len(syncCommitteeMessages) > 0 {
-		span.AddEvent("submitting sync committee")
-		submissionStart := time.Now()
-		if err := r.beacon.SubmitSyncMessages(ctx, syncCommitteeMessages); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
-
-			const errMsg = "could not submit sync committee messages"
-			logger.Error(errMsg, zap.Error(err))
-			return traces.Errorf(span, "%s: %w", errMsg, err)
-		}
-
-		recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommittee, r.BaseRunner.State.RunningInstance.State.Round)
-
-		syncMsgsCount := len(syncCommitteeMessages)
-		if syncMsgsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(
-				ctx,
-				uint32(syncMsgsCount),
-				r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleSyncCommittee,
-			)
-		}
-		const eventMsg = "✅ successfully submitted sync committee"
-		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.BeaconSlotAttribute(r.BaseRunner.State.StartingDuty.DutySlot()),
-			observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
-			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
-			observability.ValidatorCountAttribute(len(syncCommitteeMessages)),
-			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
-			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(r.measurements.consensusStart).Seconds()),
-		))
-		logger.Info(eventMsg,
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.BaseRunner.State.RunningInstance.State.Round),
-			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
-			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-			fields.Count(syncMsgsCount),
-		)
-
-		// Record successful submissions
-		for validator := range syncCommitteeMessagesToSubmit {
-			r.RecordSubmission(spectypes.BNRoleSyncCommittee, validator)
-		}
-	}
 
 	if executionErr != nil {
 		span.SetStatus(codes.Error, executionErr.Error())
@@ -1037,7 +980,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 	}
 
 	// Check if duty has terminated (runner has submitted for all duties)
-	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
+	if r.HasSubmittedAllDuties() {
 		r.BaseRunner.State.Finished = true
 	}
 
@@ -1045,26 +988,36 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 	return nil
 }
 
-// HasSubmittedAllValidatorDuties -- Returns true if the runner has done submissions for all validators for the given slot
-func (r *AggregatorCommitteeRunner) HasSubmittedAllValidatorDuties(attestationMap map[phase0.ValidatorIndex][32]byte, syncCommitteeMap map[phase0.ValidatorIndex][32]byte) bool {
-	// Expected total
-	expectedTotalSubmissions := len(attestationMap) + len(syncCommitteeMap)
+// HasSubmittedForValidator checks if a validator has submitted any duty for a given role
+func (r *AggregatorCommitteeRunner) HasSubmittedForValidator(role spectypes.BeaconRole, validatorIndex phase0.ValidatorIndex) bool {
+	if _, ok := r.submittedDuties[role]; !ok {
+		return false
+	}
+	if _, ok := r.submittedDuties[role][validatorIndex]; !ok {
+		return false
+	}
+	return len(r.submittedDuties[role][validatorIndex]) > 0
+}
 
-	totalSubmissions := 0
+// HasSubmittedAllDuties checks if all expected duties have been submitted
+func (r *AggregatorCommitteeRunner) HasSubmittedAllDuties() bool {
+	duty := r.BaseRunner.State.StartingDuty.(*spectypes.AggregatorCommitteeDuty)
 
-	// Add submitted attestation duties
-	for valIdx := range attestationMap {
-		if r.HasSubmitted(spectypes.BNRoleAttester, valIdx) {
-			totalSubmissions++
+	for _, vDuty := range duty.ValidatorDuties {
+		if vDuty == nil {
+			continue
+		}
+
+		if _, hasShare := r.BaseRunner.Share[vDuty.ValidatorIndex]; !hasShare {
+			continue
+		}
+
+		if !r.HasSubmittedForValidator(vDuty.Type, vDuty.ValidatorIndex) {
+			return false
 		}
 	}
-	// Add submitted sync committee duties
-	for valIdx := range syncCommitteeMap {
-		if r.HasSubmitted(spectypes.BNRoleSyncCommittee, valIdx) {
-			totalSubmissions++
-		}
-	}
-	return totalSubmissions >= expectedTotalSubmissions
+
+	return true
 }
 
 // RecordSubmission -- Records a submission for the (role, validator index, slot) tuple
@@ -1085,33 +1038,6 @@ func (r *AggregatorCommitteeRunner) HasSubmitted(role spectypes.BeaconRole, valI
 	}
 	_, ok := r.submittedDuties[role][valIdx]
 	return ok
-}
-
-func findValidators(
-	expectedRoot [32]byte,
-	attestationMap map[phase0.ValidatorIndex][32]byte,
-	committeeMap map[phase0.ValidatorIndex][32]byte) (spectypes.BeaconRole, []phase0.ValidatorIndex, bool) {
-	var validators []phase0.ValidatorIndex
-
-	// look for the expectedRoot in attestationMap
-	for validator, root := range attestationMap {
-		if root == expectedRoot {
-			validators = append(validators, validator)
-		}
-	}
-	if len(validators) > 0 {
-		return spectypes.BNRoleAttester, validators, true
-	}
-	// look for the expectedRoot in committeeMap
-	for validator, root := range committeeMap {
-		if root == expectedRoot {
-			validators = append(validators, validator)
-		}
-	}
-	if len(validators) > 0 {
-		return spectypes.BNRoleSyncCommittee, validators, true
-	}
-	return spectypes.BNRoleUnknown, nil, false
 }
 
 // Unneeded since no preconsensus phase
@@ -1208,95 +1134,85 @@ func (r *AggregatorCommitteeRunner) expectedSyncCommitteeSelectionRoot(
 }
 
 func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
-	attestationMap map[phase0.ValidatorIndex][32]byte,
-	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
+	aggregatorMap map[phase0.ValidatorIndex][32]byte,
+	contributionMap map[phase0.ValidatorIndex][][32]byte,
 	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, err error,
 ) {
-	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
-	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
+	aggregatorMap = make(map[phase0.ValidatorIndex][32]byte)
+	contributionMap = make(map[phase0.ValidatorIndex][][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
-	duty := r.BaseRunner.State.StartingDuty
-	// TODO DecidedValue should be interface??
-	beaconVoteData := r.BaseRunner.State.DecidedValue
-	beaconVote := &spectypes.BeaconVote{}
-	if err := beaconVote.Decode(beaconVoteData); err != nil {
-		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
+
+	consensusData := &spectypes.AggregatorCommitteeConsensusData{}
+	if err := consensusData.Decode(r.BaseRunner.State.DecidedValue); err != nil {
+		return nil, nil, nil, errors.Wrap(err, "could not decode consensus data")
 	}
 
-	slot := duty.DutySlot()
-	epoch := r.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
+	epoch := r.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
 
-	dataVersion, _ := r.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
+	aggregateAndProofs, hashRoots, err := consensusData.GetAggregateAndProofs()
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "could not get aggregate and proofs")
+	}
 
-	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
-		if validatorDuty == nil {
+	for i, aggregateAndProof := range aggregateAndProofs {
+		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
+		hashRoot := hashRoots[i]
+
+		// Calculate signing root for aggregate and proof
+		domain, err := r.beacon.DomainData(ctx, epoch, spectypes.DomainAggregateAndProof)
+		if err != nil {
 			continue
 		}
-		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
-		slot := validatorDuty.DutySlot()
-		epoch := r.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
-		switch validatorDuty.Type {
-		case spectypes.BNRoleAttester:
-			// Attestation object
-			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion)
-			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
-			if err != nil {
-				logger.Debug("failed to construct attestation", zap.Error(err))
-				continue
-			}
 
-			// Root
-			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainAttester)
-			if err != nil {
-				logger.Debug("failed to get attester domain", zap.Error(err))
-				continue
-			}
-
-			root, err := spectypes.ComputeETHSigningRoot(attestationData, domain)
-			if err != nil {
-				logger.Debug("failed to compute attester root", zap.Error(err))
-				continue
-			}
-
-			// Add to map
-			attestationMap[validatorDuty.ValidatorIndex] = root
-			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
-			}
-			beaconObjects[validatorDuty.ValidatorIndex][root] = attestationResponse
-		case spectypes.BNRoleSyncCommittee:
-			// Sync committee beacon object
-			syncMsg := &altair.SyncCommitteeMessage{
-				Slot:            slot,
-				BeaconBlockRoot: beaconVote.BlockRoot,
-				ValidatorIndex:  validatorDuty.ValidatorIndex,
-			}
-
-			// Root
-			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainSyncCommittee)
-			if err != nil {
-				logger.Debug("failed to get sync committee domain", zap.Error(err))
-				continue
-			}
-			// Eth root
-			blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
-			root, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
-			if err != nil {
-				logger.Debug("failed to compute sync committee root", zap.Error(err))
-				continue
-			}
-
-			// Set root and beacon object
-			syncCommitteeMap[validatorDuty.ValidatorIndex] = root
-			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
-			}
-			beaconObjects[validatorDuty.ValidatorIndex][root] = syncMsg
-		default:
-			return nil, nil, nil, fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
+		root, err := spectypes.ComputeETHSigningRoot(hashRoot, domain)
+		if err != nil {
+			continue
 		}
+
+		aggregatorMap[validatorIndex] = root
+
+		// Store beacon object
+		if _, ok := beaconObjects[validatorIndex]; !ok {
+			beaconObjects[validatorIndex] = make(map[[32]byte]interface{})
+		}
+		beaconObjects[validatorIndex][root] = aggregateAndProof
 	}
-	return attestationMap, syncCommitteeMap, beaconObjects, nil
+
+	contributions, err := consensusData.GetSyncCommitteeContributions()
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "could not get sync committee contributions")
+	}
+	for i, contribution := range contributions {
+		validatorIndex := consensusData.Contributors[i].ValidatorIndex
+
+		// Create contribution and proof
+		contribAndProof := &altair.ContributionAndProof{
+			AggregatorIndex: validatorIndex,
+			Contribution:    &contribution.Contribution,
+			SelectionProof:  consensusData.Contributors[i].SelectionProof,
+		}
+
+		// Calculate signing root
+		domain, err := r.beacon.DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
+		if err != nil {
+			continue
+		}
+
+		root, err := spectypes.ComputeETHSigningRoot(contribAndProof, domain)
+		if err != nil {
+			continue
+		}
+
+		contributionMap[validatorIndex] = append(contributionMap[validatorIndex], root)
+
+		// Store beacon object
+		if _, ok := beaconObjects[validatorIndex]; !ok {
+			beaconObjects[validatorIndex] = make(map[[32]byte]interface{})
+		}
+		beaconObjects[validatorIndex][root] = contribAndProof
+	}
+
+	return aggregatorMap, contributionMap, beaconObjects, nil
 }
 
 type preConsensusMetadata struct {
@@ -1306,7 +1222,7 @@ type preConsensusMetadata struct {
 }
 
 // findValidatorsForPreConsensusRoot finds all validators that have the given root in pre-consensus
-func findValidatorsForPreConsensusRoot(
+func (r *AggregatorCommitteeRunner) findValidatorsForPreConsensusRoot(
 	expectedRoot [32]byte,
 	aggregatorMap map[phase0.ValidatorIndex][32]byte,
 	contributionMap map[phase0.ValidatorIndex]map[uint64][32]byte,
@@ -1337,6 +1253,89 @@ func findValidatorsForPreConsensusRoot(
 	}
 
 	return metadata, len(metadata) > 0
+}
+
+func (r *AggregatorCommitteeRunner) findValidatorsForPostConsensusRoot(
+	expectedRoot [32]byte,
+	aggregatorMap map[phase0.ValidatorIndex][32]byte,
+	contributionMap map[phase0.ValidatorIndex][][32]byte,
+) (spectypes.BeaconRole, []phase0.ValidatorIndex, bool) {
+	var validators []phase0.ValidatorIndex
+
+	// Check aggregator map
+	for validator, root := range aggregatorMap {
+		if root == expectedRoot {
+			validators = append(validators, validator)
+		}
+	}
+	if len(validators) > 0 {
+		return spectypes.BNRoleAggregator, validators, true
+	}
+
+	// Check contribution map
+	for validator, roots := range contributionMap {
+		for _, root := range roots {
+			if root == expectedRoot {
+				validators = append(validators, validator)
+				break
+			}
+		}
+	}
+	if len(validators) > 0 {
+		return spectypes.BNRoleSyncCommitteeContribution, validators, true
+	}
+
+	return spectypes.BNRoleUnknown, nil, false
+}
+
+// constructSignedAggregateAndProof constructs a signed aggregate and proof from versioned data
+func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
+	aggregateAndProof *spec.VersionedAggregateAndProof,
+	signature phase0.BLSSignature,
+) (*spec.VersionedSignedAggregateAndProof, error) {
+	ret := &spec.VersionedSignedAggregateAndProof{
+		Version: aggregateAndProof.Version,
+	}
+
+	switch ret.Version {
+	case spec.DataVersionPhase0:
+		ret.Phase0 = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Phase0,
+			Signature: signature,
+		}
+	case spec.DataVersionAltair:
+		ret.Altair = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Altair,
+			Signature: signature,
+		}
+	case spec.DataVersionBellatrix:
+		ret.Bellatrix = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Bellatrix,
+			Signature: signature,
+		}
+	case spec.DataVersionCapella:
+		ret.Capella = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Capella,
+			Signature: signature,
+		}
+	case spec.DataVersionDeneb:
+		ret.Deneb = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Deneb,
+			Signature: signature,
+		}
+	case spec.DataVersionElectra:
+		if aggregateAndProof.Electra == nil {
+			return nil, errors.New("nil Electra aggregate and proof")
+		}
+		ret.Electra = &electra.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Electra,
+			Signature: signature,
+		}
+	default:
+		return nil, errors.Errorf("unknown version %s", ret.Version.String())
+	}
+
+	return ret, nil
 }
 
 func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
