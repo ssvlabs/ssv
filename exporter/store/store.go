@@ -1,16 +1,19 @@
 package store
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 
+	"github.com/RoaringBitmap/roaring/v2/roaring64"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -20,6 +23,9 @@ const (
 	validatorDutyTraceKey      = "vd"
 	committeeDutyTraceKey      = "cd"
 	validatorCommitteeIndexKey = "vc"
+	scheduledDutyKey           = "sd"
+	// slotKeyLen is the number of bytes used to encode a slot in keys.
+	slotKeyLen = 4
 )
 
 type DutyTraceStore struct {
@@ -260,6 +266,160 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 	return
 }
 
+// SetScheduledRole overwrites scheduled indices for a (slot, role).
+func (s *DutyTraceStore) SetScheduledRole(slot phase0.Slot, role spectypes.BeaconRole, indices []phase0.ValidatorIndex) error {
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	if len(indices) == 0 {
+		return s.db.Delete(prefix, nil)
+	}
+	bm := roaring64.NewBitmap()
+	for _, idx := range indices {
+		bm.Add(uint64(idx))
+	}
+	var buf bytes.Buffer
+	if _, err := bm.WriteTo(&buf); err != nil {
+		return fmt.Errorf("set scheduled (slot=%d role=%d): serialize: %w", slot, role, err)
+	}
+	if err := s.db.Set(prefix, nil, buf.Bytes()); err != nil {
+		return fmt.Errorf("set scheduled (slot=%d role=%d): %w", slot, role, err)
+	}
+	return nil
+}
+
+// AddScheduledRole unions indices into existing (slot, role) bitmap.
+func (s *DutyTraceStore) AddScheduledRole(slot phase0.Slot, role spectypes.BeaconRole, indices []phase0.ValidatorIndex) error {
+	if len(indices) == 0 {
+		return nil
+	}
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	bm := roaring64.NewBitmap()
+	for _, idx := range indices {
+		bm.Add(uint64(idx))
+	}
+	if existing, found, err := s.db.Get(prefix, nil); err != nil {
+		return fmt.Errorf("add scheduled (slot=%d role=%d): get existing: %w", slot, role, err)
+	} else if found {
+		var prev roaring64.Bitmap
+		if _, err := prev.ReadFrom(bytes.NewReader(existing.Value)); err != nil {
+			return fmt.Errorf("add scheduled (slot=%d role=%d): read existing: %w", slot, role, err)
+		}
+		bm.Or(&prev)
+	}
+	var buf bytes.Buffer
+	if _, err := bm.WriteTo(&buf); err != nil {
+		return fmt.Errorf("add scheduled (slot=%d role=%d): serialize: %w", slot, role, err)
+	}
+	if err := s.db.Set(prefix, nil, buf.Bytes()); err != nil {
+		return fmt.Errorf("add scheduled (slot=%d role=%d): %w", slot, role, err)
+	}
+	return nil
+}
+
+// GetScheduledRole returns indices for a (slot, role).
+func (s *DutyTraceStore) GetScheduledRole(slot phase0.Slot, role spectypes.BeaconRole) ([]phase0.ValidatorIndex, error) {
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	obj, found, err := s.db.Get(prefix, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get scheduled role (slot=%d role=%d): %w", slot, role, err)
+	}
+	if !found {
+		return nil, ErrNotFound
+	}
+	var bm roaring64.Bitmap
+	if _, err := bm.ReadFrom(bytes.NewReader(obj.Value)); err != nil {
+		return nil, fmt.Errorf("get scheduled role (slot=%d role=%d): decode: %w", slot, role, err)
+	}
+	out := make([]phase0.ValidatorIndex, 0, bm.GetCardinality())
+	it := bm.Iterator()
+	for it.HasNext() {
+		out = append(out, phase0.ValidatorIndex(it.Next()))
+	}
+	return out, nil
+}
+
+// DeleteScheduledRole removes scheduled indices for a (slot, role).
+func (s *DutyTraceStore) DeleteScheduledRole(slot phase0.Slot, role spectypes.BeaconRole) error {
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	return s.db.Delete(prefix, nil)
+}
+
+// DeleteScheduledSlot removes scheduled data for all roles at a slot.
+func (s *DutyTraceStore) DeleteScheduledSlot(slot phase0.Slot) error {
+	var errs *multierror.Error
+	for _, role := range rolemask.All() {
+		if err := s.db.Delete(s.makeScheduledRolePrefix(slot, role), nil); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("delete scheduled (slot=%d role=%d): %w", slot, role, err))
+		}
+	}
+	return errs.ErrorOrNil()
+}
+
+// SaveScheduled stores a compact map (validator index -> role mask) for a slot.
+func (s *DutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {
+	if len(schedule) == 0 {
+		return nil
+	}
+	// Iterate roles together with their mask bit to avoid extra lookups.
+	for role, bit := range rolemask.AllWithBits() {
+		bm := roaring64.NewBitmap()
+		for idx, m := range schedule {
+			if m&bit != 0 {
+				bm.Add(uint64(idx))
+			}
+		}
+		if bm.IsEmpty() {
+			continue
+		}
+		prefix := s.makeScheduledRolePrefix(slot, role)
+		if existing, found, err := s.db.Get(prefix, nil); err != nil {
+			return fmt.Errorf("save scheduled (slot=%d role=%d): get: %w", slot, role, err)
+		} else if found {
+			var prev roaring64.Bitmap
+			if _, err := prev.ReadFrom(bytes.NewReader(existing.Value)); err != nil {
+				return fmt.Errorf("save scheduled (slot=%d role=%d): read: %w", slot, role, err)
+			}
+			bm.Or(&prev)
+		}
+		var buf bytes.Buffer
+		if _, err := bm.WriteTo(&buf); err != nil {
+			return fmt.Errorf("save scheduled (slot=%d role=%d): serialize: %w", slot, role, err)
+		}
+		if err := s.db.Set(prefix, nil, buf.Bytes()); err != nil {
+			return fmt.Errorf("save scheduled (slot=%d role=%d): %w", slot, role, err)
+		}
+	}
+	return nil
+}
+
+// GetScheduled returns compact schedule map for a slot.
+func (s *DutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	out := make(map[phase0.ValidatorIndex]rolemask.Mask)
+	var errs *multierror.Error
+	// Iterate roles together with their mask bit to avoid extra lookups.
+	for role, bit := range rolemask.AllWithBits() {
+		prefix := s.makeScheduledRolePrefix(slot, role)
+		obj, found, err := s.db.Get(prefix, nil)
+		if err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("get scheduled (slot=%d role=%d): %w", slot, role, err))
+			continue
+		}
+		if !found {
+			continue
+		}
+		var bm roaring64.Bitmap
+		if _, err := bm.ReadFrom(bytes.NewReader(obj.Value)); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("get scheduled (slot=%d role=%d): decode: %w", slot, role, err))
+			continue
+		}
+		it := bm.Iterator()
+		for it.HasNext() {
+			idx := phase0.ValidatorIndex(it.Next())
+			out[idx] |= bit
+		}
+	}
+	return out, errs.ErrorOrNil()
+}
+
 func (s *DutyTraceStore) makeValidatorPrefix(slot phase0.Slot, role spectypes.BeaconRole, index ...phase0.ValidatorIndex) []byte {
 	prefix := make([]byte, 0, len(validatorDutyTraceKey)+4+1)
 	prefix = append(prefix, []byte(validatorDutyTraceKey)...)
@@ -290,6 +450,21 @@ func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot) []byte {
 	prefix := make([]byte, 0, len(validatorCommitteeIndexKey)+4)
 	prefix = append(prefix, []byte(validatorCommitteeIndexKey)...)
 	return append(prefix, slotToByteSlice(slot)...)
+}
+
+func (s *DutyTraceStore) makeScheduledRolePrefix(slot phase0.Slot, role spectypes.BeaconRole) []byte {
+	prefix := make([]byte, 0, len(scheduledDutyKey)+slotKeyLen+1)
+	prefix = append(prefix, []byte(scheduledDutyKey)...)
+	prefix = append(prefix, slotToByteSlice(slot)...)
+	// Use the mask bit as the role discriminator in the key (instead of the
+	// raw role value) to avoid depending on role numeric width.
+	if b, ok := rolemask.BitOf(role); ok {
+		prefix = append(prefix, b)
+	} else {
+		// Unknown roles should not appear here; keep a stable suffix anyway.
+		prefix = append(prefix, 0)
+	}
+	return prefix
 }
 
 // helpers
