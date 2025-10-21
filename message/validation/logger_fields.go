@@ -70,7 +70,9 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	descriptor.DutyExecutorID = decodedMessage.SSVMessage.GetID().GetDutyExecutorID()
 	descriptor.Role = decodedMessage.SSVMessage.GetID().GetRoleType()
 	descriptor.SSVMessageType = decodedMessage.GetType()
-	descriptor.Signers = decodedMessage.SignedSSVMessage.OperatorIDs
+	if decodedMessage.SignedSSVMessage != nil {
+		descriptor.Signers = decodedMessage.SignedSSVMessage.OperatorIDs
+	}
 
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
