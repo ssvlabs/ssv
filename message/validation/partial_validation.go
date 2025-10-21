@@ -173,7 +173,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Sync committee contribution
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
-		if err := signerState.SeenMsgTypes.ValidatePartialSignatureMessage(partialSignatureMessages); err != nil {
+		if err := signerState.SeenMsgTypes.ValidatePartialSignatureMessage(partialSignatureMessages, signedSSVMessage.OperatorIDs, committeeInfo); err != nil {
 			return err
 		}
 	}

@@ -95,18 +95,18 @@ func (c *SeenMsgTypes) ValidateConsensusMessage(signedSSVMessage *spectypes.Sign
 
 // ValidatePartialSignatureMessage checks if the provided partial signature message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
-func (c *SeenMsgTypes) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages) error {
+func (c *SeenMsgTypes) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages, signers []spectypes.OperatorID, info CommitteeInfo) error {
 	switch m.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		if c.reachedPreConsensusLimit() {
 			err := ErrInvalidPartialSignatureTypeCount
-			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
+			err.got = fmt.Sprintf("pre-consensus from %v (indices %v), having %v from %v", signers, info.signerIndices, c.String(), signers[0])
 			return err
 		}
 	case spectypes.PostConsensusPartialSig:
 		if c.reachedPostConsensusLimit() {
 			err := ErrInvalidPartialSignatureTypeCount
-			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
+			err.got = fmt.Sprintf("post-consensus from %v (indices %v), having %v from %v", signers, info.signerIndices, c.String(), signers[0])
 			return err
 		}
 	default:
