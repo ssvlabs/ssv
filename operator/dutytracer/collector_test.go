@@ -1023,6 +1023,155 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 	})
 }
 
+func TestCollector_processPartialSigCommittee_UnknownRootBuffers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger := zap.NewNop()
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+
+	tracer := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+	const slot = phase0.Slot(12)
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+
+	// Provide committee operators to satisfy processPartialSigCommittee
+	committee := &storage.Committee{ID: committeeID, Operators: []spectypes.OperatorID{1, 2, 3, 4}}
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+
+	// Prepare the trace with known roots so the message root is treated as unknown
+	trace, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID)
+	require.NoError(t, err)
+	trace.Lock()
+	trace.roleRootsReady = true
+	trace.syncCommitteeRoot = phase0.Root{1}
+	trace.attestationRoot = phase0.Root{2}
+	trace.Unlock()
+
+	// Build a partial signature message with an unknown root
+	fakeSig := [96]byte{}
+	unknownRoot := phase0.Root{9, 9, 9}
+	partSig := spectypes.PartialSignatureMessages{
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{{
+			ValidatorIndex:   phase0.ValidatorIndex(55),
+			Signer:           99,
+			PartialSignature: fakeSig[:],
+			SigningRoot:      unknownRoot,
+		}},
+	}
+	data, err := partSig.Encode()
+	require.NoError(t, err)
+
+	msg := buildPartialSigMessage(identifier, data)
+	require.NoError(t, tracer.Collect(t.Context(), msg, dummyVerify))
+
+	// Inspect internal pending buffer; nothing should be classified yet
+	trace2, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID)
+	require.NoError(t, err)
+	trace2.Lock()
+	defer trace2.Unlock()
+	require.Empty(t, trace2.Attester)
+	require.Empty(t, trace2.SyncCommittee)
+
+	// Validate pending structure contains our root/signer and index
+	perSigner, ok := trace2.pendingByRoot[unknownRoot]
+	require.True(t, ok)
+	byTs, ok := perSigner[99]
+	require.True(t, ok)
+	found := false
+	for _, idxs := range byTs {
+		for _, idx := range idxs {
+			if idx == 55 {
+				found = true
+				break
+			}
+		}
+	}
+	require.True(t, found, "expected buffered index for unknown root")
+}
+
+func TestCollector_FlushPending_Timestamps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger := zap.NewNop()
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+
+	tracer := New(logger, validators, mockclient{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+
+	const slot = phase0.Slot(13)
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+
+	// Committee mock
+	committee := &storage.Committee{ID: committeeID, Operators: []spectypes.OperatorID{1, 2, 3, 4}}
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+
+	// Derive a sync-committee root deterministically and use it in two separate batches
+	var blockRoot = phase0.Root([32]byte{1, 2, 3})
+	syncRoot, _, voteData := buildRoleRoots(t, tracer, slot, blockRoot)
+
+	// Batch 1
+	ps1 := spectypes.PartialSignatureMessages{
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{{
+			ValidatorIndex:   77,
+			Signer:           99,
+			PartialSignature: make([]byte, 96),
+			SigningRoot:      syncRoot,
+		}},
+	}
+	d1, _ := ps1.Encode()
+	require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, d1), dummyVerify))
+
+	// Ensure a different timestamp for batch 2
+	time.Sleep(2 * time.Millisecond)
+
+	// Batch 2 (same root, same signer, same index)
+	ps2 := spectypes.PartialSignatureMessages{
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{{
+			ValidatorIndex:   77,
+			Signer:           99,
+			PartialSignature: make([]byte, 96),
+			SigningRoot:      syncRoot,
+		}},
+	}
+	d2, _ := ps2.Encode()
+	require.NoError(t, tracer.Collect(t.Context(), buildPartialSigMessage(identifier, d2), dummyVerify))
+
+	// Push a proposal carrying the BeaconVote so roots are computed and pending flushed
+	proposal := buildCommitteeProposalWithBeaconVote(identifier, slot, voteData)
+	require.NoError(t, tracer.Collect(t.Context(), proposal, dummyVerify))
+
+	// Now the committee duty should contain two signer records for the same signer with distinct timestamps
+	duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+	require.NoError(t, err)
+	require.NotNil(t, duty)
+
+	// Filter SyncCommittee entries for signer 99 that include index 77
+	var times []uint64
+	for _, sd := range duty.SyncCommittee {
+		if sd.Signer == 99 {
+			for _, idx := range sd.ValidatorIdx {
+				if idx == 77 {
+					times = append(times, sd.ReceivedTime)
+					break
+				}
+			}
+		}
+	}
+	require.Len(t, times, 2, "expected two timestamped batches for the same signer")
+	assert.NotEqual(t, times[0], times[1], "timestamps should differ between batches")
+}
+
 func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
