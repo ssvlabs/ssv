@@ -460,33 +460,27 @@ func TestCommitteeDuty(t *testing.T) {
 		Operators: []spectypes.OperatorID{1, 2, 3, 4},
 	}
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
-	validators.EXPECT().Committee(committeeID).Return(committee, true)
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
 
 	dutyStore := new(mockDutyTraceStore)
-	tracer := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
+	// Use a mock client so role roots can be computed from proposal FullData
+	tracer := New(logger, validators, mockclient{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
 	copy(wantBeaconRoot[:], bnVal[:])
+	var (
+		testBVData []byte
+		syncRoot   phase0.Root
+		attRoot    phase0.Root
+	)
 
-	{ // TC 1 - process partial sig messages
-		fakeSig := [96]byte{}
+	{ // TC 1 - process partial sig messages (no roots yet => pending, no classification)
+		// Build deterministic signing roots from a BeaconVote; use them in partial sigs
+		var blockRoot = phase0.Root([32]byte{1, 2, 3})
+		syncRoot, attRoot, testBVData = buildRoleRoots(t, tracer, slot, blockRoot)
 
-		var partSigMessages = spectypes.PartialSignatureMessages{
-			Slot: 1,
-			Messages: []*spectypes.PartialSignatureMessage{
-				{
-					ValidatorIndex:   vIndex,
-					Signer:           99,
-					PartialSignature: fakeSig[:],
-					SigningRoot:      [32]byte{1, 2, 3},
-				},
-			},
-		}
-
-		partSigMessagesData, err := partSigMessages.Encode()
-		require.NoError(t, err)
-
+		partSigMessagesData := encodePartialSigMessages(slot, vIndex, 99, syncRoot, attRoot)
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		tracer.Collect(t.Context(), partSigMsg, dummyVerify)
 
@@ -496,47 +490,19 @@ func TestCommitteeDuty(t *testing.T) {
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, duty.CommitteeID, committeeID)
 
-		require.NotNil(t, duty.Attester)
-		require.NotEmpty(t, duty.Attester)
-
-		attester := duty.Attester[0]
-		require.NotEmpty(t, attester.Signer)
-		assert.Equal(t, uint64(99), attester.Signer)
-
+		// No roots were derived on the trace yet, so nothing is classified.
+		require.Empty(t, duty.Attester)
+		require.Empty(t, duty.SyncCommittee)
 		require.NotNil(t, duty.ConsensusTrace)
 		require.Empty(t, duty.Decideds)
 		require.Empty(t, duty.Rounds)
-		require.Empty(t, duty.SyncCommittee)
 		require.Equal(t, committee.Operators, duty.OperatorIDs)
 		assert.Equal(t, committeeID, committeeID)
 	}
 
-	validators.EXPECT().Committee(committeeID).Return(committee, true)
-
-	{ // TC 1b - process partial sig messages with sc root
-		fakeSig := [96]byte{}
-
-		var partSigMessages = spectypes.PartialSignatureMessages{
-			Slot: 1,
-			Messages: []*spectypes.PartialSignatureMessage{
-				{
-					ValidatorIndex:   vIndex,
-					Signer:           99,
-					PartialSignature: fakeSig[:],
-					SigningRoot:      [32]byte{1, 2, 3},
-				},
-			},
-		}
-
-		partSigMessagesData, err := partSigMessages.Encode()
-		require.NoError(t, err)
-
-		trace, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID)
-		require.NoError(t, err)
-		trace.syncCommitteeRoot = [32]byte{1, 2, 3}
-
-		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		tracer.Collect(t.Context(), partSigMsg, dummyVerify)
+	{ // TC 1b - push proposal with BeaconVote to compute roots and flush pending
+		proposal := buildCommitteeProposalWithBeaconVote(identifier, slot, testBVData)
+		tracer.Collect(t.Context(), proposal, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -544,12 +510,13 @@ func TestCommitteeDuty(t *testing.T) {
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, duty.CommitteeID, committeeID)
 
+		// Pending partial sigs should now be classified into both roles
 		require.NotNil(t, duty.SyncCommittee)
 		require.NotEmpty(t, duty.SyncCommittee)
+		require.NotNil(t, duty.Attester)
+		require.NotEmpty(t, duty.Attester)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		require.Empty(t, duty.Decideds)
-		require.Empty(t, duty.Rounds)
 		require.Equal(t, committee.Operators, duty.OperatorIDs)
 		assert.Equal(t, committeeID, committeeID)
 	}
@@ -835,6 +802,46 @@ func buildConsensusMsg(identifier spectypes.MessageID, msgType specqbft.MessageT
 			PrepareJustification:     [][]byte{justification([][]byte{justification(nil)})},
 		},
 	}
+}
+
+// buildCommitteeProposalWithBeaconVote creates a committee proposal carrying
+// BeaconVote FullData so the collector derives role roots and classifies
+// pending partial signatures via the normal code path.
+func buildCommitteeProposalWithBeaconVote(identifier spectypes.MessageID, slot phase0.Slot, voteData []byte) *queue.SSVMessage {
+	msg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
+	msg.SignedSSVMessage.FullData = voteData
+	return msg
+}
+
+// buildRoleRoots encodes a BeaconVote for the given block root and asks the
+// collector to derive sync-committee and attester signing roots for the slot.
+// It returns (syncRoot, attRoot, encodedVote).
+func buildRoleRoots(t *testing.T, c *Collector, slot phase0.Slot, blockRoot phase0.Root) (phase0.Root, phase0.Root, []byte) {
+	t.Helper()
+	bv := &spectypes.BeaconVote{BlockRoot: blockRoot}
+	data, err := bv.Encode()
+	require.NoError(t, err)
+	syncRoot, attRoot, err := c.computeRoleRoots(t.Context(), slot, data)
+	require.NoError(t, err)
+	return syncRoot, attRoot, data
+}
+
+// encodePartialSigMessages builds a PartialSignatureMessages payload for a
+// single validator index and signer across multiple signing roots.
+func encodePartialSigMessages(slot phase0.Slot, vIdx phase0.ValidatorIndex, signer spectypes.OperatorID, roots ...phase0.Root) []byte {
+	fakeSig := [96]byte{}
+	msgs := make([]*spectypes.PartialSignatureMessage, 0, len(roots))
+	for _, r := range roots {
+		msgs = append(msgs, &spectypes.PartialSignatureMessage{
+			ValidatorIndex:   vIdx,
+			Signer:           signer,
+			PartialSignature: fakeSig[:],
+			SigningRoot:      r,
+		})
+	}
+	p := spectypes.PartialSignatureMessages{Slot: slot, Messages: msgs}
+	data, _ := p.Encode()
+	return data
 }
 
 func justification(rcj [][]byte) []byte {
@@ -1405,6 +1412,12 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 	t.Run("first validator reaches quorum", func(t *testing.T) {
 		listener.Reset()
 
+		// Pre-derive attester root so classification is active
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		require.NoError(t, err)
+		trace.attestationRoot = signingRoot
+		trace.roleRootsReady = true
+
 		// Send partial signatures from 3 operators for validator1 (reaches quorum)
 		// Send each operator's signature separately
 		operators := []spectypes.OperatorID{operator1, operator2, operator3}
@@ -1462,6 +1475,12 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 	t.Run("second validator reaches quorum", func(t *testing.T) {
 		listener.Reset()
 
+		// Prepare roots for the same committee at the slot
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		require.NoError(t, err)
+		trace.attestationRoot = signingRoot
+		trace.roleRootsReady = true
+
 		// Send partial signatures from 3 operators for validator2 (reaches quorum)
 		operators := []spectypes.OperatorID{operator1, operator2, operator3}
 		for _, op := range operators {
@@ -1494,6 +1513,12 @@ func TestCollector_PublishDecidedsToListener(t *testing.T) {
 
 	t.Run("insufficient signers don't trigger publication", func(t *testing.T) {
 		listener.Reset()
+
+		// Prepare roots for slot+1 as well
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot+1, committeeID)
+		require.NoError(t, err)
+		trace.attestationRoot = signingRoot
+		trace.roleRootsReady = true
 
 		// Send partial signatures from only 2 operators for a new validator (below quorum)
 		operators := []spectypes.OperatorID{operator1, operator2}

@@ -1,6 +1,9 @@
 package validator
 
 import (
+	"encoding/hex"
+	"strconv"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
@@ -26,7 +29,7 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 
 	if err := c.store.SaveCommitteeDutyLinks(slot, links); err != nil {
 		c.logger.Error("save validator to committee relations to disk", zap.Error(err))
-		return
+		return 0
 	}
 
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
@@ -35,8 +38,7 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 	})
 
 	totalSaved = len(links)
-
-	return
+	return totalSaved
 }
 
 func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
@@ -46,6 +48,23 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		if !found {
 			return true
 		}
+		// Warn loudly if we are about to drop pending buffered entries due to roots not being resolved.
+		trace.Lock()
+		pendingCount := 0
+		for _, perSigner := range trace.pendingByRoot {
+			for _, idxs := range perSigner {
+				pendingCount += len(idxs)
+			}
+		}
+		if pendingCount > 0 {
+			c.logger.Error("discarding pending committee signer entries (roots unresolved)",
+				fields.Slot(slot), fields.CommitteeID(key),
+				zap.Int("pending_entries", pendingCount),
+				pendingDetails(trace.pendingByRoot))
+			// We intentionally drop pending entries here; they are not persisted.
+			trace.pendingByRoot = nil
+		}
+		trace.Unlock()
 
 		data := trace.trace()
 		duties = append(duties, data)
@@ -54,7 +73,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 
 	if err := c.store.SaveCommitteeDuties(slot, duties); err != nil {
 		c.logger.Error("save committee duties to disk", zap.Error(err))
-		return
+		return 0
 	}
 
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
@@ -63,8 +82,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	totalSaved = len(duties)
-
-	return
+	return totalSaved
 }
 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
@@ -98,4 +116,23 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	return len(duties)
+}
+
+// pendingDetails constructs a single zap field named "pending_signers_by_root"
+// that logs the content of pendingByRoot in a JSON-friendly structure.
+func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID][]phase0.ValidatorIndex) zap.Field {
+	out := make(map[string]map[string][]uint64, len(data))
+	for root, perSigner := range data {
+		rhex := hex.EncodeToString(root[:])
+		inner := make(map[string][]uint64, len(perSigner))
+		for signer, idxs := range perSigner {
+			arr := make([]uint64, 0, len(idxs))
+			for _, idx := range idxs {
+				arr = append(arr, uint64(idx))
+			}
+			inner[strconv.FormatUint(signer, 10)] = arr
+		}
+		out[rhex] = inner
+	}
+	return zap.Any("pending_signers_by_root", out)
 }
