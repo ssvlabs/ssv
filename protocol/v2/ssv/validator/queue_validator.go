@@ -232,7 +232,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
 		}
 		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
+			return spectypes.WrapError(spectypes.SSVMessageHasInvalidSignatureErrorCode, fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err))
 		}
 	}
 

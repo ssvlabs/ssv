@@ -20,6 +20,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -139,7 +140,7 @@ func (gc *GoClient) GetBeaconBlock(
 		}
 		return beaconBlock, beaconBlock.Fulu, nil
 	default:
-		return nil, nil, fmt.Errorf("unknown block version %d", beaconBlock.Version)
+		return nil, nil, spectypes.WrapError(spectypes.UnknownBlockVersionErrorCode, fmt.Errorf("unknown block version %d", beaconBlock.Version))
 	}
 }
 
@@ -373,7 +374,7 @@ func (gc *GoClient) submitRegularBlock(
 			Blobs:     block.Fulu.Blobs,
 		}
 	default:
-		return fmt.Errorf("unknown block version %d", version)
+		return spectypes.WrapError(spectypes.UnknownBlockVersionErrorCode, fmt.Errorf("unknown block version %d", version))
 	}
 
 	opts := &api.SubmitProposalOpts{

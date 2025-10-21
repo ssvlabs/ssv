@@ -75,7 +75,7 @@ func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
 		return errors.Wrap(err, "could not hash input data")
 	}
 	if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
-		return errors.New("H(data) != root")
+		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 	}
 
 	return nil

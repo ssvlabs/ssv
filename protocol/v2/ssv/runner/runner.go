@@ -258,7 +258,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 	if prevDecided {
-		return true, nil, errors.New("not processing consensus message since consensus has already finished")
+		return true, nil, spectypes.NewError(spectypes.SkipConsensusMessageAsConsensusHasFinishedErrorCode, "not processing consensus message since consensus has already finished")
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
@@ -364,15 +364,15 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	}
 
 	if b.State.RunningInstance == nil {
-		return false, fmt.Errorf("decided wrong instance (running instance is nil)")
+		return false, spectypes.NewError(spectypes.DecidedWrongInstanceErrorCode, "decided wrong instance (running instance is nil)")
 	}
 
 	if decidedMessage.Height != b.State.RunningInstance.GetHeight() {
-		return false, fmt.Errorf(
+		return false, spectypes.WrapError(spectypes.DecidedWrongInstanceErrorCode, fmt.Errorf(
 			"decided wrong instance (msg_height = %d, running_instance_height = %d)",
 			decidedMessage.Height,
 			b.State.RunningInstance.GetHeight(),
-		)
+		))
 	}
 
 	// verify we decided running instance only, if not we do not proceed
@@ -436,8 +436,10 @@ func (b *BaseRunner) hasRunningDuty() bool {
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 	if b.QBFTController.Height >= specqbft.Height(duty.DutySlot()) && b.QBFTController.Height != 0 {
-		return errors.Errorf("duty for slot %d already passed. Current height is %d", duty.DutySlot(),
-			b.QBFTController.Height)
+		return spectypes.NewError(
+			spectypes.DutyAlreadyPassedErrorCode,
+			fmt.Sprintf("duty for slot %d already passed. Current height is %d", duty.DutySlot(), b.QBFTController.Height),
+		)
 	}
 	return nil
 }
@@ -445,10 +447,9 @@ func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	// assume CurrentDuty is not nil if state is not nil
 	if b.State != nil && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
-		return errors.Errorf(
-			"duty for slot %d already passed. Current slot is %d",
-			duty.DutySlot(),
-			b.State.CurrentDuty.DutySlot(),
+		return spectypes.NewError(
+			spectypes.DutyAlreadyPassedErrorCode,
+			fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), b.State.CurrentDuty.DutySlot()),
 		)
 	}
 	return nil

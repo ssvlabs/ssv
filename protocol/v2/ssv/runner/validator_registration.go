@@ -163,7 +163,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 }
 
 func (r *ValidatorRegistrationRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return fmt.Errorf("no consensus phase for validator registration")
+	return spectypes.NewError(spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "no consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
@@ -171,7 +171,7 @@ func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger 
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return fmt.Errorf("no post consensus phase for validator registration")
+	return spectypes.NewError(spectypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode, "no post consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {

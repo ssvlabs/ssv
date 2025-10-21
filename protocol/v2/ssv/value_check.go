@@ -2,6 +2,7 @@ package ssv
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -23,19 +24,19 @@ func dutyValueCheck(
 	validatorIndex phase0.ValidatorIndex,
 ) error {
 	if beaconConfig.EstimatedEpochAtSlot(duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return errors.New("duty epoch is into far future")
+		return spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
 	}
 
 	if expectedType != duty.Type {
-		return errors.New("wrong beacon role type")
+		return spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
 	}
 
 	if !bytes.Equal(validatorPK[:], duty.PubKey[:]) {
-		return errors.New("wrong validator pk")
+		return spectypes.NewError(spectypes.WrongValidatorPubkeyErrorCode, "wrong validator pk")
 	}
 
 	if validatorIndex != duty.ValidatorIndex {
-		return errors.New("wrong validator index")
+		return spectypes.NewError(spectypes.WrongValidatorIndexErrorCode, "wrong validator index")
 	}
 
 	return nil
@@ -50,15 +51,15 @@ func BeaconVoteValueCheckF(
 	return func(data []byte) error {
 		bv := spectypes.BeaconVote{}
 		if err := bv.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding beacon vote")
+			return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding beacon vote: %w", err))
 		}
 
 		if bv.Target.Epoch > estimatedCurrentEpoch+1 {
-			return errors.New("attestation data target epoch is into far future")
+			return spectypes.NewError(spectypes.AttestationTargetEpochTooFarFutureErrorCode, "attestation data target epoch is into far future")
 		}
 
 		if bv.Source.Epoch >= bv.Target.Epoch {
-			return errors.New("attestation data source >= target")
+			return spectypes.NewError(spectypes.AttestationSourceNotLessThanTargetErrorCode, "attestation data source >= target")
 		}
 
 		attestationData := &phase0.AttestationData{
@@ -94,7 +95,7 @@ func ProposerValueCheckF(
 			return errors.Wrap(err, "failed decoding consensus data")
 		}
 		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
+			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 		}
 
 		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleProposer, validatorPK, validatorIndex); err != nil {
@@ -126,7 +127,7 @@ func AggregatorValueCheckF(
 			return errors.Wrap(err, "failed decoding consensus data")
 		}
 		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
+			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 		}
 
 		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
@@ -148,7 +149,7 @@ func SyncCommitteeContributionValueCheckF(
 			return errors.Wrap(err, "failed decoding consensus data")
 		}
 		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
+			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 		}
 
 		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {

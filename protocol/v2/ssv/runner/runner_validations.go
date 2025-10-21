@@ -22,7 +22,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	psigMsgs *spectypes.PartialSignatureMessages,
 ) error {
 	if !b.hasRunningDuty() {
-		return NewRetryableError(ErrNoRunningDuty)
+		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoRunningDuty))
 	}
 
 	if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
@@ -51,7 +51,7 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
-		return NewRetryableError(ErrNoRunningDuty)
+		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoRunningDuty))
 	}
 
 	// slotIsRelevant ensures the post-consensus message is even remotely relevant (eg. we might have already
@@ -63,15 +63,19 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		maxSlot := b.State.CurrentDuty.DutySlot()
 		if psigMsgs.Slot < minSlot {
 			// This message is targeting a slot that's already too far in the past to matter.
-			return fmt.Errorf("invalid partial sig slot: %d, want at least: %d", psigMsgs.Slot, minSlot)
+			return spectypes.WrapError(spectypes.PartialSigMessageInvalidSlotErrorCode, fmt.Errorf(
+				"invalid partial sig slot: %d, want at least: %d",
+				psigMsgs.Slot,
+				minSlot,
+			))
 		}
 		if psigMsgs.Slot > maxSlot {
-			return NewRetryableError(fmt.Errorf(
-				"%w: message slot: %d, want at most: %d",
+			return NewRetryableError(spectypes.WrapError(spectypes.PartialSigMessageFutureSlotErrorCode, fmt.Errorf(
+				"%v: message slot: %d, want at most: %d",
 				ErrFuturePartialSigMsg,
 				psigMsgs.Slot,
 				maxSlot,
-			))
+			)))
 		}
 		return nil
 	}
@@ -80,13 +84,13 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 
 	if b.State.RunningInstance == nil {
-		return NewRetryableError(ErrInstanceNotFound)
+		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningConsensusInstanceErrorCode, ErrInstanceNotFound))
 	}
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
 	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
 	if !decided || len(b.State.DecidedValue) == 0 {
-		return NewRetryableError(ErrNoDecidedValue)
+		return NewRetryableError(spectypes.WrapError(spectypes.NoDecidedValueErrorCode, ErrNoDecidedValue))
 	}
 
 	// Validate the post-consensus message differently depending on a message type.
@@ -154,7 +158,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	domain phase0.DomainType,
 ) error {
 	if len(expectedRootObjs) != len(psigMsgs.Messages) {
-		return errors.New("wrong expected roots count")
+		return spectypes.NewError(spectypes.WrongRootsCountErrorCode, "wrong expected roots count")
 	}
 
 	// convert expected roots to map and mark unique roots when verified
@@ -198,7 +202,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	// verify roots
 	for i, r := range sortedRoots {
 		if !bytes.Equal(sortedExpectedRoots[i][:], r[:]) {
-			return errors.New("wrong signing root")
+			return spectypes.NewError(spectypes.WrongSigningRootErrorCode, "wrong signing root")
 		}
 	}
 	return nil

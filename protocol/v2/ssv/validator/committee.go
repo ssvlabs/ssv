@@ -201,7 +201,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 	err error,
 ) {
 	if len(duty.ValidatorDuties) == 0 {
-		return nil, nil, nil, errors.New("no beacon duties")
+		return nil, nil, nil, spectypes.NewError(spectypes.NoBeaconDutiesErrorCode, "no beacon duties")
 	}
 
 	runnableDuty = &spectypes.CommitteeDuty{
@@ -228,7 +228,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 	}
 
 	if len(shares) == 0 {
-		return nil, nil, nil, errors.New("no shares for duty's validators")
+		return nil, nil, nil, spectypes.NewError(spectypes.NoValidatorSharesErrorCode, "no shares for duty's validators")
 	}
 
 	return shares, attesters, runnableDuty, nil
@@ -316,7 +316,7 @@ func (c *Committee) UnmarshalJSON(data []byte) error {
 
 func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
 	if !(c.CommitteeMember.CommitteeID.MessageIDBelongs(msg.GetID())) {
-		return errors.New("msg ID doesn't match committee ID")
+		return spectypes.NewError(spectypes.MessageIDCommitteeIDMismatchErrorCode, "msg ID doesn't match committee ID")
 	}
 
 	if len(msg.GetData()) == 0 {

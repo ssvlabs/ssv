@@ -142,7 +142,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 }
 
 func (r *VoluntaryExitRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return errors.New("no consensus phase for voluntary exit")
+	return spectypes.NewError(spectypes.ValidatorExitNoConsensusPhaseErrorCode, "no consensus phase for voluntary exit")
 }
 
 func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
@@ -150,7 +150,7 @@ func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Log
 }
 
 func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return errors.New("no post consensus phase for voluntary exit")
+	return spectypes.NewError(spectypes.ValidatorExitNoPostConsensusPhaseErrorCode, "no post consensus phase for voluntary exit")
 }
 
 func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {

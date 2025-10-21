@@ -11,6 +11,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ type MsgProcessingSpecTest struct {
 	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
 	DontStartDuty          bool // if set to true will not start a duty for the runner
-	ExpectedError          string
+	ExpectedErrorCode      int
 }
 
 func (test *MsgProcessingSpecTest) TestName() string {
@@ -150,11 +151,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
 	network := &spectestingutils.TestingNetwork{}
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
@@ -292,7 +289,7 @@ type MsgProcessingSpecTestAlias struct {
 	OutputMessages          []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots  []string
 	DontStartDuty           bool // if set to true will not start a duty for the runner
-	ExpectedError           string
+	ExpectedErrorCode       int
 	BeaconDuty              *spectypes.ValidatorDuty `json:"ValidatorDuty,omitempty"`
 	CommitteeDuty           *spectypes.CommitteeDuty `json:"CommitteeDuty,omitempty"`
 }
@@ -308,7 +305,7 @@ func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
 		OutputMessages:          t.OutputMessages,
 		BeaconBroadcastedRoots:  t.BeaconBroadcastedRoots,
 		DontStartDuty:           t.DontStartDuty,
-		ExpectedError:           t.ExpectedError,
+		ExpectedErrorCode:       t.ExpectedErrorCode,
 	}
 
 	if t.Duty != nil {
@@ -342,7 +339,7 @@ func (t *MsgProcessingSpecTest) UnmarshalJSON(data []byte) error {
 	t.OutputMessages = aux.OutputMessages
 	t.BeaconBroadcastedRoots = aux.BeaconBroadcastedRoots
 	t.DontStartDuty = aux.DontStartDuty
-	t.ExpectedError = aux.ExpectedError
+	t.ExpectedErrorCode = aux.ExpectedErrorCode
 
 	// Determine which type of duty was marshaled
 	if aux.BeaconDuty != nil {

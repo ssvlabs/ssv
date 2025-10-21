@@ -236,7 +236,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
 		}
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
+			return spectypes.WrapError(spectypes.SSVMessageHasInvalidSignatureErrorCode, fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err))
 		}
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
 			// TODO - we should improve this error message as is suggested by the commented-out code here
@@ -279,7 +279,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		r, exists := c.Runners[slot]
 		c.mtx.RUnlock()
 		if !exists {
-			return traces.Errorf(span, "no runner found for message's slot")
+			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, traces.Errorf(span, "no runner found for message's slot"))
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
@@ -302,7 +302,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				return traces.Errorf(span, "no runner found for message's slot")
+				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, traces.Errorf(span, "no runner found for message's slot"))
 			}
 			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
 				return traces.Error(span, err)

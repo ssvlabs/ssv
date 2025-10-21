@@ -129,7 +129,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 
 func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
 	if !i.CanProcessMessages() {
-		return errors.New("instance stopped processing messages")
+		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
 	}
 
 	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
@@ -146,7 +146,7 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
 func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
 	if !i.CanProcessMessages() {
-		return false, nil, nil, errors.New("instance stopped processing messages")
+		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
 	}
 
 	if err := i.BaseMsgValidation(msg); err != nil {
@@ -188,7 +188,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	// unless we allow decided messages from previous round.
 	decided := msg.QBFTMessage.MsgType == specqbft.CommitMsgType && i.State.CommitteeMember.HasQuorum(len(msg.SignedMessage.OperatorIDs))
 	if !decided && msg.QBFTMessage.Round < i.State.Round {
-		return errors.New("past round")
+		return spectypes.NewError(spectypes.PastRoundErrorCode, "past round")
 	}
 
 	switch msg.QBFTMessage.MsgType {
@@ -197,7 +197,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
-			return NewRetryableError(ErrNoProposalForCurrentRound)
+			return NewRetryableError(spectypes.WrapError(spectypes.NoProposalForCurrentRoundErrorCode, ErrNoProposalForCurrentRound))
 		}
 
 		return i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(
@@ -208,7 +208,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
-			return NewRetryableError(ErrNoProposalForCurrentRound)
+			return NewRetryableError(spectypes.WrapError(spectypes.NoProposalForCurrentRoundErrorCode, ErrNoProposalForCurrentRound))
 		}
 		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:

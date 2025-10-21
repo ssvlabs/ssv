@@ -3,16 +3,16 @@ package testing
 import (
 	"bytes"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *qbft.Config {
@@ -21,12 +21,12 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *q
 		Domain:       testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
-				return errors.New("invalid value")
+				return types.NewError(types.QBFTValueInvalidErrorCode, "invalid value")
 			}
 
 			// as a base validation we do not accept nil values
 			if len(data) == 0 {
-				return errors.New("invalid value")
+				return types.NewError(types.QBFTValueInvalidErrorCode, "invalid value")
 			}
 			return nil
 		},

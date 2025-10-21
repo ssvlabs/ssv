@@ -11,13 +11,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv"
+	stests "github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -35,7 +36,7 @@ type CommitteeSpecTest struct {
 	PostDutyCommittee      spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
-	ExpectedError          string
+	ExpectedErrorCode      int
 }
 
 func (test *CommitteeSpecTest) TestName() string {
@@ -50,11 +51,7 @@ func (test *CommitteeSpecTest) FullName() string {
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	logger := log.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
 	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
@@ -123,7 +120,7 @@ func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
 
 func (test *CommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
 	lastErr := test.runPreTesting(logger)
-	if lastErr != nil && len(test.ExpectedError) == 0 {
+	if lastErr != nil && test.ExpectedErrorCode == 0 {
 		return nil, lastErr
 	}
 
@@ -165,8 +162,13 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 	ret := make(map[string]spectypes.Root, len(tests.Tests))
 	for _, test := range tests.Tests {
 		err := test.runPreTesting(logger)
-		if err != nil && test.ExpectedError != err.Error() {
-			return nil, fmt.Errorf("expected error: %s, got: %s", test.ExpectedError, err)
+		if err != nil && !stests.MatchesErrorCode(test.ExpectedErrorCode, err) {
+			return nil, fmt.Errorf(
+				"(%s) expected error with code: %d, got error: %s",
+				test.TestName(),
+				test.ExpectedErrorCode,
+				err,
+			)
 		}
 		ret[test.Name] = test.Committee
 	}

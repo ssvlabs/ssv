@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -66,22 +67,22 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 		return errors.New("msg type is not proposal")
 	}
 	if msg.QBFTMessage.Height != i.State.Height {
-		return ErrWrongMsgHeight
+		return spectypes.WrapError(spectypes.WrongMessageHeightErrorCode, ErrWrongMsgHeight)
 	}
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
-		return errors.New("msg allows 1 signer")
+		return spectypes.NewError(spectypes.MessageAllowsOneSignerOnlyErrorCode, "msg allows 1 signer")
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
-		return errors.New("signer not in committee")
+		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
 	}
 
 	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{i.proposer(msg.QBFTMessage.Round)}) {
-		return errors.New("proposal leader invalid")
+		return spectypes.NewError(spectypes.ProposalLeaderInvalidErrorCode, "proposal leader invalid")
 	}
 
 	if err := msg.Validate(); err != nil {
-		return errors.Wrap(err, "proposal invalid")
+		return spectypes.WrapError(spectypes.ProposalInvalidErrorCode, fmt.Errorf("proposal invalid: %w", err))
 	}
 
 	// verify full data integrity
@@ -90,7 +91,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 		return errors.Wrap(err, "could not hash input data")
 	}
 	if !bytes.Equal(msg.QBFTMessage.Root[:], r[:]) {
-		return errors.New("H(data) != root")
+		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 	}
 
 	// get justifications
@@ -127,7 +128,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 		msg.QBFTMessage.Round > i.State.Round {
 		return nil
 	}
-	return errors.New("proposal is not valid with current state")
+	return spectypes.NewError(spectypes.ProposalInvalidErrorCode, "proposal is not valid with current state")
 }
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
@@ -156,7 +157,7 @@ func (i *Instance) isProposalJustification(
 
 	// check there is a quorum
 	if !specqbft.HasQuorum(i.State.CommitteeMember, roundChangeMsgs) {
-		return errors.New("change round has no quorum")
+		return spectypes.NewError(spectypes.RoundChangeNoQuorumErrorCode, "change round has no quorum")
 	}
 
 	// previouslyPreparedF returns true if any on the round change messages have a prepared round and fullData
@@ -206,7 +207,7 @@ func (i *Instance) isProposalJustification(
 			rcMsg.QBFTMessage.DataRound,
 			rcMsg.QBFTMessage.Root,
 		); err != nil {
-			return errors.New("signed prepare not valid")
+			return spectypes.NewError(spectypes.PrepareMessageInvalidErrorCode, "signed prepare not valid")
 		}
 	}
 	return nil

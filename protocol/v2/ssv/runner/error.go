@@ -44,3 +44,7 @@ func (e RetryableError) Is(target error) bool {
 	ok := errors.As(target, &retryableErr)
 	return ok
 }
+
+func (e RetryableError) Unwrap() error {
+	return e.originalErr
+}

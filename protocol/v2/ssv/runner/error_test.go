@@ -12,6 +12,10 @@ func TestRetryableError(t *testing.T) {
 	someErr := fmt.Errorf("some error")
 	require.False(t, errors.Is(someErr, &RetryableError{}))
 
-	retryableErr := NewRetryableError(someErr)
-	require.True(t, errors.Is(retryableErr, &RetryableError{}))
+	wrappedErr := NewRetryableError(someErr)
+	require.True(t, errors.Is(wrappedErr, &RetryableError{}))
+
+	rErr := &RetryableError{}
+	require.False(t, errors.As(someErr, &rErr))
+	require.True(t, errors.As(wrappedErr, &rErr))
 }

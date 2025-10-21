@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -26,7 +27,7 @@ type StartNewRunnerDutySpecTest struct {
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages          []*spectypes.PartialSignatureMessages
-	ExpectedError           string
+	ExpectedErrorCode       int
 }
 
 func (test *StartNewRunnerDutySpecTest) TestName() string {
@@ -42,11 +43,7 @@ func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
 
 func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	err := test.runPreTesting(logger)
-	if len(test.ExpectedError) > 0 {
-		require.EqualError(t, err, test.ExpectedError)
-	} else {
-		require.NoError(t, err)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
 	// test output message
 	broadcastedSignedMsgs := test.Runner.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
