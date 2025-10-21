@@ -1,30 +1,30 @@
 package discovery
 
 import (
-    "context"
-    "fmt"
-    "net"
-    "time"
+	"context"
+	"fmt"
+	"net"
+	"time"
 
-    "github.com/ethereum/go-ethereum/p2p/discover"
-    "github.com/ethereum/go-ethereum/p2p/discover/v5wire"
-    "github.com/ethereum/go-ethereum/p2p/enode"
-    "github.com/libp2p/go-libp2p/core/peer"
-    "github.com/pkg/errors"
-    "go.opentelemetry.io/otel/attribute"
-    "go.opentelemetry.io/otel/codes"
-    "go.opentelemetry.io/otel/trace"
-    "go.uber.org/zap"
-    "go.uber.org/zap/zapcore"
+	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
-    "github.com/ssvlabs/ssv/network/commons"
-    "github.com/ssvlabs/ssv/network/peers"
-    "github.com/ssvlabs/ssv/network/records"
-    "github.com/ssvlabs/ssv/networkconfig"
-    "github.com/ssvlabs/ssv/observability"
-    "github.com/ssvlabs/ssv/observability/log"
-    "github.com/ssvlabs/ssv/observability/log/fields"
-    "github.com/ssvlabs/ssv/utils/ttl"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 const (
@@ -136,193 +136,193 @@ func (dvs *DiscV5Service) Self() *enode.LocalNode {
 
 // Node tries to find the enode.Node of the given peer
 func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error) {
-    // Trace lookup for ENR by peer ID for correlating discovery issues.
-    _, span := tracer.Start(context.Background(),
-        observability.InstrumentName(observabilityNamespace, "discovery.lookup_node"),
-        trace.WithAttributes(attribute.String("ssv.p2p.peer.id", info.ID.String())),
-    )
-    defer span.End()
-    pki, err := info.ID.ExtractPublicKey()
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return nil, err
-    }
-    pk := commons.ECDSAPubFromInterface(pki)
-    id := enode.PubkeyToIDV4(pk)
+	// Trace lookup for ENR by peer ID for correlating discovery issues.
+	_, span := tracer.Start(context.Background(),
+		observability.InstrumentName(observabilityNamespace, "discovery.lookup_node"),
+		trace.WithAttributes(attribute.String("ssv.p2p.peer.id", info.ID.String())),
+	)
+	defer span.End()
+	pki, err := info.ID.ExtractPublicKey()
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	pk := commons.ECDSAPubFromInterface(pki)
+	id := enode.PubkeyToIDV4(pk)
 	logger = logger.With(zap.String("info", info.String()),
 		zap.String("enode.ID", id.String()))
-    nodes := dvs.dv5Listener.AllNodes()
-    node := findNode(nodes, id)
-    if node == nil {
-        logger.Debug("could not find node, trying lookup")
-        // could not find node, trying to look it up
-        nodes = dvs.dv5Listener.Lookup(id)
-        node = findNode(nodes, id)
-    }
-    if node == nil {
-        span.AddEvent("node_not_found", trace.WithAttributes(attribute.String("ssv.p2p.enode.id", id.String())))
-    } else {
-        span.AddEvent("node_found", trace.WithAttributes(attribute.String("ssv.p2p.enr", node.String())))
-    }
-    span.SetStatus(codes.Ok, "")
-    return node, nil
+	nodes := dvs.dv5Listener.AllNodes()
+	node := findNode(nodes, id)
+	if node == nil {
+		logger.Debug("could not find node, trying lookup")
+		// could not find node, trying to look it up
+		nodes = dvs.dv5Listener.Lookup(id)
+		node = findNode(nodes, id)
+	}
+	if node == nil {
+		span.AddEvent("node_not_found", trace.WithAttributes(attribute.String("ssv.p2p.enode.id", id.String())))
+	} else {
+		span.AddEvent("node_found", trace.WithAttributes(attribute.String("ssv.p2p.enr", node.String())))
+	}
+	span.SetStatus(codes.Ok, "")
+	return node, nil
 }
 
 // Bootstrap start looking for new nodes, note that this function blocks.
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-    _, span := tracer.Start(dvs.ctx, observability.InstrumentName(observabilityNamespace, "discovery.bootstrap"))
-    defer span.End()
-    // Log every 10th skipped peer.
+	_, span := tracer.Start(dvs.ctx, observability.InstrumentName(observabilityNamespace, "discovery.bootstrap"))
+	defer span.End()
+	// Log every 10th skipped peer.
 	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
 	const logFrequency = 10
 	var skippedPeers uint64 = 0
 
-    dvs.discover(
-        dvs.ctx,
-        func(e PeerEvent) {
-            logger := dvs.logger.With(
-                fields.ENR(e.Node),
-                fields.PeerID(e.AddrInfo.ID),
-            )
-            dvs.logger.Debug("checking peer")
-            err := dvs.checkPeer(dvs.ctx, e)
-            if err != nil {
-                if skippedPeers%logFrequency == 0 {
-                    logger.Debug("skipped discovered peer", zap.Error(err))
-                }
-                skippedPeers++
-                span.AddEvent("peer_skipped", trace.WithAttributes(
-                    attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
-                    attribute.String("error", err.Error()),
-                ))
-                return
-            }
-            span.AddEvent("peer_accepted", trace.WithAttributes(
-                attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
-            ))
-            handler(e)
-        },
-        defaultDiscoveryInterval,
-        dvs.ssvNodeFilter(),
-        dvs.sharedSubnetsFilter(1),
-        dvs.alreadyDiscoveredFilter(),
-        dvs.badNodeFilter(),
-        dvs.alreadyConnectedFilter(),
-        dvs.recentlyTrimmedFilter(),
-    )
+	dvs.discover(
+		dvs.ctx,
+		func(e PeerEvent) {
+			logger := dvs.logger.With(
+				fields.ENR(e.Node),
+				fields.PeerID(e.AddrInfo.ID),
+			)
+			dvs.logger.Debug("checking peer")
+			err := dvs.checkPeer(dvs.ctx, e)
+			if err != nil {
+				if skippedPeers%logFrequency == 0 {
+					logger.Debug("skipped discovered peer", zap.Error(err))
+				}
+				skippedPeers++
+				span.AddEvent("peer_skipped", trace.WithAttributes(
+					attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
+					attribute.String("error", err.Error()),
+				))
+				return
+			}
+			span.AddEvent("peer_accepted", trace.WithAttributes(
+				attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
+			))
+			handler(e)
+		},
+		defaultDiscoveryInterval,
+		dvs.ssvNodeFilter(),
+		dvs.sharedSubnetsFilter(1),
+		dvs.alreadyDiscoveredFilter(),
+		dvs.badNodeFilter(),
+		dvs.alreadyConnectedFilter(),
+		dvs.recentlyTrimmedFilter(),
+	)
 
-    span.SetStatus(codes.Ok, "")
-    return nil
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
 
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
-    ctx, span := tracer.Start(ctx,
-        observability.InstrumentName(observabilityNamespace, "discovery.check_peer"),
-        trace.WithAttributes(
-            attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
-            attribute.String("ssv.p2p.enr", e.Node.String()),
-        ),
-    )
-    defer span.End()
-    // Get the peer's domain type, skipping if it mismatches ours.
-    // TODO: uncomment errors once there are sufficient nodes with domain type.
-    peerDiscoveriesCounter.Add(ctx, 1)
-    nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return errors.Wrap(err, "could not read domain type")
-    }
-    if dvs.ssvConfig.DomainType != nodeDomainType {
-        recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
-        err := fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.ssvConfig.DomainType)
-        span.AddEvent("peer_skipped", trace.WithAttributes(
-            attribute.String("reason", "domain_mismatch"),
-            attribute.String("error", err.Error()),
-        ))
-        span.SetStatus(codes.Ok, "")
-        return err
-    }
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "discovery.check_peer"),
+		trace.WithAttributes(
+			attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
+			attribute.String("ssv.p2p.enr", e.Node.String()),
+		),
+	)
+	defer span.End()
+	// Get the peer's domain type, skipping if it mismatches ours.
+	// TODO: uncomment errors once there are sufficient nodes with domain type.
+	peerDiscoveriesCounter.Add(ctx, 1)
+	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "could not read domain type")
+	}
+	if dvs.ssvConfig.DomainType != nodeDomainType {
+		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
+		err := fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.ssvConfig.DomainType)
+		span.AddEvent("peer_skipped", trace.WithAttributes(
+			attribute.String("reason", "domain_mismatch"),
+			attribute.String("error", err.Error()),
+		))
+		span.SetStatus(codes.Ok, "")
+		return err
+	}
 
 	// Get the peer's subnets, skipping if it has none.
-    peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return fmt.Errorf("could not read subnets: %w", err)
-    }
-    if commons.ZeroSubnets == peerSubnets {
-        recordPeerSkipped(ctx, skipReasonZeroSubnets)
-        err := errors.New("zero subnets")
-        span.AddEvent("peer_skipped", trace.WithAttributes(
-            attribute.String("reason", "zero_subnets"),
-        ))
-        span.SetStatus(codes.Ok, "")
-        return err
-    }
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("could not read subnets: %w", err)
+	}
+	if commons.ZeroSubnets == peerSubnets {
+		recordPeerSkipped(ctx, skipReasonZeroSubnets)
+		err := errors.New("zero subnets")
+		span.AddEvent("peer_skipped", trace.WithAttributes(
+			attribute.String("reason", "zero_subnets"),
+		))
+		span.SetStatus(codes.Ok, "")
+		return err
+	}
 
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
 
 	// Filters
-    if !dvs.limitNodeFilter(e.Node) {
-        recordPeerSkipped(ctx, skipReasonReachedLimit)
-        err := errors.New("reached limit")
-        span.AddEvent("peer_skipped", trace.WithAttributes(
-            attribute.String("reason", "reached_limit"),
-        ))
-        span.SetStatus(codes.Ok, "")
-        return err
-    }
-    if !dvs.sharedSubnetsFilter(1)(e.Node) {
-        recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
-        err := errors.New("no shared subnets")
-        span.AddEvent("peer_skipped", trace.WithAttributes(
-            attribute.String("reason", "no_shared_subnets"),
-        ))
-        span.SetStatus(codes.Ok, "")
-        return err
-    }
-    if !dvs.alreadyDiscoveredFilter()(e.Node) {
-        recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
-        err := errors.New("peer already discovered recently")
-        span.AddEvent("peer_skipped", trace.WithAttributes(
-            attribute.String("reason", "already_discovered_recently"),
-        ))
-        span.SetStatus(codes.Ok, "")
-        return err
-    }
+	if !dvs.limitNodeFilter(e.Node) {
+		recordPeerSkipped(ctx, skipReasonReachedLimit)
+		err := errors.New("reached limit")
+		span.AddEvent("peer_skipped", trace.WithAttributes(
+			attribute.String("reason", "reached_limit"),
+		))
+		span.SetStatus(codes.Ok, "")
+		return err
+	}
+	if !dvs.sharedSubnetsFilter(1)(e.Node) {
+		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
+		err := errors.New("no shared subnets")
+		span.AddEvent("peer_skipped", trace.WithAttributes(
+			attribute.String("reason", "no_shared_subnets"),
+		))
+		span.SetStatus(codes.Ok, "")
+		return err
+	}
+	if !dvs.alreadyDiscoveredFilter()(e.Node) {
+		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
+		err := errors.New("peer already discovered recently")
+		span.AddEvent("peer_skipped", trace.WithAttributes(
+			attribute.String("reason", "already_discovered_recently"),
+		))
+		span.SetStatus(codes.Ok, "")
+		return err
+	}
 
-    peerAcceptedCounter.Add(ctx, 1)
+	peerAcceptedCounter.Add(ctx, 1)
 
-    span.AddEvent("peer_ok")
-    span.SetStatus(codes.Ok, "")
-    return nil
+	span.AddEvent("peer_ok")
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
 
 // initDiscV5Listener creates a new listener and starts it
 func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
-    _, span := tracer.Start(dvs.ctx, observability.InstrumentName(observabilityNamespace, "discovery.init_listener"))
-    defer span.End()
-    opts := discOpts.DiscV5Opts
-    if err := opts.Validate(); err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return errors.Wrap(err, "invalid opts")
-    }
+	_, span := tracer.Start(dvs.ctx, observability.InstrumentName(observabilityNamespace, "discovery.init_listener"))
+	defer span.End()
+	opts := discOpts.DiscV5Opts
+	if err := opts.Validate(); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "invalid opts")
+	}
 
 	ipAddr, bindIP, n := opts.IPs()
 
-    udpConn, err := newUDPListener(bindIP, opts.Port, n)
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return errors.Wrap(err, "could not listen UDP")
-    }
-    dvs.conn = udpConn
+	udpConn, err := newUDPListener(bindIP, opts.Port, n)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "could not listen UDP")
+	}
+	dvs.conn = udpConn
 
-    localNode, err := dvs.createLocalNode(discOpts, ipAddr)
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return errors.Wrap(err, "could not create local node")
-    }
+	localNode, err := dvs.createLocalNode(discOpts, ipAddr)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "could not create local node")
+	}
 
 	// Get the protocol ID, or set to default if not provided
 	protocolID := dvs.ssvConfig.DiscoveryProtocolID
@@ -336,17 +336,17 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	sharedConn := &SharedUDPConn{udpConn, unhandled}
 	dvs.sharedConn = sharedConn
 
-    dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return err
-    }
+	dv5PostForkCfg, err := opts.DiscV5Cfg(dvs.logger, WithProtocolID(protocolID), WithUnhandled(unhandled))
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
 
-    dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return errors.Wrap(err, "could not create discV5 listener")
-    }
+	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "could not create discV5 listener")
+	}
 
 	dvs.logger.Debug("started discv5 post-fork listener (UDP)",
 		fields.BindIP(bindIP),
@@ -357,17 +357,17 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	)
 
 	// Previous discovery, without ProtocolID restriction, to be discontinued after the fork
-    dv5PreForkCfg, err := opts.DiscV5Cfg(dvs.logger)
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return err
-    }
+	dv5PreForkCfg, err := opts.DiscV5Cfg(dvs.logger)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
 
-    dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
-    if err != nil {
-        span.SetStatus(codes.Error, err.Error())
-        return errors.Wrap(err, "could not create discV5 pre-fork listener")
-    }
+	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return errors.Wrap(err, "could not create discV5 pre-fork listener")
+	}
 
 	dvs.logger.Debug("started discv5 pre-fork listener (UDP)",
 		fields.BindIP(bindIP),
@@ -376,14 +376,14 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		fields.Domain(discOpts.SSVConfig.DomainType),
 	)
 
-    dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
-    dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
-    span.SetAttributes(
-        attribute.String("ssv.p2p.bind_ip", bindIP.String()),
-        attribute.Int64("ssv.p2p.udp_port", int64(opts.Port)),
-    )
-    span.SetStatus(codes.Ok, "")
-    return nil
+	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
+	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
+	span.SetAttributes(
+		attribute.String("ssv.p2p.bind_ip", bindIP.String()),
+		attribute.Int64("ssv.p2p.udp_port", int64(opts.Port)),
+	)
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
 
 // discover finds new nodes in the network,
@@ -394,50 +394,50 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
 func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
-    ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "discovery.discover"),
-        trace.WithAttributes(attribute.Int64("ssv.p2p.discover.interval.ms", interval.Milliseconds())))
-    defer span.End()
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "discovery.discover"),
+		trace.WithAttributes(attribute.Int64("ssv.p2p.discover.interval.ms", interval.Milliseconds())))
+	defer span.End()
 
-    iterator := dvs.dv5Listener.RandomNodes()
-    for _, f := range filters {
-        iterator = enode.Filter(iterator, f)
-    }
+	iterator := dvs.dv5Listener.RandomNodes()
+	for _, f := range filters {
+		iterator = enode.Filter(iterator, f)
+	}
 	// selfID is used to exclude current node
 	selfID := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-    for ctx.Err() == nil {
-        select {
-        case <-ticker.C:
-        case <-ctx.Done():
-            return
-        }
-        exists := iterator.Next()
-        if !exists {
-            continue
-        }
-        // ignoring nil or self nodes
-        if n := iterator.Node(); n != nil {
-            if n.ID().TerminalString() == selfID {
-                continue
-            }
-            ai, err := ToPeer(n)
-            if err != nil {
-                continue
-            }
-            peerDiscoveryIterationsCounter.Add(ctx, 1)
-            span.AddEvent("peer_discovered", trace.WithAttributes(
-                attribute.String("ssv.p2p.peer.id", ai.ID.String()),
-                attribute.String("ssv.p2p.enr", n.String()),
-            ))
-            handler(PeerEvent{
-                AddrInfo: *ai,
-                Node:     n,
-            })
-        }
-    }
+	for ctx.Err() == nil {
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return
+		}
+		exists := iterator.Next()
+		if !exists {
+			continue
+		}
+		// ignoring nil or self nodes
+		if n := iterator.Node(); n != nil {
+			if n.ID().TerminalString() == selfID {
+				continue
+			}
+			ai, err := ToPeer(n)
+			if err != nil {
+				continue
+			}
+			peerDiscoveryIterationsCounter.Add(ctx, 1)
+			span.AddEvent("peer_discovered", trace.WithAttributes(
+				attribute.String("ssv.p2p.peer.id", ai.ID.String()),
+				attribute.String("ssv.p2p.enr", n.String()),
+			))
+			handler(PeerEvent{
+				AddrInfo: *ai,
+				Node:     n,
+			})
+		}
+	}
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
@@ -476,27 +476,27 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, er
 
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR() {
-    ctx, span := tracer.Start(dvs.ctx, observability.InstrumentName(observabilityNamespace, "discovery.publish_enr"))
-    defer span.End()
-    // Update own node record.
-    err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.ssvConfig.DomainType)
-    if err != nil {
-        dvs.logger.Error("could not set domain type", zap.Error(err))
-        span.SetStatus(codes.Error, err.Error())
-        return
-    }
-    err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.DomainType)
-    if err != nil {
-        dvs.logger.Error("could not set next domain type", zap.Error(err))
-        span.SetStatus(codes.Error, err.Error())
-        return
-    }
+	ctx, span := tracer.Start(dvs.ctx, observability.InstrumentName(observabilityNamespace, "discovery.publish_enr"))
+	defer span.End()
+	// Update own node record.
+	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.ssvConfig.DomainType)
+	if err != nil {
+		dvs.logger.Error("could not set domain type", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.DomainType)
+	if err != nil {
+		dvs.logger.Error("could not set next domain type", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
 
 	// Acquire publish lock to prevent parallel publishing.
 	// If there's an ongoing goroutine, it would now start publishing the record updated above,
 	// and if it's done before the new deadline, this goroutine would pick up where it left off.
-    ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
-    defer done()
+	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+	defer done()
 
 	select {
 	case <-ctx.Done():
@@ -514,38 +514,38 @@ func (dvs *DiscV5Service) PublishENR() {
 	peerIDs := map[peer.ID]struct{}{}
 
 	// Publish ENR.
-    dvs.discover(ctx, func(e PeerEvent) {
-        _, err := dvs.dv5Listener.Ping(e.Node)
-        if err != nil {
-            errs++
-            if err.Error() == "RPC timeout" {
-                // ignore
-                return
-            }
-            dvs.logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
-            span.AddEvent("ping_error", trace.WithAttributes(
-                attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
-                attribute.String("error", err.Error()),
-            ))
-            return
-        }
-        pings++
-        peerIDs[e.AddrInfo.ID] = struct{}{}
-        span.AddEvent("ping_ok", trace.WithAttributes(attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String())))
-    }, time.Millisecond*100, dvs.ssvNodeFilter(), dvs.badNodeFilter())
+	dvs.discover(ctx, func(e PeerEvent) {
+		_, err := dvs.dv5Listener.Ping(e.Node)
+		if err != nil {
+			errs++
+			if err.Error() == "RPC timeout" {
+				dvs.logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
+				return
+			}
+			dvs.logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
+			span.AddEvent("ping_error", trace.WithAttributes(
+				attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String()),
+				attribute.String("error", err.Error()),
+			))
+			return
+		}
+		pings++
+		peerIDs[e.AddrInfo.ID] = struct{}{}
+		span.AddEvent("ping_ok", trace.WithAttributes(attribute.String("ssv.p2p.peer.id", e.AddrInfo.ID.String())))
+	}, time.Millisecond*100, dvs.ssvNodeFilter(), dvs.badNodeFilter())
 
 	// Log metrics.
-    dvs.logger.Debug("done publishing ENR",
-        fields.Duration(start),
-        zap.Int("unique_peers", len(peerIDs)),
-        zap.Int("pings", pings),
-        zap.Int("errors", errs))
-    span.SetAttributes(
-        attribute.Int64("ssv.p2p.publish_enr.unique_peers", int64(len(peerIDs))),
-        attribute.Int64("ssv.p2p.publish_enr.pings", int64(pings)),
-        attribute.Int64("ssv.p2p.publish_enr.errors", int64(errs)),
-    )
-    span.SetStatus(codes.Ok, "")
+	dvs.logger.Debug("done publishing ENR",
+		fields.Duration(start),
+		zap.Int("unique_peers", len(peerIDs)),
+		zap.Int("pings", pings),
+		zap.Int("errors", errs))
+	span.SetAttributes(
+		attribute.Int64("ssv.p2p.publish_enr.unique_peers", int64(len(peerIDs))),
+		attribute.Int64("ssv.p2p.publish_enr.pings", int64(pings)),
+		attribute.Int64("ssv.p2p.publish_enr.errors", int64(errs)),
+	)
+	span.SetStatus(codes.Ok, "")
 }
 
 func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
