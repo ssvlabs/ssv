@@ -30,7 +30,7 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 
 	if err := c.store.SaveCommitteeDutyLinks(slot, links); err != nil {
 		c.logger.Error("save validator to committee relations to disk", zap.Error(err))
-		return 0
+		return
 	}
 
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
@@ -39,7 +39,8 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 	})
 
 	totalSaved = len(links)
-	return totalSaved
+
+	return
 }
 
 func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
@@ -76,7 +77,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 
 	if err := c.store.SaveCommitteeDuties(slot, duties); err != nil {
 		c.logger.Error("save committee duties to disk", zap.Error(err))
-		return 0
+		return
 	}
 
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
@@ -85,7 +86,8 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	totalSaved = len(duties)
-	return totalSaved
+
+	return
 }
 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
