@@ -27,6 +27,7 @@ type LoggerFields struct {
 	Role           spectypes.RunnerRole
 	SSVMessageType spectypes.MsgType
 	Slot           phase0.Slot
+	Signers        []spectypes.OperatorID
 	Consensus      *ConsensusFields
 	DutyID         string
 }
@@ -38,6 +39,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 		fields.RunnerRole(d.Role),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
+		fields.OperatorIDs(d.Signers),
 	}
 
 	if d.DutyID != "" {
@@ -68,6 +70,7 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 	descriptor.DutyExecutorID = decodedMessage.SSVMessage.GetID().GetDutyExecutorID()
 	descriptor.Role = decodedMessage.SSVMessage.GetID().GetRoleType()
 	descriptor.SSVMessageType = decodedMessage.GetType()
+	descriptor.Signers = decodedMessage.SignedSSVMessage.OperatorIDs
 
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
