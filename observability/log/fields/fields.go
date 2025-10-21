@@ -297,13 +297,19 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
+// Duties formats a list of duties as a single log field, truncating the output if needed.
+// Use truncateAfter<=0 to disable truncation.
+func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty, truncateAfter int) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {
 			b.WriteString(", ")
 		}
 		b.WriteString(BuildDutyID(epoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
+		if truncateAfter > 0 && i+1 >= truncateAfter {
+			b.WriteString(", (truncated) ...")
+			break
+		}
 	}
 	return zap.String(FieldDuties, b.String())
 }
