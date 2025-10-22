@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// ctxWithDeadlineOnNextSlot returns newly created context setting its deadline to parentCtx
+// ctxWithParentDeadline returns newly created context setting its deadline to parentCtx
 // deadline if it has one set. This is useful when we want to inherit parentCtx deadline,
 // but not get canceled when parentCtx is canceled (e.g., we want to keep working in the
 // background until the deadline expires).
