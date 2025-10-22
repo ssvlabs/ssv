@@ -105,12 +105,12 @@ func (p *prefetchingBeacon) evictOldAttesterCaches(anchor phase0.Epoch) {
 		keepMin = anchor - 1
 	}
 	p.muAtt.Lock()
+	defer p.muAtt.Unlock()
 	for e := range p.attester {
 		if e < keepMin {
 			delete(p.attester, e)
 		}
 	}
-	p.muAtt.Unlock()
 }
 
 // evictOldProposerCaches evicts proposer epochs older than (anchor-1).
@@ -120,24 +120,24 @@ func (p *prefetchingBeacon) evictOldProposerCaches(anchor phase0.Epoch) {
 		keepMin = anchor - 1
 	}
 	p.muProp.Lock()
+	defer p.muProp.Unlock()
 	for e := range p.proposer {
 		if e < keepMin {
 			delete(p.proposer, e)
 		}
 	}
-	p.muProp.Unlock()
 }
 
 // evictOldSyncCommitteePeriods evicts sync-committee periods older than anchorPeriod.
 func (p *prefetchingBeacon) evictOldSyncCommitteePeriods(anchorPeriod uint64) {
 	keepMin := anchorPeriod
 	p.muSync.Lock()
+	defer p.muSync.Unlock()
 	for period := range p.sync {
 		if period < keepMin {
 			delete(p.sync, period)
 		}
 	}
-	p.muSync.Unlock()
 }
 
 func (p *prefetchingBeacon) ensureAttesterEpoch(ctx context.Context, epoch phase0.Epoch) error {
