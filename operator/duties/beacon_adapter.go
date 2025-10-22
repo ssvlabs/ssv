@@ -98,6 +98,50 @@ func (p *prefetchingBeacon) committeesForEpoch(ctx context.Context, epoch phase0
 	return nil, ErrCommitteesUnsupported
 }
 
+// evictOldEpochCaches trims attester/proposer caches to a small sliding window
+// around the provided anchor epoch (the epoch being populated) to prevent
+// unbounded growth during long runs. Keeps [anchor-1, anchor, anchor+1].
+func (p *prefetchingBeacon) evictOldEpochCaches(anchor phase0.Epoch) {
+	var keepMin phase0.Epoch
+	if anchor > 0 {
+		keepMin = anchor - 1
+	}
+	keepMax := anchor + 1
+
+	// Attester
+	p.muAtt.Lock()
+	for e := range p.attester {
+		if e < keepMin || e > keepMax {
+			delete(p.attester, e)
+		}
+	}
+	p.muAtt.Unlock()
+
+	// Proposer
+	p.muProp.Lock()
+	for e := range p.proposer {
+		if e < keepMin || e > keepMax {
+			delete(p.proposer, e)
+		}
+	}
+	p.muProp.Unlock()
+}
+
+// evictOldSyncPeriods trims sync-committee cache around the provided anchor
+// period. Keeps [anchor, anchor+1].
+func (p *prefetchingBeacon) evictOldSyncPeriods(anchorPeriod uint64) {
+	keepMin := anchorPeriod
+	keepMax := anchorPeriod + 1
+
+	p.muSync.Lock()
+	for period := range p.sync {
+		if period < keepMin || period > keepMax {
+			delete(p.sync, period)
+		}
+	}
+	p.muSync.Unlock()
+}
+
 func (p *prefetchingBeacon) ensureAttesterEpoch(ctx context.Context, epoch phase0.Epoch) error {
 	p.muAtt.RLock()
 	_, ok := p.attester[epoch]
@@ -145,6 +189,8 @@ func (p *prefetchingBeacon) ensureAttesterEpoch(ctx context.Context, epoch phase
 	p.attester[epoch] = dutyMap
 	p.muAtt.Unlock()
 	p.log.Debug("build attester cache", zap.Uint64("epoch", uint64(epoch)), zap.Int("indices", len(dutyMap)), zap.Duration("took", time.Since(start)))
+	// Trim caches opportunistically after populating.
+	p.evictOldEpochCaches(epoch)
 	return nil
 }
 
@@ -177,6 +223,8 @@ func (p *prefetchingBeacon) ensureProposerEpoch(ctx context.Context, epoch phase
 	p.muProp.Lock()
 	p.proposer[epoch] = collected
 	p.muProp.Unlock()
+	// Trim caches opportunistically after populating.
+	p.evictOldEpochCaches(epoch)
 	return nil
 }
 
@@ -210,6 +258,8 @@ func (p *prefetchingBeacon) ensureSyncPeriod(ctx context.Context, epoch phase0.E
 	p.muSync.Lock()
 	p.sync[period] = collected
 	p.muSync.Unlock()
+	// Trim caches opportunistically after populating.
+	p.evictOldSyncPeriods(period)
 	return nil
 }
 
