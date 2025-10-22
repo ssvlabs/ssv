@@ -77,7 +77,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 
 	if err := c.store.SaveCommitteeDuties(slot, duties); err != nil {
 		c.logger.Error("save committee duties to disk", zap.Error(err))
-		return
+		return 0
 	}
 
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
@@ -86,8 +86,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	totalSaved = len(duties)
-
-	return
+	return totalSaved
 }
 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {

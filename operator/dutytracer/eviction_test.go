@@ -1,3 +1,5 @@
+//go:build lfs
+
 package validator
 
 import (

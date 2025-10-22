@@ -615,7 +615,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					trace.syncCommitteeRoot = syncRoot
 					trace.attestationRoot = attRoot
 					trace.roleRootsReady = true
-					trace.flushPending(startTime)
+					trace.flushPending()
 				} else {
 					c.logger.Debug("compute role roots from proposal", zap.Error(err), fields.Slot(slot))
 				}
@@ -893,7 +893,7 @@ func (dt *committeeDutyTrace) addPending(root phase0.Root, signer spectypes.Oper
 
 // flushPending routes buffered entries into Attester/SyncCommittee buckets
 // according to derived role roots. Caller must hold dt.Lock().
-func (dt *committeeDutyTrace) flushPending(receivedAt uint64) {
+func (dt *committeeDutyTrace) flushPending() {
 	if len(dt.pendingByRoot) == 0 {
 		return
 	}
