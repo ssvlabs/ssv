@@ -21,14 +21,16 @@ import (
 type ProposerHandler struct {
 	baseHandler
 
-	duties     *dutystore.Duties[eth2apiv1.ProposerDuty]
-	fetchFirst bool
+	duties       *dutystore.Duties[eth2apiv1.ProposerDuty]
+	fetchFirst   bool
+	exporterMode bool
 }
 
-func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
+func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty], exporterMode bool) *ProposerHandler {
 	return &ProposerHandler{
-		duties:     duties,
-		fetchFirst: true,
+		duties:       duties,
+		fetchFirst:   true,
+		exporterMode: exporterMode,
 	}
 }
 
@@ -71,20 +73,23 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
-			if h.fetchFirst {
-				h.fetchFirst = false
-				h.indicesChanged = false
-				h.processFetching(ctx, currentEpoch)
-				h.processExecution(ctx, currentEpoch, slot)
-			} else {
-				h.processExecution(ctx, currentEpoch, slot)
-				if h.indicesChanged {
+			func() {
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				defer cancel()
+
+				if h.fetchFirst {
+					h.fetchFirst = false
 					h.indicesChanged = false
-					h.processFetching(ctx, currentEpoch)
+					h.processFetching(tickCtx, currentEpoch)
+					h.processExecution(tickCtx, currentEpoch, slot)
+				} else {
+					h.processExecution(tickCtx, currentEpoch, slot)
+					if h.indicesChanged {
+						h.indicesChanged = false
+						h.processFetching(tickCtx, currentEpoch)
+					}
 				}
-			}
-			cancel()
+			}()
 
 			// last slot of epoch
 			if uint64(slot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
@@ -131,9 +136,6 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		))
 	defer span.End()
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	span.AddEvent("fetching duties")
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
 		// Set empty duties to inform DutyStore that fetch for this epoch is done.
@@ -147,6 +149,10 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	if h.exporterMode {
+		return
+	}
+
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.execute"),
 		trace.WithAttributes(
@@ -232,10 +238,14 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(epoch, storeDuties)
 
+	truncate := -1
+	if h.exporterMode {
+		truncate = 10
+	}
 	h.logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.Duties(epoch, specDuties),
+		fields.Duties(epoch, specDuties, truncate),
 		fields.Duration(start))
 
 	span.SetStatus(codes.Ok, "")

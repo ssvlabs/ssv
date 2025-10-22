@@ -25,17 +25,33 @@ func TestProber(t *testing.T) {
 		clNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
 
 		err := p.Probe(ctx, clNodeName)
 		require.NoError(t, err)
 	})
 
-	t.Run("1 node, success with glitchy node", func(t *testing.T) {
-		clNode := &glitchyNodeMock{}
+	t.Run("1 node, success with retry delay", func(t *testing.T) {
+		glitchesCnt := 3
+		clNode := newGlitchyNodeMock(uint64(glitchesCnt))
+
+		retryDelay := 100 * time.Millisecond
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, retryDelay)
+
+		startTime := time.Now()
+		err := p.Probe(ctx, clNodeName)
+		took := time.Since(startTime)
+		require.NoError(t, err)
+		require.True(t, took > time.Duration(glitchesCnt)*retryDelay)
+	})
+
+	t.Run("1 node, success with glitchy node", func(t *testing.T) {
+		clNode := newGlitchyNodeMock(2)
+
+		p := New(log.TestLogger(t))
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
 
 		err := p.Probe(ctx, clNodeName)
 		require.NoError(t, err)
@@ -46,7 +62,7 @@ func TestProber(t *testing.T) {
 		clNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
 
 		err := p.Probe(ctx, elNodeName)
 		require.ErrorContains(t, err, "not found")
@@ -58,7 +74,7 @@ func TestProber(t *testing.T) {
 		clNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
 
 		clDownErr := fmt.Errorf("some error")
 		clNode.healthy.Store(&clDownErr)
@@ -72,7 +88,7 @@ func TestProber(t *testing.T) {
 		clNode := &stuckNodeMock{}
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
 
 		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
 		defer cancel()
@@ -88,8 +104,8 @@ func TestProber(t *testing.T) {
 		elNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		err := p.ProbeAll(ctx)
 		require.NoError(t, err)
@@ -103,8 +119,8 @@ func TestProber(t *testing.T) {
 		elNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		err := p.ProbeAll(ctx)
 		require.NoError(t, err)
@@ -124,8 +140,8 @@ func TestProber(t *testing.T) {
 		elNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		err := p.ProbeAll(ctx)
 		require.NoError(t, err)
@@ -145,8 +161,8 @@ func TestProber(t *testing.T) {
 		elNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		err := p.ProbeAll(ctx)
 		require.NoError(t, err)
@@ -154,7 +170,7 @@ func TestProber(t *testing.T) {
 		eventSyncerNode := &nodeMock{}
 		eventSyncerNode.healthy.Store(nil)
 
-		p.AddNode(eventSyncerNodeName, eventSyncerNode, 10*time.Second, 5)
+		p.AddNode(eventSyncerNodeName, eventSyncerNode, 10*time.Second, 5, 0)
 
 		err = p.ProbeAll(ctx)
 		require.NoError(t, err)
@@ -168,8 +184,8 @@ func TestProber(t *testing.T) {
 		elNode.healthy.Store(nil)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		err := p.ProbeAll(ctx)
 		require.NoError(t, err)
@@ -177,7 +193,7 @@ func TestProber(t *testing.T) {
 		eventSyncerNode := &nodeMock{}
 		eventSyncerNode.healthy.Store(nil)
 
-		p.AddNode(eventSyncerNodeName, eventSyncerNode, 10*time.Second, 5)
+		p.AddNode(eventSyncerNodeName, eventSyncerNode, 10*time.Second, 5, 0)
 
 		err = p.ProbeAll(ctx)
 		require.NoError(t, err)
@@ -194,8 +210,8 @@ func TestProber(t *testing.T) {
 		elNode := &stuckNodeMock{}
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Millisecond, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Millisecond, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Millisecond, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Millisecond, 5, 0)
 
 		errCh := make(chan error)
 		go func() {
@@ -216,8 +232,8 @@ func TestProber(t *testing.T) {
 		elNode := &stuckNodeMock{}
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		probeCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
 		defer cancel()
@@ -230,8 +246,8 @@ func TestProber(t *testing.T) {
 		elNode := &stuckNodeMock{}
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		probeCtx, cancel := context.WithCancel(ctx)
 		cancel()
@@ -240,15 +256,29 @@ func TestProber(t *testing.T) {
 	})
 
 	t.Run("node glitches survived via retries", func(t *testing.T) {
-		clNode := &glitchyNodeMock{}
+		clNode := newGlitchyNodeMock(2)
 
-		elNode := &glitchyNodeMock{}
+		elNode := newGlitchyNodeMock(3)
 
 		p := New(log.TestLogger(t))
-		p.AddNode(clNodeName, clNode, 10*time.Second, 5)
-		p.AddNode(elNodeName, elNode, 10*time.Second, 5)
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
 
 		err := p.ProbeAll(ctx)
 		require.NoError(t, err)
+	})
+
+	t.Run("node glitches exceeding max probe retries", func(t *testing.T) {
+		clNode := newGlitchyNodeMock(2)
+
+		elNode := newGlitchyNodeMock(6)
+
+		p := New(log.TestLogger(t))
+		p.AddNode(clNodeName, clNode, 10*time.Second, 5, 0)
+		p.AddNode(elNodeName, elNode, 10*time.Second, 5, 0)
+
+		err := p.ProbeAll(ctx)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "probe health-check failed: probe node elNodeName: node is unhealthy: got a glitch")
 	})
 }

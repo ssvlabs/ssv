@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
+	apiv1fulu "github.com/attestantio/go-eth2-client/api/v1/fulu"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
@@ -30,20 +32,15 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(ctx, "ProposerDuties", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
-
+	recordRequest(ctx, gc.log, "ProposerDuties", gc.multiClient, http.MethodGet, true, time.Since(start), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "ProposerDuties"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
+		return nil, errMultiClient(fmt.Errorf("fetch proposer duties: %w", err), "ProposerDuties")
 	}
 	if resp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "ProposerDuties"),
-		)
-		return nil, fmt.Errorf("proposer duties response is nil")
+		return nil, errMultiClient(fmt.Errorf("proposer duties response is nil"), "ProposerDuties")
+	}
+	if resp.Data == nil {
+		return nil, errMultiClient(fmt.Errorf("proposer duties response data is nil"), "ProposerDuties")
 	}
 
 	return resp.Data, nil
@@ -63,26 +60,27 @@ func (gc *GoClient) fetchProposal(
 		RandaoReveal: sig,
 		Graffiti:     graffiti,
 	})
-	recordRequestDuration(ctx, "Proposal", client.Address(), http.MethodGet, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "Proposal", client, http.MethodGet, false, time.Since(reqStart), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Proposal"),
-			zap.String("address", client.Address()),
-			fields.Slot(slot),
-			zap.Error(err),
-		)
-		return nil, err
+		return nil, errSingleClient(fmt.Errorf("fetch proposal: %w", err), client.Address(), "Proposal")
 	}
+	if resp == nil {
+		return nil, errSingleClient(fmt.Errorf("proposal response is nil"), client.Address(), "Proposal")
+	}
+	if resp.Data == nil {
+		return nil, errSingleClient(fmt.Errorf("proposal response data is nil"), client.Address(), "Proposal")
+	}
+
 	return resp.Data, nil
 }
 
-// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
+// GetBeaconBlock implements ProposerCalls.GetBeaconBlock
 func (gc *GoClient) GetBeaconBlock(
 	ctx context.Context,
 	slot phase0.Slot,
 	graffitiBytes []byte,
 	randao []byte,
-) (ssz.Marshaler, spec.DataVersion, error) {
+) (*api.VersionedProposal, ssz.Marshaler, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
@@ -96,20 +94,20 @@ func (gc *GoClient) GetBeaconBlock(
 	if len(gc.clients) == 1 {
 		beaconBlock, err = gc.fetchProposal(ctx, gc.clients[0], slot, sig, graffiti)
 		if err != nil {
-			return nil, DataVersionNil, err
+			return nil, nil, err
 		}
 	} else {
-		// For multiple clients, race them in parallel for fastest response
+		// For multiple clients, race them in parallel for the fastest response
 		beaconBlock, err = gc.getProposalParallel(ctx, slot, sig, graffiti)
 		if err != nil {
-			return nil, DataVersionNil, err
+			return nil, nil, err
 		}
 	}
 
 	// Check and log if fee recipient is missing (for both single and multi-client paths)
 	feeRecipient, err := beaconBlock.FeeRecipient()
 	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("failed to get fee recipient: %w", err)
+		return nil, nil, fmt.Errorf("failed to get fee recipient: %w", err)
 	}
 	if feeRecipient.IsZero() {
 		gc.log.Warn("proposal missing fee recipient - fees will be burned",
@@ -117,88 +115,31 @@ func (gc *GoClient) GetBeaconBlock(
 			zap.Bool("blinded", beaconBlock.Blinded))
 	}
 
-	if beaconBlock.Blinded {
-		switch beaconBlock.Version {
-		case spec.DataVersionCapella:
-			if beaconBlock.CapellaBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block is nil")
-			}
-			if beaconBlock.CapellaBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block body is nil")
-			}
-			if beaconBlock.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella blinded block execution payload header is nil")
-			}
-			return beaconBlock.CapellaBlinded, beaconBlock.Version, nil
-		case spec.DataVersionDeneb:
-			if beaconBlock.DenebBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block contents is nil")
-			}
-			if beaconBlock.DenebBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block body is nil")
-			}
-			if beaconBlock.DenebBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
-			}
-			return beaconBlock.DenebBlinded, beaconBlock.Version, nil
-		case spec.DataVersionElectra:
-			if beaconBlock.ElectraBlinded == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block is nil")
-			}
-			if beaconBlock.ElectraBlinded.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block body is nil")
-			}
-			if beaconBlock.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("electra blinded block execution payload header is nil")
-			}
-			return beaconBlock.ElectraBlinded, beaconBlock.Version, nil
-		default:
-			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
-		}
-	}
-
+	// Note: FeeRecipient() above already validates payload presence (ExecutionPayload/ExecutionPayloadHeader),
+	// so we don't need explicit payload checks in this switch statement
 	switch beaconBlock.Version {
 	case spec.DataVersionCapella:
-		if beaconBlock.Capella == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block is nil")
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.CapellaBlinded, nil
 		}
-		if beaconBlock.Capella.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
-		}
-		if beaconBlock.Capella.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
-		}
-		return beaconBlock.Capella, beaconBlock.Version, nil
+		return beaconBlock, beaconBlock.Capella, nil
 	case spec.DataVersionDeneb:
-		if beaconBlock.Deneb == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.DenebBlinded, nil
 		}
-		if beaconBlock.Deneb.Block == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block is nil")
-		}
-		if beaconBlock.Deneb.Block.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
-		}
-		if beaconBlock.Deneb.Block.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
-		}
-		return beaconBlock.Deneb, beaconBlock.Version, nil
+		return beaconBlock, beaconBlock.Deneb, nil
 	case spec.DataVersionElectra:
-		if beaconBlock.Electra == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block contents is nil")
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.ElectraBlinded, nil
 		}
-		if beaconBlock.Electra.Block == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block is nil")
+		return beaconBlock, beaconBlock.Electra, nil
+	case spec.DataVersionFulu:
+		if beaconBlock.Blinded {
+			return beaconBlock, beaconBlock.FuluBlinded, nil
 		}
-		if beaconBlock.Electra.Block.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block body is nil")
-		}
-		if beaconBlock.Electra.Block.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra block execution payload is nil")
-		}
-		return beaconBlock.Electra, beaconBlock.Version, nil
+		return beaconBlock, beaconBlock.Fulu, nil
 	default:
-		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
+		return nil, nil, fmt.Errorf("unknown block version %d", beaconBlock.Version)
 	}
 }
 
@@ -215,14 +156,14 @@ func (gc *GoClient) getProposalParallel(
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
 ) (*api.VersionedProposal, error) {
-	// Create a context that we'll cancel as soon as we get first successful response
+	// Create a context that we'll cancel as soon as we get the first successful response
 	parallelCtx, cancelParallel := context.WithCancel(ctx)
 	defer cancelParallel()
 
 	type result struct {
 		proposal *api.VersionedProposal
 		err      error
-		address  string
+		client   string
 	}
 
 	resultCh := make(chan result, len(gc.clients))
@@ -230,94 +171,35 @@ func (gc *GoClient) getProposalParallel(
 	for _, client := range gc.clients {
 		go func(c Client) {
 			proposal, err := gc.fetchProposal(parallelCtx, c, slot, sig, graffiti)
-			// Errors are already logged in fetchProposal
 			select {
-			case resultCh <- result{proposal: proposal, err: err, address: c.Address()}:
+			case resultCh <- result{proposal: proposal, err: err, client: c.Address()}:
 			case <-parallelCtx.Done():
 				// Context canceled, exit without blocking
 			}
 		}(client)
 	}
 
-	var lastErr error
-	for i := 0; i < len(gc.clients); i++ {
+	var errs error
+	for range gc.clients {
 		select {
 		case res := <-resultCh:
 			if res.err != nil {
-				lastErr = res.err
+				errs = errors.Join(errs, res.err)
 				continue
 			}
-			// Got a successful response, cancel other requests and return
-			gc.log.Debug("received proposal from client",
-				zap.String("address", res.address),
+			// Got a successful response, cancel other requests and return.
+			gc.log.Debug("received proposal, canceling other requests",
+				zap.String("client", res.client),
 				fields.Slot(slot),
-				zap.Int("response_number", i+1))
-			cancelParallel() // Cancel other goroutines immediately
+			)
+			cancelParallel()
 			return res.proposal, nil
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 
-	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d: %w", len(gc.clients), slot, lastErr)
-}
-
-func (gc *GoClient) SubmitBlindedBeaconBlock(
-	ctx context.Context,
-	block *api.VersionedBlindedProposal,
-	sig phase0.BLSSignature,
-) error {
-	signedBlock := &api.VersionedSignedBlindedProposal{
-		Version: block.Version,
-	}
-	switch block.Version {
-	case spec.DataVersionCapella:
-		if block.Capella == nil {
-			return fmt.Errorf("capella blinded block is nil")
-		}
-		signedBlock.Capella = &apiv1capella.SignedBlindedBeaconBlock{
-			Message: block.Capella,
-		}
-		copy(signedBlock.Capella.Signature[:], sig[:])
-	case spec.DataVersionDeneb:
-		if block.Deneb == nil {
-			return fmt.Errorf("deneb block contents is nil")
-		}
-		if block.Deneb.Body == nil {
-			return fmt.Errorf("deneb block body is nil")
-		}
-		if block.Deneb.Body.ExecutionPayloadHeader == nil {
-			return fmt.Errorf("deneb block execution payload header is nil")
-		}
-		signedBlock.Deneb = &apiv1deneb.SignedBlindedBeaconBlock{
-			Message: block.Deneb,
-		}
-		copy(signedBlock.Deneb.Signature[:], sig[:])
-	case spec.DataVersionElectra:
-		if block.Electra == nil {
-			return fmt.Errorf("electra block contents is nil")
-		}
-		if block.Electra.Body == nil {
-			return fmt.Errorf("electra block body is nil")
-		}
-		if block.Electra.Body.ExecutionPayloadHeader == nil {
-			return fmt.Errorf("electra block execution payload header is nil")
-		}
-		signedBlock.Electra = &apiv1electra.SignedBlindedBeaconBlock{
-			Message: block.Electra,
-		}
-		copy(signedBlock.Electra.Signature[:], sig[:])
-	default:
-		return fmt.Errorf("unknown block version")
-	}
-
-	opts := &api.SubmitBlindedProposalOpts{
-		Proposal: signedBlock,
-	}
-
-	return gc.multiClientSubmit(ctx, "SubmitBlindedProposal", func(ctx context.Context, client Client) error {
-		return client.SubmitBlindedProposal(ctx, opts)
-	})
+	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -326,62 +208,172 @@ func (gc *GoClient) SubmitBeaconBlock(
 	block *api.VersionedProposal,
 	sig phase0.BLSSignature,
 ) error {
-	signedBlock := &api.VersionedSignedProposal{
-		Version: block.Version,
+	if block.Blinded {
+		return gc.submitBlindedBlock(ctx, block, sig)
 	}
-	switch block.Version {
+	return gc.submitRegularBlock(ctx, block, sig)
+}
+
+// submitBlindedBlock handles submission of blinded blocks
+func (gc *GoClient) submitBlindedBlock(
+	ctx context.Context,
+	block *api.VersionedProposal,
+	sig phase0.BLSSignature,
+) error {
+	version := block.Version
+	signedBlindedBlock := &api.VersionedSignedBlindedProposal{
+		Version: version,
+	}
+	switch version {
+	case spec.DataVersionCapella:
+		if block.CapellaBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
+		}
+		signedBlindedBlock.Capella = &apiv1capella.SignedBlindedBeaconBlock{
+			Message:   block.CapellaBlinded,
+			Signature: sig,
+		}
+	case spec.DataVersionDeneb:
+		if block.DenebBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
+		}
+		if block.DenebBlinded.Body == nil {
+			return fmt.Errorf("%s blinded block body is nil", version.String())
+		}
+		if block.DenebBlinded.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("%s blinded block execution payload header is nil", version.String())
+		}
+		signedBlindedBlock.Deneb = &apiv1deneb.SignedBlindedBeaconBlock{
+			Message:   block.DenebBlinded,
+			Signature: sig,
+		}
+	case spec.DataVersionElectra:
+		if block.ElectraBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
+		}
+		if block.ElectraBlinded.Body == nil {
+			return fmt.Errorf("%s blinded block body is nil", version.String())
+		}
+		if block.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("%s blinded block execution payload header is nil", version.String())
+		}
+		signedBlindedBlock.Electra = &apiv1electra.SignedBlindedBeaconBlock{
+			Message:   block.ElectraBlinded,
+			Signature: sig,
+		}
+	case spec.DataVersionFulu:
+		if block.FuluBlinded == nil {
+			return fmt.Errorf("%s blinded block is nil", version.String())
+		}
+		if block.FuluBlinded.Body == nil {
+			return fmt.Errorf("%s blinded block body is nil", version.String())
+		}
+		if block.FuluBlinded.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("%s blinded block execution payload header is nil", version.String())
+		}
+		// Fulu reuses Electra's block types as per consensus spec
+		signedBlindedBlock.Fulu = &apiv1electra.SignedBlindedBeaconBlock{
+			Message:   block.FuluBlinded,
+			Signature: sig,
+		}
+	default:
+		return fmt.Errorf("unknown blinded block version %d", version)
+	}
+
+	opts := &api.SubmitBlindedProposalOpts{
+		Proposal: signedBlindedBlock,
+	}
+
+	return gc.multiClientSubmit(ctx, "SubmitBlindedProposal", func(ctx context.Context, client Client) error {
+		return client.SubmitBlindedProposal(ctx, opts)
+	})
+}
+
+// submitRegularBlock handles submission of regular (non-blinded) blocks
+func (gc *GoClient) submitRegularBlock(
+	ctx context.Context,
+	block *api.VersionedProposal,
+	sig phase0.BLSSignature,
+) error {
+	version := block.Version
+	signedBlock := &api.VersionedSignedProposal{
+		Version: version,
+	}
+	switch version {
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
-			return fmt.Errorf("capella block is nil")
+			return fmt.Errorf("%s block is nil", version.String())
 		}
 		signedBlock.Capella = &capella.SignedBeaconBlock{
-			Message: block.Capella,
+			Message:   block.Capella,
+			Signature: sig,
 		}
-		copy(signedBlock.Capella.Signature[:], sig[:])
 	case spec.DataVersionDeneb:
 		if block.Deneb == nil {
-			return fmt.Errorf("deneb block contents is nil")
+			return fmt.Errorf("%s block contents is nil", version.String())
 		}
 		if block.Deneb.Block == nil {
-			return fmt.Errorf("deneb block is nil")
+			return fmt.Errorf("%s block is nil", version.String())
 		}
 		if block.Deneb.Block.Body == nil {
-			return fmt.Errorf("deneb block body is nil")
+			return fmt.Errorf("%s block body is nil", version.String())
 		}
 		if block.Deneb.Block.Body.ExecutionPayload == nil {
-			return fmt.Errorf("deneb block execution payload header is nil")
+			return fmt.Errorf("%s block execution payload is nil", version.String())
 		}
 		signedBlock.Deneb = &apiv1deneb.SignedBlockContents{
 			SignedBlock: &deneb.SignedBeaconBlock{
-				Message: block.Deneb.Block,
+				Message:   block.Deneb.Block,
+				Signature: sig,
 			},
 			KZGProofs: block.Deneb.KZGProofs,
 			Blobs:     block.Deneb.Blobs,
 		}
-		copy(signedBlock.Deneb.SignedBlock.Signature[:], sig[:])
 	case spec.DataVersionElectra:
 		if block.Electra == nil {
-			return fmt.Errorf("electra block contents is nil")
+			return fmt.Errorf("%s block contents is nil", version.String())
 		}
 		if block.Electra.Block == nil {
-			return fmt.Errorf("electra block is nil")
+			return fmt.Errorf("%s block is nil", version.String())
 		}
 		if block.Electra.Block.Body == nil {
-			return fmt.Errorf("electra block body is nil")
+			return fmt.Errorf("%s block body is nil", version.String())
 		}
 		if block.Electra.Block.Body.ExecutionPayload == nil {
-			return fmt.Errorf("electra block execution payload header is nil")
+			return fmt.Errorf("%s block execution payload is nil", version.String())
 		}
 		signedBlock.Electra = &apiv1electra.SignedBlockContents{
 			SignedBlock: &electra.SignedBeaconBlock{
-				Message: block.Electra.Block,
+				Message:   block.Electra.Block,
+				Signature: sig,
 			},
 			KZGProofs: block.Electra.KZGProofs,
 			Blobs:     block.Electra.Blobs,
 		}
-		copy(signedBlock.Electra.SignedBlock.Signature[:], sig[:])
+	case spec.DataVersionFulu:
+		if block.Fulu == nil {
+			return fmt.Errorf("%s block contents is nil", version.String())
+		}
+		if block.Fulu.Block == nil {
+			return fmt.Errorf("%s block is nil", version.String())
+		}
+		if block.Fulu.Block.Body == nil {
+			return fmt.Errorf("%s block body is nil", version.String())
+		}
+		if block.Fulu.Block.Body.ExecutionPayload == nil {
+			return fmt.Errorf("%s block execution payload is nil", version.String())
+		}
+		signedBlock.Fulu = &apiv1fulu.SignedBlockContents{
+			// Fulu reuses Electra's block types as per consensus spec
+			SignedBlock: &electra.SignedBeaconBlock{
+				Message:   block.Fulu.Block,
+				Signature: sig,
+			},
+			KZGProofs: block.Fulu.KZGProofs,
+			Blobs:     block.Fulu.Blobs,
+		}
 	default:
-		return fmt.Errorf("unknown block version")
+		return fmt.Errorf("unknown block version %d", version)
 	}
 
 	opts := &api.SubmitProposalOpts{
@@ -412,10 +404,9 @@ func (gc *GoClient) handleProposalPreparationsOnReconnect(ctx context.Context, c
 	provider := gc.proposalPreparationsProvider
 	gc.proposalPreparationsProviderMu.RUnlock()
 
-	// Provider may be nil during early reconnections if the beacon client reconnects
-	// before operator.New() completes and calls SetProposalPreparationsProvider.
-	// This is harmless - we skip re-submission and let the regular
-	// schedule handle it once the fee recipient controller starts.
+	// Provider may be nil during early reconnections if the beacon client reconnects before operator.New()
+	// completes and calls SetProposalPreparationsProvider. This is harmless - we skip re-submission and let
+	// the regular schedule handle it once the fee recipient controller starts.
 	if provider == nil {
 		logger.Debug("proposal preparations provider not set during reconnection",
 			zap.String("reason", "early reconnection before initialization complete"),
@@ -433,30 +424,27 @@ func (gc *GoClient) handleProposalPreparationsOnReconnect(ctx context.Context, c
 		return
 	}
 
-	if err := gc.submitProposalPreparationBatches(preparations, func(batch []*eth2apiv1.ProposalPreparation) error {
+	err = gc.submitProposalPreparationBatches(preparations, func(batch []*eth2apiv1.ProposalPreparation) error {
 		return client.SubmitProposalPreparations(ctx, batch)
-	}); err != nil {
-		logger.Warn("failed to submit all preparations on reconnect", zap.Error(err))
+	})
+	if err != nil {
+		logger.Warn("failed to submit proposal preparations on reconnect", zap.Error(err))
+		return
 	}
+
+	logger.Debug("successfully submitted all proposal preparations on reconnect",
+		zap.Int("total", len(preparations)),
+	)
 }
 
-// submitProposalPreparationBatches submits proposal preparations in batches using the provided submit function
 func (gc *GoClient) submitProposalPreparationBatches(
 	preparations []*eth2apiv1.ProposalPreparation,
 	submitFunc func(batch []*eth2apiv1.ProposalPreparation) error,
-) error {
+) (jointErr error) {
 	var submitted, batchStart int
-	var lastErr error
-
 	for batch := range slices.Chunk(preparations, ProposalPreparationBatchSize) {
 		if err := submitFunc(batch); err != nil {
-			gc.log.Error(clResponseErrMsg,
-				zap.String("api", "SubmitProposalPreparations"),
-				zap.Int("batch_start", batchStart),
-				zap.Int("batch_size", len(batch)),
-				zap.Error(err),
-			)
-			lastErr = err
+			jointErr = errors.Join(jointErr, fmt.Errorf("submit batch (start=%d, size=%d): %w", batchStart, len(batch), err))
 		} else {
 			submitted += len(batch)
 		}
@@ -465,25 +453,10 @@ func (gc *GoClient) submitProposalPreparationBatches(
 
 	switch {
 	case submitted == len(preparations):
-		gc.log.Debug("successfully submitted all proposal preparations",
-			zap.Int("total", len(preparations)),
-		)
 		return nil
-
 	case submitted > 0:
-		gc.log.Error("partially submitted proposal preparations",
-			zap.Int("submitted", submitted),
-			zap.Int("failed", len(preparations)-submitted),
-			zap.Int("total", len(preparations)),
-			zap.Error(lastErr),
-		)
-		return fmt.Errorf("partially submitted preparations: %d/%d, last error: %w", submitted, len(preparations), lastErr)
-
+		return fmt.Errorf("partially submitted proposal preparations: %d/%d, encountered errors: %w", submitted, len(preparations), jointErr)
 	default:
-		gc.log.Error("couldn't submit any proposal preparations",
-			zap.Int("total", len(preparations)),
-			zap.Error(lastErr),
-		)
-		return fmt.Errorf("failed to submit any preparations: %w", lastErr)
+		return fmt.Errorf("failed to submit any of %d proposal preparations: %w", len(preparations), jointErr)
 	}
 }

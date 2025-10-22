@@ -124,6 +124,10 @@ func (s *storage) DeleteOperatorData(rw basedb.ReadWriter, id spectypes.Operator
 	return s.operatorStore.DeleteOperatorData(rw, id)
 }
 
+func (s *storage) ListOperatorsAll(r basedb.Reader) ([]registrystorage.OperatorData, error) {
+	return s.operatorStore.ListOperatorsAll(r)
+}
+
 func (s *storage) ListOperators(r basedb.Reader, from uint64, to uint64) ([]registrystorage.OperatorData, error) {
 	return s.operatorStore.ListOperators(r, from, to)
 }

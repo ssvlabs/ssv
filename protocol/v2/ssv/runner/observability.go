@@ -19,7 +19,7 @@ import (
 type attributeConsensusPhase string
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/protocol/v2/ssv"
+	observabilityName      = "github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	observabilityNamespace = "ssv.validator"
 
 	attributeConsensusPhasePreConsensus attributeConsensusPhase = "pre_consensus"

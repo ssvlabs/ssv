@@ -189,6 +189,21 @@ func (mr *MockBaseValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockBaseValidatorStore)(nil).ValidatorIndex), pubKey)
 }
 
+// ValidatorPubkey mocks base method.
+func (m *MockBaseValidatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (types.ValidatorPK, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorPubkey", index)
+	ret0, _ := ret[0].(types.ValidatorPK)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorPubkey indicates an expected call of ValidatorPubkey.
+func (mr *MockBaseValidatorStoreMockRecorder) ValidatorPubkey(index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorPubkey", reflect.TypeOf((*MockBaseValidatorStore)(nil).ValidatorPubkey), index)
+}
+
 // Validators mocks base method.
 func (m *MockBaseValidatorStore) Validators() []*types0.SSVShare {
 	m.ctrl.T.Helper()
@@ -370,6 +385,21 @@ func (m *MockValidatorStore) ValidatorIndex(pubKey types.ValidatorPK) (phase0.Va
 func (mr *MockValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockValidatorStore)(nil).ValidatorIndex), pubKey)
+}
+
+// ValidatorPubkey mocks base method.
+func (m *MockValidatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (types.ValidatorPK, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorPubkey", index)
+	ret0, _ := ret[0].(types.ValidatorPK)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorPubkey indicates an expected call of ValidatorPubkey.
+func (mr *MockValidatorStoreMockRecorder) ValidatorPubkey(index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorPubkey", reflect.TypeOf((*MockValidatorStore)(nil).ValidatorPubkey), index)
 }
 
 // Validators mocks base method.
@@ -623,6 +653,21 @@ func (m *MockSelfValidatorStore) ValidatorIndex(pubKey types.ValidatorPK) (phase
 func (mr *MockSelfValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockSelfValidatorStore)(nil).ValidatorIndex), pubKey)
+}
+
+// ValidatorPubkey mocks base method.
+func (m *MockSelfValidatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (types.ValidatorPK, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorPubkey", index)
+	ret0, _ := ret[0].(types.ValidatorPK)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorPubkey indicates an expected call of ValidatorPubkey.
+func (mr *MockSelfValidatorStoreMockRecorder) ValidatorPubkey(index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorPubkey", reflect.TypeOf((*MockSelfValidatorStore)(nil).ValidatorPubkey), index)
 }
 
 // Validators mocks base method.

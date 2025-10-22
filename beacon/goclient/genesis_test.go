@@ -79,7 +79,7 @@ func Test_genesisForClient(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		genesis, err := genesisForClient(ctx, logger, client.multiClient)
+		genesis, err := client.genesisForClient(ctx, client.multiClient)
 		require.NoError(t, err)
 		require.NotNil(t, genesis)
 
@@ -107,7 +107,7 @@ func Test_genesisForClient(t *testing.T) {
 			},
 		)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "timed out awaiting config initialization") // node cannot initialize if it cannot get genesis
+		require.Contains(t, err.Error(), "timed out awaiting Beacon config initialization") // node cannot initialize if it cannot get genesis
 		require.Nil(t, client)
 	})
 
@@ -131,7 +131,7 @@ func Test_genesisForClient(t *testing.T) {
 			},
 		)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "timed out awaiting config initialization") // node cannot initialize if it cannot get genesis
+		require.Contains(t, err.Error(), "timed out awaiting Beacon config initialization") // node cannot initialize if it cannot get genesis
 		require.Nil(t, client)
 	})
 }

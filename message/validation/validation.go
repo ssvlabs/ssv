@@ -53,13 +53,12 @@ type peerIDWithMessageID struct {
 }
 
 type messageValidator struct {
-	logger          *zap.Logger
-	netCfg          *networkconfig.Network
-	pectraForkEpoch phase0.Epoch
-	state           *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
-	validatorStore  validatorStore
-	operators       operators
-	dutyStore       *dutystore.Store
+	logger         *zap.Logger
+	netCfg         *networkconfig.Network
+	state          *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
+	validatorStore validatorStore
+	operators      operators
+	dutyStore      *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
@@ -85,7 +84,6 @@ func New(
 	operators operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
-	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
@@ -96,7 +94,6 @@ func New(
 		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
-		pectraForkEpoch:     pectraForkEpoch,
 	}
 
 	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64

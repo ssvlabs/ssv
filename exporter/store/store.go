@@ -1,16 +1,19 @@
 package store
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 
+	"github.com/RoaringBitmap/roaring/v2/roaring64"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -20,6 +23,9 @@ const (
 	validatorDutyTraceKey      = "vd"
 	committeeDutyTraceKey      = "cd"
 	validatorCommitteeIndexKey = "vc"
+	scheduledDutyKey           = "sd"
+	// slotKeyLen is the number of bytes used to encode a slot in keys.
+	slotKeyLen = 4
 )
 
 type DutyTraceStore struct {
@@ -32,7 +38,7 @@ func New(db basedb.Database) *DutyTraceStore {
 	}
 }
 
-func (s *DutyTraceStore) SaveValidatorDuty(dto *model.ValidatorDutyTrace) error {
+func (s *DutyTraceStore) SaveValidatorDuty(dto *exporter.ValidatorDutyTrace) error {
 	role, slot, index := dto.Role, dto.Slot, dto.Validator
 	prefix := s.makeValidatorPrefix(slot, role, index)
 
@@ -49,7 +55,7 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *model.ValidatorDutyTrace) error 
 	return nil
 }
 
-func (s *DutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace) error {
+func (s *DutyTraceStore) SaveValidatorDuties(duties []*exporter.ValidatorDutyTrace) error {
 	return s.db.SetMany(nil, len(duties), func(i int) (basedb.Obj, error) {
 		role := duties[i].Role
 		slot := duties[i].Slot
@@ -68,7 +74,7 @@ func (s *DutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace)
 	})
 }
 
-func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
+func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
 	prefix := s.makeValidatorPrefix(slot, role, index)
 	ctx := fmt.Sprintf("role=%s slot=%d index=%d", role, slot, index)
 
@@ -80,7 +86,7 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 		return nil, fmt.Errorf("get validator duty (%s): %w", ctx, ErrNotFound)
 	}
 
-	duty := new(model.ValidatorDutyTrace)
+	duty := new(exporter.ValidatorDutyTrace)
 	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
 		return nil, fmt.Errorf("unmarshal validator duty (%s): %w", ctx, err)
 	}
@@ -88,15 +94,15 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 	return duty, nil
 }
 
-func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error) {
-	var duties []*model.ValidatorDutyTrace
+func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+	var duties []*exporter.ValidatorDutyTrace
 	var errs *multierror.Error
 
 	prefix := s.makeValidatorPrefix(slot, role)
 	ctx := fmt.Sprintf("role=%s slot=%d", role, slot)
 
 	iterationError := s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
-		duty := new(model.ValidatorDutyTrace)
+		duty := new(exporter.ValidatorDutyTrace)
 		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
 			errs = multierror.Append(errs, fmt.Errorf("unmarshal validator duty (%s): %w", ctx, err))
 		} else {
@@ -126,8 +132,8 @@ func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.Val
 	return spectypes.CommitteeID(obj.Value), nil
 }
 
-func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*model.CommitteeDutyLink, error) {
-	var links []*model.CommitteeDutyLink
+func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+	var links []*exporter.CommitteeDutyLink
 	var errs *multierror.Error
 
 	prefix := s.makeValidatorCommitteePrefix(slot)
@@ -137,7 +143,7 @@ func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*model.Commi
 		var committeeID spectypes.CommitteeID
 		copy(committeeID[:], obj.Value)
 		index := binary.LittleEndian.Uint64(obj.Key)
-		links = append(links, &model.CommitteeDutyLink{
+		links = append(links, &exporter.CommitteeDutyLink{
 			ValidatorIndex: phase0.ValidatorIndex(index),
 			CommitteeID:    committeeID,
 		})
@@ -185,7 +191,7 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[ph
 	})
 }
 
-func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
+func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*exporter.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteeSlotPrefix(slot)
 
 	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
@@ -201,7 +207,7 @@ func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.C
 	})
 }
 
-func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error {
+func (s *DutyTraceStore) SaveCommitteeDuty(duty *exporter.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteePrefix(duty.Slot, duty.CommitteeID)
 
 	ctx := fmt.Sprintf("slot=%d committeeID=%x", duty.Slot, duty.CommitteeID)
@@ -217,15 +223,15 @@ func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
 	return nil
 }
 
-func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
-	var duties []*model.CommitteeDutyTrace
+func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*exporter.CommitteeDutyTrace, error) {
+	var duties []*exporter.CommitteeDutyTrace
 	var errs *multierror.Error
 
 	prefix := s.makeCommitteeSlotPrefix(slot)
 	ctx := fmt.Sprintf("slot=%d", slot)
 
 	iterationError := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
-		duty := new(model.CommitteeDutyTrace)
+		duty := new(exporter.CommitteeDutyTrace)
 		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
 			errs = multierror.Append(errs, fmt.Errorf("unmarshal committee duty (%s): %w", ctx, err))
 		} else {
@@ -240,7 +246,7 @@ func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.Committe
 	return duties, errs.ErrorOrNil()
 }
 
-func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *model.CommitteeDutyTrace, err error) {
+func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *exporter.CommitteeDutyTrace, err error) {
 	prefix := s.makeCommitteePrefix(slot, committeeID)
 	ctx := fmt.Sprintf("slot=%d committeeID=%x", slot, committeeID)
 
@@ -252,12 +258,166 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 		return nil, fmt.Errorf("get committee duty (%s): %w", ctx, ErrNotFound)
 	}
 
-	duty = new(model.CommitteeDutyTrace)
+	duty = new(exporter.CommitteeDutyTrace)
 	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
 		return nil, fmt.Errorf("unmarshal committee duty (%s): %w", ctx, err)
 	}
 
 	return
+}
+
+// SetScheduledRole overwrites scheduled indices for a (slot, role).
+func (s *DutyTraceStore) SetScheduledRole(slot phase0.Slot, role spectypes.BeaconRole, indices []phase0.ValidatorIndex) error {
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	if len(indices) == 0 {
+		return s.db.Delete(prefix, nil)
+	}
+	bm := roaring64.NewBitmap()
+	for _, idx := range indices {
+		bm.Add(uint64(idx))
+	}
+	var buf bytes.Buffer
+	if _, err := bm.WriteTo(&buf); err != nil {
+		return fmt.Errorf("set scheduled (slot=%d role=%d): serialize: %w", slot, role, err)
+	}
+	if err := s.db.Set(prefix, nil, buf.Bytes()); err != nil {
+		return fmt.Errorf("set scheduled (slot=%d role=%d): %w", slot, role, err)
+	}
+	return nil
+}
+
+// AddScheduledRole unions indices into existing (slot, role) bitmap.
+func (s *DutyTraceStore) AddScheduledRole(slot phase0.Slot, role spectypes.BeaconRole, indices []phase0.ValidatorIndex) error {
+	if len(indices) == 0 {
+		return nil
+	}
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	bm := roaring64.NewBitmap()
+	for _, idx := range indices {
+		bm.Add(uint64(idx))
+	}
+	if existing, found, err := s.db.Get(prefix, nil); err != nil {
+		return fmt.Errorf("add scheduled (slot=%d role=%d): get existing: %w", slot, role, err)
+	} else if found {
+		var prev roaring64.Bitmap
+		if _, err := prev.ReadFrom(bytes.NewReader(existing.Value)); err != nil {
+			return fmt.Errorf("add scheduled (slot=%d role=%d): read existing: %w", slot, role, err)
+		}
+		bm.Or(&prev)
+	}
+	var buf bytes.Buffer
+	if _, err := bm.WriteTo(&buf); err != nil {
+		return fmt.Errorf("add scheduled (slot=%d role=%d): serialize: %w", slot, role, err)
+	}
+	if err := s.db.Set(prefix, nil, buf.Bytes()); err != nil {
+		return fmt.Errorf("add scheduled (slot=%d role=%d): %w", slot, role, err)
+	}
+	return nil
+}
+
+// GetScheduledRole returns indices for a (slot, role).
+func (s *DutyTraceStore) GetScheduledRole(slot phase0.Slot, role spectypes.BeaconRole) ([]phase0.ValidatorIndex, error) {
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	obj, found, err := s.db.Get(prefix, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get scheduled role (slot=%d role=%d): %w", slot, role, err)
+	}
+	if !found {
+		return nil, ErrNotFound
+	}
+	var bm roaring64.Bitmap
+	if _, err := bm.ReadFrom(bytes.NewReader(obj.Value)); err != nil {
+		return nil, fmt.Errorf("get scheduled role (slot=%d role=%d): decode: %w", slot, role, err)
+	}
+	out := make([]phase0.ValidatorIndex, 0, bm.GetCardinality())
+	it := bm.Iterator()
+	for it.HasNext() {
+		out = append(out, phase0.ValidatorIndex(it.Next()))
+	}
+	return out, nil
+}
+
+// DeleteScheduledRole removes scheduled indices for a (slot, role).
+func (s *DutyTraceStore) DeleteScheduledRole(slot phase0.Slot, role spectypes.BeaconRole) error {
+	prefix := s.makeScheduledRolePrefix(slot, role)
+	return s.db.Delete(prefix, nil)
+}
+
+// DeleteScheduledSlot removes scheduled data for all roles at a slot.
+func (s *DutyTraceStore) DeleteScheduledSlot(slot phase0.Slot) error {
+	var errs *multierror.Error
+	for _, role := range rolemask.All() {
+		if err := s.db.Delete(s.makeScheduledRolePrefix(slot, role), nil); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("delete scheduled (slot=%d role=%d): %w", slot, role, err))
+		}
+	}
+	return errs.ErrorOrNil()
+}
+
+// SaveScheduled stores a compact map (validator index -> role mask) for a slot.
+func (s *DutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {
+	if len(schedule) == 0 {
+		return nil
+	}
+	// Iterate roles together with their mask bit to avoid extra lookups.
+	for role, bit := range rolemask.AllWithBits() {
+		bm := roaring64.NewBitmap()
+		for idx, m := range schedule {
+			if m&bit != 0 {
+				bm.Add(uint64(idx))
+			}
+		}
+		if bm.IsEmpty() {
+			continue
+		}
+		prefix := s.makeScheduledRolePrefix(slot, role)
+		if existing, found, err := s.db.Get(prefix, nil); err != nil {
+			return fmt.Errorf("save scheduled (slot=%d role=%d): get: %w", slot, role, err)
+		} else if found {
+			var prev roaring64.Bitmap
+			if _, err := prev.ReadFrom(bytes.NewReader(existing.Value)); err != nil {
+				return fmt.Errorf("save scheduled (slot=%d role=%d): read: %w", slot, role, err)
+			}
+			bm.Or(&prev)
+		}
+		var buf bytes.Buffer
+		if _, err := bm.WriteTo(&buf); err != nil {
+			return fmt.Errorf("save scheduled (slot=%d role=%d): serialize: %w", slot, role, err)
+		}
+		if err := s.db.Set(prefix, nil, buf.Bytes()); err != nil {
+			return fmt.Errorf("save scheduled (slot=%d role=%d): %w", slot, role, err)
+		}
+	}
+	return nil
+}
+
+// GetScheduled returns compact schedule map for a slot.
+func (s *DutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	out := make(map[phase0.ValidatorIndex]rolemask.Mask)
+	var errs *multierror.Error
+	// Iterate roles together with their mask bit to avoid extra lookups.
+	for role, bit := range rolemask.AllWithBits() {
+		prefix := s.makeScheduledRolePrefix(slot, role)
+		obj, found, err := s.db.Get(prefix, nil)
+		if err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("get scheduled (slot=%d role=%d): %w", slot, role, err))
+			continue
+		}
+		if !found {
+			continue
+		}
+		var bm roaring64.Bitmap
+		if _, err := bm.ReadFrom(bytes.NewReader(obj.Value)); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("get scheduled (slot=%d role=%d): decode: %w", slot, role, err))
+			continue
+		}
+		it := bm.Iterator()
+		for it.HasNext() {
+			idx := phase0.ValidatorIndex(it.Next())
+			out[idx] |= bit
+		}
+	}
+	return out, errs.ErrorOrNil()
 }
 
 func (s *DutyTraceStore) makeValidatorPrefix(slot phase0.Slot, role spectypes.BeaconRole, index ...phase0.ValidatorIndex) []byte {
@@ -290,6 +450,21 @@ func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot) []byte {
 	prefix := make([]byte, 0, len(validatorCommitteeIndexKey)+4)
 	prefix = append(prefix, []byte(validatorCommitteeIndexKey)...)
 	return append(prefix, slotToByteSlice(slot)...)
+}
+
+func (s *DutyTraceStore) makeScheduledRolePrefix(slot phase0.Slot, role spectypes.BeaconRole) []byte {
+	prefix := make([]byte, 0, len(scheduledDutyKey)+slotKeyLen+1)
+	prefix = append(prefix, []byte(scheduledDutyKey)...)
+	prefix = append(prefix, slotToByteSlice(slot)...)
+	// Use the mask bit as the role discriminator in the key (instead of the
+	// raw role value) to avoid depending on role numeric width.
+	if b, ok := rolemask.BitOf(role); ok {
+		prefix = append(prefix, b)
+	} else {
+		// Unknown roles should not appear here; keep a stable suffix anyway.
+		prefix = append(prefix, 0)
+	}
+	return prefix
 }
 
 // helpers

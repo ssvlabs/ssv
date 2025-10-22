@@ -2,8 +2,6 @@ package goclient
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"net/http"
 	"time"
@@ -13,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"go.uber.org/zap"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -32,15 +29,113 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 		return nil, 0, fmt.Errorf("wait for 2/3 of slot: %w", err)
 	}
 
-	va, _, err := gc.fetchVersionedAggregate(ctx, slot, committeeIndex)
+	attData, _, err := gc.GetAttestationData(ctx, slot)
 	if err != nil {
-		return nil, DataVersionNil, err
+		return nil, DataVersionNil, fmt.Errorf("fetch attestation data: %w", err)
+	}
+
+	// Explicitly set Index field as beacon nodes may return inconsistent values.
+	// EIP-7549: For Electra and later, index must always be 0, pre-Electra uses committee index.
+	dataVersion, _ := gc.beaconConfig.ForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
+	attData.Index = 0
+	if dataVersion < spec.DataVersionElectra {
+		attData.Index = committeeIndex
+	}
+
+	// Get aggregate attestation data.
+	root, err := attData.HashTreeRoot()
+	if err != nil {
+		return nil, DataVersionNil, fmt.Errorf("fetch attestation data root: %w", err)
+	}
+
+	aggDataReqStart := time.Now()
+	aggDataResp, err := gc.multiClient.AggregateAttestation(ctx, &api.AggregateAttestationOpts{
+		Slot:                slot,
+		AttestationDataRoot: root,
+		CommitteeIndex:      committeeIndex,
+	})
+	recordRequest(ctx, gc.log, "AggregateAttestation", gc.multiClient, http.MethodGet, true, time.Since(aggDataReqStart), err)
+	if err != nil {
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch aggregate attestation: %w", err), "AggregateAttestation")
+	}
+	if aggDataResp == nil {
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation response is nil"), "AggregateAttestation")
+	}
+	if aggDataResp.Data == nil {
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation response data is nil"), "AggregateAttestation")
 	}
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
 
-	return gc.versionedToAggregateAndProof(va, index, selectionProof)
+	vAtt := aggDataResp.Data
+	switch vAtt.Version {
+	case spec.DataVersionPhase0:
+		if vAtt.Phase0 == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", vAtt.Version.String()), "AggregateAttestation")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       vAtt.Phase0,
+			SelectionProof:  selectionProof,
+		}, vAtt.Version, nil
+	case spec.DataVersionAltair:
+		if vAtt.Altair == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", vAtt.Version.String()), "AggregateAttestation")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       vAtt.Altair,
+			SelectionProof:  selectionProof,
+		}, vAtt.Version, nil
+	case spec.DataVersionBellatrix:
+		if vAtt.Bellatrix == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", vAtt.Version.String()), "AggregateAttestation")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       vAtt.Bellatrix,
+			SelectionProof:  selectionProof,
+		}, vAtt.Version, nil
+	case spec.DataVersionCapella:
+		if vAtt.Capella == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", vAtt.Version.String()), "AggregateAttestation")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       vAtt.Capella,
+			SelectionProof:  selectionProof,
+		}, vAtt.Version, nil
+	case spec.DataVersionDeneb:
+		if vAtt.Deneb == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", vAtt.Version.String()), "AggregateAttestation")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       vAtt.Deneb,
+			SelectionProof:  selectionProof,
+		}, vAtt.Version, nil
+	case spec.DataVersionElectra:
+		if vAtt.Electra == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", vAtt.Version.String()), "AggregateAttestation")
+		}
+		return &electra.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       vAtt.Electra,
+			SelectionProof:  selectionProof,
+		}, vAtt.Version, nil
+	case spec.DataVersionFulu:
+		if vAtt.Fulu == nil {
+			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", vAtt.Version.String()), "AggregateAttestation")
+		}
+		return &electra.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       vAtt.Fulu,
+			SelectionProof:  selectionProof,
+		}, vAtt.Version, nil
+	default:
+		return nil, DataVersionNil, fmt.Errorf("unknown data version: %d", vAtt.Version)
+	}
 }
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
@@ -48,195 +143,14 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 	ctx context.Context,
 	msg *spec.VersionedSignedAggregateAndProof,
 ) error {
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitAggregateAttestations"),
-		zap.String("client_addr", clientAddress))
-
 	start := time.Now()
-
 	err := gc.multiClient.SubmitAggregateAttestations(ctx, &api.SubmitAggregateAttestationsOpts{SignedAggregateAndProofs: []*spec.VersionedSignedAggregateAndProof{msg}})
-	recordRequestDuration(ctx, "SubmitAggregateAttestations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequest(ctx, gc.log, "SubmitAggregateAttestations", gc.multiClient, http.MethodPost, true, time.Since(start), err)
 	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
+		return errMultiClient(fmt.Errorf("submit aggregate attestations: %w", err), "SubmitAggregateAttestations")
 	}
 
-	logger.Debug("consensus client submitted signed aggregate attestations")
 	return nil
-}
-
-func (gc *GoClient) IsAggregator(
-	ctx context.Context,
-	slot phase0.Slot,
-	committeeIndex phase0.CommitteeIndex,
-	committeeLength uint64,
-	slotSig []byte,
-) bool {
-	const targetAggregatorsPerCommittee = 16
-
-	modulo := committeeLength / targetAggregatorsPerCommittee
-	if modulo == 0 {
-		modulo = 1
-	}
-
-	h := sha256.Sum256(slotSig)
-	x := binary.LittleEndian.Uint64(h[:8])
-
-	return x%modulo == 0
-}
-
-func (gc *GoClient) GetAggregateAttestation(
-	ctx context.Context,
-	slot phase0.Slot,
-	committeeIndex phase0.CommitteeIndex,
-) (ssz.Marshaler, error) {
-	va, _, err := gc.fetchVersionedAggregate(ctx, slot, committeeIndex)
-	if err != nil {
-		return nil, err
-	}
-	agg, _, err := gc.versionedAggregateToSSZ(va)
-	return agg, err
-}
-
-func (gc *GoClient) fetchVersionedAggregate(
-	ctx context.Context,
-	slot phase0.Slot,
-	committeeIndex phase0.CommitteeIndex,
-) (*spec.VersionedAttestation, spec.DataVersion, error) {
-	attData, _, err := gc.GetAttestationData(ctx, slot)
-	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("get attestation data: %w", err)
-	}
-
-	dataVersion, _ := gc.beaconConfig.ForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
-	// Pre-Electra needs AttestationData.Index set
-	if dataVersion < spec.DataVersionElectra {
-		attData.Index = committeeIndex
-	}
-
-	root, err := attData.HashTreeRoot()
-	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("attestation data root: %w", err)
-	}
-
-	start := time.Now()
-	resp, err := gc.multiClient.AggregateAttestation(ctx, &api.AggregateAttestationOpts{
-		Slot:                slot,
-		AttestationDataRoot: root,
-		CommitteeIndex:      committeeIndex, // ignored by older forks, used by newer
-	})
-	recordRequestDuration(ctx, "AggregateAttestation", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
-	if err != nil {
-		gc.log.Error(clResponseErrMsg, zap.String("api", "AggregateAttestation"), zap.Error(err))
-		return nil, DataVersionNil, fmt.Errorf("aggregate attestation: %w", err)
-	}
-	if resp == nil || resp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg, zap.String("api", "AggregateAttestation"))
-		return nil, DataVersionNil, fmt.Errorf("nil aggregate attestation response")
-	}
-
-	return resp.Data, resp.Data.Version, nil
-}
-
-func (gc *GoClient) versionedAggregateToSSZ(
-	va *spec.VersionedAttestation,
-) (ssz.Marshaler, spec.DataVersion, error) {
-	switch va.Version {
-	case spec.DataVersionElectra:
-		if va.Electra == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra data is nil")
-		}
-		return va.Electra, va.Version, nil
-	case spec.DataVersionDeneb:
-		if va.Deneb == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb data is nil")
-		}
-		return va.Deneb, va.Version, nil
-	case spec.DataVersionCapella:
-		if va.Capella == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella data is nil")
-		}
-		return va.Capella, va.Version, nil
-	case spec.DataVersionBellatrix:
-		if va.Bellatrix == nil {
-			return nil, DataVersionNil, fmt.Errorf("bellatrix data is nil")
-		}
-		return va.Bellatrix, va.Version, nil
-	case spec.DataVersionAltair:
-		if va.Altair == nil {
-			return nil, DataVersionNil, fmt.Errorf("altair data is nil")
-		}
-		return va.Altair, va.Version, nil
-	default:
-		if va.Phase0 == nil {
-			return nil, DataVersionNil, fmt.Errorf("phase0 data is nil")
-		}
-		return va.Phase0, va.Version, nil
-	}
-}
-
-func (gc *GoClient) versionedToAggregateAndProof(
-	va *spec.VersionedAttestation,
-	index phase0.ValidatorIndex,
-	selectionProof phase0.BLSSignature,
-) (ssz.Marshaler, spec.DataVersion, error) {
-	switch va.Version {
-	case spec.DataVersionElectra:
-		if va.Electra == nil {
-			return nil, DataVersionNil, fmt.Errorf("electra data is nil")
-		}
-		return &electra.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Electra,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionDeneb:
-		if va.Deneb == nil {
-			return nil, DataVersionNil, fmt.Errorf("deneb data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Deneb,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionCapella:
-		if va.Capella == nil {
-			return nil, DataVersionNil, fmt.Errorf("capella data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Capella,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionBellatrix:
-		if va.Bellatrix == nil {
-			return nil, DataVersionNil, fmt.Errorf("bellatrix data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Bellatrix,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	case spec.DataVersionAltair:
-		if va.Altair == nil {
-			return nil, DataVersionNil, fmt.Errorf("altair data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Altair,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	default:
-		if va.Phase0 == nil {
-			return nil, DataVersionNil, fmt.Errorf("phase0 data is nil")
-		}
-		return &phase0.AggregateAndProof{
-			AggregatorIndex: index,
-			Aggregate:       va.Phase0,
-			SelectionProof:  selectionProof,
-		}, va.Version, nil
-	}
 }
 
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)

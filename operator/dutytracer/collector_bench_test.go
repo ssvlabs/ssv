@@ -17,7 +17,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -57,7 +57,7 @@ func BenchmarkTracer(b *testing.B) {
 
 			b.ResetTimer()
 			for b.Loop() {
-				collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+				collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 				var wg sync.WaitGroup
 				for _, msg := range traces[:actualCount] {
@@ -102,7 +102,7 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 			return nil, err
 		}
 
-		dataMsg := new(model.DiskMsg)
+		dataMsg := new(exporter.DiskMsg)
 		if err := dataMsg.UnmarshalSSZ(diskMsgBytes); err != nil {
 			return nil, err
 		}
