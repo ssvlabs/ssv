@@ -93,10 +93,13 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
-			h.processExecution(ctx, period, slot)
-			h.processFetching(ctx, epoch, period, true)
-			cancel()
+			func() {
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				defer cancel()
+
+				h.processExecution(tickCtx, period, slot)
+				h.processFetching(tickCtx, epoch, period, true)
+			}()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
 			periodSlots := h.slotsPerPeriod()
@@ -112,7 +115,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		case reorgEvent := <-h.reorg:
 			epoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
 			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
@@ -150,11 +152,11 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch"),
+		observability.InstrumentName(observabilityNamespace, "sync_committee_contribution.fetch"),
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconPeriodAttribute(period),
-			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommitteeContribution),
 		))
 	defer span.End()
 
@@ -185,8 +187,9 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	if h.exporterMode {
 		return
 	}
+
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "sync_committee.execute"),
+		observability.InstrumentName(observabilityNamespace, "sync_committee_contribution.execute"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconPeriodAttribute(period),
@@ -295,26 +298,23 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		return nil
 	}
 
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		const eventMsg = "failed to get context deadline"
-		span.AddEvent(eventMsg)
-		h.logger.Warn(eventMsg)
-		span.SetStatus(codes.Ok, "")
-		return nil
-	}
-
 	span.AddEvent("submitting beacon sync committee subscriptions", trace.WithAttributes(
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
-	go func(ctx context.Context, h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
-		subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
+
+	go func() {
+		// Cannot use parent-context itself here, have to create independent instance
+		// to be able to continue working in background.
+		subscriptionCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
 		defer cancel()
+		if !withDeadline {
+			h.logger.Warn("parent-context has no deadline set")
+		}
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+			h.logger.Error("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
-	}(ctx, h, subscriptions)
+	}()
 
 	span.SetStatus(codes.Ok, "")
 	return nil
