@@ -98,6 +98,32 @@ func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDu
 	return c.OnExecuteDuty(ctx, logger, dec.Body.(*types.EventMsg))
 }
 
+func (c *Committee) ExecuteAggregatorDuty(ctx context.Context, duty *spectypes.AggregatorCommitteeDuty) error {
+	ssvMsg, err := createAggregatorCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.DomainType)
+	if err != nil {
+		return fmt.Errorf("create committee duty: %w", err)
+	}
+	dec, err := queue.DecodeSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("decode duty execute msg: %w", err)
+	}
+
+	dec.TraceContext = ctx
+
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
+	committeeOpIDs := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot)
+	logger := c.logger.
+		With(fields.DutyID(committeeDutyID)).
+		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.CurrentSlot(c.networkConfig.EstimatedCurrentSlot())).
+		With(fields.Slot(duty.Slot)).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.SlotStartTime(c.networkConfig.SlotStartTime(duty.Slot)))
+
+	return c.OnExecuteDuty(ctx, logger, dec.Body.(*types.EventMsg))
+}
+
 func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "on_execute_committee_duty"),
@@ -110,22 +136,45 @@ func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	if err != nil {
 		return traces.Errorf(span, "failed to get execute committee duty data: %w", err)
 	}
-	duty := executeDutyData.Duty
 
-	span.SetAttributes(
-		observability.BeaconSlotAttribute(duty.Slot),
-		observability.RunnerRoleAttribute(duty.RunnerRole()),
-		observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-	)
+	if executeDutyData.Duty != nil {
+		duty := executeDutyData.Duty
 
-	span.AddEvent("start duty")
-	if err := c.StartDuty(ctx, logger, duty); err != nil {
-		return traces.Errorf(span, "could not start committee duty: %w", err)
-	}
+		span.SetAttributes(
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+		)
 
-	span.AddEvent("start consume queue")
-	if err := c.StartConsumeQueue(ctx, logger, duty); err != nil {
-		return traces.Errorf(span, "could not start committee consume queue: %w", err)
+		span.AddEvent("start duty")
+		if err := c.StartDuty(ctx, logger, duty); err != nil {
+			return traces.Errorf(span, "could not start committee duty: %w", err)
+		}
+
+		span.AddEvent("start consume queue")
+		if err := c.StartConsumeQueue(ctx, logger, duty.Slot); err != nil {
+			return traces.Errorf(span, "could not start committee consume queue: %w", err)
+		}
+	} else if executeDutyData.AggDuty != nil {
+		duty := executeDutyData.AggDuty
+
+		span.SetAttributes(
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+		)
+
+		span.AddEvent("start duty")
+		if err := c.StartAggregatorDuty(ctx, logger, duty); err != nil {
+			return traces.Errorf(span, "could not start committee duty: %w", err)
+		}
+
+		span.AddEvent("start consume queue")
+		if err := c.StartConsumeAggregatorQueue(ctx, logger, duty.Slot); err != nil {
+			return traces.Errorf(span, "could not start committee consume queue: %w", err)
+		}
+	} else {
+		return traces.Errorf(span, "invalid execute committee duty data")
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -152,6 +201,17 @@ func createCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID sp
 	}
 
 	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
+}
+
+// createAggregatorCommitteeDutyExecuteMsg returns ssvMsg with event type of execute aggregator committee duty
+func createAggregatorCommitteeDutyExecuteMsg(duty *spectypes.AggregatorCommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+	executeAggregatorCommitteeDutyData := types.ExecuteCommitteeDutyData{AggDuty: duty}
+	data, err := json.Marshal(executeAggregatorCommitteeDutyData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal execute aggregator committee duty data: %w", err)
+	}
+
+	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleAggregatorCommittee, data)
 }
 
 func dutyDataToSSVMsg(

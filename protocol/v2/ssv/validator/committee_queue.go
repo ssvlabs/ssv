@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -78,23 +79,52 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, slot phase0.Slot) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	// Setting the cancel function separately due the queue could be created in HandleMessage
-	q, found := c.Queues[duty.Slot]
+	q, found := c.Queues[slot]
 	if !found {
-		return fmt.Errorf("no queue found for slot %d", duty.Slot)
+		return fmt.Errorf("no queue found for slot %d", slot)
 	}
 
-	r := c.Runners[duty.Slot]
+	r := c.Runners[slot]
 	if r == nil {
-		return fmt.Errorf("no runner found for slot %d", duty.Slot)
+		return fmt.Errorf("no runner found for slot %d", slot)
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(slot+runnerExpirySlots))
+
+	go func() {
+		defer cancelF()
+		if err := c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r); err != nil {
+			logger.Error("❗failed consuming committee queue", zap.Error(err))
+		}
+	}()
+
+	return nil
+}
+
+// TODO: reduce code duplication
+func (c *Committee) StartConsumeAggregatorQueue(ctx context.Context, logger *zap.Logger, slot phase0.Slot) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	// Setting the cancel function separately due the queue could be created in HandleMessage
+	q, found := c.Queues[slot]
+	if !found {
+		return fmt.Errorf("no queue found for slot %d", slot)
+	}
+
+	r := c.AggregatorRunners[slot]
+	if r == nil {
+		return fmt.Errorf("no runner found for slot %d", slot)
+	}
+
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.networkConfig.EstimatedTimeAtSlot(slot+runnerExpirySlots))
 
 	go func() {
 		defer cancelF()
@@ -113,7 +143,7 @@ func (c *Committee) ConsumeQueue(
 	q queueContainer,
 	logger *zap.Logger,
 	handler MessageHandler,
-	rnr *runner.CommitteeRunner,
+	rnr runner.Runner,
 ) error {
 	// Construct a representation of the current state.
 	state := *q.queueState

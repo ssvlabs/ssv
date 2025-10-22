@@ -42,7 +42,8 @@ type ExecuteDutyData struct {
 }
 
 type ExecuteCommitteeDutyData struct {
-	Duty *types.CommitteeDuty
+	Duty    *types.CommitteeDuty           `json:"duty,omitempty"`
+	AggDuty *types.AggregatorCommitteeDuty `json:"agg_duty,omitempty"`
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {

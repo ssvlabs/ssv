@@ -341,19 +341,15 @@ func TestStartConsumeQueue(t *testing.T) {
 	}
 	committee.Runners[slot] = committeeRunner
 
-	duty := &spectypes.CommitteeDuty{
-		Slot: phase0.Slot(124),
-	}
-	err := committee.StartConsumeQueue(t.Context(), logger, duty)
+	err := committee.StartConsumeQueue(t.Context(), logger, 124)
 	assert.Error(t, err)
 
-	duty.Slot = slot
 	delete(committee.Runners, slot)
-	err = committee.StartConsumeQueue(t.Context(), logger, duty)
+	err = committee.StartConsumeQueue(t.Context(), logger, slot)
 	assert.Error(t, err)
 
 	committee.Runners[slot] = committeeRunner
-	err = committee.StartConsumeQueue(t.Context(), logger, duty)
+	err = committee.StartConsumeQueue(t.Context(), logger, slot)
 	assert.NoError(t, err)
 }
 

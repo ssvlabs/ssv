@@ -176,9 +176,36 @@ func (r *AggregatorCommitteeRunner) UnmarshalJSON(data []byte) error {
 	r.valCheck = aux.valCheck
 	return nil
 }
+func (r *AggregatorCommitteeRunner) HasRunningQBFTInstance() bool {
+	return r.BaseRunner.HasRunningQBFTInstance()
+}
 
-func (r *AggregatorCommitteeRunner) GetBaseRunner() *BaseRunner {
-	return r.BaseRunner
+func (r *AggregatorCommitteeRunner) HasAcceptedProposalForCurrentRound() bool {
+	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (r *AggregatorCommitteeRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return r.BaseRunner.GetShares()
+}
+
+func (r *AggregatorCommitteeRunner) GetRole() spectypes.RunnerRole {
+	return r.BaseRunner.GetRole()
+}
+
+func (r *AggregatorCommitteeRunner) GetLastHeight() specqbft.Height {
+	return r.BaseRunner.GetLastHeight()
+}
+
+func (r *AggregatorCommitteeRunner) GetLastRound() specqbft.Round {
+	return r.BaseRunner.GetLastRound()
+}
+
+func (r *AggregatorCommitteeRunner) GetStateRoot() ([32]byte, error) {
+	return r.BaseRunner.GetStateRoot()
+}
+
+func (r *AggregatorCommitteeRunner) SetTimeoutFunc(fn TimeoutF) {
+	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *AggregatorCommitteeRunner) GetBeaconNode() beacon.BeaconNode {
@@ -193,12 +220,20 @@ func (r *AggregatorCommitteeRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
+func (r *AggregatorCommitteeRunner) GetNetworkConfig() *networkconfig.Network {
+	return r.BaseRunner.NetworkConfig
+}
+
 func (r *AggregatorCommitteeRunner) GetBeaconSigner() ekm.BeaconSigner {
 	return r.signer
 }
 
 func (r *AggregatorCommitteeRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
+}
+
+func (r *AggregatorCommitteeRunner) GetBaseRunner() *BaseRunner {
+	return r.BaseRunner
 }
 
 // findValidatorDuty finds the validator duty for a specific role
@@ -233,7 +268,7 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 
 	// TODO: waitToSlotTwoThirds(vDuty.Slot)
 
-	attestation, err := r.beacon.GetAggregateAttestation(ctx, vDuty.Slot, vDuty.CommitteeIndex)
+	attestation, _, err := r.beacon.GetAggregateAttestation(ctx, vDuty.Slot, vDuty.CommitteeIndex)
 	if err != nil {
 		return true, traces.Errorf(span, "failed to get aggregate attestation: %w", err)
 	}
@@ -492,7 +527,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, msg, &spectypes.BeaconVote{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValCheckF(), msg, &spectypes.BeaconVote{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -594,7 +629,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 				case spectypes.BNRoleSyncCommittee:
 					totalSyncCommitteeDuties.Add(1)
 
-					partialSigMsg, err := r.BaseRunner.signBeaconObject(
+					partialSigMsg, err := signBeaconObject(
 						ctx,
 						r,
 						validatorDuty,
@@ -717,7 +752,7 @@ func (r *AggregatorCommitteeRunner) signAttesterDuty(
 	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 
 	span.AddEvent("signing beacon object")
-	partialMsg, err := r.BaseRunner.signBeaconObject(
+	partialMsg, err := signBeaconObject(
 		ctx,
 		r,
 		validatorDuty,
@@ -986,6 +1021,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (r *AggregatorCommitteeRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
 }
 
 // HasSubmittedForValidator checks if a validator has submitted any duty for a given role
@@ -1371,7 +1410,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		case spectypes.BNRoleAggregator:
 			span.AddEvent("signing beacon object")
 			// Sign slot for aggregator selection proof
-			partialSig, err := r.BaseRunner.signBeaconObject(
+			partialSig, err := signBeaconObject(
 				ctx,
 				r,
 				vDuty,
@@ -1396,7 +1435,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 				}
 
 				span.AddEvent("signing beacon object")
-				partialSig, err := r.BaseRunner.signBeaconObject(
+				partialSig, err := signBeaconObject(
 					ctx,
 					r,
 					vDuty,

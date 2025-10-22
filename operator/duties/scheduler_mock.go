@@ -46,6 +46,18 @@ func (m *MockDutiesExecutor) EXPECT() *MockDutiesExecutorMockRecorder {
 	return m.recorder
 }
 
+// ExecuteAggregatorCommitteeDuties mocks base method.
+func (m *MockDutiesExecutor) ExecuteAggregatorCommitteeDuties(ctx context.Context, duties aggregatorCommitteeDutiesMap) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ExecuteAggregatorCommitteeDuties", ctx, duties)
+}
+
+// ExecuteAggregatorCommitteeDuties indicates an expected call of ExecuteAggregatorCommitteeDuties.
+func (mr *MockDutiesExecutorMockRecorder) ExecuteAggregatorCommitteeDuties(ctx, duties any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteAggregatorCommitteeDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteAggregatorCommitteeDuties), ctx, duties)
+}
+
 // ExecuteCommitteeDuties mocks base method.
 func (m *MockDutiesExecutor) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
 	m.ctrl.T.Helper()
@@ -92,6 +104,18 @@ func NewMockDutyExecutor(ctrl *gomock.Controller) *MockDutyExecutor {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockDutyExecutor) EXPECT() *MockDutyExecutorMockRecorder {
 	return m.recorder
+}
+
+// ExecuteAggregatorCommitteeDuty mocks base method.
+func (m *MockDutyExecutor) ExecuteAggregatorCommitteeDuty(ctx context.Context, committeeID types0.CommitteeID, duty *types0.AggregatorCommitteeDuty) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ExecuteAggregatorCommitteeDuty", ctx, committeeID, duty)
+}
+
+// ExecuteAggregatorCommitteeDuty indicates an expected call of ExecuteAggregatorCommitteeDuty.
+func (mr *MockDutyExecutorMockRecorder) ExecuteAggregatorCommitteeDuty(ctx, committeeID, duty any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteAggregatorCommitteeDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteAggregatorCommitteeDuty), ctx, committeeID, duty)
 }
 
 // ExecuteCommitteeDuty mocks base method.

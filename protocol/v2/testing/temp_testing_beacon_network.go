@@ -54,7 +54,12 @@ func (bn *BeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return bn.Bn.GetBeaconNetwork()
 }
 func (bn *BeaconNodeWrapped) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
-	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
+	p, _, err := bn.Bn.GetBeaconBlock(slot, graffiti, randao)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return spectestingutils.TestingBeaconBlockV(spectestingutils.VersionBySlot(slot)), p, nil // workaround to get *api.VersionedProposal
 }
 func (bn *BeaconNodeWrapped) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
 	for _, registration := range registrations {

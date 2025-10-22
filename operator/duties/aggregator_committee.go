@@ -17,23 +17,24 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-type committeeDutiesMap map[spectypes.CommitteeID]*committeeDuty
+type aggregatorCommitteeDutiesMap map[spectypes.CommitteeID]*aggregatorCommitteeDuty
 
-type CommitteeHandler struct {
+type AggregatorCommitteeHandler struct {
 	baseHandler
 
 	attDuties  *dutystore.Duties[eth2apiv1.AttesterDuty]
 	syncDuties *dutystore.SyncCommitteeDuties
 }
 
-type committeeDuty struct {
-	duty        *spectypes.CommitteeDuty
+type aggregatorCommitteeDuty struct {
+	duty        *spectypes.AggregatorCommitteeDuty
 	id          spectypes.CommitteeID
 	operatorIDs []spectypes.OperatorID
 }
 
-func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], syncDuties *dutystore.SyncCommitteeDuties) *CommitteeHandler {
-	h := &CommitteeHandler{
+// TODO: consider merging with NewCommitteeHandler
+func NewAggregatorCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], syncDuties *dutystore.SyncCommitteeDuties) *AggregatorCommitteeHandler {
+	h := &AggregatorCommitteeHandler{
 		attDuties:  attDuties,
 		syncDuties: syncDuties,
 	}
@@ -41,11 +42,11 @@ func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], sy
 	return h
 }
 
-func (h *CommitteeHandler) Name() string {
-	return "COMMITTEE"
+func (h *AggregatorCommitteeHandler) Name() string {
+	return "AGGREGATOR_COMMITTEE"
 }
 
-func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
+func (h *AggregatorCommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
@@ -82,7 +83,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+func (h *AggregatorCommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "committee.execute"),
 		trace.WithAttributes(
@@ -107,17 +108,17 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
 	}
 
-	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
+	h.dutiesExecutor.ExecuteAggregatorCommitteeDuties(ctx, committeeMap)
 
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *CommitteeHandler) buildCommitteeDuties(
+func (h *AggregatorCommitteeHandler) buildCommitteeDuties(
 	attDuties []*eth2apiv1.AttesterDuty,
 	syncDuties []*eth2apiv1.SyncCommitteeDuty,
 	epoch phase0.Epoch,
 	slot phase0.Slot,
-) committeeDutiesMap {
+) aggregatorCommitteeDutiesMap {
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	selfValidators := h.validatorProvider.SelfParticipatingValidators(epoch)
@@ -131,23 +132,23 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 		validatorCommittees[validatorShare.ValidatorIndex] = cd
 	}
 
-	resultCommitteeMap := make(committeeDutiesMap)
+	resultCommitteeMap := make(aggregatorCommitteeDutiesMap)
 	for _, duty := range attDuties {
 		if h.shouldExecuteAtt(duty, epoch) {
-			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, spectypes.BNRoleAggregator))
 		}
 	}
 	for _, duty := range syncDuties {
 		if h.shouldExecuteSync(duty, slot, epoch) {
-			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
 	}
 
 	return resultCommitteeMap
 }
 
-func (h *CommitteeHandler) addToCommitteeMap(
-	committeeDutyMap committeeDutiesMap,
+func (h *AggregatorCommitteeHandler) addToCommitteeMap(
+	committeeDutyMap aggregatorCommitteeDutiesMap,
 	validatorCommittees map[phase0.ValidatorIndex]committeeDuty,
 	specDuty *spectypes.ValidatorDuty,
 ) {
@@ -159,10 +160,10 @@ func (h *CommitteeHandler) addToCommitteeMap(
 
 	cd, exists := committeeDutyMap[committee.id]
 	if !exists {
-		cd = &committeeDuty{
+		cd = &aggregatorCommitteeDuty{
 			id:          committee.id,
 			operatorIDs: committee.operatorIDs,
-			duty: &spectypes.CommitteeDuty{
+			duty: &spectypes.AggregatorCommitteeDuty{
 				Slot:            specDuty.Slot,
 				ValidatorDuties: []*spectypes.ValidatorDuty{},
 			},
@@ -174,7 +175,7 @@ func (h *CommitteeHandler) addToCommitteeMap(
 	cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
 }
 
-func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+func (h *AggregatorCommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
 	return &spectypes.ValidatorDuty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
@@ -187,7 +188,7 @@ func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spec
 	}
 }
 
-func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+func (h *AggregatorCommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
 	indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
 	for i, index := range duty.ValidatorSyncCommitteeIndices {
 		indices[i] = uint64(index)
@@ -201,7 +202,7 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 	}
 }
 
-func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch phase0.Epoch) bool {
+func (h *AggregatorCommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch phase0.Epoch) bool {
 	share, found := h.validatorProvider.Validator(duty.PubKey[:])
 	if !found || !share.IsAttesting(epoch) {
 		return false
@@ -226,7 +227,7 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 	return false
 }
 
-func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
+func (h *AggregatorCommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
 	share, found := h.validatorProvider.Validator(duty.PubKey[:])
 	if !found || !share.IsParticipating(h.beaconConfig, epoch) {
 		return false
@@ -250,7 +251,7 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 	return false
 }
 
-func (h *CommitteeHandler) canParticipate(share *types.SSVShare, currentSlot phase0.Slot) bool {
+func (h *AggregatorCommitteeHandler) canParticipate(share *types.SSVShare, currentSlot phase0.Slot) bool {
 	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 	if share.MinParticipationEpoch() > currentEpoch {

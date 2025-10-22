@@ -81,6 +81,39 @@ func BeaconVoteValueCheckF(
 	}
 }
 
+func ValidatorConsensusDataValueCheckF(
+	beaconConfig *networkconfig.Beacon,
+) specqbft.ProposedValueCheckF {
+	return func(data []byte) error {
+		cd := &spectypes.ValidatorConsensusData{}
+		if err := cd.Decode(data); err != nil {
+			return errors.Wrap(err, "failed decoding consensus data")
+		}
+		if err := cd.Validate(); err != nil {
+			return errors.Wrap(err, "invalid value")
+		}
+
+		if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
+			return errors.New("duty epoch is into far future")
+		}
+
+		if spectypes.BNRoleAggregatorCommittee != cd.Duty.Type {
+			return errors.New("wrong beacon role type")
+		}
+
+		// TODO: should it be checked?
+		//if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
+		//	return errors.New("wrong validator pk")
+		//}
+		//
+		//if validatorIndex != cd.Duty.ValidatorIndex {
+		//	return errors.New("wrong validator index")
+		//}
+
+		return nil
+	}
+}
+
 func ProposerValueCheckF(
 	signer ekm.BeaconSigner,
 	beaconConfig *networkconfig.Beacon,

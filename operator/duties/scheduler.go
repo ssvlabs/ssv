@@ -41,12 +41,14 @@ const (
 type DutiesExecutor interface {
 	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty)
 	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
+	ExecuteAggregatorCommitteeDuties(ctx context.Context, duties aggregatorCommitteeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
 	ExecuteDuty(ctx context.Context, duty *spectypes.ValidatorDuty)
 	ExecuteCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteAggregatorCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty)
 }
 
 type BeaconNode interface {
@@ -162,6 +164,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	if !opts.ExporterMode {
 		s.handlers = append(s.handlers,
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 		)
@@ -507,6 +510,58 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 	span.SetStatus(codes.Ok, "")
 }
 
+// ExecuteAggregatorCommitteeDuties tries to execute the given aggregator committee duties
+func (s *Scheduler) ExecuteAggregatorCommitteeDuties(ctx context.Context, duties aggregatorCommitteeDutiesMap) {
+	if s.exporterMode {
+		// We never execute duties in exporter mode. The handler should skip calling this method.
+		// Keeping check here to detect programming mistakes.
+		s.logger.Error("ExecuteAggregatorCommitteeDuties should not be called in exporter mode. Possible code error in duty handlers?")
+		return // early return is fine, we don't need to return an error
+	}
+
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_aggregator_committee_duties"))
+	defer span.End()
+
+	for _, committee := range duties {
+		duty := committee.duty
+		logger := s.loggerWithAggregatorCommitteeDutyContext(committee)
+
+		const eventMsg = "🔧 executing aggregator committee duty"
+		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.CommitteeIDAttribute(committee.id),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+		))
+
+		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+		if slotDelay >= 100*time.Millisecond {
+			const eventMsg = "⚠️ late duty execution"
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				observability.CommitteeIDAttribute(committee.id),
+				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
+		}
+
+		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+
+		go func() {
+			// Cannot use parent-context itself here, have to create independent instance
+			// to be able to continue working in background.
+			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			defer cancel()
+			if !withDeadline {
+				logger.Warn("parent-context has no deadline set")
+			}
+
+			s.waitOneThirdOrValidBlock(duty.Slot)
+			s.dutyExecutor.ExecuteAggregatorCommitteeDuty(dutyCtx, committee.id, duty)
+		}()
+	}
+
+	span.SetStatus(codes.Ok, "")
+}
+
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
 	return s.logger.
@@ -527,6 +582,22 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty)
 
 	return s.logger.
 		With(fields.CommitteeID(committeeDuty.id)).
+		With(fields.DutyID(committeeDutyID)).
+		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
+		With(fields.Slot(duty.Slot)).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
+}
+
+// loggerWithAggregatorCommitteeDutyContext returns an instance of logger with the given aggregator committee duty's information
+func (s *Scheduler) loggerWithAggregatorCommitteeDutyContext(aggregatorCommitteeDuty *aggregatorCommitteeDuty) *zap.Logger {
+	duty := aggregatorCommitteeDuty.duty
+	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+	committeeDutyID := fields.BuildCommitteeDutyID(aggregatorCommitteeDuty.operatorIDs, dutyEpoch, duty.Slot)
+
+	return s.logger.
+		With(fields.CommitteeID(aggregatorCommitteeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.RunnerRole(duty.RunnerRole())).
 		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).

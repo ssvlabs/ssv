@@ -155,12 +155,13 @@ func (m *MockAggregatorCalls) EXPECT() *MockAggregatorCallsMockRecorder {
 }
 
 // GetAggregateAttestation mocks base method.
-func (m *MockAggregatorCalls) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, error) {
+func (m *MockAggregatorCalls) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAggregateAttestation", ctx, slot, committeeIndex)
 	ret0, _ := ret[0].(ssz.Marshaler)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetAggregateAttestation indicates an expected call of GetAggregateAttestation.
@@ -781,12 +782,13 @@ func (mr *MockBeaconNodeMockRecorder) DomainData(ctx, epoch, domain any) *gomock
 }
 
 // GetAggregateAttestation mocks base method.
-func (m *MockBeaconNode) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, error) {
+func (m *MockBeaconNode) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAggregateAttestation", ctx, slot, committeeIndex)
 	ret0, _ := ret[0].(ssz.Marshaler)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetAggregateAttestation indicates an expected call of GetAggregateAttestation.

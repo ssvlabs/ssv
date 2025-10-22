@@ -249,6 +249,27 @@ var baseCommitteeWithRunnerSample = func(
 		)
 		return r.(*runner.CommitteeRunner), err
 	}
+
+	createAggregatorRunnerF := func(shareMap map[phase0.ValidatorIndex]*spectypes.Share) (*runner.AggregatorCommitteeRunner, error) {
+		r, err := runner.NewAggregatorCommitteeRunner(
+			networkconfig.TestNetwork,
+			shareMap,
+			controller.NewController(
+				runnerSample.BaseRunner.QBFTController.Identifier,
+				runnerSample.BaseRunner.QBFTController.CommitteeMember,
+				runnerSample.BaseRunner.QBFTController.GetConfig(),
+				spectestingutils.TestingOperatorSigner(keySetSample),
+				false,
+			),
+			runnerSample.GetBeaconNode(),
+			runnerSample.GetNetwork(),
+			runnerSample.GetSigner(),
+			runnerSample.GetOperatorSigner(),
+			runnerSample.GetValCheckF(),
+		)
+		return r.(*runner.AggregatorCommitteeRunner), err
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	c := validator.NewCommittee(
@@ -258,6 +279,7 @@ var baseCommitteeWithRunnerSample = func(
 		runnerSample.BaseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
+		createAggregatorRunnerF,
 		shareMap,
 		committeeDutyGuard,
 	)
