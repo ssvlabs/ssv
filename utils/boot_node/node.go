@@ -160,35 +160,23 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 		Port: int(port),
 	}
 	conn, err := net.ListenUDP(networkVersion, udpAddr)
-
 	if err != nil {
-		n.logger.Fatal("can't setup udp listener", zap.Error(err))
+		n.logger.Fatal("Failed to create UDP server", zap.Error(err))
 	}
 	localNode, err := n.createLocalNode(privateKey, ip, port)
 	if err != nil {
-		n.logger.Fatal("can't setup create localnode", zap.Error(err))
+		n.logger.Fatal("Failed to create local node", zap.Error(err))
 	}
 
-	// Allocate a fake connection to forward postFork packets to the preFork listener.
-	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &discovery.SharedUDPConn{UDPConn: conn, Unhandled: unhandled}
-
-	postForkListener, err := discover.ListenV5(conn, localNode, discover.Config{
+	listener, err := discover.ListenV5(conn, localNode, discover.Config{
 		PrivateKey:   privateKey,
-		Unhandled:    unhandled,
 		V5ProtocolID: &n.ssvConfig.DiscoveryProtocolID,
 	})
 	if err != nil {
-		n.logger.Fatal("can't create postfork listener", zap.Error(err))
+		n.logger.Fatal("Filed to create UDPv5 listener", zap.Error(err))
 	}
 
-	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
-		PrivateKey: privateKey,
-	})
-	if err != nil {
-		n.logger.Fatal("can't create prefork listener", zap.Error(err))
-	}
-	return discovery.NewForkingDV5Listener(n.logger, preForkListener, postForkListener, 5*time.Second)
+	return listener
 }
 
 func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
