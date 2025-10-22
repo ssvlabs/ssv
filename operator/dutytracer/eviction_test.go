@@ -1,5 +1,4 @@
 //go:build lfs
-// +build lfs
 
 package validator
 
@@ -41,7 +40,7 @@ func TestEviction(t *testing.T) {
 	dutyStore := store.New(db)
 	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
-	collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	for _, trace := range traces {
 		collector.Collect(t.Context(), trace, dummyVerify)

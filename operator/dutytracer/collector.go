@@ -20,9 +20,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -63,6 +65,13 @@ type Collector struct {
 	inFlightValidator hashmap.Map[phase0.ValidatorIndex, struct{}]
 
 	decidedListenerFunc func(msg DecidedInfo)
+
+	// duties is the runtime duty store used to derive per-slot scheduled roles.
+	duties *dutystore.Store
+
+	// scheduleJobs is a bounded queue for async schedule computation to avoid
+	// blocking the hot path and DB with synchronous writes.
+	scheduleJobs chan phase0.Slot
 }
 
 type DomainDataProvider interface {
@@ -76,6 +85,7 @@ func New(
 	store DutyTraceStore,
 	beaconNetwork *networkconfig.Beacon,
 	decidedListenerFunc func(msg DecidedInfo),
+	duties *dutystore.Store,
 ) *Collector {
 	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration
 
@@ -92,6 +102,8 @@ func New(
 		inFlightCommittee:              hashmap.Map[spectypes.CommitteeID, struct{}]{},
 		inFlightValidator:              hashmap.Map[phase0.ValidatorIndex, struct{}]{},
 		decidedListenerFunc:            decidedListenerFunc,
+		duties:                         duties,
+		scheduleJobs:                   make(chan phase0.Slot, 32),
 	}
 
 	return collector
@@ -106,6 +118,10 @@ type scRootKey struct {
 func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provider) {
 	c.logger.Info("start duty tracer cache to disk evictor")
 	ticker := tickerProvider()
+	// Start schedule filler in a separate goroutine to avoid blocking eviction.
+	go c.startScheduleFiller(ctx, tickerProvider)
+	// Start a single worker to process schedule writes asynchronously.
+	go c.runScheduleWorker(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -927,4 +943,105 @@ func (c *Collector) signersToKey(signers []spectypes.OperatorID) string {
 		parts = append(parts, fmt.Sprintf("%d", signer))
 	}
 	return strings.Join(parts, ",")
+}
+
+// SaveScheduled stores a compact schedule map for a slot (pass-through to disk store).
+func (c *Collector) SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error {
+	if c.store == nil {
+		return fmt.Errorf("store not initialized")
+	}
+	return c.store.SaveScheduled(slot, schedule)
+}
+
+// GetScheduled loads the compact schedule for a slot (pass-through to disk store).
+func (c *Collector) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	if c.store == nil {
+		return nil, fmt.Errorf("store not initialized")
+	}
+	return c.store.GetScheduled(slot)
+}
+
+// startScheduleFiller runs a background loop that derives scheduled duties
+// from the duty store each slot and persists them compactly.
+func (c *Collector) startScheduleFiller(ctx context.Context, tickerProvider slotticker.Provider) {
+	if c.duties == nil || c.beacon == nil || c.store == nil {
+		c.logger.Debug("schedule filler disabled (missing deps)")
+		return
+	}
+	t := tickerProvider()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.Next():
+			slot := t.Slot()
+			// Enqueue current slot quickly; if queue is full, drop to avoid backpressure.
+			select {
+			case c.scheduleJobs <- slot:
+			default:
+			}
+			// Enqueue a tiny backfill (previous slot) to reduce races if queue permits.
+			if slot > 0 {
+				select {
+				case c.scheduleJobs <- slot - 1:
+				default:
+				}
+			}
+		}
+	}
+}
+
+// computeAndPersistScheduleForSlot builds a per-slot role mask map from dutystore
+// for (ATTESTER, PROPOSER, SYNC_COMMITTEE). Idempotent and best-effort.
+func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
+	epoch := c.beacon.EstimatedEpochAtSlot(slot)
+	schedule := make(map[phase0.ValidatorIndex]rolemask.Mask)
+
+	// Attester indices for this slot (InCommittee only)
+	if c.duties.Attester != nil {
+		for _, d := range c.duties.Attester.CommitteeSlotDuties(epoch, slot) {
+			// d may be nil in edge cases; guard defensively
+			if d == nil {
+				continue
+			}
+			schedule[d.ValidatorIndex] |= rolemask.BitAttester
+		}
+	}
+
+	// Proposer indices for this slot (all scheduled proposers)
+	if c.duties.Proposer != nil {
+		for _, idx := range c.duties.Proposer.SlotIndices(epoch, slot) {
+			schedule[idx] |= rolemask.BitProposer
+		}
+	}
+
+	// Sync-committee membership for this slot (period members are scheduled every slot)
+	if c.duties.SyncCommittee != nil {
+		period := c.beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+		for _, sc := range c.duties.SyncCommittee.CommitteePeriodDuties(period) {
+			if sc == nil {
+				continue
+			}
+			schedule[sc.ValidatorIndex] |= rolemask.BitSyncCommittee
+		}
+	}
+
+	if len(schedule) == 0 {
+		return nil
+	}
+	return c.store.SaveScheduled(slot, schedule)
+}
+
+// runScheduleWorker performs schedule computations and DB writes off the hot path.
+func (c *Collector) runScheduleWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case s := <-c.scheduleJobs:
+			if err := c.computeAndPersistScheduleForSlot(s); err != nil {
+				c.logger.Debug("schedule worker compute/persist", fields.Slot(s), zap.Error(err))
+			}
+		}
+	}
 }

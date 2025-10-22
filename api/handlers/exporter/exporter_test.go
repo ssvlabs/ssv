@@ -22,6 +22,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	estore "github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
@@ -497,6 +498,9 @@ type mockTraceStore struct {
 	GetCommitteeDecidedsFunc    func(slot phase0.Slot, index phase0.ValidatorIndex, _ ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	// added to satisfy dutyTraceStore interface for schedule and committee links
+	GetCommitteeDutyLinksFunc func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
+	GetScheduledFunc          func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
 }
 
 func newMockTraceStore() *mockTraceStore {
@@ -575,6 +579,20 @@ func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spec
 	key := fmt.Sprintf("%d", slot)
 	src := m.committeeDecideds[key]
 	return append([]dutytracer.ParticipantsRangeIndexEntry(nil), src...), nil
+}
+
+func (m *mockTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+	if m.GetCommitteeDutyLinksFunc != nil {
+		return m.GetCommitteeDutyLinksFunc(slot)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	if m.GetScheduledFunc != nil {
+		return m.GetScheduledFunc(slot)
+	}
+	return map[phase0.ValidatorIndex]rolemask.Mask{}, nil
 }
 
 func (m *mockTraceStore) AddValidatorDecided(role spectypes.BeaconRole, slot phase0.Slot, signers []uint64) {
@@ -1281,11 +1299,37 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				var committeeID spectypes.CommitteeID
+				committeeID[0] = 1
 				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (traces []*exporter.CommitteeDutyTrace, err error) {
 					traces = []*exporter.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
 					}
 					return traces, nil
+				}
+				store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+					if slot != 100 {
+						return nil, nil
+					}
+					return map[phase0.ValidatorIndex]rolemask.Mask{
+						phase0.ValidatorIndex(1): rolemask.BitAttester | rolemask.BitAggregator,
+						phase0.ValidatorIndex(2): rolemask.BitAggregator,
+					}, nil
+				}
+				store.GetCommitteeDutyLinksFunc = func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+					if slot != 100 {
+						return nil, nil
+					}
+					return []*exporter.CommitteeDutyLink{
+						{
+							ValidatorIndex: phase0.ValidatorIndex(1),
+							CommitteeID:    committeeID,
+						},
+						{
+							ValidatorIndex: phase0.ValidatorIndex(2),
+							CommitteeID:    committeeID,
+						},
+					}, nil
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -1299,6 +1343,16 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
 				assert.NotEmpty(t, resp.Data[0].Proposal)
+				require.Len(t, resp.Schedule, 1)
+				sched := resp.Schedule[0]
+				assert.Equal(t, uint64(100), sched.Slot)
+				var expectedID spectypes.CommitteeID
+				expectedID[0] = 1
+				assert.Equal(t, hex.EncodeToString(expectedID[:]), sched.CommitteeID)
+				require.Contains(t, sched.Roles, "ATTESTER")
+				require.Contains(t, sched.Roles, "AGGREGATOR")
+				assert.ElementsMatch(t, []uint64{1}, sched.Roles["ATTESTER"])
+				assert.ElementsMatch(t, []uint64{1, 2}, sched.Roles["AGGREGATOR"])
 			},
 		},
 		{
@@ -1473,6 +1527,74 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			tt.validateResp(t, rec)
 		})
 	}
+}
+
+func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
+	store := newMockTraceStore()
+	exporter := &Exporter{traceStore: store}
+
+	req := ValidatorTracesRequest{
+		From:  10,
+		To:    11,
+		Roles: api.RoleSlice{api.Role(spectypes.BNRoleAttester), api.Role(spectypes.BNRoleProposer)},
+	}
+
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+		switch slot {
+		case 10:
+			return map[phase0.ValidatorIndex]rolemask.Mask{
+				1: rolemask.BitAttester | rolemask.BitProposer,
+				2: rolemask.BitProposer,
+			}, nil
+		case 11:
+			return map[phase0.ValidatorIndex]rolemask.Mask{
+				1: rolemask.BitProposer,
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	schedule := exporter.buildValidatorSchedule(&req, nil)
+	require.Len(t, schedule, 3)
+	rolesByKey := make(map[string][]string)
+	for _, entry := range schedule {
+		key := fmt.Sprintf("%d-%d", entry.Slot, entry.Validator)
+		rolesByKey[key] = entry.Roles
+	}
+	assert.ElementsMatch(t, []string{"ATTESTER", "PROPOSER"}, rolesByKey["10-1"])
+	assert.ElementsMatch(t, []string{"PROPOSER"}, rolesByKey["10-2"])
+	assert.ElementsMatch(t, []string{"PROPOSER"}, rolesByKey["11-1"])
+}
+
+func TestExporterBuildValidatorSchedule_Filtered(t *testing.T) {
+	store := newMockTraceStore()
+	exporter := &Exporter{traceStore: store}
+
+	req := ValidatorTracesRequest{
+		From:    10,
+		To:      10,
+		Roles:   api.RoleSlice{api.Role(spectypes.BNRoleAttester), api.Role(spectypes.BNRoleAggregator)},
+		Indices: api.Uint64Slice{1},
+	}
+
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+		if slot != 10 {
+			return nil, nil
+		}
+		return map[phase0.ValidatorIndex]rolemask.Mask{
+			1: rolemask.BitAttester | rolemask.BitAggregator,
+			2: rolemask.BitAttester,
+		}, nil
+	}
+
+	indices := []phase0.ValidatorIndex{1}
+	schedule := exporter.buildValidatorSchedule(&req, indices)
+	require.Len(t, schedule, 1)
+	entry := schedule[0]
+	assert.Equal(t, uint64(10), entry.Slot)
+	assert.Equal(t, uint64(1), entry.Validator)
+	assert.ElementsMatch(t, []string{"ATTESTER", "AGGREGATOR"}, entry.Roles)
 }
 
 func TestExporterCommitteeTraces_InvalidJSON(t *testing.T) {

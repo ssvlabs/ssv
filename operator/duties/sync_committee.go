@@ -31,11 +31,13 @@ type SyncCommitteeHandler struct {
 	// preparationSlots is the number of slots ahead of the sync committee
 	// period change at which to prepare the relevant duties.
 	preparationSlots uint64
+	exporterMode     bool
 }
 
-func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitteeHandler {
+func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode bool) *SyncCommitteeHandler {
 	h := &SyncCommitteeHandler{
-		duties: duties,
+		duties:       duties,
+		exporterMode: exporterMode,
 	}
 	h.fetchCurrentPeriod = true
 	return h
@@ -180,6 +182,9 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 }
 
 func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
+	if h.exporterMode {
+		return
+	}
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "sync_committee.execute"),
 		trace.WithAttributes(
@@ -272,6 +277,14 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 
 	h.prepareDutiesResultLog(period, duties, start)
 
+	// Further processing is not needed in exporter mode, terminate early
+	// avoiding CL subscriptions saves some CPU & Network resources
+	// and avoids unnecessary log noise
+	if h.exporterMode {
+		span.SetStatus(codes.Ok, "")
+		return nil
+	}
+
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
 	lastEpoch := h.beaconConfig.FirstEpochOfSyncPeriod(period+1) - 1
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
@@ -309,12 +322,17 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 
 func (h *SyncCommitteeHandler) prepareDutiesResultLog(period uint64, duties []*eth2apiv1.SyncCommitteeDuty, start time.Time) {
 	var b strings.Builder
-	for i, duty := range duties {
-		if i > 0 {
-			b.WriteString(", ")
+	if h.exporterMode {
+		// too many duties to log individually
+		b.WriteString("[exporter mode]")
+	} else {
+		for i, duty := range duties {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			tmp := fmt.Sprintf("%v-p%v-v%v", h.Name(), period, duty.ValidatorIndex)
+			b.WriteString(tmp)
 		}
-		tmp := fmt.Sprintf("%v-p%v-v%v", h.Name(), period, duty.ValidatorIndex)
-		b.WriteString(tmp)
 	}
 	h.logger.Debug("👥 got duties",
 		fields.Count(len(duties)),

@@ -74,7 +74,10 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				// duty syncer fails to parse messages with no signers so instead
 				// we skip adding the message to the response altogether
 				if len(idxEntry.Signers) == 0 {
-					errs = multierror.Append(errs, fmt.Errorf("omitting entry with no signers (index=%x, slot=%d, role=%s)", idxEntry.Index, slot, role.String()))
+					// we don't append an error here to prevent duty-syncer from getting stuck on error-500.
+					// still we should investigate how it is possible that we have an entry with no signers,
+					// we log it here for further investigation.
+					e.logger.Error("omitting entry with no signers", zap.String("index", fmt.Sprintf("%x", idxEntry.Index)), zap.Uint64("slot", uint64(slot)), zap.String("role", role.String()))
 					continue
 				}
 
