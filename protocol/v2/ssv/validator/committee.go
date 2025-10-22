@@ -43,7 +43,7 @@ type Committee struct {
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
-	Queues  map[phase0.Slot]QueueContainer
+	Queues  map[phase0.Slot]queueContainer
 	Runners map[phase0.Slot]*runner.CommitteeRunner
 	Shares  map[phase0.ValidatorIndex]*spectypes.Share
 
@@ -77,7 +77,7 @@ func NewCommittee(
 		networkConfig:   networkConfig,
 		ctx:             ctx,
 		cancel:          cancel,
-		Queues:          make(map[phase0.Slot]QueueContainer),
+		Queues:          make(map[phase0.Slot]queueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		Shares:          shares,
 		CommitteeMember: operator,
@@ -152,26 +152,16 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 		return nil, nil, traces.Error(span, err)
 	}
 
+	// Create the corresponding runner.
 	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
 		return nil, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
-
-	// Set timeout function.
-	r.GetBaseRunner().TimeoutF = c.onTimeout
+	r.SetTimeoutFunc(c.onTimeout)
 	c.Runners[duty.Slot] = r
-	_, queueExists := c.Queues[duty.Slot]
-	if !queueExists {
-		c.Queues[duty.Slot] = QueueContainer{
-			Q: queue.New(1000), // TODO alan: get queue opts from options
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             qbft.Height(duty.Slot),
-				Slot:               duty.Slot,
-				Quorum:             c.CommitteeMember.GetQuorum(),
-			},
-		}
-	}
+
+	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
+	_ = c.getQueue(duty.Slot)
 
 	// Prunes all expired committee runners, when new runner is created
 	logger = logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
@@ -182,6 +172,33 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 
 	span.SetStatus(codes.Ok, "")
 	return r, runnableDuty, nil
+}
+
+// getQueue returns queue for the provided slot, lazily initializing it if it didn't exist previously.
+// MUST be called with c.mtx locked!
+func (c *Committee) getQueue(slot phase0.Slot) queueContainer {
+	q, exists := c.Queues[slot]
+	if !exists {
+		q = queueContainer{
+			Q: queue.New(
+				1000,
+				queue.WithInboxSizeMetric(
+					queue.InboxSizeMetric,
+					queue.CommitteeQueueMetricType,
+					queue.CommitteeMetricID(slot),
+				),
+			),
+			queueState: &queue.State{
+				HasRunningInstance: false,
+				Height:             qbft.Height(slot),
+				Slot:               slot,
+				Quorum:             c.CommitteeMember.GetQuorum(),
+			},
+		}
+		c.Queues[slot] = q
+	}
+
+	return q
 }
 
 // prepareDuty filters out unrunnable validator duties and returns the shares and attesters.

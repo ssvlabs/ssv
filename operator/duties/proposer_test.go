@@ -71,7 +71,7 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
@@ -107,7 +107,7 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
@@ -153,7 +153,7 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
@@ -219,7 +219,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
@@ -303,7 +303,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
@@ -383,7 +383,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
 	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").

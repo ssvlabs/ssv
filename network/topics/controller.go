@@ -166,18 +166,23 @@ func (ctrl *topicsCtrl) Topics() []string {
 }
 
 // Subscribe subscribes to the given topic, it can handle multiple concurrent calls.
-// it will create a single goroutine and channel for every topic
+// It will create a single goroutine and channel for every topic
 func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = commons.GetTopicFullName(name)
+
 	ctrl.subFilter.(Whitelist).Register(name)
+
 	sub, err := ctrl.container.Subscribe(name)
-	defer ctrl.logger.Debug("subscribing to topic", zap.String("topic", name), zap.Bool("already_subscribed", sub == nil), zap.Error(err))
 	if err != nil {
-		return err
+		return fmt.Errorf("subscribe to topic %s: %w", name, err)
 	}
+
 	if sub == nil { // already subscribed
 		return nil
 	}
+
+	ctrl.logger.Debug("subscribing to topic", zap.String("topic", name))
+
 	go ctrl.start(name, sub)
 
 	return nil

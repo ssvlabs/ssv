@@ -69,6 +69,7 @@ type Operators interface {
 	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
 	SaveOperatorData(rw basedb.ReadWriter, operatorData *OperatorData) (bool, error)
 	DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error
+	ListOperatorsAll(r basedb.Reader) ([]OperatorData, error)
 	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 	DropOperators() error
@@ -95,13 +96,17 @@ func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 	return operatorsPrefix
 }
 
+// ListOperatorsAll returns data of the all known operators.
+func (s *operatorsStorage) ListOperatorsAll(r basedb.Reader) ([]OperatorData, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.listOperators(r, 0, 0)
+}
+
 // ListOperators returns data of the all known operators by index range (from, to)
 // when 'to' equals zero, all operators will be returned
-func (s *operatorsStorage) ListOperators(
-	r basedb.Reader,
-	from uint64,
-	to uint64,
-) ([]OperatorData, error) {
+func (s *operatorsStorage) ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 

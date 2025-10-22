@@ -2,7 +2,6 @@ package instance
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"sync"
@@ -45,11 +44,9 @@ func NewInstance(
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
 ) *Instance {
-	var name string
+	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
 	if len(identifier) == 56 {
-		name = spectypes.MessageID(identifier).GetRoleType().String()
-	} else {
-		name = base64.StdEncoding.EncodeToString(identifier)
+		runnerRole = spectypes.MessageID(identifier).GetRoleType()
 	}
 
 	return &Instance{
@@ -67,7 +64,7 @@ func NewInstance(
 		config:      config,
 		signer:      signer,
 		processMsgF: spectypes.NewThreadSafeF(),
-		metrics:     newMetrics(name),
+		metrics:     newMetrics(runnerRole),
 	}
 }
 
@@ -86,7 +83,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
-		i.metrics.StartStage()
+		i.metrics.Start()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
 		logger = logger.With(

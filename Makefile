@@ -13,14 +13,12 @@ ifndef BUILD_PATH
     export BUILD_PATH
 endif
 
-# Node command.
-NODE_COMMAND=--config=${CONFIG_PATH}
+NODE_COMMAND_ARGS=--config=${CONFIG_PATH}
 ifneq ($(SHARE_CONFIG),)
-  NODE_COMMAND+= --share-config=${SHARE_CONFIG}
+  NODE_COMMAND_ARGS+= --share-config=${SHARE_CONFIG}
 endif
 
-# Bootnode command.
-BOOTNODE_COMMAND=--config=${CONFIG_PATH}
+BOOTNODE_COMMAND_ARGS=--config=${CONFIG_PATH}
 
 COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
@@ -32,7 +30,7 @@ RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
-lint: golangci-lint deadcode-lint
+lint: golangci-lint deadcode-lint openapi-lint
 
 .PHONY: golangci-lint
 golangci-lint:
@@ -107,26 +105,39 @@ docker-benchmark:
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
 
+.PHONY: spec-alignment-diff
+spec-alignment-diff:
+	cd ./scripts/differ && go install .
+	cd ./scripts/spec-alignment && ./differ.sh
+
 .PHONY: start-node
 start-node:
-	@echo "Build ${BUILD_PATH}"
-	@echo "Build ${CONFIG_PATH}"
-	@echo "Build ${CONFIG_PATH2}"
-	@echo "Command ${NODE_COMMAND}"
+	@echo "Build binary: ${BUILD_PATH}"
+	@echo "Config path: ${CONFIG_PATH}"
+	@echo "Share config path: ${SHARE_CONFIG}"
+	@echo "Command provided: ${NODE_COMMAND_ARGS}"
 ifdef DEBUG_PORT
 	@echo "Running node-${NODE_ID} in debug mode"
 	@dlv  --continue --accept-multiclient --headless --listen=:${DEBUG_PORT} --api-version=2 exec \
-	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
+	 ${BUILD_PATH} start-node -- ${NODE_COMMAND_ARGS}
 else
-	@echo "Running node on address: ${HOST_ADDRESS})"
-	@${BUILD_PATH} start-node ${NODE_COMMAND}
+	@echo "Running node on address: ${HOST_ADDRESS}"
+	@${BUILD_PATH} start-node ${NODE_COMMAND_ARGS}
 endif
 
+# docker-run builds and runs docker image in foreground (also mounting a Docker-managed volume `data`)
+.PHONY: docker-run
+docker-run:
+	@echo "node ${NODES_ID}"
+	@docker rm -f ssv_node && docker build -t ssv_node . && docker run --env-file .env --name=ssv_node -p 16000:16000 -p 13001:13001 -p 12001:12001/udp -v data:/data -it ssv_node make BUILD_PATH=/go/bin/ssvnode start-node && docker logs ssv_node --follow
+
+# docker builds and runs docker image in background
 .PHONY: docker
 docker:
 	@echo "node ${NODES_ID}"
 	@docker rm -f ssv_node && docker build -t ssv_node . && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000/udp -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node && docker logs ssv_node --follow
 
+# docker-image runs existing docker image in background
 .PHONY: docker-image
 docker-image:
 	@echo "node ${NODES_ID}"
@@ -157,7 +168,7 @@ stop:
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
-	${BUILD_PATH} start-boot-node ${BOOTNODE_COMMAND}
+	${BUILD_PATH} start-boot-node ${BOOTNODE_COMMAND_ARGS}
 
 .PHONY: mock
 mock:
@@ -167,6 +178,16 @@ mock:
 generate:
 	go generate ./...
 
+SWAG := $(RUN_TOOL) github.com/swaggo/swag/cmd/swag
+
+.PHONY: openapi openapi-lint
+
+openapi:
+	@SWAG='$(SWAG)' bash scripts/openapi.sh --write
+
+openapi-lint:
+	@SWAG='$(SWAG)' bash scripts/openapi.sh --lint
+
 .PHONY: tools
 tools:
 	$(GET_TOOL) golang.org/x/tools/cmd/goimports
@@ -175,6 +196,7 @@ tools:
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
 	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	$(GET_TOOL) golang.org/x/tools/cmd/deadcode
+	$(GET_TOOL) github.com/swaggo/swag/cmd/swag
 	$(RUN_TOOL)
 
 .PHONY: format

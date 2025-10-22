@@ -60,7 +60,7 @@ func TestEthExecLayer(t *testing.T) {
 		validators    = testEnv.validators
 		eventSyncer   = testEnv.eventSyncer
 		shares        = testEnv.shares
-		validatorCtrl = testEnv.validatorCtrl
+		taskExecutor  = testEnv.taskExecutor
 	)
 
 	blockNum := uint64(0x1)
@@ -171,7 +171,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 2: Exit validator
 		{
-			validatorCtrl.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			taskExecutor.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 			shares := nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))
@@ -196,7 +196,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 3: Remove validator
 		{
-			validatorCtrl.EXPECT().StopValidator(gomock.Any()).AnyTimes()
+			taskExecutor.EXPECT().StopValidator(gomock.Any()).AnyTimes()
 
 			shares := nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))
@@ -228,7 +228,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 4 Liquidate Cluster
 		{
-			validatorCtrl.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			taskExecutor.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 			clusterLiquidate := NewTestClusterLiquidatedInput(common)
 			clusterLiquidate.prepare([]*ClusterLiquidatedEventInput{
@@ -258,7 +258,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 5 Reactivate Cluster
 		{
-			validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			taskExecutor.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
@@ -310,7 +310,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 7 Update Fee Recipient
 		{
-			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+			taskExecutor.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 
 			setFeeRecipient := NewSetFeeRecipientAddressInput(common)
 			setFeeRecipient.prepare([]*SetFeeRecipientAddressEventInput{
@@ -322,10 +322,9 @@ func TestEthExecLayer(t *testing.T) {
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
 
-			recipientData, found, err := nodeStorage.GetRecipientData(nil, testAddrAlice)
+			feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
 			require.NoError(t, err)
-			require.True(t, found)
-			require.Equal(t, testAddrBob.String(), recipientData.FeeRecipient.String())
+			require.Equal(t, testAddrBob.Bytes(), feeRecipient[:])
 		}
 
 		stopChan <- struct{}{}

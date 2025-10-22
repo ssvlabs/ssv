@@ -2,15 +2,19 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
@@ -95,11 +99,47 @@ var (
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordRequestDuration(ctx context.Context, serverAddr string, duration time.Duration) {
+func recordRequest(
+	ctx context.Context,
+	logger *zap.Logger,
+	routeName string,
+	client interface{ Address() string },
+	duration time.Duration,
+	err error,
+) {
+	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
+	// to it (there are too many requests being made to log them every time, some requests don't even result
+	// into a network-based call due to caching implemented for some routes).
+	if err != nil || duration > 1*time.Millisecond {
+		logger.Debug("EL request done",
+			zap.String("route_name", routeName),
+			zap.String("client_addr", client.Address()),
+			fields.Took(duration),
+			zap.Bool("success", err == nil),
+			zap.Error(err),
+		)
+	}
+
+	// Build metric attributes, add error-code attribute in case there is an error.
+	attr := []attribute.KeyValue{
+		semconv.ServerAddress(client.Address()),
+		attribute.String("rpc.route_name", routeName),
+	}
+	if err != nil {
+		// Error code of 0 signifies the presence of some error, see if we can clarify if further by checking
+		// for rpc error codes.
+		errCode := 0
+		var rpcErr rpc.Error
+		if errors.As(err, &rpcErr) {
+			errCode = rpcErr.ErrorCode()
+		}
+		attr = append(attr, attribute.Int("rpc.response.error_status_code", errCode))
+	}
+	// Record the request as a metric.
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
-		metric.WithAttributes(semconv.ServerAddress(serverAddr)))
+		metric.WithAttributes(attr...))
 }
 
 func executionClientStatusAttribute(value executionClientStatus) attribute.KeyValue {

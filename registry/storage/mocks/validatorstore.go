@@ -12,6 +12,7 @@ package mocks
 import (
 	reflect "reflect"
 
+	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -70,6 +71,21 @@ func (m *MockBaseValidatorStore) Committees() []*storage.Committee {
 func (mr *MockBaseValidatorStoreMockRecorder) Committees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committees", reflect.TypeOf((*MockBaseValidatorStore)(nil).Committees))
+}
+
+// GetFeeRecipient mocks base method.
+func (m *MockBaseValidatorStore) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockBaseValidatorStoreMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockBaseValidatorStore)(nil).GetFeeRecipient), validatorPK)
 }
 
 // OperatorCommittees mocks base method.
@@ -173,6 +189,21 @@ func (mr *MockBaseValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockBaseValidatorStore)(nil).ValidatorIndex), pubKey)
 }
 
+// ValidatorPubkey mocks base method.
+func (m *MockBaseValidatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (types.ValidatorPK, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorPubkey", index)
+	ret0, _ := ret[0].(types.ValidatorPK)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorPubkey indicates an expected call of ValidatorPubkey.
+func (mr *MockBaseValidatorStoreMockRecorder) ValidatorPubkey(index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorPubkey", reflect.TypeOf((*MockBaseValidatorStore)(nil).ValidatorPubkey), index)
+}
+
 // Validators mocks base method.
 func (m *MockBaseValidatorStore) Validators() []*types0.SSVShare {
 	m.ctrl.T.Helper()
@@ -238,6 +269,21 @@ func (m *MockValidatorStore) Committees() []*storage.Committee {
 func (mr *MockValidatorStoreMockRecorder) Committees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committees", reflect.TypeOf((*MockValidatorStore)(nil).Committees))
+}
+
+// GetFeeRecipient mocks base method.
+func (m *MockValidatorStore) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockValidatorStoreMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockValidatorStore)(nil).GetFeeRecipient), validatorPK)
 }
 
 // OperatorCommittees mocks base method.
@@ -341,6 +387,21 @@ func (mr *MockValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockValidatorStore)(nil).ValidatorIndex), pubKey)
 }
 
+// ValidatorPubkey mocks base method.
+func (m *MockValidatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (types.ValidatorPK, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorPubkey", index)
+	ret0, _ := ret[0].(types.ValidatorPK)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorPubkey indicates an expected call of ValidatorPubkey.
+func (mr *MockValidatorStoreMockRecorder) ValidatorPubkey(index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorPubkey", reflect.TypeOf((*MockValidatorStore)(nil).ValidatorPubkey), index)
+}
+
 // Validators mocks base method.
 func (m *MockValidatorStore) Validators() []*types0.SSVShare {
 	m.ctrl.T.Helper()
@@ -420,6 +481,21 @@ func (m *MockSelfValidatorStore) Committees() []*storage.Committee {
 func (mr *MockSelfValidatorStoreMockRecorder) Committees() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committees", reflect.TypeOf((*MockSelfValidatorStore)(nil).Committees))
+}
+
+// GetFeeRecipient mocks base method.
+func (m *MockSelfValidatorStore) GetFeeRecipient(validatorPK types.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFeeRecipient", validatorPK)
+	ret0, _ := ret[0].(bellatrix.ExecutionAddress)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFeeRecipient indicates an expected call of GetFeeRecipient.
+func (mr *MockSelfValidatorStoreMockRecorder) GetFeeRecipient(validatorPK any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFeeRecipient", reflect.TypeOf((*MockSelfValidatorStore)(nil).GetFeeRecipient), validatorPK)
 }
 
 // OperatorCommittees mocks base method.
@@ -577,6 +653,21 @@ func (m *MockSelfValidatorStore) ValidatorIndex(pubKey types.ValidatorPK) (phase
 func (mr *MockSelfValidatorStoreMockRecorder) ValidatorIndex(pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorIndex", reflect.TypeOf((*MockSelfValidatorStore)(nil).ValidatorIndex), pubKey)
+}
+
+// ValidatorPubkey mocks base method.
+func (m *MockSelfValidatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (types.ValidatorPK, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorPubkey", index)
+	ret0, _ := ret[0].(types.ValidatorPK)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ValidatorPubkey indicates an expected call of ValidatorPubkey.
+func (mr *MockSelfValidatorStoreMockRecorder) ValidatorPubkey(index any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorPubkey", reflect.TypeOf((*MockSelfValidatorStore)(nil).ValidatorPubkey), index)
 }
 
 // Validators mocks base method.

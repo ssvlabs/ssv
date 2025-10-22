@@ -110,7 +110,7 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
@@ -145,7 +145,7 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
@@ -187,7 +187,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -250,7 +250,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -324,7 +324,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -413,7 +413,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -511,7 +511,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -597,7 +597,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -693,7 +693,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -787,7 +787,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -890,7 +890,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
@@ -945,7 +945,7 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -988,7 +988,7 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)

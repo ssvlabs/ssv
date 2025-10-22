@@ -104,7 +104,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.Uint64("slot", uint64(dutySlot)),
 				zap.Uint64("validator_index", uint64(regDescriptor.ValidatorIndex)),
 				zap.String("validator_pubkey", regDescriptor.ValidatorPubkey.String()),
-				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient[:])))
+				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient)))
 
 		case <-h.indicesChange:
 			h.logger.Debug("🛠 indicesChange event")
@@ -130,8 +130,8 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 			continue
 		}
 
-		pk := phase0.BLSPubKey{}
-		copy(pk[:], share.ValidatorPubKey[:])
+		pk := phase0.BLSPubKey(share.ValidatorPubKey)
+
 		duties = append(duties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleValidatorRegistration,
 			ValidatorIndex: share.ValidatorIndex,
