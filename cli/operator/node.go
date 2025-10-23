@@ -382,7 +382,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var keyManager ekm.KeyManager
-
 		if usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
@@ -411,7 +410,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorDataStore.GetOperatorData().PublicKey)
+		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorPubKeyHash(operatorDataStore.GetOperatorData().PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.NetworkConfig = networkConfig
@@ -693,8 +692,8 @@ func ensureNoMissingKeys(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	ssvSignerClient *ssvsigner.Client,
 ) {
-	if operatorDataStore.GetOperatorID() == 0 {
-		logger.Fatal("operator ID is not ready")
+	if !operatorDataStore.OperatorIDReady() {
+		return
 	}
 
 	shares := nodeStorage.Shares().List(
