@@ -44,7 +44,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		With(fields.Slot(slot)).
 		With(fields.DutyID(dutyID))
 
-	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+	_, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "enqueue_validator_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgTypeAttribute(msgType),
@@ -53,8 +53,6 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID)))
 	defer span.End()
-
-	msg.TraceContext = ctx
 
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
@@ -254,7 +252,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID),
 		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
+	)
 	defer span.End()
 
 	// Get runner

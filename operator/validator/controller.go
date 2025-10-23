@@ -668,12 +668,15 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	span.AddEvent("executing committee duty")
-	if err := cm.ExecuteDuty(ctx, logger, duty); err != nil {
-		logger.Error("could not execute committee duty", zap.Error(err))
+	span.AddEvent("starting committee duty")
+	r, q, err := cm.StartDuty(ctx, logger, duty)
+	if err != nil {
+		logger.Error("could not start committee duty", zap.Error(err))
 		span.SetStatus(codes.Error, err.Error())
 		return
 	}
+
+	cm.ConsumeQueue(ctx, logger, q, cm.ProcessMessage, r)
 
 	span.SetStatus(codes.Ok, "")
 }

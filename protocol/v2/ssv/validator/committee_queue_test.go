@@ -284,64 +284,6 @@ func TestConsumeQueueBasic(t *testing.T) {
 	assert.Equal(t, specqbft.PrepareMsgType, receivedMessages[1].Body.(*specqbft.Message).MsgType)
 }
 
-// TestStartConsumeQueue tests the StartQueueConsumer method, which orchestrates queue processing
-// for a specific slot. This test verifies error handling in various scenarios:
-// - Missing queue for a slot
-// - Missing runner for a slot
-// - Successful queue consumption start
-//
-// Flow:
-// 1. Set up a committee with a queue for a specific slot and a corresponding runner
-// 2. Test scenario 1: Call StartQueueConsumer with a duty for a nonexistent slot (should error)
-// 3. Test scenario 2: Delete runner and call StartQueueConsumer for the existing slot (should error)
-// 4. Test scenario 3: Restore runner and call StartQueueConsumer for the valid slot (should succeed)
-func TestStartConsumeQueue(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	logger := log.TestLogger(t)
-
-	committee := &Committee{
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		networkConfig: networkconfig.TestNetwork,
-	}
-
-	slot := phase0.Slot(123)
-
-	q := queueContainer{
-		Q: queue.New(logger, 1000),
-		queueState: &queue.State{
-			HasRunningInstance: false,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-		},
-	}
-	committee.Queues[slot] = q
-
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{},
-		},
-	}
-	committee.Runners[slot] = committeeRunner
-
-	duty := &spectypes.CommitteeDuty{
-		Slot: phase0.Slot(124),
-	}
-	err := committee.StartQueueConsumer(t.Context(), logger, duty)
-	assert.Error(t, err)
-
-	duty.Slot = slot
-	delete(committee.Runners, slot)
-	err = committee.StartQueueConsumer(t.Context(), logger, duty)
-	assert.Error(t, err)
-
-	committee.Runners[slot] = committeeRunner
-	err = committee.StartQueueConsumer(t.Context(), logger, duty)
-	assert.NoError(t, err)
-}
-
 // TestFilterNoProposalAccepted tests the message filtering behavior when no proposal
 // is accepted for the current round. In this state, the queue should:
 // - Process proposal messages (always)

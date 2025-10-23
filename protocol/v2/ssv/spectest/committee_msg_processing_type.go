@@ -91,7 +91,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
-			err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
+			_, _, err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
 			if err != nil {
 				lastErr = err
 			}

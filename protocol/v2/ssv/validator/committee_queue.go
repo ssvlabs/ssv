@@ -50,7 +50,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		With(fields.Slot(slot)).
 		With(fields.DutyID(dutyID))
 
-	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+	_, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "enqueue_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgTypeAttribute(msgType),
@@ -60,8 +60,6 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID)))
 	defer span.End()
-
-	msg.TraceContext = ctx
 
 	c.mtx.Lock()
 	q := c.getQueue(logger, slot)
@@ -76,34 +74,6 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	}
 
 	span.SetStatus(codes.Ok, "")
-}
-
-// StartQueueConsumer start consuming p2p message queue with the supplied handler
-func (c *Committee) StartQueueConsumer(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	// Setting the cancel function separately due the queue could be created in HandleMessage
-	q, found := c.Queues[duty.Slot]
-	if !found {
-		return fmt.Errorf("no queue found for slot %d", duty.Slot)
-	}
-
-	r := c.Runners[duty.Slot]
-	if r == nil {
-		return fmt.Errorf("no runner found for slot %d", duty.Slot)
-	}
-
-	go func() {
-		// queueCtx enforces a deadline for queue consumer to terminate and clean up resources at some point
-		// in the future (when this queue becomes no longer relevant)
-		queueCtx, cancel := context.WithDeadline(ctx, c.networkConfig.TimeAtSlot(duty.Slot+runnerExpirySlots))
-		defer cancel()
-
-		c.ConsumeQueue(queueCtx, logger, q, c.ProcessMessage, r)
-	}()
-
-	return nil
 }
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
@@ -266,7 +236,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID),
 		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
+	)
 	defer span.End()
 
 	switch msgType {

@@ -105,7 +105,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				}
 			}
 		} else {
-			lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
+			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
 
 		for _, msg := range test.Messages {
