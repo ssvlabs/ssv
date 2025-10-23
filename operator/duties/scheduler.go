@@ -89,6 +89,10 @@ type SchedulerOptions struct {
 	SlotTickerProvider      slotticker.Provider
 	DutyStore               *dutystore.Store
 	P2PNetwork              network.P2PNetwork
+	// ExporterMode disables handlers that make sense only for operators
+	// executing duties (e.g., validator registration). When true, scheduler
+	// still fetches/stores duties for all validators but does not execute them.
+	ExporterMode bool
 }
 
 type Scheduler struct {
@@ -116,6 +120,8 @@ type Scheduler struct {
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
+
+	exporterMode bool
 }
 
 func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
@@ -136,20 +142,30 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
 
-		handlers: []dutyHandler{
-			NewAttesterHandler(dutyStore.Attester),
-			NewProposerHandler(dutyStore.Proposer),
-			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
-			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
-			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
-			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
-		},
+		handlers: []dutyHandler{},
 
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
 
+	s.exporterMode = opts.ExporterMode
+
+	// These handlers fetch & record duties from the beacon node and are needed in both operator & exporter modes.
+	// When adding a new handler here, ensure it supports both modes.
+	s.handlers = append(s.handlers,
+		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
+		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
+		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
+	)
+	// These handlers only execute duties and are not needed in exporter mode.
+	if !opts.ExporterMode {
+		s.handlers = append(s.handlers,
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
+			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
+		)
+	}
 	return s
 }
 
@@ -394,6 +410,13 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
+	if s.exporterMode {
+		// We never execute duties in exporter mode. The handler should skip calling this method.
+		// Keeping check here to detect programming mistakes.
+		s.logger.Error("ExecuteDuties should not be called in exporter mode. Possible code error in duty handlers?")
+		return // early return is fine, we don't need to return an error
+	}
+
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "scheduler.execute_duties"),
 		trace.WithAttributes(observability.DutyCountAttribute(len(duties))),
@@ -401,27 +424,31 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	defer span.End()
 
 	for _, duty := range duties {
-		duty := duty
 		logger := s.loggerWithDutyContext(duty)
 
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
-			span.AddEvent(eventMsg,
-				trace.WithAttributes(
-					attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
-					observability.BeaconRoleAttribute(duty.Type),
-					observability.RunnerRoleAttribute(duty.RunnerRole())))
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
+				observability.BeaconRoleAttribute(duty.Type),
+				observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
 
-		go func(ctx context.Context) {
-			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(duty.Slot)
+		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+
+		go func() {
+			// Cannot use parent-context itself here, have to create independent instance
+			// to be able to continue working in background.
+			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			defer cancel()
+			if !withDeadline {
+				logger.Warn("parent-context has no deadline set")
 			}
-			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
-			s.dutyExecutor.ExecuteDuty(ctx, duty)
-		}(ctx)
+
+			s.dutyExecutor.ExecuteDuty(dutyCtx, duty)
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -429,6 +456,13 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
+	if s.exporterMode {
+		// We never execute duties in exporter mode. The handler should skip calling this method.
+		// Keeping check here to detect programming mistakes.
+		s.logger.Error("ExecuteCommitteeDuties should not be called in exporter mode. Possible code error in duty handlers?")
+		return // early return is fine, we don't need to return an error
+	}
+
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"))
 	defer span.End()
 
@@ -438,7 +472,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		const eventMsg = "🔧 executing committee duty"
 		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties))
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.CommitteeIDAttribute(committee.id),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
@@ -447,17 +481,26 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
-			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				observability.CommitteeIDAttribute(committee.id),
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
 		}
 
-		go func(ctx context.Context) {
+		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+
+		go func() {
+			// Cannot use parent-context itself here, have to create independent instance
+			// to be able to continue working in background.
+			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			defer cancel()
+			if !withDeadline {
+				logger.Warn("parent-context has no deadline set")
+			}
+
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
-			s.dutyExecutor.ExecuteCommitteeDuty(ctx, committee.id, duty)
-		}(ctx)
+			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, committee.id, duty)
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")

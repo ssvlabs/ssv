@@ -530,7 +530,8 @@ var StartNodeCmd = &cobra.Command{
 				}
 				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
-					dstore, networkConfig.Beacon, decidedStreamPublisherFn)
+					dstore, networkConfig.Beacon, decidedStreamPublisherFn,
+					dutyStore)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector

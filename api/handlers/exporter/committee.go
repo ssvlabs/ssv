@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
@@ -60,7 +61,11 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return toApiError(errs)
 	}
 
-	return api.Render(w, r, toCommitteeTraceResponse(all, errs))
+	// Attach read-only schedule unioned per committee for the requested slot range.
+	schedule := e.buildCommitteeSchedule(&request)
+	resp := toCommitteeTraceResponse(all, errs)
+	resp.Schedule = schedule
+	return api.Render(w, r, resp)
 }
 
 func validateCommitteeRequest(request *CommitteeTracesRequest) error {
@@ -106,4 +111,76 @@ func toCommitteeTraceResponse(duties []*exporter.CommitteeDutyTrace, errs *multi
 	}
 	r.Errors = toStrings(errs)
 	return r
+}
+
+// buildCommitteeSchedule constructs per-committee schedules by grouping scheduled indices
+// via stored validator→committee links at each slot in-range.
+func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesRequest) []CommitteeSchedule {
+	out := make([]CommitteeSchedule, 0)
+	// Optional filter for committees.
+	var filter map[spectypes.CommitteeID]struct{}
+	if len(req.CommitteeIDs) > 0 {
+		filter = make(map[spectypes.CommitteeID]struct{}, len(req.CommitteeIDs))
+		for _, c := range req.CommitteeIDs {
+			var id spectypes.CommitteeID
+			copy(id[:], c)
+			filter[id] = struct{}{}
+		}
+	}
+
+	for s := req.From; s <= req.To; s++ {
+		slot := phase0.Slot(s)
+		sched, err := e.traceStore.GetScheduled(slot)
+		if err != nil {
+			e.logger.Warn("get scheduled failed", zap.Error(err), fields.Slot(slot))
+			continue
+		}
+		if len(sched) == 0 {
+			continue
+		}
+		links, err := e.traceStore.GetCommitteeDutyLinks(slot)
+		if err != nil {
+			e.logger.Warn("get committee links failed", zap.Error(err), fields.Slot(slot))
+			continue
+		}
+		if len(links) == 0 {
+			continue
+		}
+		// committeeID -> role -> indices
+		grouped := make(map[spectypes.CommitteeID]map[spectypes.BeaconRole][]phase0.ValidatorIndex)
+		for _, l := range links {
+			mask, ok := sched[l.ValidatorIndex]
+			if !ok {
+				continue
+			}
+			cid := l.CommitteeID
+			if filter != nil {
+				if _, ok := filter[cid]; !ok {
+					continue
+				}
+			}
+			if grouped[cid] == nil {
+				grouped[cid] = make(map[spectypes.BeaconRole][]phase0.ValidatorIndex)
+			}
+			// Populate roles for bits present
+			for _, role := range rolemask.All() {
+				if rolemask.Has(mask, role) {
+					grouped[cid][role] = append(grouped[cid][role], l.ValidatorIndex)
+				}
+			}
+		}
+		for cid, roles := range grouped {
+			// Convert to API shape: string committeeID and role->[]uint64
+			apiRoles := make(map[string][]uint64, len(roles))
+			for role, idxs := range roles {
+				arr := make([]uint64, 0, len(idxs))
+				for _, i := range idxs {
+					arr = append(arr, uint64(i))
+				}
+				apiRoles[role.String()] = arr
+			}
+			out = append(out, CommitteeSchedule{Slot: uint64(slot), CommitteeID: hex.EncodeToString(cid[:]), Roles: apiRoles})
+		}
+	}
+	return out
 }

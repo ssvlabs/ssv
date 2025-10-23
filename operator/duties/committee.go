@@ -61,9 +61,17 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
-
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
-			h.processExecution(ctx, period, epoch, slot)
+
+			func() {
+				// Attestations and sync-committee submissions are rewarded as long as they are finished within
+				// 2 slots after the target slot (the target slot itself, plus the next slot after that), hence
+				// we are setting the deadline here to target slot + 2.
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+1)
+				defer cancel()
+
+				h.processExecution(tickCtx, period, epoch, slot)
+			}()
 
 		case <-h.reorg:
 			h.logger.Debug("🛠 reorg event")
