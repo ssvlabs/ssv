@@ -116,7 +116,10 @@ func (c *Committee) ConsumeQueue(
 	rnr *runner.CommitteeRunner,
 ) {
 	logger.Debug("📬 queue consumer is running")
-	defer logger.Debug("📪 queue consumer is closed")
+	defer logger.Debug(
+		"📪 queue consumer is closed",
+		zap.Bool("ctx_done", ctx.Err() != nil),
+	)
 
 	// Construct a representation of the current state.
 	state := *q.queueState

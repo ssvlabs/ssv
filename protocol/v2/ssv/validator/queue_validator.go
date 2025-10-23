@@ -99,7 +99,10 @@ func (v *Validator) StartQueueConsumer(
 		}
 
 		v.logger.Debug("📬 queue consumer is running")
-		defer v.logger.Debug("📪 queue consumer is closed")
+		defer v.logger.Debug(
+			"📪 queue consumer is closed",
+			zap.Bool("ctx_done", ctx.Err() != nil),
+		)
 
 		// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
 		// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
