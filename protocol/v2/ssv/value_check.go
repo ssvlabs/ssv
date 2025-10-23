@@ -74,17 +74,21 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		}
 	}
 
-	if bv.Target.Root != v.expectedVote.Target.Root {
-		return errors.New("beacon vote target root doesn't satisfy slashing protection data")
-	}
-
-	// Implemented according to https://github.com/ssvlabs/SIPs/discussions/70
+	// Implemented according to https://github.com/ssvlabs/SIPs/pull/69
 	if bv.Source.Epoch != v.expectedVote.Source.Epoch {
-		return errors.New("beacon vote source epoch doesn't satisfy slashing protection data")
+		return fmt.Errorf("unexpected source epoch %v, expected %v", bv.Source.Epoch, v.expectedVote.Source.Epoch)
 	}
 
 	if bv.Target.Epoch != v.expectedVote.Target.Epoch {
-		return errors.New("beacon vote target epoch doesn't satisfy slashing protection data")
+		return fmt.Errorf("unexpected target epoch %v, expected %v", bv.Target.Epoch, v.expectedVote.Target.Epoch)
+	}
+
+	if bv.Source.Root != v.expectedVote.Source.Root {
+		return fmt.Errorf("unexpected source root %x, expected %x", bv.Source.Root, v.expectedVote.Source.Root)
+	}
+
+	if bv.Target.Root != v.expectedVote.Target.Root {
+		return fmt.Errorf("unexpected target root %x, expected %x", bv.Target.Root, v.expectedVote.Target.Root)
 	}
 
 	return nil
