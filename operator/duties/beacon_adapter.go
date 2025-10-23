@@ -12,7 +12,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	goclient "github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
@@ -102,7 +102,7 @@ func (p *prefetchingBeacon) committeesForEpoch(ctx context.Context, epoch phase0
 func (p *prefetchingBeacon) evictOldAttesterCaches(anchor phase0.Epoch) {
 	var keepMin phase0.Epoch
 	if anchor > 0 {
-		keepMin = anchor - 1
+		keepMin = anchor - 3
 	}
 	p.muAtt.Lock()
 	defer p.muAtt.Unlock()
@@ -117,7 +117,7 @@ func (p *prefetchingBeacon) evictOldAttesterCaches(anchor phase0.Epoch) {
 func (p *prefetchingBeacon) evictOldProposerCaches(anchor phase0.Epoch) {
 	var keepMin phase0.Epoch
 	if anchor > 0 {
-		keepMin = anchor - 1
+		keepMin = anchor - 3
 	}
 	p.muProp.Lock()
 	defer p.muProp.Unlock()
