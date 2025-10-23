@@ -93,7 +93,11 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 }
 
 // StartDuty starts a new duty for the given slot.
-func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+	*runner.CommitteeRunner,
+	queueContainer,
+	error,
+) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
 		trace.WithAttributes(
@@ -103,23 +107,24 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	defer span.End()
 
 	span.AddEvent("prepare duty and runner")
-	r, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
+	r, q, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
 	if err != nil {
-		return traces.Error(span, err)
+		return nil, queueContainer{}, traces.Errorf(span, "prepare duty and runner: %w", err)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
 	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
-		return traces.Errorf(span, "runner failed to start duty: %w", err)
+		return nil, queueContainer{}, traces.Errorf(span, "runner failed to start duty: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+	return r, q, nil
 }
 
 func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	r *runner.CommitteeRunner,
+	q queueContainer,
 	runnableDuty *spectypes.CommitteeDuty,
 	err error,
 ) {
@@ -135,26 +140,26 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	defer c.mtx.Unlock()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
-		return nil, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
+		return nil, queueContainer{}, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		return nil, nil, traces.Error(span, err)
+		return nil, queueContainer{}, nil, traces.Error(span, err)
 	}
 
 	// Create the corresponding runner.
 	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
-		return nil, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
+		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
 	r.SetTimeoutFunc(c.onTimeout)
 	c.Runners[duty.Slot] = r
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
-	_ = c.getQueue(logger, duty.Slot)
+	q = c.getQueue(logger, duty.Slot)
 
-	// Prunes all expired committee runners, when new runner is created
+	// Prunes all expired committee runners opportunistically (when a new runner is created).
 	logger = logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
 	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
 		span.RecordError(err)
@@ -162,7 +167,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	}
 
 	span.SetStatus(codes.Ok, "")
-	return r, runnableDuty, nil
+	return r, q, runnableDuty, nil
 }
 
 // getQueue returns queue for the provided slot, lazily initializing it if it didn't exist previously.

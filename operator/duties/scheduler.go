@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -442,7 +443,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
 			defer cancel()
 			if !withDeadline {
 				logger.Warn("parent-context has no deadline set")
@@ -493,7 +494,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
 			defer cancel()
 			if !withDeadline {
 				logger.Warn("parent-context has no deadline set")

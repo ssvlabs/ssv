@@ -28,8 +28,6 @@ func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *s
 		return fmt.Errorf("decode duty execute msg: %w", err)
 	}
 
-	dec.TraceContext = ctx
-
 	if pushed := v.Queues[duty.RunnerRole()].TryPush(dec); !pushed {
 		return fmt.Errorf("dropping ExecuteDuty message for validator %s because the queue is full", duty.PubKey.String())
 	}
@@ -71,55 +69,6 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 	return nil
 }
 
-func (c *Committee) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	ssvMsg, err := createCommitteeDutyExecuteMsg(duty, c.CommitteeMember.CommitteeID, c.networkConfig.DomainType)
-	if err != nil {
-		return fmt.Errorf("create committee duty: %w", err)
-	}
-	dec, err := queue.DecodeSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("decode duty execute msg: %w", err)
-	}
-
-	dec.TraceContext = ctx
-
-	return c.OnExecuteDuty(ctx, logger, dec.Body.(*types.EventMsg))
-}
-
-func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "on_execute_committee_duty"),
-		trace.WithAttributes(
-			observability.ValidatorEventTypeAttribute(msg.Type),
-		))
-	defer span.End()
-
-	executeDutyData, err := msg.GetExecuteCommitteeDutyData()
-	if err != nil {
-		return traces.Errorf(span, "failed to get execute committee duty data: %w", err)
-	}
-	duty := executeDutyData.Duty
-
-	span.SetAttributes(
-		observability.BeaconSlotAttribute(duty.Slot),
-		observability.RunnerRoleAttribute(duty.RunnerRole()),
-		observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-	)
-
-	span.AddEvent("start duty")
-	if err := c.StartDuty(ctx, logger, duty); err != nil {
-		return traces.Errorf(span, "could not start committee duty: %w", err)
-	}
-
-	span.AddEvent("start consume queue")
-	if err := c.StartQueueConsumer(ctx, logger, duty); err != nil {
-		return traces.Errorf(span, "could not start committee consume queue: %w", err)
-	}
-
-	span.SetStatus(codes.Ok, "")
-	return nil
-}
-
 // createDutyExecuteMsg returns ssvMsg with event type of execute duty
 func createDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
@@ -129,17 +78,6 @@ func createDutyExecuteMsg(duty *spectypes.ValidatorDuty, pubKey phase0.BLSPubKey
 	}
 
 	return dutyDataToSSVMsg(domain, pubKey[:], duty.RunnerRole(), data)
-}
-
-// createCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
-func createCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
-	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
-	data, err := json.Marshal(executeCommitteeDutyData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
-	}
-
-	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
 }
 
 func dutyDataToSSVMsg(
