@@ -1,6 +1,10 @@
 package validator
 
 import (
+	"encoding/hex"
+	"sort"
+	"strconv"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
@@ -46,6 +50,25 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		if !found {
 			return true
 		}
+		// Warn loudly if we are about to drop pending buffered entries due to roots not being resolved.
+		trace.Lock()
+		pendingCount := 0
+		for _, perSigner := range trace.pendingByRoot {
+			for _, byTs := range perSigner {
+				for _, idxs := range byTs {
+					pendingCount += len(idxs)
+				}
+			}
+		}
+		if pendingCount > 0 {
+			c.logger.Error("discarding pending committee signer entries (roots unresolved)",
+				fields.Slot(slot), fields.CommitteeID(key),
+				zap.Int("pending_entries", pendingCount),
+				pendingDetails(trace.pendingByRoot))
+			// We intentionally drop pending entries here; they are not persisted.
+			trace.pendingByRoot = nil
+		}
+		trace.Unlock()
 
 		data := trace.trace()
 		duties = append(duties, data)
@@ -54,7 +77,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 
 	if err := c.store.SaveCommitteeDuties(slot, duties); err != nil {
 		c.logger.Error("save committee duties to disk", zap.Error(err))
-		return
+		return 0
 	}
 
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
@@ -63,8 +86,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	totalSaved = len(duties)
-
-	return
+	return totalSaved
 }
 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
@@ -98,4 +120,58 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 	})
 
 	return len(duties)
+}
+
+// pendingDetails constructs a single zap field named "pending_signers_by_root"
+// that logs the content of pendingByRoot in a JSON-friendly structure.
+func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex) zap.Field {
+	out := make(map[string]map[string]any, len(data))
+	for root, perSigner := range data {
+		rhex := hex.EncodeToString(root[:])
+		inner := make(map[string]any, len(perSigner))
+		for signer, byTs := range perSigner {
+			// Flatten across timestamps for log brevity and also include per-timestamp buckets
+			union := make(map[uint64]struct{})
+			// deterministic ts ordering
+			tsKeys := make([]uint64, 0, len(byTs))
+			for ts := range byTs {
+				tsKeys = append(tsKeys, ts)
+			}
+			sort.Slice(tsKeys, func(i, j int) bool { return tsKeys[i] < tsKeys[j] })
+
+			buckets := make([]map[string]any, 0, len(tsKeys))
+			for _, ts := range tsKeys {
+				idxs := byTs[ts]
+				if len(idxs) == 0 {
+					continue
+				}
+				// dedup + sort per bucket
+				ded := make(map[uint64]struct{}, len(idxs))
+				for _, idx := range idxs {
+					u := uint64(idx)
+					ded[u] = struct{}{}
+					union[u] = struct{}{}
+				}
+				arr := make([]uint64, 0, len(ded))
+				for v := range ded {
+					arr = append(arr, v)
+				}
+				sort.Slice(arr, func(i, j int) bool { return arr[i] < arr[j] })
+				buckets = append(buckets, map[string]any{"t": ts, "indices": arr})
+			}
+			// union indices sorted
+			unionArr := make([]uint64, 0, len(union))
+			for v := range union {
+				unionArr = append(unionArr, v)
+			}
+			sort.Slice(unionArr, func(i, j int) bool { return unionArr[i] < unionArr[j] })
+
+			inner[strconv.FormatUint(signer, 10)] = map[string]any{
+				"by_timestamp":  buckets,
+				"union_indices": unionArr,
+			}
+		}
+		out[rhex] = inner
+	}
+	return zap.Any("pending_signers_by_root", out)
 }
