@@ -423,12 +423,15 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// fetched a full (non-blinded) block, prefer submitting the full block
 	// (including blobs for Deneb/Electra/Fulu). Other operators will keep
 	// submitting the blinded variant.
+	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
+	//		I left it for now to keep backwards compatibility.
 	if r.originalFullProposal != nil {
 		inst := r.GetState().RunningInstance
 		if inst != nil && inst.State != nil {
 			proposerF := inst.GetConfig().GetProposerF()
 			leaderID := proposerF(inst.State, inst.State.Round)
 			if leaderID == r.operatorSigner.GetOperatorID() {
+				logger.Debug("retrieved original full proposal for leader submission")
 				vBlk = r.originalFullProposal
 			}
 		}
