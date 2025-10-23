@@ -231,7 +231,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 }
 
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) {
-	const runnerExpirySlots = 2
+	const runnerExpirySlots = 34
 
 	if currentSlot <= runnerExpirySlots {
 		return // nothing to prune yet
