@@ -8,9 +8,11 @@ import (
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
+
 	// no direct use of bellatrix package here
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+
 	// no direct use of electra package here; kept for type refs via api/v1
 	utilbellatrix "github.com/attestantio/go-eth2-client/util/bellatrix"
 	utilcapella "github.com/attestantio/go-eth2-client/util/capella"
