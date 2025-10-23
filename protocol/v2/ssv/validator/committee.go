@@ -24,11 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-var (
-	// runnerExpirySlots - Committee messages are allowed up to 34 slots in the future. All runners that are older can be stopped.
-	runnerExpirySlots = phase0.Slot(34)
-)
-
 type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []phase0.BLSPubKey, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error)
 
 type Committee struct {
@@ -160,11 +155,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	q = c.getQueue(logger, duty.Slot)
 
 	// Prunes all expired committee runners opportunistically (when a new runner is created).
-	logger = logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
-	if err := c.unsafePruneExpiredRunners(logger, duty.Slot); err != nil {
-		span.RecordError(err)
-		logger.Error("couldn't prune expired committee runners", zap.Error(err))
-	}
+	c.unsafePruneExpiredRunners(logger, duty.Slot)
 
 	span.SetStatus(codes.Ok, "")
 	return r, q, runnableDuty, nil
@@ -239,15 +230,17 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 	return shares, attesters, runnableDuty, nil
 }
 
-func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
-	if runnerExpirySlots > currentSlot {
-		return nil
+func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) {
+	const runnerExpirySlots = 2
+
+	if currentSlot <= runnerExpirySlots {
+		return // nothing to prune yet
 	}
 
 	minValidSlot := currentSlot - runnerExpirySlots
 
 	for slot := range c.Runners {
-		if slot <= minValidSlot {
+		if slot < minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
 			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
 			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot)
@@ -257,8 +250,6 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 			delete(c.Queues, slot)
 		}
 	}
-
-	return nil
 }
 
 func (c *Committee) Encode() ([]byte, error) {
