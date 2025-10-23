@@ -46,6 +46,12 @@ type ProposerRunner struct {
 	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
 	// higher MEV.
 	proposerDelay time.Duration
+
+	// originalFullProposal holds the initially fetched full (non-blinded) block
+	// for this duty on this operator, if any. Used so that the leader of the
+	// decided QBFT round can submit the full block + blobs after signatures are
+	// collected, while still proposing a blinded value during QBFT.
+	originalFullProposal *api.VersionedProposal
 }
 
 func NewProposerRunner(
@@ -161,6 +167,9 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	// reset cached full proposal at the beginning of a new attempt
+	r.originalFullProposal = nil
+
 	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		const errMsg = "failed to get beacon block"
@@ -204,6 +213,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
 	// block, convert it to blinded form by swapping the execution payload with
 	// its header. Consensus value carries the blinded block SSZ.
+	// Cache original full proposal if applicable for later leader submission
+	if !vBlk.Blinded {
+		r.originalFullProposal = vBlk
+	}
+
 	blindedVersioned, blindedObj, err := blindutil.EnsureBlinded(vBlk)
 	if err != nil {
 		return traces.Errorf(span, "failed to blind full block: %w", err)
@@ -403,6 +417,21 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return traces.Errorf(span, "could not get block data from consensus data: %w", err)
+	}
+
+	// If this operator is the leader of the decided round and it originally
+	// fetched a full (non-blinded) block, prefer submitting the full block
+	// (including blobs for Deneb/Electra/Fulu). Other operators will keep
+	// submitting the blinded variant.
+	if r.originalFullProposal != nil {
+		inst := r.GetState().RunningInstance
+		if inst != nil && inst.State != nil {
+			proposerF := inst.GetConfig().GetProposerF()
+			leaderID := proposerF(inst.State, inst.State.Round)
+			if leaderID == r.operatorSigner.GetOperatorID() {
+				vBlk = r.originalFullProposal
+			}
+		}
 	}
 
 	loggerFields := []zap.Field{
