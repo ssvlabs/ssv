@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -160,7 +161,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	vBlk, obj, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		const errMsg = "failed to get beacon block"
 
@@ -200,13 +201,21 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
 	))
 
-	byts, err := obj.MarshalSSZ()
+	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
+	// block, convert it to blinded form by swapping the execution payload with
+	// its header. Consensus value carries the blinded block SSZ.
+	blindedVersioned, blindedObj, err := blindutil.EnsureBlinded(vBlk)
 	if err != nil {
-		return traces.Errorf(span, "could not marshal beacon block: %w", err)
+		return traces.Errorf(span, "failed to blind full block: %w", err)
+	}
+
+	byts, err := blindedObj.MarshalSSZ()
+	if err != nil {
+		return traces.Errorf(span, "could not marshal blinded beacon block: %w", err)
 	}
 	input := &spectypes.ValidatorConsensusData{
 		Duty:    *duty,
-		Version: vBlk.Version,
+		Version: blindedVersioned.Version,
 		DataSSZ: byts,
 	}
 
@@ -373,12 +382,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
-	if err != nil {
-		return traces.Errorf(span, "could not decode consensus data: %w", err)
-	}
-
 	start := time.Now()
 
 	logger = logger.With(
@@ -388,6 +391,14 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		fields.QBFTHeight(r.BaseRunner.QBFTController.Height),
 		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
 	)
+
+	// Use the locally cached block for submission, but first verify the root
+	// matches the decided one.
+	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
+	if err != nil {
+		return traces.Errorf(span, "could not decode consensus data: %w", err)
+	}
 
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
@@ -701,4 +712,75 @@ func extractBlockHash(vBlk *api.VersionedProposal) (phase0.Hash32, error) {
 	default:
 		return phase0.Hash32{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
 	}
+}
+
+// buildSigningObjectAndRoot returns the concrete block object to be signed for
+// DomainProposer along with its HashTreeRoot. It supports both blinded and
+// regular blocks across all fork versions.
+func buildSigningObjectAndRoot(vBlk *api.VersionedProposal) (ssz.HashRoot, [32]byte, error) {
+	if vBlk == nil {
+		return nil, [32]byte{}, fmt.Errorf("nil block")
+	}
+
+	var obj ssz.HashRoot
+	switch vBlk.Version {
+	case spec.DataVersionCapella:
+		if vBlk.Blinded {
+			if vBlk.CapellaBlinded == nil {
+				return nil, [32]byte{}, fmt.Errorf("capella blinded block is nil")
+			}
+			obj = vBlk.CapellaBlinded
+		} else {
+			if vBlk.Capella == nil {
+				return nil, [32]byte{}, fmt.Errorf("capella block is nil")
+			}
+			obj = vBlk.Capella
+		}
+	case spec.DataVersionDeneb:
+		if vBlk.Blinded {
+			if vBlk.DenebBlinded == nil {
+				return nil, [32]byte{}, fmt.Errorf("deneb blinded block is nil")
+			}
+			obj = vBlk.DenebBlinded
+		} else {
+			if vBlk.Deneb == nil || vBlk.Deneb.Block == nil {
+				return nil, [32]byte{}, fmt.Errorf("deneb block is nil")
+			}
+			obj = vBlk.Deneb.Block
+		}
+	case spec.DataVersionElectra:
+		if vBlk.Blinded {
+			if vBlk.ElectraBlinded == nil {
+				return nil, [32]byte{}, fmt.Errorf("electra blinded block is nil")
+			}
+			obj = vBlk.ElectraBlinded
+		} else {
+			if vBlk.Electra == nil || vBlk.Electra.Block == nil {
+				return nil, [32]byte{}, fmt.Errorf("electra block is nil")
+			}
+			obj = vBlk.Electra.Block
+		}
+	case spec.DataVersionFulu:
+		if vBlk.Blinded {
+			if vBlk.FuluBlinded == nil {
+				return nil, [32]byte{}, fmt.Errorf("fulu blinded block is nil")
+			}
+			// Fulu reuses Electra's blinded block types
+			obj = vBlk.FuluBlinded
+		} else {
+			if vBlk.Fulu == nil || vBlk.Fulu.Block == nil {
+				return nil, [32]byte{}, fmt.Errorf("fulu block is nil")
+			}
+			// Fulu reuses Electra's block types
+			obj = vBlk.Fulu.Block
+		}
+	default:
+		return nil, [32]byte{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
+	}
+
+	root, err := obj.HashTreeRoot()
+	if err != nil {
+		return nil, [32]byte{}, fmt.Errorf("hash tree root: %w", err)
+	}
+	return obj, root, nil
 }
