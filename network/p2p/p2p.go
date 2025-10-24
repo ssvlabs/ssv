@@ -158,7 +158,7 @@ func (n *p2pNetwork) parseTrustedPeers() error {
 	// Group addresses by peer ID.
 	trustedPeers := map[peer.ID][]ma.Multiaddr{}
 	for _, mas := range n.cfg.TrustedPeers {
-		for _, ma := range strings.Split(mas, ",") {
+		for ma := range strings.SplitSeq(mas, ",") {
 			addrInfo, err := peer.AddrInfoFromString(ma)
 			if err != nil {
 				return fmt.Errorf("could not parse trusted peer: %w", err)
