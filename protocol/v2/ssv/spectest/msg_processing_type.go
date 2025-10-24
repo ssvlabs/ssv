@@ -61,7 +61,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 
 func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
-	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
+	keySetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
 	if len(test.Runner.GetShares()) == 0 {
 		panic("No share in base runner for tests")
 	}
@@ -71,7 +71,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	}
 
 	for valIdx, validatorShare := range test.Runner.GetShares() {
-		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
+		keySetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
 	var v *validator.Validator
@@ -80,7 +80,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
 		guard := validator.NewCommitteeDutyGuard()
-		c = baseCommitteeWithRunnerSample(logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
+		c = baseCommitteeWithRunnerSample(logger, keySetMap, test.Runner.(*runner.CommitteeRunner), guard)
 
 		if test.DontStartDuty {
 			r := test.Runner.(*runner.CommitteeRunner)

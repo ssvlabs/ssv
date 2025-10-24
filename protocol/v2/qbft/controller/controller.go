@@ -141,7 +141,7 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	}
 
 	decided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
-	if errors.Is(err, &instance.RetryableError{}) {
+	if instance.IsRetryable(err) {
 		return nil, NewRetryableError(err)
 	}
 	if err != nil {

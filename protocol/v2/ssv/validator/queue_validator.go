@@ -97,10 +97,7 @@ func (v *Validator) StartQueueConsumer(
 		}
 
 		v.logger.Debug("📬 queue consumer is running")
-		defer v.logger.Debug(
-			"📪 queue consumer is closed",
-			zap.Bool("ctx_done", ctx.Err() != nil),
-		)
+		defer v.logger.Debug("📪 queue consumer is closed")
 
 		// msgRetries keeps track of how many times we've tried to handle a particular message. Since this map
 		// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
@@ -191,7 +188,7 @@ func (v *Validator) StartQueueConsumer(
 
 				const couldNotHandleMsgLogPrefix = "could not handle message, "
 				switch {
-				case errors.Is(err, &runner.RetryableError{}) && msgRetryCnt < retryCount:
+				case runner.IsRetryable(err) && msgRetryCnt < retryCount:
 					msgLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 					msgRetries.Set(v.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 					go func(msg *queue.SSVMessage) {

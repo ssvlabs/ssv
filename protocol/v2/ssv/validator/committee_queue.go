@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -86,10 +86,7 @@ func (c *Committee) ConsumeQueue(
 	rnr *runner.CommitteeRunner,
 ) {
 	logger.Debug("📬 queue consumer is running")
-	defer logger.Debug(
-		"📪 queue consumer is closed",
-		zap.Bool("ctx_done", ctx.Err() != nil),
-	)
+	defer logger.Debug("📪 queue consumer is closed")
 
 	// Construct a representation of the current state.
 	state := *q.queueState
@@ -111,7 +108,7 @@ func (c *Committee) ConsumeQueue(
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
-				sm, ok := m.Body.(*qbft.Message)
+				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
 				}
@@ -120,7 +117,7 @@ func (c *Committee) ConsumeQueue(
 					return true
 				}
 
-				return sm.MsgType != qbft.PrepareMsgType && sm.MsgType != qbft.CommitMsgType
+				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
 		} else if state.HasRunningInstance {
 			filter = func(ssvMessage *queue.SSVMessage) bool {
@@ -174,7 +171,7 @@ func (c *Committee) ConsumeQueue(
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
 				msgLogger.Error("❗ "+couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
-			case errors.Is(err, &runner.RetryableError{}) && msgRetryCnt < retryCount:
+			case runner.IsRetryable(err) && msgRetryCnt < retryCount:
 				msgLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
 				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
@@ -241,7 +238,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
-		qbftMsg := &qbft.Message{}
+		qbftMsg := &specqbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
 			return traces.Errorf(span, "could not decode consensus Message: %w", err)
 		}
@@ -303,7 +300,7 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	logger = logger.With(fields.MessageType(msgType))
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		qbftMsg := msg.Body.(*qbft.Message)
+		qbftMsg := msg.Body.(*specqbft.Message)
 		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
 	}
 

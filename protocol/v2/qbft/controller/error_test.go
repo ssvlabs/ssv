@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 
@@ -10,8 +9,8 @@ import (
 
 func TestRetryableError(t *testing.T) {
 	someErr := fmt.Errorf("some error")
-	require.False(t, errors.Is(someErr, &RetryableError{}))
+	require.False(t, IsRetryable(someErr))
 
-	retryableErr := NewRetryableError(someErr)
-	require.True(t, errors.Is(retryableErr, &RetryableError{}))
+	wrappedErr := NewRetryableError(someErr)
+	require.True(t, IsRetryable(wrappedErr))
 }

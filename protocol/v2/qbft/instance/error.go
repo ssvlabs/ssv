@@ -33,12 +33,11 @@ func (e RetryableError) Error() string {
 	return e.originalErr.Error()
 }
 
-func (e RetryableError) Is(target error) bool {
-	var retryableErr *RetryableError
-	ok := errors.As(target, &retryableErr)
-	return ok
-}
-
 func (e RetryableError) Unwrap() error {
 	return e.originalErr
+}
+
+func IsRetryable(err error) bool {
+	var retryableErr *RetryableError
+	return errors.As(err, &retryableErr)
 }

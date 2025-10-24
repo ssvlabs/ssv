@@ -8,7 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -178,7 +178,7 @@ func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queueContaine
 			),
 			queueState: &queue.State{
 				HasRunningInstance: false,
-				Height:             qbft.Height(slot),
+				Height:             specqbft.Height(slot),
 				Slot:               slot,
 				Quorum:             c.CommitteeMember.GetQuorum(),
 			},

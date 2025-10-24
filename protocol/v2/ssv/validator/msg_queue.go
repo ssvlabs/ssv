@@ -14,7 +14,7 @@ import (
 )
 
 // MessageHandler process the provided message. Message processing can fail with retryable or
-// non-retryable error (can be checked via `errors.Is(err, &runner.RetryableError{})`).
+// non-retryable error (can be checked via `runner.IsRetryable(err)`).
 type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
 type msgIDType string
