@@ -169,9 +169,9 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 
 	committee := &Committee{
 		logger:          logger,
+		networkConfig:   networkconfig.TestNetwork,
 		Queues:          make(map[phase0.Slot]queueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		networkConfig:   networkconfig.TestNetwork,
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
@@ -221,9 +221,9 @@ func TestConsumeQueueBasic(t *testing.T) {
 
 	committee := &Committee{
 		logger:        logger,
+		networkConfig: networkconfig.TestNetwork,
 		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		networkConfig: networkconfig.TestNetwork,
 	}
 
 	slot := phase0.Slot(123)
@@ -305,8 +305,9 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -423,8 +424,9 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -501,8 +503,9 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -623,7 +626,9 @@ func TestChangingFilterState(t *testing.T) {
 		}
 		q.Q.TryPush(prepareMsg)
 
-		c := &Committee{}
+		c := &Committee{
+			networkConfig: networkconfig.TestNetwork,
+		}
 		c.ConsumeQueue(ctx, logger, q, handler, rnr)
 		return seen
 	}
@@ -729,8 +734,9 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				Queues:  make(map[phase0.Slot]queueContainer),
-				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+				networkConfig: networkconfig.TestNetwork,
+				Queues:        make(map[phase0.Slot]queueContainer),
+				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
@@ -889,8 +895,9 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				Queues:  make(map[phase0.Slot]queueContainer),
-				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+				networkConfig: networkconfig.TestNetwork,
+				Queues:        make(map[phase0.Slot]queueContainer),
+				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
@@ -974,8 +981,9 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -1099,9 +1107,9 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	queueCapacity := 2
 	committee := &Committee{
 		logger:          logger,
+		networkConfig:   networkconfig.TestNetwork,
 		Queues:          make(map[phase0.Slot]queueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
-		networkConfig:   networkconfig.TestNetwork,
 	}
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
@@ -1198,7 +1206,9 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	committee := &Committee{}
+	committee := &Committee{
+		networkConfig: networkconfig.TestNetwork,
+	}
 
 	slot := phase0.Slot(123)
 	q := queueContainer{
@@ -1263,8 +1273,9 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	// --- Setup a single-slot committee and its queue ---
 	slot := phase0.Slot(42)
 	committee := &Committee{
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 	qc := queueContainer{
 		Q: queue.New(logger, 1000),
@@ -1475,10 +1486,10 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		committee := &Committee{
 			logger:          logger,
+			networkConfig:   networkconfig.TestNetwork,
 			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			networkConfig:   networkconfig.TestNetwork,
 		}
 
 		currentRound := specqbft.Round(1)
@@ -1551,10 +1562,10 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		committee := &Committee{
 			logger:          logger,
+			networkConfig:   networkconfig.TestNetwork,
 			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			networkConfig:   networkconfig.TestNetwork,
 		}
 
 		currentRound := specqbft.Round(1)
@@ -1645,8 +1656,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		logger := logger.Named("PrioritizationWhenSaturated")
 
 		committee := &Committee{
-			Queues:  make(map[phase0.Slot]queueContainer),
-			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+			networkConfig: networkconfig.TestNetwork,
+			Queues:        make(map[phase0.Slot]queueContainer),
+			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
 
 		queueCapacity := 5
