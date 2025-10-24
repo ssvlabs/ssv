@@ -10,6 +10,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -969,10 +970,21 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 						continue
 					}
 
+					// TODO: store in a map and submit afterwards like in committee duty?
+					start := time.Now()
 					if err := r.beacon.SubmitSignedAggregateSelectionProof(ctx, signedAgg); err != nil {
 						executionErr = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
 						continue
 					}
+
+					const eventMsg = "✅ successful submitted aggregate"
+					span.AddEvent(eventMsg)
+					logger.Debug(
+						eventMsg,
+						fields.SubmissionTime(time.Since(start)),
+						fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+					)
 
 					r.RecordSubmission(spectypes.BNRoleAggregator, signatureResult.validatorIndex, root)
 
@@ -983,10 +995,21 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 						Signature: signatureResult.signature,
 					}
 
+					// TODO: store in a map and submit afterwards like in committee duty?
+					start := time.Now()
 					if err := r.beacon.SubmitSignedContributionAndProof(ctx, signedContrib); err != nil {
 						executionErr = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
 						continue
 					}
+
+					const eventMsg = "✅ successfully submitted sync committee aggregator"
+					span.AddEvent(eventMsg)
+					logger.Debug(
+						eventMsg,
+						fields.SubmissionTime(time.Since(start)),
+						fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+					)
 
 					r.RecordSubmission(spectypes.BNRoleSyncCommitteeContribution, signatureResult.validatorIndex, root)
 
