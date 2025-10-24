@@ -102,7 +102,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	role := msg.MsgID.GetRoleType()
 
 	logger := ncv.logger.With(fields.RunnerRole(role))
-	if role == spectypes.RoleCommittee {
+	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
 		cid := spectypes.CommitteeID(msg.GetID().GetDutyExecutorID()[16:])
 		logger = logger.With(fields.CommitteeID(cid))
 	} else {

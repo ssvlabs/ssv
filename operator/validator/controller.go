@@ -346,9 +346,10 @@ func (c *Controller) handleRouterMessages() {
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
-	spectypes.RoleCommittee:  64,
-	spectypes.RoleProposer:   4,
-	spectypes.RoleAggregator: 4,
+	spectypes.RoleCommittee:           64,
+	spectypes.RoleAggregatorCommittee: 64,
+	spectypes.RoleProposer:            4,
+	spectypes.RoleAggregator:          4,
 	//spectypes.BNRoleSyncCommittee:             4,
 	spectypes.RoleSyncCommitteeContribution: 4,
 }
@@ -406,7 +407,8 @@ func (c *Controller) handleNonCommitteeMessages(
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		// Process proposal messages for committee consensus only to get the roots
-		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+		role := msg.MsgID.GetRoleType()
+		if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee {
 			return nil
 		}
 

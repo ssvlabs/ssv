@@ -542,7 +542,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 
 	span.AddEvent("instance is decided")
 	r.measurements.EndConsensus()
-	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleCommittee)
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregatorCommittee)
 
 	r.measurements.StartPostConsensus()
 
@@ -1026,7 +1026,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 	}
 
 	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleCommittee)
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregatorCommittee)
 
 	logger = logger.With(fields.PostConsensusTime(r.measurements.PostConsensusTime()))
 
