@@ -164,7 +164,7 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 		err := test.runPreTesting(logger)
 		if err != nil && !stests.MatchesErrorCode(test.ExpectedErrorCode, err) {
 			return nil, fmt.Errorf(
-				"(%s) expected error with code: %d, got error: %s",
+				"(%s) expected error with code: %d, got error: %w",
 				test.TestName(),
 				test.ExpectedErrorCode,
 				err,
