@@ -150,7 +150,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if role != spectypes.RoleCommittee { // Rule only for validator runners
+	if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee { // Rule only for validator runners
 		maxSlot := signerStateBySlot.MaxSlot()
 		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
@@ -196,7 +196,8 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	clusterValidatorCount := len(committeeInfo.validatorIndices)
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
-	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+	role = signedSSVMessage.SSVMessage.MsgID.GetRoleType()
+	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
 		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster
 		// #nosec G115
 		if partialSignatureMessageCount > min(2*clusterValidatorCount, clusterValidatorCount+int(mv.netCfg.SyncCommitteeSize)) {
@@ -211,7 +212,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 				return ErrTripleValidatorIndexInPartialSignatures
 			}
 		}
-	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleSyncCommitteeContribution {
+	} else if role == spectypes.RoleSyncCommitteeContribution {
 		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync committee contribution duty
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManyPartialSignatureMessages

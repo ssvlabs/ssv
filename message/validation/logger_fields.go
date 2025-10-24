@@ -92,7 +92,7 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.SSVMessage) 
 }
 
 func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
-	if lf.Role == spectypes.RoleCommittee {
+	if lf.Role == spectypes.RoleCommittee || lf.Role == spectypes.RoleAggregatorCommittee {
 		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
 		if ok {
 			lf.DutyID = fields.BuildCommitteeDutyID(c.Operators, mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot)

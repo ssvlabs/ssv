@@ -10,7 +10,7 @@ import (
 )
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
-	return role == spectypes.RoleCommittee
+	return role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee
 }
 
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
@@ -93,7 +93,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration:
 		return 2, true
 
-	case spectypes.RoleCommittee:
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
 		validatorIndexCount := uint64(len(validatorIndices))
 		slotsPerEpoch := mv.netCfg.SlotsPerEpoch
 
