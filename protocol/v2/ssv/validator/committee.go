@@ -231,7 +231,8 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 }
 
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) {
-	const runnerExpirySlots = 34
+	const lateSlotAllowance = 2 // LateSlotAllowance from message/validation/const.go
+	runnerExpirySlots := phase0.Slot(c.networkConfig.SlotsPerEpoch + lateSlotAllowance)
 
 	if currentSlot <= runnerExpirySlots {
 		return // nothing to prune yet

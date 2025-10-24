@@ -87,7 +87,7 @@ func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 func (q *priorityQueue) Push(msg *SSVMessage) {
 	q.recordInboxSize(int64(len(q.inbox)) + 1)
 
-	q.maybeAlertInboxIsTooLarge()
+	q.warnIfInboxIsTooBig()
 
 	q.inbox <- msg
 }
@@ -97,7 +97,7 @@ func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 
 	select {
 	case q.inbox <- msg:
-		q.maybeAlertInboxIsTooLarge()
+		q.warnIfInboxIsTooBig()
 		return true
 	default:
 		return false
@@ -240,9 +240,9 @@ func (q *priorityQueue) recordInboxSize(inboxSize int64) {
 	)
 }
 
-// maybeAlertInboxIsTooLarge logs a warning that we'd ideally never want to hit, if we do - we'd want to do
+// warnIfInboxIsTooBig logs a warning that we'd ideally never want to hit, if we do - we'd want to do
 // something about it.
-func (q *priorityQueue) maybeAlertInboxIsTooLarge() {
+func (q *priorityQueue) warnIfInboxIsTooBig() {
 	if len(q.inbox) > cap(q.inbox)/2 {
 		q.logger.Warn("queue is half-full")
 	}
