@@ -42,7 +42,7 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 		validatorPk1 := phase0.BLSPubKey{1, 2, 3}
 		validatorIndex2 := phase0.ValidatorIndex(2)
 		validatorPk2 := phase0.BLSPubKey{4, 5, 6}
-		validatorIndex3 := phase0.ValidatorIndex(scheduler.beaconConfig.SlotsPerEpoch*frequencyEpochs + 1)
+		validatorIndex3 := phase0.ValidatorIndex(scheduler.netCfg.SlotsPerEpoch*frequencyEpochs + 1)
 		validatorPk3 := phase0.BLSPubKey{7, 8, 9}
 
 		attestingShares := []*types.SSVShare{

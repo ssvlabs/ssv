@@ -81,7 +81,7 @@ type SchedulerOptions struct {
 	Ctx                     context.Context
 	BeaconNode              BeaconNode
 	ExecutionClient         ExecutionClient
-	BeaconConfig            *networkconfig.Beacon
+	NetworkConfig           *networkconfig.Network
 	ValidatorProvider       ValidatorProvider
 	ValidatorController     ValidatorController
 	DutyExecutor            DutyExecutor
@@ -101,7 +101,7 @@ type Scheduler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        *networkconfig.Beacon
+	netCfg              *networkconfig.Network
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
@@ -136,7 +136,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		logger:              logger.Named(log.NameDutyScheduler),
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
-		beaconConfig:        opts.BeaconConfig,
+		netCfg:              opts.NetworkConfig,
 		slotTickerProvider:  opts.SlotTickerProvider,
 		dutyExecutor:        opts.DutyExecutor,
 		validatorProvider:   opts.ValidatorProvider,
@@ -164,6 +164,8 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	if !opts.ExporterMode {
 		s.handlers = append(s.handlers,
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			// TODO: NewAttesterHandler and NewSyncCommitteeHandler handle aggregator and sync committee contribution duties too.
+			// Should aggregator committee be handled by NewCommitteeHandler?
 			NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
@@ -205,7 +207,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			s.logger,
 			s.beaconNode,
 			s.executionClient,
-			s.beaconConfig,
+			s.netCfg,
 			s.validatorProvider,
 			s.validatorController,
 			s,
@@ -314,8 +316,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.beaconConfig.IntervalDuration()
-			finalTime := s.beaconConfig.SlotStartTime(slot).Add(delay)
+			delay := s.netCfg.IntervalDuration()
+			finalTime := s.netCfg.SlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 			if waitDuration > 0 {
 				select {
@@ -335,13 +337,13 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 	return func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
 
-		if event.Slot != s.beaconConfig.EstimatedCurrentSlot() {
+		if event.Slot != s.netCfg.EstimatedCurrentSlot() {
 			// No need to process outdated events here.
 			return
 		}
 
 		// check for reorg
-		epoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+		epoch := s.netCfg.EstimatedEpochAtSlot(event.Slot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
 		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
@@ -394,8 +396,8 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.beaconConfig.IntervalDuration()
-		slotStartTimeWithDelay := s.beaconConfig.SlotStartTime(event.Slot).Add(delay)
+		delay := s.netCfg.IntervalDuration()
+		slotStartTimeWithDelay := s.netCfg.SlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
@@ -430,7 +432,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	for _, duty := range duties {
 		logger := s.loggerWithDutyContext(duty)
 
-		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
@@ -475,14 +477,14 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		logger := s.loggerWithCommitteeDutyContext(committee)
 
 		const eventMsg = "🔧 executing committee duty"
-		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
 		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.CommitteeIDAttribute(committee.id),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
 		))
 
-		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
@@ -527,14 +529,14 @@ func (s *Scheduler) ExecuteAggregatorCommitteeDuties(ctx context.Context, duties
 		logger := s.loggerWithAggregatorCommitteeDutyContext(committee)
 
 		const eventMsg = "🔧 executing aggregator committee duty"
-		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
 		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.CommitteeIDAttribute(committee.id),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
 		))
 
-		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
@@ -567,43 +569,43 @@ func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Lo
 	return s.logger.
 		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.netCfg.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.beaconConfig.EstimatedEpochAtSlot(duty.Slot))).
+		With(fields.Epoch(s.netCfg.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
+		With(fields.SlotStartTime(s.netCfg.SlotStartTime(duty.Slot)))
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
-	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
 	return s.logger.
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.netCfg.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
+		With(fields.SlotStartTime(s.netCfg.SlotStartTime(duty.Slot)))
 }
 
 // loggerWithAggregatorCommitteeDutyContext returns an instance of logger with the given aggregator committee duty's information
 func (s *Scheduler) loggerWithAggregatorCommitteeDutyContext(aggregatorCommitteeDuty *aggregatorCommitteeDuty) *zap.Logger {
 	duty := aggregatorCommitteeDuty.duty
-	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
+	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.BuildCommitteeDutyID(aggregatorCommitteeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
 	return s.logger.
 		With(fields.CommitteeID(aggregatorCommitteeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.netCfg.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.SlotStartTime(s.beaconConfig.SlotStartTime(duty.Slot)))
+		With(fields.SlotStartTime(s.netCfg.SlotStartTime(duty.Slot)))
 }
 
 // advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,
