@@ -19,6 +19,7 @@ func OperatorIDsFromOperators(operators []*spectypes.Operator) []spectypes.Opera
 // OperatorSigner used to sign protocol messages.
 type OperatorSigner interface {
 	SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte, error)
+
 	GetOperatorID() spectypes.OperatorID
 }
 
