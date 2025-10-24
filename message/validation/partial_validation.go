@@ -257,7 +257,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.SelectionProofPartialSig,
 		spectypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig,
-		spectypes.VoluntaryExitPartialSig:
+		spectypes.VoluntaryExitPartialSig,
+		spectypes.AggregatorCommitteePartialSig:
 		return true
 	default:
 		return false
@@ -279,7 +280,7 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	case spectypes.RoleVoluntaryExit:
 		return msgType == spectypes.VoluntaryExitPartialSig
 	case spectypes.RoleAggregatorCommittee:
-		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.SelectionProofPartialSig || msgType == spectypes.ContributionProofs
+		return msgType == spectypes.AggregatorCommitteePartialSig
 	default:
 		return false
 	}

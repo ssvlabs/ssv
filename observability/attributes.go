@@ -139,6 +139,8 @@ func ValidatorPartialSigMsgTypeAttribute(msgType types.PartialSigMsgType) attrib
 		return attribute.String(attrKey, "ValidatorRegistrationPartialSig")
 	case types.VoluntaryExitPartialSig:
 		return attribute.String(attrKey, "VoluntaryExitPartialSig")
+	case types.AggregatorCommitteePartialSig:
+		return attribute.String(attrKey, "AggregatorCommitteePartialSig")
 	default:
 		return attribute.String(attrKey, "UnknownPartialSigMsgType")
 	}
