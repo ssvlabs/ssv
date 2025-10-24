@@ -103,7 +103,7 @@ func (v *Validator) StartQueueConsumer(
 		// grows over time, we need to clean it up automatically. There is no specific TTL value to use for its
 		// entries - it just needs to be large enough to prevent unnecessary (but non-harmful) retries from happening.
 		msgRetries := ttlcache.New(
-			ttlcache.WithTTL[msgIDType, int](10 * time.Minute),
+			ttlcache.WithTTL[msgIDType, int64](10 * time.Minute),
 		)
 		go msgRetries.Start()
 		defer msgRetries.Stop()
@@ -167,14 +167,13 @@ func (v *Validator) StartQueueConsumer(
 			err = handler(ctx, msgLogger, msg)
 			if err != nil {
 				// We'll re-queue the message to be replayed later in case the error we got is retryable.
-				// We are aiming to cover most of the slot time (~12s), but we don't need to cover all 12s
-				// since most duties must finish well before that anyway, and will take additional time
-				// to execute as well.
+				// We are aiming to cover most of the slot time (~10s), but we don't need to cover the
+				// full slot (all 12s) since most duties must finish well before that anyway, and will
+				// take additional time to execute as well.
 				// Retry delay should be small so we can proceed with the corresponding duty execution asap.
-				const (
-					retryDelay = 25 * time.Millisecond
-					retryCount = 40
-				)
+				const retryDelay = 25 * time.Millisecond
+				retryCount := int64(v.NetworkConfig.SlotDuration / retryDelay)
+
 				msgRetryItem := msgRetries.Get(v.messageID(msg))
 				if msgRetryItem == nil {
 					msgRetries.Set(v.messageID(msg), 0, ttlcache.DefaultTTL)
@@ -184,7 +183,7 @@ func (v *Validator) StartQueueConsumer(
 
 				msgLogger = logWithMessageMetadata(msgLogger, msg).
 					With(zap.String("message_identifier", string(v.messageID(msg)))).
-					With(zap.Int("attempt", msgRetryCnt+1))
+					With(zap.Int64("attempt", msgRetryCnt+1))
 
 				const couldNotHandleMsgLogPrefix = "could not handle message, "
 				switch {
