@@ -59,6 +59,7 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		if p.Capella == nil || p.Capella.Body == nil || p.Capella.Body.ExecutionPayload == nil {
 			return nil, nil, fmt.Errorf("capella block or payload is nil")
 		}
+
 		// Compute transactions/withdrawals roots from lists.
 		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: p.Capella.Body.ExecutionPayload.Transactions}).HashTreeRoot()
 		if err != nil {
@@ -113,6 +114,7 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		if p.Deneb == nil || p.Deneb.Block == nil || p.Deneb.Block.Body == nil || p.Deneb.Block.Body.ExecutionPayload == nil {
 			return nil, nil, fmt.Errorf("deneb block or payload is nil")
 		}
+
 		payload := p.Deneb.Block.Body.ExecutionPayload
 		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: payload.Transactions}).HashTreeRoot()
 		if err != nil {
@@ -122,6 +124,7 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		if err != nil {
 			return nil, nil, fmt.Errorf("compute withdrawals root: %w", err)
 		}
+
 		eph := &deneb.ExecutionPayloadHeader{
 			ParentHash:       payload.ParentHash,
 			FeeRecipient:     payload.FeeRecipient,
@@ -169,6 +172,7 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		if p.Electra == nil || p.Electra.Block == nil || p.Electra.Block.Body == nil || p.Electra.Block.Body.ExecutionPayload == nil {
 			return nil, nil, fmt.Errorf("electra block or payload is nil")
 		}
+
 		payload := p.Electra.Block.Body.ExecutionPayload
 		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: payload.Transactions}).HashTreeRoot()
 		if err != nil {
@@ -178,6 +182,7 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		if err != nil {
 			return nil, nil, fmt.Errorf("compute withdrawals root: %w", err)
 		}
+
 		eph := &deneb.ExecutionPayloadHeader{
 			ParentHash:       payload.ParentHash,
 			FeeRecipient:     payload.FeeRecipient,
@@ -227,6 +232,7 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		if p.Fulu == nil || p.Fulu.Block == nil || p.Fulu.Block.Body == nil || p.Fulu.Block.Body.ExecutionPayload == nil {
 			return nil, nil, fmt.Errorf("fulu block or payload is nil")
 		}
+
 		payload := p.Fulu.Block.Body.ExecutionPayload
 		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: payload.Transactions}).HashTreeRoot()
 		if err != nil {
