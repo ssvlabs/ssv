@@ -58,7 +58,7 @@ func (i *participantStorage) Prune(ctx context.Context, threshold phase0.Slot) {
 	i.logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 }
 
-// PruneContinuously on every tick looks up and removes the slots that fall below the retain threshold
+// PruneContinously on every tick looks up and removes the slots that fall below the retain threshold
 func (i *participantStorage) PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
 	ticker := slotTickerProvider()
 	i.logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))

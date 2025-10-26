@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
@@ -77,7 +79,12 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return toApiError(errs)
 	}
 
-	return api.Render(w, r, toValidatorTraceResponse(results, errs))
+	// Build schedule from disk, read-only.
+	schedule := e.buildValidatorSchedule(&request, indices)
+
+	resp := toValidatorTraceResponse(results, errs)
+	resp.Schedule = schedule
+	return api.Render(w, r, resp)
 }
 
 func validateValidatorRequest(request *ValidatorTracesRequest) error {
@@ -168,6 +175,31 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 			continue
 		}
 
+		// Membership gating: only return a validator entry if this index appears
+		// in the role-specific signer data collected for this committee duty.
+		hasIndex := false
+		if role == spectypes.BNRoleAttester {
+			for _, sd := range duty.Attester {
+				if slices.Contains(sd.ValidatorIdx, index) {
+					hasIndex = true
+					break
+				}
+			}
+		} else if role == spectypes.BNRoleSyncCommittee {
+			for _, sd := range duty.SyncCommittee {
+				if slices.Contains(sd.ValidatorIdx, index) {
+					hasIndex = true
+					break
+				}
+			}
+		} else {
+			// For non-committee roles, should not reach this path; be conservative.
+			hasIndex = true
+		}
+		if !hasIndex {
+			continue
+		}
+
 		validatorDuty := validatorDutyTraceWithCommitteeID{
 			ValidatorDutyTrace: exporter.ValidatorDutyTrace{
 				ConsensusTrace: duty.ConsensusTrace,
@@ -196,6 +228,68 @@ func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *
 	}
 	r.Errors = toStrings(errs)
 	return r
+}
+
+// buildValidatorSchedule reads the compact on-disk schedule and returns a filtered
+// per-validator schedule for the requested roles and slot range.
+func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices []phase0.ValidatorIndex) []ValidatorSchedule {
+	out := make([]ValidatorSchedule, 0)
+
+	// Deduplicate requested roles (idiomatic way is to build a map in ~O(n) cost).
+	roleWanted := map[spectypes.BeaconRole]struct{}{}
+	for _, r := range req.Roles {
+		roleWanted[spectypes.BeaconRole(r)] = struct{}{}
+	}
+
+	// If no filters provided, we’ll include all indices present in the schedule per slot.
+	filter := req.hasFilters()
+
+	for s := req.From; s <= req.To; s++ {
+		slot := phase0.Slot(s)
+		sched, err := e.traceStore.GetScheduled(slot)
+		if err != nil {
+			e.logger.Warn("get scheduled failed", zap.Error(err), fields.Slot(slot))
+			continue
+		}
+
+		// Determine which indices to include.
+		var idxs []phase0.ValidatorIndex
+		if filter {
+			idxs = indices
+		} else {
+			idxs = make([]phase0.ValidatorIndex, 0, len(sched))
+			for idx := range sched {
+				idxs = append(idxs, idx)
+			}
+		}
+
+		for _, idx := range idxs {
+			mask, ok := sched[idx]
+			if !ok {
+				continue
+			}
+			roles := make([]string, 0, len(req.Roles))
+			for role := range roleWanted {
+				if rolemask.Has(mask, role) {
+					roles = append(roles, role.String())
+				}
+			}
+			if len(roles) == 0 {
+				// If the request specified explicit indices/pubkeys, include the
+				// validator entry with empty roles to make absence explicit.
+				if filter {
+					out = append(out, ValidatorSchedule{Slot: uint64(slot), Validator: uint64(idx), Roles: roles})
+				}
+				continue
+			}
+			out = append(out, ValidatorSchedule{
+				Slot:      uint64(slot),
+				Validator: uint64(idx),
+				Roles:     roles,
+			})
+		}
+	}
+	return out
 }
 
 // === Shared validator traces helpers ===

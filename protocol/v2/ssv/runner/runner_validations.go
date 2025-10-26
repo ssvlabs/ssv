@@ -71,7 +71,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	case *CommitteeRunner:
 		decidedValue := &spectypes.BeaconVote{}
 		if err := decidedValue.Decode(decidedValueBytes); err != nil {
-			return errors.Wrap(err, "failed to parse decided value to BeaconData")
+			return errors.Wrap(err, "failed to parse decided value to BeaconVote")
 		}
 
 		return b.validatePartialSigMsgForSlot(psigMsgs, b.State.StartingDuty.DutySlot())
