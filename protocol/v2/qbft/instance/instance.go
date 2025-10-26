@@ -99,7 +99,7 @@ func (i *Instance) Start(
 			fields.QBFTRound(i.State.Round),
 			fields.QBFTHeight(i.State.Height))
 
-		proposerID := i.proposer(specqbft.FirstRound)
+		proposerID := i.ProposerForRound(specqbft.FirstRound)
 		const eventMsg = "ℹ️ starting QBFT instance"
 		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
 		span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
