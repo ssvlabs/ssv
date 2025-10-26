@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -35,8 +36,10 @@ type SyncCommitteeAggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
+
+	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
+	ValCheck ssv.ValueChecker
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -47,7 +50,7 @@ func NewSyncCommitteeAggregatorRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	highestDecidedSlot phase0.Slot,
 ) (Runner, error) {
 	if len(share) != 1 {
@@ -66,7 +69,7 @@ func NewSyncCommitteeAggregatorRunner(
 		beacon:         beacon,
 		network:        network,
 		signer:         signer,
-		valCheck:       valCheck,
+		ValCheck:       valCheck,
 		operatorSigner: operatorSigner,
 		measurements:   NewMeasurementsStore(),
 	}, nil
@@ -174,7 +177,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	r.measurements.StartConsensus()
-	if err := r.BaseRunner.decide(ctx, logger, r, input.Duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, input.Duty.Slot, input, r.ValCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
@@ -193,7 +196,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValCheckF(), signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -316,7 +319,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return traces.Errorf(span, "could not decode validator consensus data: %w", err)
+		return traces.Errorf(span, "could not decode decided validator consensus data: %w", err)
 	}
 	contributions, err := validatorConsensusData.GetSyncCommitteeContributions()
 	if err != nil {
@@ -589,10 +592,6 @@ func (r *SyncCommitteeAggregatorRunner) GetShare() *spectypes.Share {
 
 func (r *SyncCommitteeAggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *SyncCommitteeAggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return r.valCheck
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {

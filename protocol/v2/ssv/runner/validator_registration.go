@@ -44,7 +44,6 @@ type ValidatorRegistrationRunner struct {
 	network                        specqbft.Network
 	signer                         ekm.BeaconSigner
 	operatorSigner                 ssvtypes.OperatorSigner
-	valCheck                       specqbft.ProposedValueCheckF
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
 	feeRecipientProvider           feeRecipientProvider
 
@@ -338,10 +337,6 @@ func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
 
 func (r *ValidatorRegistrationRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return r.valCheck
 }
 
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {

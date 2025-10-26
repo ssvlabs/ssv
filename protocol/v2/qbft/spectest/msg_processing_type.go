@@ -39,6 +39,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 		test.Pre.State.Height,
 		signer,
 	)
+	pre.ValueChecker = qbfttesting.TestingValueChecker{}
 	require.NoError(t, pre.Decode(preByts))
 
 	preInstance := pre

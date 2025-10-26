@@ -33,6 +33,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -42,15 +43,21 @@ type CommitteeDutyGuard interface {
 }
 
 type CommitteeRunner struct {
-	BaseRunner          *BaseRunner
+	BaseRunner *BaseRunner
+
+	// attestingValidators is a list of validator this committee-runner will be processing attestation duties for.
+	attestingValidators []phase0.BLSPubKey
+
 	network             specqbft.Network
 	beacon              beacon.BeaconNode
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
-	valCheck            specqbft.ProposedValueCheckF
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
 	measurements        measurementsStore
+
+	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
+	ValCheck ssv.ValueChecker
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 }
@@ -58,12 +65,12 @@ type CommitteeRunner struct {
 func NewCommitteeRunner(
 	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
+	attestingValidators []phase0.BLSPubKey,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck specqbft.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
 	doppelgangerHandler DoppelgangerProvider,
 ) (Runner, error) {
@@ -77,11 +84,13 @@ func NewCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
+
+		attestingValidators: attestingValidators,
+
 		beacon:              beacon,
 		network:             network,
 		signer:              signer,
 		operatorSigner:      operatorSigner,
-		valCheck:            valCheck,
 		submittedDuties:     make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
 		DutyGuard:           dutyGuard,
 		doppelgangerHandler: doppelgangerHandler,
@@ -148,7 +157,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       specqbft.ProposedValueCheckF
+		valCheck       ssv.ValueChecker
 	}
 
 	// Create object and marshal
@@ -158,7 +167,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		network:        cr.network,
 		signer:         cr.signer,
 		operatorSigner: cr.operatorSigner,
-		valCheck:       cr.valCheck,
+		valCheck:       cr.ValCheck,
 	}
 
 	byts, err := json.Marshal(alias)
@@ -173,7 +182,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       specqbft.ProposedValueCheckF
+		valCheck       ssv.ValueChecker
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -188,7 +197,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	cr.network = aux.network
 	cr.signer = aux.signer
 	cr.operatorSigner = aux.operatorSigner
-	cr.valCheck = aux.valCheck
+	cr.ValCheck = aux.valCheck
 	return nil
 }
 
@@ -228,10 +237,6 @@ func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return cr.beacon
 }
 
-func (cr *CommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return cr.valCheck
-}
-
 func (cr *CommitteeRunner) GetNetwork() specqbft.Network {
 	return cr.network
 }
@@ -263,7 +268,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr.GetValCheckF(), msg, &spectypes.BeaconVote{})
+	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr.ValCheck.CheckValue, msg, &spectypes.BeaconVote{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -1074,7 +1079,15 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Target:    attData.Target,
 	}
 
-	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
+	cr.ValCheck = ssv.NewVoteChecker(
+		cr.signer,
+		slot,
+		cr.attestingValidators,
+		cr.GetNetworkConfig().EstimatedCurrentEpoch(),
+		vote,
+	)
+
+	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote, cr.ValCheck); err != nil {
 		return traces.Errorf(span, "failed to start new duty runner instance: %w", err)
 	}
 

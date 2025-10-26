@@ -35,7 +35,6 @@ type VoluntaryExitRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
 }
@@ -297,10 +296,6 @@ func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
 }
 func (r *VoluntaryExitRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return r.valCheck
 }
 
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {

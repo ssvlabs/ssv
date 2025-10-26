@@ -77,7 +77,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
 	}
 
-	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{i.proposer(msg.QBFTMessage.Round)}) {
+	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{i.ProposerForRound(msg.QBFTMessage.Round)}) {
 		return spectypes.NewError(spectypes.ProposalLeaderInvalidErrorCode, "proposal leader invalid")
 	}
 
@@ -138,7 +138,7 @@ func (i *Instance) isProposalJustification(
 	round specqbft.Round,
 	fullData []byte,
 ) error {
-	if err := i.config.GetValueCheckF()(fullData); err != nil {
+	if err := i.ValueChecker.CheckValue(fullData); err != nil {
 		return errors.Wrap(err, "proposal fullData invalid")
 	}
 
@@ -213,7 +213,11 @@ func (i *Instance) isProposalJustification(
 	return nil
 }
 
-func (i *Instance) proposer(round specqbft.Round) spectypes.OperatorID {
+func (i *Instance) Proposer() spectypes.OperatorID {
+	return i.ProposerForRound(i.State.Round)
+}
+
+func (i *Instance) ProposerForRound(round specqbft.Round) spectypes.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return i.config.GetProposerF()(i.State, round)
 }
