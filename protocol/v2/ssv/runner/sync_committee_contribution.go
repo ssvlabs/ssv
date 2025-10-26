@@ -316,7 +316,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return traces.Errorf(span, "could not decode validator consensus data: %w", err)
+		return traces.Errorf(span, "could not decode decided validator consensus data: %w", err)
 	}
 	contributions, err := validatorConsensusData.GetSyncCommitteeContributions()
 	if err != nil {
