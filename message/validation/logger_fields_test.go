@@ -26,6 +26,7 @@ func TestBuildLoggerFields(t *testing.T) {
 		require.Equal(t, spectypes.RunnerRole(0), fields.Role)
 		require.Equal(t, spectypes.MsgType(0), fields.SSVMessageType)
 		require.Equal(t, phase0.Slot(0), fields.Slot)
+		require.Nil(t, fields.Signers)
 		require.Nil(t, fields.Consensus)
 		require.Empty(t, fields.DutyID)
 	})
@@ -42,6 +43,7 @@ func TestBuildLoggerFields(t *testing.T) {
 		require.Equal(t, spectypes.RunnerRole(0), fields.Role)
 		require.Equal(t, spectypes.MsgType(0), fields.SSVMessageType)
 		require.Equal(t, phase0.Slot(0), fields.Slot)
+		require.Nil(t, fields.Signers)
 		require.Nil(t, fields.Consensus)
 	})
 
@@ -61,7 +63,8 @@ func TestBuildLoggerFields(t *testing.T) {
 
 		decodedMessage := &queue.SSVMessage{
 			SignedSSVMessage: &spectypes.SignedSSVMessage{
-				SSVMessage: ssvMsg,
+				SSVMessage:  ssvMsg,
+				OperatorIDs: []spectypes.OperatorID{1, 2, 3, 4},
 			},
 			SSVMessage: ssvMsg,
 			Body:       consensusMsg,
@@ -73,6 +76,7 @@ func TestBuildLoggerFields(t *testing.T) {
 		require.Equal(t, phase0.Slot(12345), fields.Slot)
 		require.NotNil(t, fields.Consensus)
 		require.Equal(t, specqbft.Round(3), fields.Consensus.Round)
+		require.Equal(t, []spectypes.OperatorID{1, 2, 3, 4}, fields.Signers)
 		require.Equal(t, specqbft.CommitMsgType, fields.Consensus.QBFTMessageType)
 		require.Equal(t, spectypes.SSVConsensusMsgType, fields.SSVMessageType)
 	})
@@ -97,6 +101,7 @@ func TestBuildLoggerFields(t *testing.T) {
 		require.Equal(t, phase0.Slot(0), fields.Slot)
 		require.Nil(t, fields.Consensus)
 		require.Equal(t, spectypes.SSVConsensusMsgType, fields.SSVMessageType)
+		require.Nil(t, fields.Signers)
 	})
 
 	t.Run("consensus message with typed nil body", func(t *testing.T) {
@@ -119,6 +124,7 @@ func TestBuildLoggerFields(t *testing.T) {
 
 		require.NotNil(t, fields)
 		require.Equal(t, phase0.Slot(0), fields.Slot)
+		require.Nil(t, fields.Signers)
 		require.Nil(t, fields.Consensus)
 	})
 
@@ -142,7 +148,8 @@ func TestBuildLoggerFields(t *testing.T) {
 
 		decodedMessage := &queue.SSVMessage{
 			SignedSSVMessage: &spectypes.SignedSSVMessage{
-				SSVMessage: ssvMsg,
+				SSVMessage:  ssvMsg,
+				OperatorIDs: []spectypes.OperatorID{1, 2, 3, 4},
 			},
 			SSVMessage: ssvMsg,
 			Body:       partialSigMsg,
@@ -152,6 +159,7 @@ func TestBuildLoggerFields(t *testing.T) {
 
 		require.NotNil(t, fields)
 		require.Equal(t, phase0.Slot(67890), fields.Slot)
+		require.Equal(t, []spectypes.OperatorID{1, 2, 3, 4}, fields.Signers)
 		require.Nil(t, fields.Consensus)
 		require.Equal(t, spectypes.SSVPartialSignatureMsgType, fields.SSVMessageType)
 	})
@@ -176,6 +184,7 @@ func TestBuildLoggerFields(t *testing.T) {
 		require.Equal(t, phase0.Slot(0), fields.Slot, "slot should be 0 when body is nil")
 		require.Nil(t, fields.Consensus)
 		require.Equal(t, spectypes.SSVPartialSignatureMsgType, fields.SSVMessageType)
+		require.Nil(t, fields.Signers)
 	})
 
 	t.Run("partial signature message with typed nil body", func(t *testing.T) {
@@ -198,6 +207,7 @@ func TestBuildLoggerFields(t *testing.T) {
 
 		require.NotNil(t, fields)
 		require.Equal(t, phase0.Slot(0), fields.Slot, "slot should be 0 when body is typed nil")
+		require.Nil(t, fields.Signers)
 		require.Nil(t, fields.Consensus)
 	})
 
@@ -224,6 +234,7 @@ func TestBuildLoggerFields(t *testing.T) {
 		require.Equal(t, phase0.Slot(0), fields.Slot)
 		require.Nil(t, fields.Consensus)
 		require.Equal(t, spectypes.MsgType(99), fields.SSVMessageType)
+		require.Nil(t, fields.Signers)
 	})
 }
 
@@ -260,7 +271,8 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 
 		decodedMessage := &queue.SSVMessage{
 			SignedSSVMessage: &spectypes.SignedSSVMessage{
-				SSVMessage: ssvMsg,
+				SSVMessage:  ssvMsg,
+				OperatorIDs: []spectypes.OperatorID{1, 2, 3, 4},
 			},
 			SSVMessage: ssvMsg,
 			Body:       partialSigMsg,
@@ -276,6 +288,7 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 		// Verify the fields that should be present
 		require.Equal(t, phase0.Slot(12345), fields.Slot)
 		require.Equal(t, spectypes.SSVPartialSignatureMsgType, fields.SSVMessageType)
+		require.Equal(t, []spectypes.OperatorID{1, 2, 3, 4}, fields.Signers)
 
 		// Double-check by converting to zap fields
 		zapFields := fields.AsZapFields()
@@ -303,7 +316,8 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 
 		decodedMessage := &queue.SSVMessage{
 			SignedSSVMessage: &spectypes.SignedSSVMessage{
-				SSVMessage: ssvMsg,
+				SSVMessage:  ssvMsg,
+				OperatorIDs: []spectypes.OperatorID{1, 2, 3, 4},
 			},
 			SSVMessage: ssvMsg,
 			Body:       consensusMsg,
@@ -314,6 +328,7 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 		require.NotNil(t, fields.Consensus, "Consensus fields must be present for consensus messages")
 		require.Equal(t, specqbft.ProposalMsgType, fields.Consensus.QBFTMessageType)
 		require.Equal(t, specqbft.Round(1), fields.Consensus.Round)
+		require.Equal(t, []spectypes.OperatorID{1, 2, 3, 4}, fields.Signers)
 	})
 }
 
@@ -324,6 +339,7 @@ func TestAsZapFields(t *testing.T) {
 			Role:           spectypes.RoleAggregator,
 			SSVMessageType: spectypes.SSVConsensusMsgType,
 			Slot:           12345,
+			Signers:        []spectypes.OperatorID{1, 2, 3, 4},
 			Consensus: &ConsensusFields{
 				Round:           3,
 				QBFTMessageType: specqbft.ProposalMsgType,
@@ -334,7 +350,7 @@ func TestAsZapFields(t *testing.T) {
 		fields := lf.AsZapFields()
 
 		// Should have base fields + consensus fields + duty ID
-		require.Len(t, fields, 7) // DutyExecutorID, Role, SSVMessageType, Slot, DutyID, Round, QBFTMessageType
+		require.Len(t, fields, 8) // DutyExecutorID, Role, SSVMessageType, Slot, DutyID, Round, QBFTMessageType, Signers
 	})
 
 	t.Run("without consensus fields", func(t *testing.T) {
@@ -343,6 +359,7 @@ func TestAsZapFields(t *testing.T) {
 			Role:           spectypes.RoleAggregator,
 			SSVMessageType: spectypes.SSVPartialSignatureMsgType,
 			Slot:           12345,
+			Signers:        []spectypes.OperatorID{1, 2, 3, 4},
 			Consensus:      nil,
 			DutyID:         "",
 		}
@@ -350,7 +367,7 @@ func TestAsZapFields(t *testing.T) {
 		fields := lf.AsZapFields()
 
 		// Should only have base fields (no consensus, no duty ID)
-		require.Len(t, fields, 4) // DutyExecutorID, Role, SSVMessageType, Slot
+		require.Len(t, fields, 5) // DutyExecutorID, Role, SSVMessageType, Slot, Signers
 	})
 
 	t.Run("minimal fields", func(t *testing.T) {
@@ -359,6 +376,6 @@ func TestAsZapFields(t *testing.T) {
 		fields := lf.AsZapFields()
 
 		// Should have minimum required fields
-		require.Len(t, fields, 4) // DutyExecutorID, Role, SSVMessageType, Slot (all with zero values)
+		require.Len(t, fields, 5) // DutyExecutorID, Role, SSVMessageType, Slot, Signers (all with zero values)
 	})
 }
