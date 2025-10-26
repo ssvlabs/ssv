@@ -179,3 +179,84 @@ func TestPrefetchingBeaconCommitteesUnsupported(t *testing.T) {
 	_, err := pb.committeesForEpoch(context.Background(), 0)
 	assert.ErrorIs(t, err, ErrCommitteesUnsupported)
 }
+
+func TestPrefetchingBeaconEvictOldAttester(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+
+	// Seed epochs: 4 (old-old), 5 (previous), 6 (anchor), 7 (future)
+	pb.muAtt.Lock()
+	pb.attester[4] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+	pb.attester[5] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+	pb.attester[6] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+	pb.attester[7] = map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{0: nil}
+	pb.muAtt.Unlock()
+
+	pb.evictOldAttesterCaches(6)
+
+	pb.muAtt.RLock()
+	defer pb.muAtt.RUnlock()
+	_, hasOldOld := pb.attester[4]
+	_, hasAnchor := pb.attester[6]
+	_, hasFuture := pb.attester[7]
+	_, hasPrev := pb.attester[5]
+	assert.False(t, hasOldOld, "epochs < anchor-1 must be evicted")
+	assert.True(t, hasPrev, "previous epoch must be kept")
+	assert.True(t, hasAnchor, "anchor must be kept")
+	assert.True(t, hasFuture, "future must be kept")
+}
+
+func TestPrefetchingBeaconEvictOldProposer(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+
+	// Seed epochs: 9 (old-old), 10 (previous), 11 (anchor), 12 (future)
+	pb.muProp.Lock()
+	pb.proposer[9] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+	pb.proposer[10] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+	pb.proposer[11] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+	pb.proposer[12] = map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty{0: nil}
+	pb.muProp.Unlock()
+
+	pb.evictOldProposerCaches(11)
+
+	pb.muProp.RLock()
+	defer pb.muProp.RUnlock()
+	_, hasOldOld := pb.proposer[9]
+	_, hasAnchor := pb.proposer[11]
+	_, hasFuture := pb.proposer[12]
+	_, hasPrev := pb.proposer[10]
+	assert.False(t, hasOldOld, "epochs < anchor-1 must be evicted")
+	assert.True(t, hasPrev, "previous epoch must be kept")
+	assert.True(t, hasAnchor, "anchor must be kept")
+	assert.True(t, hasFuture, "future must be kept")
+}
+
+func TestPrefetchingBeaconEvictOldSyncCommittee(t *testing.T) {
+	t.Parallel()
+
+	cfg := *networkconfig.TestNetwork.Beacon
+	pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
+
+	// Seed periods: 1 (old), 2 (anchor), 3 (future)
+	pb.muSync.Lock()
+	pb.sync[1] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
+	pb.sync[2] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
+	pb.sync[3] = map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty{0: nil}
+	pb.muSync.Unlock()
+
+	pb.evictOldSyncCommitteePeriods(2)
+
+	pb.muSync.RLock()
+	defer pb.muSync.RUnlock()
+	_, hasOld := pb.sync[1]
+	_, hasAnchor := pb.sync[2]
+	_, hasFuture := pb.sync[3]
+	assert.False(t, hasOld, "older than anchor period must be evicted")
+	assert.True(t, hasAnchor, "anchor period must be kept")
+	assert.True(t, hasFuture, "future period must be kept")
+}
