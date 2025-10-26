@@ -137,7 +137,7 @@ func (i *Instance) isProposalJustification(
 	round specqbft.Round,
 	fullData []byte,
 ) error {
-	if err := i.config.GetValueCheckF()(fullData); err != nil {
+	if err := i.ValueChecker.CheckValue(fullData); err != nil {
 		return errors.Wrap(err, "proposal fullData invalid")
 	}
 
