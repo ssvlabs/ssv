@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -31,7 +31,7 @@ type (
 	// This allows periodic metric reporting aligned with epoch boundaries.
 	EpochMetricRecorder struct {
 		mu    sync.Mutex
-		data  map[types.BeaconRole]epochCounter
+		data  map[spectypes.BeaconRole]epochCounter
 		gauge metric.Int64Gauge
 	}
 
@@ -48,11 +48,11 @@ type (
 // metric reporting, all completed roles from the previous epoch must be recorded once the new epoch begins.
 // The method automatically appends the relevant beacon role attribute to each metric entry
 // and does not require the caller to explicitly include it in the `attributes` slice.
-func (r *EpochMetricRecorder) Record(ctx context.Context, count uint32, epoch phase0.Epoch, beaconRole types.BeaconRole, attributes ...attribute.KeyValue) {
+func (r *EpochMetricRecorder) Record(ctx context.Context, count uint32, epoch phase0.Epoch, beaconRole spectypes.BeaconRole, attributes ...attribute.KeyValue) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var rolesToReset []types.BeaconRole
+	var rolesToReset []spectypes.BeaconRole
 
 	for role, entry := range r.data {
 		if entry.epoch != 0 && entry.epoch < epoch {
@@ -75,11 +75,11 @@ func (r *EpochMetricRecorder) Record(ctx context.Context, count uint32, epoch ph
 
 var (
 	submissions = EpochMetricRecorder{
-		data:  make(map[types.BeaconRole]epochCounter),
+		data:  make(map[spectypes.BeaconRole]epochCounter),
 		gauge: submissionsGauge,
 	}
 	quorums = EpochMetricRecorder{
-		data:  make(map[types.BeaconRole]epochCounter),
+		data:  make(map[spectypes.BeaconRole]epochCounter),
 		gauge: quorumsGauge,
 	}
 )
@@ -135,40 +135,40 @@ var (
 			metric.WithDescription("total number of failed duty submissions")))
 )
 
-func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
+func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.Epoch, role spectypes.BeaconRole) {
 	submissions.Record(ctx, count, epoch, role)
 }
 
-func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole, phase attributeConsensusPhase) {
+func recordSuccessfulQuorum(ctx context.Context, count uint32, epoch phase0.Epoch, role spectypes.BeaconRole, phase attributeConsensusPhase) {
 	quorums.Record(ctx, count, epoch, role, attribute.String("ssv.validator.duty.phase", string(phase)))
 }
 
-func recordFailedSubmission(ctx context.Context, role types.BeaconRole) {
+func recordFailedSubmission(ctx context.Context, role spectypes.BeaconRole) {
 	failedSubmissionCounter.Add(ctx, 1, metric.WithAttributes(observability.BeaconRoleAttribute(role)))
 }
 
-func recordConsensusDuration(ctx context.Context, duration time.Duration, role types.RunnerRole) {
+func recordConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {
 	consensusDurationHistogram.Record(ctx, duration.Seconds(),
 		metric.WithAttributes(
 			observability.RunnerRoleAttribute(role),
 		))
 }
 
-func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role types.RunnerRole) {
+func recordPreConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {
 	preConsensusDurationHistogram.Record(ctx, duration.Seconds(),
 		metric.WithAttributes(
 			observability.RunnerRoleAttribute(role),
 		))
 }
 
-func recordPostConsensusDuration(ctx context.Context, duration time.Duration, role types.RunnerRole) {
+func recordPostConsensusDuration(ctx context.Context, duration time.Duration, role spectypes.RunnerRole) {
 	postConsensusDurationHistogram.Record(ctx, duration.Seconds(),
 		metric.WithAttributes(
 			observability.RunnerRoleAttribute(role),
 		))
 }
 
-func recordDutyDuration(ctx context.Context, duration time.Duration, role types.BeaconRole, round qbft.Round) {
+func recordDutyDuration(ctx context.Context, duration time.Duration, role spectypes.BeaconRole, round specqbft.Round) {
 	dutyDurationHistogram.Record(ctx, duration.Seconds(),
 		metric.WithAttributes(
 			observability.BeaconRoleAttribute(role),

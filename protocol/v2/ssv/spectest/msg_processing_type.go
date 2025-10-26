@@ -11,6 +11,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ type MsgProcessingSpecTest struct {
 	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
 	DontStartDuty          bool // if set to true will not start a duty for the runner
-	ExpectedError          string
+	ExpectedErrorCode      int
 }
 
 func (test *MsgProcessingSpecTest) TestName() string {
@@ -61,7 +62,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 
 func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
-	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
+	keySetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
 	if len(test.Runner.GetShares()) == 0 {
 		panic("No share in base runner for tests")
 	}
@@ -71,7 +72,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	}
 
 	for valIdx, validatorShare := range test.Runner.GetShares() {
-		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
+		keySetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
 	switch test.Runner.(type) {
@@ -108,7 +109,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
 		guard := validator.NewCommitteeDutyGuard()
-		c = baseCommitteeWithRunnerSample(ctx, logger, ketSetMap, test.Runner.(*runner.CommitteeRunner), guard)
+		c = baseCommitteeWithRunnerSample(logger, keySetMap, test.Runner.(*runner.CommitteeRunner), guard)
 
 		if test.DontStartDuty {
 			r := test.Runner.(*runner.CommitteeRunner)
@@ -116,8 +117,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			c.Runners[test.Duty.DutySlot()] = r
 
 			// Inform the duty guard of the running duty, if any, so that it won't reject it.
-			if r.BaseRunner.State != nil && r.BaseRunner.State.StartingDuty != nil {
-				duty, ok := r.BaseRunner.State.StartingDuty.(*spectypes.CommitteeDuty)
+			if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
+				duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
 				if !ok {
 					panic("starting duty not found")
 				}
@@ -133,7 +134,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				}
 			}
 		} else {
-			lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
+			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
 
 		for _, msg := range test.Messages {
@@ -142,7 +143,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.ProcessMessage(ctx, dmsg)
+			err = c.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -166,7 +167,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = v.ProcessMessage(ctx, dmsg)
+			err = v.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -179,11 +180,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
 	network := &spectestingutils.TestingNetwork{}
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
@@ -245,13 +242,11 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 }
 
 var baseCommitteeWithRunnerSample = func(
-	ctx context.Context,
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
 	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
-
 	var keySetSample *spectestingutils.TestKeySet
 	for _, ks := range keySetMap {
 		keySetSample = ks
@@ -289,11 +284,8 @@ var baseCommitteeWithRunnerSample = func(
 		)
 		return r.(*runner.CommitteeRunner), err
 	}
-	ctx, cancel := context.WithCancel(ctx)
 
 	c := validator.NewCommittee(
-		ctx,
-		cancel,
 		logger,
 		runnerSample.BaseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
@@ -337,7 +329,7 @@ type MsgProcessingSpecTestAlias struct {
 	OutputMessages          []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots  []string
 	DontStartDuty           bool // if set to true will not start a duty for the runner
-	ExpectedError           string
+	ExpectedErrorCode       int
 	BeaconDuty              *spectypes.ValidatorDuty `json:"ValidatorDuty,omitempty"`
 	CommitteeDuty           *spectypes.CommitteeDuty `json:"CommitteeDuty,omitempty"`
 }
@@ -353,7 +345,7 @@ func (t *MsgProcessingSpecTest) MarshalJSON() ([]byte, error) {
 		OutputMessages:          t.OutputMessages,
 		BeaconBroadcastedRoots:  t.BeaconBroadcastedRoots,
 		DontStartDuty:           t.DontStartDuty,
-		ExpectedError:           t.ExpectedError,
+		ExpectedErrorCode:       t.ExpectedErrorCode,
 	}
 
 	if t.Duty != nil {
@@ -387,7 +379,7 @@ func (t *MsgProcessingSpecTest) UnmarshalJSON(data []byte) error {
 	t.OutputMessages = aux.OutputMessages
 	t.BeaconBroadcastedRoots = aux.BeaconBroadcastedRoots
 	t.DontStartDuty = aux.DontStartDuty
-	t.ExpectedError = aux.ExpectedError
+	t.ExpectedErrorCode = aux.ExpectedErrorCode
 
 	// Determine which type of duty was marshaled
 	if aux.BeaconDuty != nil {

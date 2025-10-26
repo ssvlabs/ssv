@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -78,11 +77,11 @@ func (c *Controller) StartNewInstance(
 	}
 
 	if height < c.Height {
-		return traces.Errorf(span, "attempting to start an instance with a past height")
+		return spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(span, "attempting to start an instance with a past height"))
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return traces.Errorf(span, "instance already running")
+		return spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(span, "instance already running"))
 	}
 
 	c.Height = height
@@ -119,21 +118,17 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	/**
 	Main controller processing flow
 	_______________________________
-	All decided msgs are processed the same, out of instance
-	All valid future msgs are saved in a container and can trigger highest decided futuremsg
-	All other msgs (not future or decided) are processed normally by an existing instance (if found)
+	All decided msgs are processed the same, out of instance.
+	All valid future msgs are saved in a container and might be referenced later if/when a not-future message arrives.
+	All other msgs (not future or decided) are processed normally by an existing instance (if found).
 	*/
-	isDecided, err := c.IsDecidedMsg(msg)
-	if err != nil {
-		return nil, err
-	}
-	if isDecided {
+	if c.isDecidedMsg(msg) {
 		return c.UponDecided(msg)
 	}
 
 	isFutureMsg := c.isFutureMessage(msg)
 	if isFutureMsg {
-		return nil, fmt.Errorf("future msg from height, could not process")
+		return nil, NewRetryableError(spectypes.WrapError(spectypes.FutureMessageErrorCode, ErrFutureConsensusMsg))
 	}
 
 	return c.UponExistingInstanceMsg(ctx, logger, msg)
@@ -142,22 +137,24 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
-		return nil, errors.New("instance not found")
+		return nil, NewRetryableError(ErrInstanceNotFound)
 	}
 
 	prevDecided, _ := inst.IsDecided()
 
 	// if previously decided, we don't process more messages
 	if prevDecided {
-		return nil, errors.New("not processing consensus message since instance is already decided")
+		return nil, spectypes.NewError(spectypes.SkipConsensusMessageAsInstanceIsDecidedErrorCode, "not processing consensus message since instance is already decided")
 	}
 
 	decided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
+	if instance.IsRetryable(err) {
+		return nil, NewRetryableError(err)
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
 
-	// save the highest Decided
 	if !decided {
 		return nil, nil
 	}
@@ -174,7 +171,7 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	// verify msg belongs to controller
 	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
-		return errors.New("message doesn't belong to Identifier")
+		return spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
 	}
 
 	return nil

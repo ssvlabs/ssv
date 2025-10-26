@@ -37,10 +37,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-var (
-	ErrNoValidDuties = errors.New("no valid duties")
-)
-
 type CommitteeDutyGuard interface {
 	StartDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
 	ValidDuty(role spectypes.BeaconRole, validator spectypes.ValidatorPK, slot phase0.Slot) error
@@ -290,7 +286,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	cr.measurements.StartPostConsensus()
 
-	duty := cr.BaseRunner.State.StartingDuty
+	duty := cr.BaseRunner.State.CurrentDuty
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
 		Slot:     duty.DutySlot(),
@@ -433,8 +429,8 @@ listener:
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
 		cr.BaseRunner.State.Finished = true
-		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
-		return ErrNoValidDuties
+		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
+		return ErrNoValidDutiesToExecute
 	}
 
 	// Avoid sending an empty message if all attester duties were blocked due to Doppelganger protection
@@ -595,8 +591,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 	if len(beaconObjects) == 0 {
 		cr.BaseRunner.State.Finished = true
-		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
-		return ErrNoValidDuties
+		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
+		return ErrNoValidDutiesToExecute
 	}
 
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
@@ -779,7 +775,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			recordSuccessfulSubmission(
 				ctx,
 				uint32(attestationsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.CurrentDuty.DutySlot()),
 				spectypes.BNRoleAttester,
 			)
 		}
@@ -796,7 +792,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		))
 
 		logger.Info(eventMsg,
-			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot())),
+			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.CurrentDuty.DutySlot())),
 			fields.QBFTHeight(cr.BaseRunner.QBFTController.Height),
 			fields.QBFTRound(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
@@ -836,13 +832,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			recordSuccessfulSubmission(
 				ctx,
 				uint32(syncMsgsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.CurrentDuty.DutySlot()),
 				spectypes.BNRoleSyncCommittee,
 			)
 		}
 		const eventMsg = "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),
+			observability.BeaconSlotAttribute(cr.BaseRunner.State.CurrentDuty.DutySlot()),
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
 			observability.ValidatorCountAttribute(len(syncCommitteeMessages)),
@@ -968,7 +964,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
-	duty := cr.BaseRunner.State.StartingDuty
+	duty := cr.BaseRunner.State.CurrentDuty
 	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}

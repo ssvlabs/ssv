@@ -125,7 +125,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().CurrentDuty.DutySlot())
 	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleAggregator, attributeConsensusPhasePreConsensus)
 
 	r.measurements.EndPreConsensus()
@@ -145,7 +145,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
 	signer := signedMsg.Messages[0].Signer
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.GetState().CurrentDuty.(*spectypes.ValidatorDuty)
 	span.SetAttributes(
 		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 		observability.ValidatorIndexAttribute(duty.ValidatorIndex),
@@ -241,7 +241,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	msg, err := signBeaconObject(
 		ctx,
 		r,
-		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		r.BaseRunner.State.CurrentDuty.(*spectypes.ValidatorDuty),
 		aggregateAndProofHashRoot,
 		decidedValue.Duty.Slot,
 		spectypes.DomainAggregateAndProof,
@@ -366,7 +366,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()), spectypes.BNRoleAggregator)
+	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().CurrentDuty.DutySlot()), spectypes.BNRoleAggregator)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -377,7 +377,7 @@ func (r *AggregatorRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger
 }
 
 func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{spectypes.SSZUint64(r.GetState().StartingDuty.DutySlot())}, spectypes.DomainSelectionProof, nil
+	return []ssz.HashRoot{spectypes.SSZUint64(r.GetState().CurrentDuty.DutySlot())}, spectypes.DomainSelectionProof, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign

@@ -6,8 +6,6 @@ import (
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -46,15 +44,15 @@ func NewVoteChecker(
 func (v *voteChecker) CheckValue(value []byte) error {
 	bv := spectypes.BeaconVote{}
 	if err := bv.Decode(value); err != nil {
-		return fmt.Errorf("failed decoding beacon vote: %w", err)
+		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding beacon vote: %w", err))
 	}
 
 	if bv.Target.Epoch > v.estimatedCurrentEpoch+1 {
-		return errors.New("attestation data target epoch is into far future")
+		return spectypes.NewError(spectypes.AttestationTargetEpochTooFarFutureErrorCode, "attestation data target epoch is into far future")
 	}
 
 	if bv.Source.Epoch >= bv.Target.Epoch {
-		return errors.New("attestation data source >= target")
+		return spectypes.NewError(spectypes.AttestationSourceNotLessThanTargetErrorCode, "attestation data source >= target")
 	}
 
 	attestationData := &phase0.AttestationData{
@@ -194,23 +192,23 @@ func checkValidatorConsensusData(
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}
 	if err := cd.Validate(); err != nil {
-		return cd, fmt.Errorf("invalid value: %w", err)
+		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 	}
 
 	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return cd, fmt.Errorf("duty epoch is in the far future")
+		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
 	}
 
 	if expectedType != cd.Duty.Type {
-		return cd, fmt.Errorf("wrong beacon role type")
+		return cd, spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
 	}
 
 	if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
-		return cd, fmt.Errorf("wrong validator pk")
+		return cd, spectypes.NewError(spectypes.WrongValidatorPubkeyErrorCode, "wrong validator pk")
 	}
 
 	if validatorIndex != cd.Duty.ValidatorIndex {
-		return cd, fmt.Errorf("wrong validator index")
+		return cd, spectypes.NewError(spectypes.WrongValidatorIndexErrorCode, "wrong validator index")
 	}
 
 	return cd, nil

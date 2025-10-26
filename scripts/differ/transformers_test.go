@@ -72,7 +72,7 @@ func TestAll(t *testing.T) {
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
-	duty := r.GetState().StartingDuty
+	duty := r.GetState().CurrentDuty
 
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
@@ -122,7 +122,7 @@ func TestAll(t *testing.T) {
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
-	duty := r.GetState().StartingDuty
+	duty := r.GetState().CurrentDuty
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
 	if r.ProducesBlindedBlocks {
