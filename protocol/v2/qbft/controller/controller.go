@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -59,13 +60,19 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
+func (c *Controller) StartNewInstance(
+	ctx context.Context,
+	logger *zap.Logger,
+	height specqbft.Height,
+	value []byte,
+	valueChecker ssv.ValueChecker,
+) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
-	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
+	if err := valueChecker.CheckValue(value); err != nil {
 		return traces.Errorf(span, "value invalid: %w", err)
 	}
 
@@ -82,7 +89,7 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 	newInstance := c.addAndStoreNewInstance()
 
 	span.AddEvent("start new instance")
-	newInstance.Start(ctx, logger, value, height)
+	newInstance.Start(ctx, logger, value, height, valueChecker)
 	c.forceStopAllInstanceExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")

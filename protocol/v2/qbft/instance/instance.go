@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -31,8 +32,9 @@ type Instance struct {
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
 
-	forceStop  bool
-	StartValue []byte
+	forceStop    bool
+	StartValue   []byte
+	ValueChecker ssv.ValueChecker `json:"-"`
 
 	metrics *metricsRecorder
 }
@@ -73,7 +75,13 @@ func (i *Instance) ForceStop() {
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(
+	ctx context.Context,
+	logger *zap.Logger,
+	value []byte,
+	height specqbft.Height,
+	valueChecker ssv.ValueChecker,
+) {
 	i.startOnce.Do(func() {
 		_, span := tracer.Start(ctx,
 			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
@@ -83,6 +91,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
+		i.ValueChecker = valueChecker
 		i.metrics.Start()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
@@ -90,7 +99,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 			fields.QBFTRound(i.State.Round),
 			fields.QBFTHeight(i.State.Height))
 
-		proposerID := i.proposer(specqbft.FirstRound)
+		proposerID := i.ProposerForRound(specqbft.FirstRound)
 		const eventMsg = "ℹ️ starting QBFT instance"
 		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
 		span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))

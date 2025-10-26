@@ -211,7 +211,7 @@ func (i *Instance) isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if i.proposer(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
+	if i.ProposerForRound(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
 		return errors.New("not proposer")
 	}
 
