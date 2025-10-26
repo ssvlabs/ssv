@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -171,6 +172,31 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 		if err != nil {
 			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.ValidatorIndex(index))
 			errs = multierror.Append(errs, err)
+			continue
+		}
+
+		// Membership gating: only return a validator entry if this index appears
+		// in the role-specific signer data collected for this committee duty.
+		hasIndex := false
+		if role == spectypes.BNRoleAttester {
+			for _, sd := range duty.Attester {
+				if slices.Contains(sd.ValidatorIdx, index) {
+					hasIndex = true
+					break
+				}
+			}
+		} else if role == spectypes.BNRoleSyncCommittee {
+			for _, sd := range duty.SyncCommittee {
+				if slices.Contains(sd.ValidatorIdx, index) {
+					hasIndex = true
+					break
+				}
+			}
+		} else {
+			// For non-committee roles, should not reach this path; be conservative.
+			hasIndex = true
+		}
+		if !hasIndex {
 			continue
 		}
 
