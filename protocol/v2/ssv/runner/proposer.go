@@ -1,8 +1,10 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -47,11 +49,14 @@ type ProposerRunner struct {
 	// higher MEV.
 	proposerDelay time.Duration
 
-	// originalFullProposal holds the initially fetched full (non-blinded) block
+	// cachedFullBlock holds the initially fetched full (non-blinded) block
 	// for this duty on this operator, if any. Used so that the leader of the
 	// decided QBFT round can submit the full block + blobs after signatures are
 	// collected, while still proposing a blinded value during QBFT.
-	originalFullProposal *api.VersionedProposal
+	cachedFullBlock *api.VersionedProposal
+	// cachedBlindedBlockSSZ is a fingerprint of the cachedFullBlock, it is stored here
+	// for efficient validation (so we re-use it instead of re-calculating).
+	cachedBlindedBlockSSZ []byte
 }
 
 func NewProposerRunner(
@@ -167,8 +172,6 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	// reset cached full proposal at the beginning of a new attempt
-	r.originalFullProposal = nil
 
 	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
@@ -212,24 +215,29 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
 	// block, convert it to blinded form by swapping the execution payload with
-	// its header. Consensus value carries the blinded block SSZ.
-	// Cache original full proposal if applicable for later leader submission
-	if !vBlk.Blinded {
-		r.originalFullProposal = vBlk
-	}
+	// its header (+ cache the original block so we can submit it later).
+	// Consensus value carries the blinded block SSZ.
 
-	blindedVersioned, blindedObj, err := blindutil.EnsureBlinded(vBlk)
+	blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
 	if err != nil {
 		return traces.Errorf(span, "failed to blind full block: %w", err)
 	}
 
-	byts, err := blindedObj.MarshalSSZ()
+	byts, err := blindedMarshaler.MarshalSSZ()
 	if err != nil {
 		return traces.Errorf(span, "could not marshal blinded beacon block: %w", err)
 	}
+
+	// Store the original block (we are only interested in full blocks) for later re-use
+	// in the post-consensus phase.
+	if !vBlk.Blinded {
+		r.cachedFullBlock = vBlk
+		r.cachedBlindedBlockSSZ = byts
+	}
+
 	input := &spectypes.ValidatorConsensusData{
 		Duty:    *duty,
-		Version: blindedVersioned.Version,
+		Version: blindedVBlk.Version,
 		DataSSZ: byts,
 	}
 
@@ -272,16 +280,13 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	r.measurements.StartPostConsensus()
 
-	// specific duty sig
-	var blkToSign ssz.HashRoot
-
 	cd := decidedValue.(*spectypes.ValidatorConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
-	versionedBlock, blkToSign, err := cd.GetBlockData()
+	versionedBlock, blkRootToSign, err := cd.GetBlockData()
 	if err != nil {
 		return traces.Errorf(span, "could not get block data from consensus data: %w", err)
 	}
@@ -303,7 +308,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		ctx,
 		r,
 		duty,
-		blkToSign,
+		blkRootToSign,
 		cd.Duty.Slot,
 		spectypes.DomainProposer,
 	)
@@ -406,34 +411,33 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		fields.QBFTRound(r.GetState().RunningInstance.State.Round),
 	)
 
-	// Use the locally cached block for submission, but first verify the root
-	// matches the decided one.
+	// If this operator is the leader of the decided round and it originally
+	// fetched a full (non-blinded) block, prefer submitting the full locally
+	// cached block (including blobs for Deneb/Electra/Fulu) - but only if
+	// the root of the decided block matches our locally cached block root.
+	// Other operators will keep submitting the blinded variant.
+	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
+	//		I left it for now to keep backwards compatibility.
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return traces.Errorf(span, "could not decode consensus data: %w", err)
+		return traces.Errorf(span, "could not decode decided validator consensus data: %w", err)
 	}
-
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return traces.Errorf(span, "could not get block data from consensus data: %w", err)
 	}
-
-	// If this operator is the leader of the decided round and it originally
-	// fetched a full (non-blinded) block, prefer submitting the full block
-	// (including blobs for Deneb/Electra/Fulu). Other operators will keep
-	// submitting the blinded variant.
-	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
-	//		I left it for now to keep backwards compatibility.
-	if r.originalFullProposal != nil {
-		inst := r.GetState().RunningInstance
-		if inst != nil && inst.State != nil {
-			proposerF := inst.GetConfig().GetProposerF()
-			leaderID := proposerF(inst.State, inst.State.Round)
-			if leaderID == r.operatorSigner.GetOperatorID() {
-				logger.Debug("retrieved original full proposal for leader submission")
-				vBlk = r.originalFullProposal
-			}
+	leaderID := r.GetState().RunningInstance.Proposer()
+	if r.cachedFullBlock != nil && leaderID == r.operatorSigner.GetOperatorID() {
+		if bytes.Equal(validatorConsensusData.DataSSZ, r.cachedBlindedBlockSSZ) {
+			logger.Debug("leader will use the original full block for proposal submission")
+			vBlk = r.cachedFullBlock
+		} else {
+			logger.Debug(
+				"leader will use the decided block for proposal submission because decided block root hash doesn't match cached block root hash",
+				zap.String("decided_block_ssz", hex.EncodeToString(validatorConsensusData.DataSSZ)),
+				zap.String("cached_block_ssz", hex.EncodeToString(r.cachedBlindedBlockSSZ)),
+			)
 		}
 	}
 
@@ -500,14 +504,14 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return nil, phase0.DomainType{}, errors.Wrap(err, "could not create consensus data")
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not decode consensus data")
 	}
 
-	_, data, err := validatorConsensusData.GetBlockData()
+	_, signedRoot, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block data")
 	}
-	return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
+	return []ssz.HashRoot{signedRoot}, spectypes.DomainProposer, nil
 }
 
 // executeDuty steps:
@@ -532,6 +536,10 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
 		return nil
 	}
+
+	// reset the cached original block at the beginning of a new duty
+	r.cachedFullBlock = nil
+	r.cachedBlindedBlockSSZ = nil
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
