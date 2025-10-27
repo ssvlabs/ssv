@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -61,10 +60,10 @@ type Validator struct {
 }
 
 // NewValidator creates a new instance of Validator.
-func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
+func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
 	v := &Validator{
 		logger:           logger.Named(log.NameValidator).With(fields.PubKey(options.SSVShare.ValidatorPubKey[:])),
-		ctx:              pctx,
+		ctx:              ctx,
 		cancel:           cancel,
 		NetworkConfig:    options.NetworkConfig,
 		DutyRunners:      options.DutyRunners,
@@ -81,6 +80,7 @@ func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, optio
 	for _, dutyRunner := range options.DutyRunners {
 		dutyRunner.SetTimeoutFunc(v.onTimeout)
 		v.Queues[dutyRunner.GetRole()] = queue.New(
+			logger,
 			options.QueueSize,
 			queue.WithInboxSizeMetric(
 				queue.InboxSizeMetric,
@@ -125,8 +125,8 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	return nil
 }
 
-// ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
+// ProcessMessage processes p2p message of all types
+func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
 	msgID := msg.GetID()
 
@@ -136,7 +136,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
 		}
 		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
+			return spectypes.WrapError(spectypes.SSVMessageHasInvalidSignatureErrorCode, fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err))
 		}
 	}
 
@@ -145,13 +145,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		return fmt.Errorf("couldn't get message slot: %w", err)
 	}
 	dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
-
-	logger := v.logger.
-		With(fields.MessageType(msgType)).
-		With(fields.MessageID(msgID)).
-		With(fields.RunnerRole(msgID.GetRoleType())).
-		With(fields.Slot(slot)).
-		With(fields.DutyID(dutyID))
 
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "process_message"),
@@ -162,7 +155,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID),
 		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
+	)
 	defer span.End()
 
 	// Get runner
@@ -184,8 +177,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		if err := qbftMsg.Validate(); err != nil {
 			return traces.Errorf(span, "invalid QBFT Message: %w", err)
 		}
-
-		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
 
 		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
 			return traces.Error(span, err)
@@ -240,8 +231,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 				return traces.Errorf(span, "get timeout data: %w", err)
 			}
 
-			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
-
 			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
 				return traces.Errorf(span, "timeout event: %w", err)
 			}
@@ -265,11 +254,11 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 
 func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
-		return errors.New("msg ID doesn't match validator ID")
+		return fmt.Errorf("msg ID doesn't match validator ID")
 	}
 
 	if len(msg.GetData()) == 0 {
-		return errors.New("msg data is invalid")
+		return fmt.Errorf("msg data is invalid")
 	}
 
 	return nil

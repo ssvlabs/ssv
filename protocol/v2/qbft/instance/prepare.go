@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -102,13 +103,13 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	root [32]byte,
 ) error {
 	if msg.QBFTMessage.MsgType != specqbft.PrepareMsgType {
-		return errors.New("prepare msg type is wrong")
+		return fmt.Errorf("prepare msg type is wrong")
 	}
 	if msg.QBFTMessage.Height != i.State.Height {
-		return errors.New("wrong msg height")
+		return spectypes.WrapError(spectypes.WrongMessageHeightErrorCode, ErrWrongMsgHeight)
 	}
 	if msg.QBFTMessage.Round != round {
-		return errors.New("wrong msg round")
+		return NewRetryableError(spectypes.WrapError(spectypes.WrongMessageRoundErrorCode, ErrWrongMsgRound))
 	}
 
 	if err := msg.Validate(); err != nil {
@@ -116,15 +117,15 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	}
 
 	if !bytes.Equal(msg.QBFTMessage.Root[:], root[:]) {
-		return errors.New("proposed data mismatch")
+		return spectypes.NewError(spectypes.ProposedDataMismatchErrorCode, "proposed data mismatch")
 	}
 
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
-		return errors.New("msg allows 1 signer")
+		return spectypes.NewError(spectypes.MessageAllowsOneSignerOnlyErrorCode, "signer not in committee")
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
-		return errors.New("signer not in committee")
+		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
 	}
 
 	return nil
@@ -141,7 +142,7 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootVerifySignature(
 
 	// Verify signature
 	if err := spectypes.Verify(msg.SignedMessage, i.State.CommitteeMember.Committee); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
+		return spectypes.WrapError(spectypes.MessageSignatureInvalidErrorCode, fmt.Errorf("msg signature invalid: %w", err))
 	}
 
 	return nil

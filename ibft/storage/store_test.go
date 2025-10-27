@@ -214,7 +214,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		storage.PruneContinously(ctx, tickerProv, 1)
+		storage.PruneContinuously(ctx, tickerProv, 1)
 	}()
 
 	mockTimeChan <- time.Now()

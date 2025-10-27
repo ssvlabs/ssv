@@ -1,7 +1,6 @@
 package spectest
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -272,7 +271,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 		Runner:                  r,
 		Threshold:               ks.Threshold,
 		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
-		ExpectedError:           m["ExpectedError"].(string),
+		ExpectedErrorCode:       int(m["ExpectedErrorCode"].(float64)),
 		OutputMessages:          outputMsgs,
 	}
 }
@@ -361,7 +360,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 		DecidedSlashable:        m["DecidedSlashable"].(bool),
 		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
 		DontStartDuty:           m["DontStartDuty"].(bool),
-		ExpectedError:           m["ExpectedError"].(string),
+		ExpectedErrorCode:       int(m["ExpectedErrorCode"].(float64)),
 		OutputMessages:          outputMsgs,
 		BeaconBroadcastedRoots:  beaconBroadcastedRoots,
 	}
@@ -395,7 +394,6 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
 	config := protocoltesting.TestingConfig(logger, ks)
-	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.CommitteeMember,
@@ -537,8 +535,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		}
 	}
 
-	ctx := t.Context() // TODO refactor this
-	c := fixCommitteeForRun(t, ctx, logger, committeeMap)
+	c := fixCommitteeForRun(t, logger, committeeMap)
 
 	return &CommitteeSpecTest{
 		Name:                   m["Name"].(string),
@@ -547,21 +544,17 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		PostDutyCommitteeRoot:  m["PostDutyCommitteeRoot"].(string),
 		OutputMessages:         outputMsgs,
 		BeaconBroadcastedRoots: beaconBroadcastedRoots,
-		ExpectedError:          m["ExpectedError"].(string),
+		ExpectedErrorCode:      int(m["ExpectedErrorCode"].(float64)),
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
+func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
 	byts, err := json.Marshal(committeeMap)
 	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
-	ctx, cancel := context.WithCancel(ctx)
-
 	c := validator.NewCommittee(
-		ctx,
-		cancel,
 		logger,
 		networkconfig.TestNetwork,
 		&specCommittee.CommitteeMember,

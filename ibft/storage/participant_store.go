@@ -50,5 +50,5 @@ type ParticipantStore interface {
 	Prune(ctx context.Context, below phase0.Slot)
 
 	// SlotGC continuously removes old slots
-	PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot)
+	PruneContinuously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot)
 }

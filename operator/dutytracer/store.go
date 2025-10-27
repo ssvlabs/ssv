@@ -192,7 +192,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 	return clone, nil
 }
 
-// hasSignersForRole checks if the duty has signers for the given role
+// hasSignersForRoles checks if the duty has signers for the given role
 // since we don't store a boolean flag to separate duties by their role in the db
 // we rely on the fact that during collection we separate the signers in their
 // corresponding fields (Attester and SyncCommittee) based on the role

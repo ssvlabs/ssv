@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 type AttesterHandler struct {
@@ -86,8 +87,16 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			h.processExecution(ctx, currentEpoch, slot)
-			h.processFetching(ctx, currentEpoch, slot)
+			func() {
+				// Aggregates submissions are rewarded as long as they are finished within 2 slots after the target slot
+				// (the target slot itself, plus the next slot after that), hence we are setting the deadline here to
+				// target slot + 2.
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				defer cancel()
+
+				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
+				h.processFetching(tickCtx, currentEpoch, slot)
+			}()
 
 			slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 
@@ -107,24 +116,29 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
-			// reset current epoch duties
-			if reorgEvent.Previous {
-				h.duties.ResetEpoch(currentEpoch)
-				h.fetchCurrentEpoch = true
-				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.ResetEpoch(currentEpoch + 1)
-					h.fetchNextEpoch = true
-				}
+			func() {
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, reorgEvent.Slot)
+				defer cancel()
 
-				h.processFetching(ctx, currentEpoch, reorgEvent.Slot)
-			} else if reorgEvent.Current {
-				// reset & re-fetch next epoch duties if in appropriate slot range,
-				// otherwise they will be fetched by the appropriate slot tick.
-				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.ResetEpoch(currentEpoch + 1)
-					h.fetchNextEpoch = true
+				// reset current epoch duties
+				if reorgEvent.Previous {
+					h.duties.ResetEpoch(currentEpoch)
+					h.fetchCurrentEpoch = true
+					if h.shouldFetchNexEpoch(reorgEvent.Slot) {
+						h.duties.ResetEpoch(currentEpoch + 1)
+						h.fetchNextEpoch = true
+					}
+
+					h.processFetching(tickCtx, currentEpoch, reorgEvent.Slot)
+				} else if reorgEvent.Current {
+					// reset & re-fetch next epoch duties if in appropriate slot range,
+					// otherwise they will be fetched by the appropriate slot tick.
+					if h.shouldFetchNexEpoch(reorgEvent.Slot) {
+						h.duties.ResetEpoch(currentEpoch + 1)
+						h.fetchNextEpoch = true
+					}
 				}
-			}
+			}()
 
 		case <-h.indicesChange:
 			slot := h.beaconConfig.EstimatedCurrentSlot()
@@ -161,9 +175,6 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		))
 	defer span.End()
 
-	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
-	defer cancel()
-
 	if h.fetchCurrentEpoch {
 		span.AddEvent("fetching current epoch duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, slot); err != nil {
@@ -187,10 +198,12 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	span.SetStatus(codes.Ok, "")
 }
 
-func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+// executeAggregatorDuties is only processing aggregator-duties after Alan fork.
+func (h *AttesterHandler) executeAggregatorDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	if h.exporterMode {
 		return
 	}
+
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "attester.execute"),
 		trace.WithAttributes(
@@ -304,26 +317,23 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return nil
 	}
 
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		const eventMsg = "failed to get context deadline"
-		span.AddEvent(eventMsg)
-		h.logger.Warn(eventMsg)
-		span.SetStatus(codes.Ok, "")
-		return nil
-	}
-
 	span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
-	go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
-		subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
+
+	go func() {
+		// Cannot use parent-context itself here, have to create independent instance
+		// to be able to continue working in background.
+		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
 		defer cancel()
+		if !withDeadline {
+			h.logger.Warn("parent-context has no deadline set")
+		}
 
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-			h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
+			h.logger.Error("failed to submit beacon committee subscription", zap.Error(err))
 		}
-	}(h, subscriptions)
+	}()
 
 	span.SetStatus(codes.Ok, "")
 	return nil

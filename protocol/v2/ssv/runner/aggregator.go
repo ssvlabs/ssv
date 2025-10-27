@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -38,8 +39,10 @@ type AggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
 	measurements   *dutyMeasurements
+
+	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
+	ValCheck ssv.ValueChecker
 
 	// IsAggregator returns true if the signature is from the input validator. The committee
 	// count is provided as an argument rather than imported implementation from spec. Having
@@ -66,7 +69,7 @@ func NewAggregatorRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	highestDecidedSlot phase0.Slot,
 ) (*AggregatorRunner, error) {
 	if len(share) != 1 {
@@ -86,7 +89,7 @@ func NewAggregatorRunner(
 		network:        network,
 		signer:         signer,
 		operatorSigner: operatorSigner,
-		valCheck:       valCheck,
+		ValCheck:       valCheck,
 		measurements:   newMeasurementsStore(),
 
 		IsAggregator: isAggregatorFn(),
@@ -122,7 +125,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot())
 	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleAggregator, attributeConsensusPhasePreConsensus)
 
 	r.measurements.EndPreConsensus()
@@ -142,7 +145,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
 	signer := signedMsg.Messages[0].Signer
-	duty := r.bState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.bState().CurrentDuty.(*spectypes.ValidatorDuty)
 	span.SetAttributes(
 		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 		observability.ValidatorIndexAttribute(duty.ValidatorIndex),
@@ -188,7 +191,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	r.measurements.StartConsensus()
 
-	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, r.ValCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
@@ -207,7 +210,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer span.End()
 
 	span.AddEvent("processing QBFT consensus msg")
-	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.GetValCheckF(), signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -240,7 +243,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	msg, err := signBeaconObject(
 		ctx,
 		r,
-		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		r.BaseRunner.State.CurrentDuty.(*spectypes.ValidatorDuty),
 		aggregateAndProofHashRoot,
 		decidedValue.Duty.Slot,
 		spectypes.DomainAggregateAndProof,
@@ -368,7 +371,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.bState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().StartingDuty.DutySlot()), spectypes.BNRoleAggregator)
+	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot()), spectypes.BNRoleAggregator)
 
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
@@ -390,7 +393,7 @@ func (r *AggregatorRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger
 }
 
 func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{spectypes.SSZUint64(r.bState().StartingDuty.DutySlot())}, spectypes.DomainSelectionProof, nil
+	return []ssz.HashRoot{spectypes.SSZUint64(r.bState().CurrentDuty.DutySlot())}, spectypes.DomainSelectionProof, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
@@ -504,10 +507,6 @@ func (r *AggregatorRunner) GetShare() *spectypes.Share {
 
 func (r *AggregatorRunner) bState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return r.valCheck
 }
 
 func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {

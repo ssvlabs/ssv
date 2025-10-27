@@ -49,11 +49,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		height++
 	}
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 }
 
 func generateController(logger *zap.Logger) *controller.Controller {
@@ -91,14 +87,14 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(context.TODO(), logger, msg)
+		decidedMsg, err := contr.ProcessMsg(context.TODO(), logger, msg)
 		if err != nil {
 			lastErr = err
 		}
-		if decided != nil {
+		if decidedMsg != nil {
 			decidedCnt++
 
-			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decided.FullData)
+			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decidedMsg.FullData)
 		}
 	}
 	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt, lastErr)
@@ -145,10 +141,15 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
+func runInstanceWithData(
+	t *testing.T,
+	logger *zap.Logger,
+	height specqbft.Height,
+	contr *controller.Controller,
+	runData *spectests.RunInstanceData,
+) error {
 	var lastErr error
-
-	_, err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue)
+	_, err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, protocoltesting.TestingValueChecker{})
 	if err != nil {
 		lastErr = err
 	}

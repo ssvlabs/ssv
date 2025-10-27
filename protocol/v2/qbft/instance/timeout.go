@@ -4,6 +4,7 @@ import (
 	"context"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -17,7 +18,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer span.End()
 
 	if !i.CanProcessMessages() {
-		return traces.Errorf(span, "instance stopped processing timeouts")
+		return types.WrapError(types.TimeoutInstanceErrorCode, traces.Errorf(span, "instance stopped processing timeouts"))
 	}
 
 	root, err := specqbft.HashDataRoot(i.StartValue)

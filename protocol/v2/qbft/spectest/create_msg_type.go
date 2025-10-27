@@ -25,7 +25,7 @@ type CreateMsgSpecTest struct {
 	CreateType                                       string
 	ExpectedRoot                                     string
 	ExpectedState                                    spectypes.Root `json:"-"` // Field is ignored by encoding/json"
-	ExpectedError                                    string
+	ExpectedErrorCode                                int
 }
 
 // UnmarshalJSON implements json.Unmarshaler to handle the Value field as hex and StateValue as base64
@@ -87,11 +87,7 @@ func (test *CreateMsgSpecTest) RunCreateMsg(t *testing.T) {
 	default:
 		t.Fail()
 	}
-	if test.ExpectedError != "" {
-		require.EqualError(t, err, test.ExpectedError)
-	} else {
-		require.NoError(t, err)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
 	r, err := msg.GetRoot()
 	require.NoError(t, err)

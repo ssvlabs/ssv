@@ -27,63 +27,65 @@ import (
 )
 
 const (
-	FieldAddress             = "address"
-	FieldAddresses           = "addresses"
-	FieldBindIP              = "bind_ip"
-	FieldBlock               = "block"
-	FieldBlockHash           = "block_hash"
-	FieldBlockCacheMetrics   = "block_cache_metrics_field"
-	FieldCommittee           = "committee"
-	FieldCommitteeID         = "committee_id"
-	FieldConnectionID        = "connection_id"
-	FieldPreConsensusTime    = "pre_consensus_time"
-	FieldPostConsensusTime   = "post_consensus_time"
-	FieldConsensusTime       = "consensus_time"
-	FieldConsensusRounds     = "consensus_rounds"
-	FieldBlockTime           = "block_time"
-	FieldCount               = "count"
-	FieldCurrentSlot         = "current_slot"
-	FieldDomain              = "domain"
-	FieldDuration            = "duration"
-	FieldDuties              = "duties"
-	FieldDutyExecutorID      = "duty_executor_id"
-	FieldDutyID              = "duty_id"
-	FieldENR                 = "enr"
-	FieldEpoch               = "epoch"
-	FieldEvent               = "event"
-	FieldFeeRecipient        = "fee_recipient"
-	FieldFromBlock           = "from_block"
-	FieldQBFTHeight          = "qbft_height"
-	FieldQBFTRound           = "qbft_round"
-	FieldIndexCacheMetrics   = "index_cache_metrics"
-	FieldMessageID           = "msg_id"
-	FieldMessageType         = "msg_type"
-	FieldName                = "name"
-	FieldOperatorId          = "operator_id"
-	FieldOperatorIDs         = "operator_ids"
-	FieldOperatorPubKey      = "operator_pubkey"
-	FieldOwnerAddress        = "owner_address"
-	FieldPeerID              = "peer_id"
-	FieldPeerScore           = "peer_score"
-	FieldPrivKey             = "privkey"
-	FieldProtocolID          = "protocol_id"
-	FieldPubKey              = "pubkey"
-	FieldBeaconRole          = "beacon_role"
-	FieldRunnerRole          = "runner_role"
-	FieldSlot                = "slot"
-	FieldSlotStartTime       = "slot_start_time"
-	FieldTotalConsensusTime  = "total_consensus_time"
-	FieldTotalDutyTime       = "total_duty_time"
-	FieldSubnets             = "subnets"
-	FieldTargetNodeENR       = "target_node_enr"
-	FieldToBlock             = "to_block"
-	FieldTook                = "took"
-	FieldTopic               = "topic"
-	FieldTxHash              = "tx_hash"
-	FieldType                = "type"
-	FieldUpdatedENRLocalNode = "updated_enr"
-	FieldValidator           = "validator"
-	FieldValidatorIndex      = "validator_index"
+	FieldAddress               = "address"
+	FieldAddresses             = "addresses"
+	FieldBindIP                = "bind_ip"
+	FieldBlock                 = "block"
+	FieldBlockHash             = "block_hash"
+	FieldBlockCacheMetrics     = "block_cache_metrics_field"
+	FieldCommittee             = "committee"
+	FieldCommitteeID           = "committee_id"
+	FieldConnectionID          = "connection_id"
+	FieldPreConsensusTime      = "pre_consensus_time"
+	FieldPostConsensusTime     = "post_consensus_time"
+	FieldConsensusTime         = "consensus_time"
+	FieldConsensusRounds       = "consensus_rounds"
+	FieldBlockTime             = "block_time"
+	FieldCount                 = "count"
+	FieldEstimatedCurrentEpoch = "estimated_current_epoch"
+	FieldEstimatedCurrentSlot  = "estimated_current_slot"
+	FieldDomain                = "domain"
+	FieldDuration              = "duration"
+	FieldDuties                = "duties"
+	FieldDutyExecutorID        = "duty_executor_id"
+	FieldDutyID                = "duty_id"
+	FieldENR                   = "enr"
+	FieldEpoch                 = "epoch"
+	FieldEvent                 = "event"
+	FieldFeeRecipient          = "fee_recipient"
+	FieldFromBlock             = "from_block"
+	FieldQBFTHeight            = "qbft_height"
+	FieldQBFTRound             = "qbft_round"
+	FieldIndexCacheMetrics     = "index_cache_metrics"
+	FieldMessageID             = "msg_id"
+	FieldMessageType           = "msg_type"
+	FieldName                  = "name"
+	FieldOperatorId            = "operator_id"
+	FieldOperatorIDs           = "operator_ids"
+	FieldOperatorPubKey        = "operator_pubkey"
+	FieldOwnerAddress          = "owner_address"
+	FieldPeerID                = "peer_id"
+	FieldPeerScore             = "peer_score"
+	FieldPrivKey               = "privkey"
+	FieldProtocolID            = "protocol_id"
+	FieldPubKey                = "pubkey"
+	FieldBeaconRole            = "beacon_role"
+	FieldRunnerRole            = "runner_role"
+	FieldSlot                  = "slot"
+	FieldSlotStartTime         = "slot_start_time"
+	FieldSubmissionTime        = "submission_time"
+	FieldTotalConsensusTime    = "total_consensus_time"
+	FieldTotalDutyTime         = "total_duty_time"
+	FieldSubnets               = "subnets"
+	FieldTargetNodeENR         = "target_node_enr"
+	FieldToBlock               = "to_block"
+	FieldTook                  = "took"
+	FieldTopic                 = "topic"
+	FieldTxHash                = "tx_hash"
+	FieldType                  = "type"
+	FieldUpdatedENRLocalNode   = "updated_enr"
+	FieldValidator             = "validator"
+	FieldValidatorIndex        = "validator_index"
 )
 
 func FromBlock(val uint64) zapcore.Field { return zap.Uint64(FieldFromBlock, val) }
@@ -154,14 +156,6 @@ func PeerScore(val float64) zapcore.Field {
 
 func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
-}
-
-func CurrentSlot(slot phase0.Slot) zapcore.Field {
-	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(slot)})
-}
-
-func SlotStartTime(time time.Time) zapcore.Field {
-	return zap.Time(FieldSlotStartTime, time)
 }
 
 func BlockCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
@@ -274,6 +268,14 @@ func Epoch(val phase0.Epoch) zap.Field {
 
 func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
+}
+
+func EstimatedCurrentEpoch(val phase0.Epoch) zapcore.Field {
+	return zap.Stringer(FieldEstimatedCurrentEpoch, stringer.Uint64Stringer{Val: uint64(val)})
+}
+
+func EstimatedCurrentSlot(val phase0.Slot) zapcore.Field {
+	return zap.Stringer(FieldEstimatedCurrentSlot, stringer.Uint64Stringer{Val: uint64(val)})
 }
 
 func Domain(val spectypes.DomainType) zap.Field {

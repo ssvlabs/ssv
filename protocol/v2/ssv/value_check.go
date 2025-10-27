@@ -2,159 +2,214 @@ package ssv
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-func dutyValueCheck(
-	duty *spectypes.ValidatorDuty,
-	beaconConfig *networkconfig.Beacon,
-	expectedType spectypes.BeaconRole,
-	validatorPK spectypes.ValidatorPK,
-	validatorIndex phase0.ValidatorIndex,
-) error {
-	if beaconConfig.EstimatedEpochAtSlot(duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return errors.New("duty epoch is into far future")
+type ValueChecker interface {
+	CheckValue(value []byte) error
+}
+
+type voteChecker struct {
+	signer                ekm.BeaconSigner
+	slot                  phase0.Slot
+	sharePublicKeys       []phase0.BLSPubKey
+	estimatedCurrentEpoch phase0.Epoch
+	expectedVote          *spectypes.BeaconVote
+}
+
+func NewVoteChecker(
+	signer ekm.BeaconSigner,
+	slot phase0.Slot,
+	sharePublicKeys []phase0.BLSPubKey,
+	estimatedCurrentEpoch phase0.Epoch,
+	expectedVote *spectypes.BeaconVote,
+) ValueChecker {
+	return &voteChecker{
+		signer:                signer,
+		slot:                  slot,
+		sharePublicKeys:       sharePublicKeys,
+		estimatedCurrentEpoch: estimatedCurrentEpoch,
+		expectedVote:          expectedVote,
+	}
+}
+
+func (v *voteChecker) CheckValue(value []byte) error {
+	bv := spectypes.BeaconVote{}
+	if err := bv.Decode(value); err != nil {
+		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding beacon vote: %w", err))
 	}
 
-	if expectedType != duty.Type {
-		return errors.New("wrong beacon role type")
+	if bv.Target.Epoch > v.estimatedCurrentEpoch+1 {
+		return spectypes.NewError(spectypes.AttestationTargetEpochTooFarFutureErrorCode, "attestation data target epoch is into far future")
 	}
 
-	if !bytes.Equal(validatorPK[:], duty.PubKey[:]) {
-		return errors.New("wrong validator pk")
+	if bv.Source.Epoch >= bv.Target.Epoch {
+		return spectypes.NewError(spectypes.AttestationSourceNotLessThanTargetErrorCode, "attestation data source >= target")
 	}
 
-	if validatorIndex != duty.ValidatorIndex {
-		return errors.New("wrong validator index")
+	attestationData := &phase0.AttestationData{
+		Slot: v.slot,
+		// Consensus data is unaware of CommitteeIndex
+		// We use -1 to not run into issues with the duplicate value slashing check:
+		// (data_1 != data_2 and data_1.target.epoch == data_2.target.epoch)
+		Index:           math.MaxUint64,
+		BeaconBlockRoot: bv.BlockRoot,
+		Source:          bv.Source,
+		Target:          bv.Target,
+	}
+
+	for _, sharePublicKey := range v.sharePublicKeys {
+		if err := v.signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
+			return err
+		}
+	}
+
+	// Implemented according to https://github.com/ssvlabs/SIPs/pull/69
+	if bv.Source.Epoch != v.expectedVote.Source.Epoch {
+		return fmt.Errorf("unexpected source epoch %v, expected %v", bv.Source.Epoch, v.expectedVote.Source.Epoch)
+	}
+
+	if bv.Target.Epoch != v.expectedVote.Target.Epoch {
+		return fmt.Errorf("unexpected target epoch %v, expected %v", bv.Target.Epoch, v.expectedVote.Target.Epoch)
+	}
+
+	if bv.Source.Root != v.expectedVote.Source.Root {
+		return fmt.Errorf("unexpected source root %x, expected %x", bv.Source.Root, v.expectedVote.Source.Root)
+	}
+
+	if bv.Target.Root != v.expectedVote.Target.Root {
+		return fmt.Errorf("unexpected target root %x, expected %x", bv.Target.Root, v.expectedVote.Target.Root)
 	}
 
 	return nil
 }
 
-func BeaconVoteValueCheckF(
-	signer ekm.BeaconSigner,
-	slot phase0.Slot,
-	sharePublicKeys []phase0.BLSPubKey,
-	estimatedCurrentEpoch phase0.Epoch,
-) specqbft.ProposedValueCheckF {
-	return func(data []byte) error {
-		bv := spectypes.BeaconVote{}
-		if err := bv.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding beacon vote")
-		}
-
-		if bv.Target.Epoch > estimatedCurrentEpoch+1 {
-			return errors.New("attestation data target epoch is into far future")
-		}
-
-		if bv.Source.Epoch >= bv.Target.Epoch {
-			return errors.New("attestation data source >= target")
-		}
-
-		attestationData := &phase0.AttestationData{
-			Slot: slot,
-			// Consensus data is unaware of CommitteeIndex
-			// We use -1 to not run into issues with the duplicate value slashing check:
-			// (data_1 != data_2 and data_1.target.epoch == data_2.target.epoch)
-			Index:           math.MaxUint64,
-			BeaconBlockRoot: bv.BlockRoot,
-			Source:          bv.Source,
-			Target:          bv.Target,
-		}
-
-		for _, sharePublicKey := range sharePublicKeys {
-			if err := signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
+type proposerChecker struct {
+	signer         ekm.BeaconSigner
+	beaconConfig   *networkconfig.Beacon
+	validatorPK    spectypes.ValidatorPK
+	validatorIndex phase0.ValidatorIndex
+	sharePublicKey phase0.BLSPubKey
 }
 
-func ProposerValueCheckF(
+func NewProposerChecker(
 	signer ekm.BeaconSigner,
 	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 	sharePublicKey phase0.BLSPubKey,
-) specqbft.ProposedValueCheckF {
-	return func(data []byte) error {
-		cd := &spectypes.ValidatorConsensusData{}
-		if err := cd.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding consensus data")
-		}
-		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
-		}
-
-		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleProposer, validatorPK, validatorIndex); err != nil {
-			return errors.Wrap(err, "duty invalid")
-		}
-
-		blockData, _, err := cd.GetBlockData()
-		if err != nil {
-			return errors.Wrap(err, "could not get block data")
-		}
-
-		slot, err := blockData.Slot()
-		if err != nil {
-			return errors.Wrap(err, "failed to get slot from block data")
-		}
-		return signer.IsBeaconBlockSlashable(sharePublicKey, slot)
+) ValueChecker {
+	return &proposerChecker{
+		signer:         signer,
+		beaconConfig:   beaconConfig,
+		validatorPK:    validatorPK,
+		validatorIndex: validatorIndex,
+		sharePublicKey: sharePublicKey,
 	}
 }
 
-func AggregatorValueCheckF(
-	signer ekm.BeaconSigner,
+func (v *proposerChecker) CheckValue(value []byte) error {
+	cd, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex)
+	if err != nil {
+		return err
+	}
+
+	blockData, _, err := cd.GetBlockData()
+	if err != nil {
+		return fmt.Errorf("could not get block data: %w", err)
+	}
+
+	slot, err := blockData.Slot()
+	if err != nil {
+		return fmt.Errorf("failed to get slot from block data: %w", err)
+	}
+	return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
+}
+
+type aggregatorChecker struct {
+	beaconConfig   *networkconfig.Beacon
+	validatorPK    spectypes.ValidatorPK
+	validatorIndex phase0.ValidatorIndex
+}
+
+func NewAggregatorChecker(
 	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) specqbft.ProposedValueCheckF {
-	return func(data []byte) error {
-		cd := &spectypes.ValidatorConsensusData{}
-		if err := cd.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding consensus data")
-		}
-		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
-		}
-
-		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
-			return errors.Wrap(err, "duty invalid")
-		}
-		return nil
+) ValueChecker {
+	return &aggregatorChecker{
+		beaconConfig:   beaconConfig,
+		validatorPK:    validatorPK,
+		validatorIndex: validatorIndex,
 	}
 }
 
-func SyncCommitteeContributionValueCheckF(
-	signer ekm.BeaconSigner,
+func (v *aggregatorChecker) CheckValue(value []byte) error {
+	_, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex)
+	return err
+}
+
+type syncCommitteeContributionChecker struct {
+	beaconConfig   *networkconfig.Beacon
+	validatorPK    spectypes.ValidatorPK
+	validatorIndex phase0.ValidatorIndex
+}
+
+func NewSyncCommitteeContributionChecker(
 	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) specqbft.ProposedValueCheckF {
-	return func(data []byte) error {
-		cd := &spectypes.ValidatorConsensusData{}
-		if err := cd.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding consensus data")
-		}
-		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
-		}
-
-		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {
-			return errors.Wrap(err, "duty invalid")
-		}
-
-		return nil
+) ValueChecker {
+	return &syncCommitteeContributionChecker{
+		beaconConfig:   beaconConfig,
+		validatorPK:    validatorPK,
+		validatorIndex: validatorIndex,
 	}
+}
+
+func (v *syncCommitteeContributionChecker) CheckValue(value []byte) error {
+	_, err := checkValidatorConsensusData(value, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex)
+	return err
+}
+
+func checkValidatorConsensusData(
+	value []byte,
+	beaconConfig *networkconfig.Beacon,
+	expectedType spectypes.BeaconRole,
+	validatorPK spectypes.ValidatorPK,
+	validatorIndex phase0.ValidatorIndex,
+) (*spectypes.ValidatorConsensusData, error) {
+	cd := &spectypes.ValidatorConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
+	}
+	if err := cd.Validate(); err != nil {
+		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+	}
+
+	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
+		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
+	}
+
+	if expectedType != cd.Duty.Type {
+		return cd, spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
+	}
+
+	if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
+		return cd, spectypes.NewError(spectypes.WrongValidatorPubkeyErrorCode, "wrong validator pk")
+	}
+
+	if validatorIndex != cd.Duty.ValidatorIndex {
+		return cd, spectypes.NewError(spectypes.WrongValidatorIndexErrorCode, "wrong validator index")
+	}
+
+	return cd, nil
 }
