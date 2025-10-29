@@ -179,17 +179,17 @@ func (v *Validator) StartQueueConsumer(
 					msgRetries.Set(v.messageID(msg), 0, ttlcache.DefaultTTL)
 					msgRetryItem = msgRetries.Get(v.messageID(msg))
 				}
-				msgRetryCnt := msgRetryItem.Value()
+				attempt := msgRetryItem.Value() + 1
 
 				msgLogger = logWithMessageMetadata(msgLogger, msg).
 					With(zap.String("message_identifier", string(v.messageID(msg)))).
-					With(zap.Int64("attempt", msgRetryCnt+1))
+					With(zap.Int64("attempt", attempt))
 
 				const couldNotHandleMsgLogPrefix = "could not handle message, "
 				switch {
-				case runner.IsRetryable(err) && msgRetryCnt < retryCount:
+				case runner.IsRetryable(err) && attempt <= retryCount:
 					msgLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
-					msgRetries.Set(v.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+					msgRetries.Set(v.messageID(msg), attempt, ttlcache.DefaultTTL)
 					go func(msg *queue.SSVMessage) {
 						time.Sleep(retryDelay)
 						if pushed := q.TryPush(msg); !pushed {
@@ -200,7 +200,7 @@ func (v *Validator) StartQueueConsumer(
 						}
 					}(msg)
 				default:
-					msgLogger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+					msgLogger.Debug(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 				}
 			}
 		}

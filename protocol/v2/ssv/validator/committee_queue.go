@@ -160,19 +160,18 @@ func (c *Committee) ConsumeQueue(
 				msgRetries.Set(c.messageID(msg), 0, ttlcache.DefaultTTL)
 				msgRetryItem = msgRetries.Get(c.messageID(msg))
 			}
-			msgRetryCnt := msgRetryItem.Value()
+			attempt := msgRetryItem.Value() + 1
 
 			msgLogger = logWithMessageMetadata(msgLogger, msg).
 				With(zap.String("message_identifier", string(c.messageID(msg)))).
-				With(zap.Int64("attempt", msgRetryCnt+1))
+				With(zap.Int64("attempt", attempt))
 
 			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
 				msgLogger.Error("❗ "+couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
-			case runner.IsRetryable(err) && msgRetryCnt < retryCount:
-				msgLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
-				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+			case runner.IsRetryable(err) && attempt <= retryCount:
+				msgRetries.Set(c.messageID(msg), attempt, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
@@ -183,7 +182,7 @@ func (c *Committee) ConsumeQueue(
 					}
 				}(msg)
 			default:
-				msgLogger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+				msgLogger.Debug(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 			}
 
 			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
