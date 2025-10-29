@@ -47,10 +47,6 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		return spectypes.WrapError(spectypes.DecodeBeaconVoteErrorCode, fmt.Errorf("failed decoding beacon vote: %w", err))
 	}
 
-	if bv.Target.Epoch > v.estimatedCurrentEpoch+1 {
-		return spectypes.NewError(spectypes.AttestationTargetEpochTooFarFutureErrorCode, "attestation data target epoch is into far future")
-	}
-
 	if bv.Source.Epoch >= bv.Target.Epoch {
 		return spectypes.NewError(spectypes.AttestationSourceNotLessThanTargetErrorCode, "attestation data source >= target")
 	}
