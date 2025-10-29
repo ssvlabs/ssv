@@ -115,7 +115,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 		return errors.Wrap(err, "failed to hash instance start value")
 	}
 
-	logger.Debug("📢 got partial quorum, broadcasting round change message",
+	logger.Debug("📢 broadcasting round change message (got partial quorum)",
 		zap.Uint64("qbft_new_round", uint64(newRound)),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),

@@ -98,10 +98,6 @@ func (i *Instance) Start(
 	i.metrics.Start()
 	i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
-	const eventMsg = "ℹ️ starting QBFT instance"
-	logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
-	span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
-
 	// propose if this node is the proposer
 	if proposerID == i.State.CommitteeMember.OperatorID {
 		proposal, err := i.CreateProposal(i.StartValue, nil, nil)

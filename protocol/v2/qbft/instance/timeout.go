@@ -51,7 +51,12 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 
 	const eventMsg = "📢 broadcasting round change message (this round timed out)"
 	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(root), observability.DutyRoundAttribute(prevRound)))
-	logger.Debug(eventMsg, zap.Any("round_change_signers", roundChange.OperatorIDs))
+	logger.Debug(
+		eventMsg,
+		zap.Uint64("qbft_new_round", uint64(newRound)),
+		fields.Root(root),
+		zap.Any("round_change_signers", roundChange.OperatorIDs),
+	)
 
 	if err := i.Broadcast(roundChange); err != nil {
 		return traces.Errorf(span, "failed to broadcast round change message: %w", err)
