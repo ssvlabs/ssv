@@ -179,7 +179,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
-			return traces.Error(span, err)
+			return traces.Errorf(span, "process consensus message: %w", err)
 		}
 
 		span.SetStatus(codes.Ok, "")
@@ -203,7 +203,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
 			span.AddEvent("processing post-consensus message")
 			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
-				return traces.Error(span, err)
+				return traces.Errorf(span, "process post-consensus message: %w", err)
 			}
 			span.SetStatus(codes.Ok, "")
 			return nil
@@ -211,7 +211,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 		span.AddEvent("processing pre-consensus message")
 		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
-			return traces.Error(span, err)
+			return traces.Errorf(span, "process pre-consensus message: %w", err)
 		}
 
 		span.SetStatus(codes.Ok, "")

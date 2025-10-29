@@ -768,7 +768,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		aLogger := logger.With(zap.Any("validators", validators))
 
 		const submittingAttestationsEvent = "submitting attestations"
-		logger.Debug(submittingAttestationsEvent)
+		aLogger.Debug(submittingAttestationsEvent)
 		span.AddEvent(submittingAttestationsEvent)
 
 		submissionStart := time.Now()
@@ -829,7 +829,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		scLogger := logger.With(zap.Any("validators", validators))
 
 		const submittingSyncCommitteeEvent = "submitting sync committee"
-		logger.Debug(submittingSyncCommitteeEvent)
+		scLogger.Debug(submittingSyncCommitteeEvent)
 		span.AddEvent(submittingSyncCommitteeEvent)
 
 		submissionStart := time.Now()
