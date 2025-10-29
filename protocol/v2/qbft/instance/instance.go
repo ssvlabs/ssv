@@ -88,7 +88,11 @@ func (i *Instance) Start(
 	proposerID := i.ProposerForRound(specqbft.FirstRound)
 
 	const startingQBFTInstanceEvent = "ℹ️ starting QBFT instance"
-	logger.Debug(startingQBFTInstanceEvent, zap.Uint64("leader", proposerID))
+	logger.Debug(
+		startingQBFTInstanceEvent,
+		zap.Uint64("us", i.State.CommitteeMember.OperatorID),
+		zap.Uint64("leader", proposerID),
+	)
 	span.AddEvent(startingQBFTInstanceEvent, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
 
 	i.StartValue = value
