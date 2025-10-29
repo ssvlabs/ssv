@@ -579,7 +579,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		indices[i] = uint64(msg.ValidatorIndex)
 	}
 
-	const eventMsg = "🧩 got partial signatures"
+	const eventMsg = "🧩 got partial signatures (post consensus)"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		zap.Bool("quorum", hasQuorum),
