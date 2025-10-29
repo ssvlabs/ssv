@@ -314,6 +314,7 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty, truncateAfter
 func Root(r [32]byte) zap.Field {
 	return zap.String("root", hex.EncodeToString(r[:]))
 }
+
 func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
 }

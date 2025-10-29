@@ -574,21 +574,26 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
 
-	msgRoots := make([][32]byte, 0)
-	vIndices := make([]uint64, len(signedMsg.Messages))
-	for i, msg := range signedMsg.Messages {
-		vIndices[i] = uint64(msg.ValidatorIndex)
-		msgRoots = append(msgRoots, msg.SigningRoot)
+	msgRootsStr := make([]string, 0, len(signedMsg.Messages))
+	vIndices := make([]uint64, 0, len(signedMsg.Messages))
+	for _, msg := range signedMsg.Messages {
+		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
+		msgRootsStr = append(msgRootsStr, hex.EncodeToString(msg.SigningRoot[:]))
+	}
+	quorumRootsStr := make([]string, 0, len(quorumRoots))
+	for _, qRoot := range quorumRoots {
+		quorumRootsStr = append(quorumRootsStr, hex.EncodeToString(qRoot[:]))
 	}
 
 	const eventMsg = "🧩 got partial signatures (post consensus)"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
-		zap.Bool("quorum", hasQuorum),
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
-		zap.Int("quorum_roots", len(quorumRoots)),
-		zap.Int("msg_roots", len(msgRoots)),
-		zap.Uint64s("validators", vIndices))
+		zap.Strings("msg_roots", msgRootsStr),
+		zap.Uint64s("validators", vIndices),
+		zap.Bool("quorum", hasQuorum),
+		zap.Strings("quorum_roots", quorumRootsStr),
+	)
 
 	if !hasQuorum {
 		span.AddEvent("no quorum")
