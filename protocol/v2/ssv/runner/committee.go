@@ -569,14 +569,16 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	defer span.End()
 
 	span.AddEvent("base post consensus message processing")
-	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, cr, signedMsg)
+	hasQuorum, quorumRoots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, cr, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
 
-	indices := make([]uint64, len(signedMsg.Messages))
+	msgRoots := make([][32]byte, 0)
+	vIndices := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
-		indices[i] = uint64(msg.ValidatorIndex)
+		vIndices[i] = uint64(msg.ValidatorIndex)
+		msgRoots = append(msgRoots, msg.SigningRoot)
 	}
 
 	const eventMsg = "🧩 got partial signatures (post consensus)"
@@ -584,8 +586,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	logger.Debug(eventMsg,
 		zap.Bool("quorum", hasQuorum),
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
-		zap.Int("roots", len(roots)),
-		zap.Uint64s("validators", indices))
+		zap.Int("quorum_roots", len(quorumRoots)),
+		zap.Int("msg_roots", len(msgRoots)),
+		zap.Uint64s("validators", vIndices))
 
 	if !hasQuorum {
 		span.AddEvent("no quorum")
@@ -613,7 +616,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	// Get unique roots to avoid repetition
 	deduplicatedRoots := make(map[[32]byte]struct{})
-	for _, root := range roots {
+	for _, root := range quorumRoots {
 		deduplicatedRoots[root] = struct{}{}
 	}
 
