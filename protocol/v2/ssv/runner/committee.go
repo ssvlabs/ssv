@@ -578,10 +578,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	for _, msg := range signedMsg.Messages {
 		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
 	}
-	quorumRootsStr := make([]string, 0, len(quorumRoots))
-	for _, qRoot := range quorumRoots {
-		quorumRootsStr = append(quorumRootsStr, hex.EncodeToString(qRoot[:]))
-	}
 
 	const eventMsg = "🧩 got partial signatures (post consensus)"
 	span.AddEvent(eventMsg)
@@ -589,7 +585,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
 		zap.Uint64s("validators", vIndices),
 		zap.Bool("quorum", hasQuorum),
-		zap.Strings("quorum_roots", quorumRootsStr),
+		zap.Int("quorum_roots", len(quorumRoots)),
 	)
 
 	if !hasQuorum {
