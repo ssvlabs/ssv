@@ -86,7 +86,7 @@ func (c *Committee) ExecuteDuty(ctx context.Context, duty *spectypes.CommitteeDu
 
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
 	committeeOpIDs := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-	committeeDutyID := fields.BuildCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot)
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot, duty.RunnerRole())
 	logger := c.logger.
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.RunnerRole(duty.RunnerRole())).
@@ -112,7 +112,7 @@ func (c *Committee) ExecuteAggregatorDuty(ctx context.Context, duty *spectypes.A
 
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
 	committeeOpIDs := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-	committeeDutyID := fields.BuildCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot)
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeOpIDs, dutyEpoch, duty.Slot, duty.RunnerRole())
 	logger := c.logger.
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.RunnerRole(duty.RunnerRole())).

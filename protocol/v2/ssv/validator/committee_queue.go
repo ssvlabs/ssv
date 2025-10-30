@@ -43,7 +43,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		logger.Error("❌ couldn't get message slot", zap.Error(err))
 		return
 	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType())
 
 	logger = logger.
 		With(fields.Slot(slot)).

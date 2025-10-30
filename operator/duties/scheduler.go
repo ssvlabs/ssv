@@ -580,7 +580,7 @@ func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Lo
 func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
 	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot, duty.RunnerRole())
 
 	return s.logger.
 		With(fields.CommitteeID(committeeDuty.id)).
@@ -596,7 +596,7 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty)
 func (s *Scheduler) loggerWithAggregatorCommitteeDutyContext(aggregatorCommitteeDuty *aggregatorCommitteeDuty) *zap.Logger {
 	duty := aggregatorCommitteeDuty.duty
 	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-	committeeDutyID := fields.BuildCommitteeDutyID(aggregatorCommitteeDuty.operatorIDs, dutyEpoch, duty.Slot)
+	committeeDutyID := fields.BuildCommitteeDutyID(aggregatorCommitteeDuty.operatorIDs, dutyEpoch, duty.Slot, duty.RunnerRole())
 
 	return s.logger.
 		With(fields.CommitteeID(aggregatorCommitteeDuty.id)).

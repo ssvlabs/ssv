@@ -200,16 +200,30 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
 		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster
 		// #nosec G115
-		if partialSignatureMessageCount > min(2*clusterValidatorCount, clusterValidatorCount+int(mv.netCfg.SyncCommitteeSize)) {
-			return ErrTooManyPartialSignatureMessages
+		messageLimit := min(2*clusterValidatorCount, clusterValidatorCount+int(mv.netCfg.SyncCommitteeSize))
+		if role == spectypes.RoleAggregatorCommittee {
+			messageLimit = clusterValidatorCount * maxSignatures
+		}
+		if partialSignatureMessageCount > messageLimit {
+			e := ErrTooManyPartialSignatureMessages
+			e.got = partialSignatureMessageCount
+			e.want = messageLimit
+			return e
 		}
 
 		// Rule: a ValidatorIndex can't appear more than 2 times in the []*PartialSignatureMessage list
 		validatorIndexCount := make(map[phase0.ValidatorIndex]int)
 		for _, message := range partialSignatureMessages.Messages {
 			validatorIndexCount[message.ValidatorIndex]++
-			if validatorIndexCount[message.ValidatorIndex] > 2 {
-				return ErrTripleValidatorIndexInPartialSignatures
+			if role == spectypes.RoleCommittee {
+				if validatorIndexCount[message.ValidatorIndex] > 2 {
+					return ErrTripleValidatorIndexInPartialSignatures
+				}
+			}
+			if role == spectypes.RoleAggregatorCommittee {
+				if validatorIndexCount[message.ValidatorIndex] > 5 {
+					return ErrSextupleValidatorIndexInPartialSignatures
+				}
 			}
 		}
 	} else if role == spectypes.RoleSyncCommitteeContribution {

@@ -666,7 +666,7 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, committeeID spect
 	}
 
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot)
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot, duty.RunnerRole())
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
@@ -710,7 +710,7 @@ func (c *Controller) ExecuteAggregatorCommitteeDuty(ctx context.Context, committ
 	}
 
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot)
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot, duty.RunnerRole())
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_aggregator_committee_duty"),
 		trace.WithAttributes(

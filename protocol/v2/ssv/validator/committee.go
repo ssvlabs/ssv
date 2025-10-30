@@ -390,7 +390,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	if err != nil {
 		return fmt.Errorf("couldn't get message slot: %w", err)
 	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType())
 
 	logger := c.logger.
 		With(fields.MessageType(msgType)).
@@ -513,7 +513,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
 			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
-			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot)
+			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot, spectypes.RoleCommittee)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.Runners, slot)
@@ -525,7 +525,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
 			epoch := c.networkConfig.EstimatedEpochAtSlot(slot)
-			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot)
+			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot, spectypes.RoleAggregatorCommittee)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired aggregator committee runner", zap.Uint64("slot", uint64(slot)))
 			delete(c.AggregatorRunners, slot)

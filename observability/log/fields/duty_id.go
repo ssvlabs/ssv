@@ -13,6 +13,14 @@ func BuildDutyID(epoch phase0.Epoch, slot phase0.Slot, runnerRole spectypes.Runn
 	return fmt.Sprintf("%v-e%v-s%v-v%v", utils.FormatRunnerRole(runnerRole), epoch, slot, index)
 }
 
-func BuildCommitteeDutyID(operators []spectypes.OperatorID, epoch phase0.Epoch, slot phase0.Slot) string {
+func BuildCommitteeDutyID(
+	operators []spectypes.OperatorID,
+	epoch phase0.Epoch,
+	slot phase0.Slot,
+	role spectypes.RunnerRole,
+) string {
+	if role == spectypes.RoleAggregatorCommittee {
+		return fmt.Sprintf("AGGREGATOR_COMMITTEE-%s-e%d-s%d", utils.FormatCommittee(operators), epoch, slot)
+	}
 	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", utils.FormatCommittee(operators), epoch, slot)
 }

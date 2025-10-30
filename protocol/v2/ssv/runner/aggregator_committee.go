@@ -1470,7 +1470,10 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 					return traces.Errorf(span, "failed to sign sync committee selection proof: %w", err)
 				}
 
-				msg.Messages = append(msg.Messages, partialSig)
+				// TODO: find a better way to handle this
+				if len(msg.Messages) == 0 || !bytes.Equal(msg.Messages[len(msg.Messages)-1].PartialSignature, partialSig.PartialSignature) {
+					msg.Messages = append(msg.Messages, partialSig)
+				}
 			}
 
 		default:
