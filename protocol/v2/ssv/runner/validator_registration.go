@@ -108,8 +108,9 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	}
 
 	logger.Debug("got partial sig",
-		zap.Uint64("signer", signedMsg.Messages[0].Signer),
-		zap.Bool("quorum", hasQuorum))
+		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
+		zap.Bool("quorum", hasQuorum),
+	)
 
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {

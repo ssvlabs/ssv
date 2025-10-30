@@ -582,7 +582,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	const eventMsg = "🧩 got partial signatures (post consensus)"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
-		zap.Uint64("signer", signedMsg.Messages[0].Signer),
+		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
 		zap.Uint64s("validators", vIndices),
 		zap.Bool("quorum", hasQuorum),
 		zap.Int("quorum_roots", len(quorumRoots)),

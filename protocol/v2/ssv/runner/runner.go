@@ -245,6 +245,10 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
+	const gotPreConsensusMsgEvent = "got pre-consensus message"
+	logger.Debug(gotPreConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
+	span.AddEvent(gotPreConsensusMsgEvent)
+
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
 
 	if hasQuorum {
@@ -323,6 +327,10 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger 
 	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
+
+	const gotPostConsensusMsgEvent = "got post-consensus message"
+	logger.Debug(gotPostConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
+	span.AddEvent(gotPostConsensusMsgEvent)
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
 

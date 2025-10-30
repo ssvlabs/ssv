@@ -126,11 +126,9 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return traces.Errorf(span, "failed processing randao message: %w", err)
 	}
 
-	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
-	signer := signedMsg.Messages[0].Signer
 	duty := r.bState().CurrentDuty.(*spectypes.ValidatorDuty)
 
-	logger.Debug("🧩 got partial RANDAO signatures", zap.Uint64("signer", signer))
+	logger.Debug("🧩 got partial RANDAO signatures (pre consensus)", zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
 
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {

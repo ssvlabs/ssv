@@ -143,8 +143,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
-	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
-	signer := signedMsg.Messages[0].Signer
+	signer := ssvtypes.PartialSigMsgSigner(signedMsg)
 	duty := r.bState().CurrentDuty.(*spectypes.ValidatorDuty)
 	span.SetAttributes(
 		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
