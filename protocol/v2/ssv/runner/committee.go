@@ -558,10 +558,15 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	defer span.End()
 
 	span.AddEvent("base post consensus message processing")
+	logger = logger.With(zap.Uint64("signer", signedMsg.Messages[0].Signer))
+	logger.Debug("base post consensus message processing")
 	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, cr, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
+
+	// Log current status of collected partial signatures for visibility.
+	logger.Debug("post consensus partial signatures status", cr.BaseRunner.State.PostConsensusContainer.Fields()...)
 
 	indices := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
@@ -690,10 +695,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 				att := sszObject.(*spec.VersionedAttestation)
 				att, err = specssv.VersionedAttestationWithSignature(att, (phase0.BLSSignature)(sig))
-					if err != nil {
-						executionErr = fmt.Errorf("could not insert signature in versioned attestation: %w", err)
-						continue
-					}
+				if err != nil {
+					executionErr = fmt.Errorf("could not insert signature in versioned attestation: %w", err)
+					continue
+				}
 
 				attestationsToSubmit[validator] = att
 			}
