@@ -630,16 +630,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			zap.Any("validators", validators),
 		)
 
-		type signatureResult struct {
-			signature      phase0.BLSSignature
-			validatorIndex phase0.ValidatorIndex
-		}
-		var (
-			wg          sync.WaitGroup
-			errCh       = make(chan error, len(validators))
-			signatureCh = make(chan signatureResult, len(validators))
-		)
-
 		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
 			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
@@ -651,87 +641,61 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				continue
 			}
 
-			wg.Add(1)
-			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots map[[32]byte]struct{}) {
-				defer wg.Done()
-
-				share := cr.BaseRunner.Share[validatorIndex]
-
-				pubKey := share.ValidatorPubKey
-				vlogger := logger.With(zap.Uint64("validator_index", uint64(validatorIndex)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
-
-				sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
-				// If the reconstructed signature verification failed, fall back to verifying each partial signature
-				if err != nil {
-					for root := range roots {
-						cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root, share.Committee, validatorIndex)
-					}
-					const eventMsg = "got post-consensus quorum but it has invalid signatures"
-					span.AddEvent(eventMsg)
-					vlogger.Error(eventMsg, zap.Error(err))
-
-					errCh <- fmt.Errorf("%s: %w", eventMsg, err)
-					return
-				}
-
-				vlogger.Debug("🧩 reconstructed partial signature")
-
-				signatureCh <- signatureResult{
-					validatorIndex: validatorIndex,
-					signature:      (phase0.BLSSignature)(sig),
-				}
-			}(validator, root, deduplicatedRoots)
-		}
-
-		go func() {
-			wg.Wait()
-			close(signatureCh)
-		}()
-
-	listener:
-		for {
-			select {
-			case <-ctx.Done():
+			if ctx.Err() != nil {
 				return ctx.Err()
-			case err := <-errCh:
-				executionErr = err
-			case signatureResult, ok := <-signatureCh:
-				if !ok {
-					break listener
+			}
+
+			share := cr.BaseRunner.Share[validator]
+			pubKey := share.ValidatorPubKey
+			vlogger := logger.With(zap.Uint64("validator_index", uint64(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
+
+			sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root, pubKey[:], validator)
+			// If the reconstructed signature verification failed, fall back to verifying each partial signature
+			if err != nil {
+				for r := range deduplicatedRoots {
+					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, r, share.Committee, validator)
 				}
+				const eventMsg = "got post-consensus quorum but it has invalid signatures"
+				span.AddEvent(eventMsg)
+				vlogger.Error(eventMsg, zap.Error(err))
 
-				validatorObjects, exists := beaconObjects[signatureResult.validatorIndex]
-				if !exists {
-					executionErr = fmt.Errorf("could not find beacon object for validator index: %d", signatureResult.validatorIndex)
-					continue
-				}
-				sszObject, exists := validatorObjects[root]
-				if !exists {
-					executionErr = fmt.Errorf("could not find ssz object for root: %s", root)
-					continue
-				}
+				executionErr = fmt.Errorf("%s: %w", eventMsg, err)
+				continue
+			}
 
-				// Store objects for multiple submission
-				if role == spectypes.BNRoleSyncCommittee {
-					syncMsg := sszObject.(*altair.SyncCommitteeMessage)
-					syncMsg.Signature = signatureResult.signature
+			vlogger.Debug("🧩 reconstructed partial signature")
 
-					syncCommitteeMessagesToSubmit[signatureResult.validatorIndex] = syncMsg
-				} else if role == spectypes.BNRoleAttester {
-					// Only mark as safe if this is an attester role
-					// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
-					// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
-					cr.doppelgangerHandler.ReportQuorum(signatureResult.validatorIndex)
+			validatorObjects, exists := beaconObjects[validator]
+			if !exists {
+				executionErr = fmt.Errorf("could not find beacon object for validator index: %d", validator)
+				continue
+			}
+			sszObject, exists := validatorObjects[root]
+			if !exists {
+				executionErr = fmt.Errorf("could not find ssz object for root: %s", root)
+				continue
+			}
 
-					att := sszObject.(*spec.VersionedAttestation)
-					att, err = specssv.VersionedAttestationWithSignature(att, signatureResult.signature)
+			// Store objects for multiple submission
+			if role == spectypes.BNRoleSyncCommittee {
+				syncMsg := sszObject.(*altair.SyncCommitteeMessage)
+				syncMsg.Signature = (phase0.BLSSignature)(sig)
+
+				syncCommitteeMessagesToSubmit[validator] = syncMsg
+			} else if role == spectypes.BNRoleAttester {
+				// Only mark as safe if this is an attester role
+				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
+				// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
+				cr.doppelgangerHandler.ReportQuorum(validator)
+
+				att := sszObject.(*spec.VersionedAttestation)
+				att, err = specssv.VersionedAttestationWithSignature(att, (phase0.BLSSignature)(sig))
 					if err != nil {
-						executionErr = fmt.Errorf("could not insert signature in versioned attestation")
+						executionErr = fmt.Errorf("could not insert signature in versioned attestation: %w", err)
 						continue
 					}
 
-					attestationsToSubmit[signatureResult.validatorIndex] = att
-				}
+				attestationsToSubmit[validator] = att
 			}
 		}
 
