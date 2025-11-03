@@ -107,7 +107,7 @@ func (r *AggregatorRunner) HasRunningDuty() bool {
 
 func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -124,9 +124,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
-
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot())
-	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleAggregator, attributeConsensusPhasePreConsensus)
 
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
@@ -158,6 +155,9 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	// to perform this aggregation duty or not
 	ok := r.IsAggregator(r.BaseRunner.NetworkConfig.TargetAggregatorsPerCommittee, duty.CommitteeLength, fullSig)
 	if !ok {
+		r.bState().Finished = true
+		r.measurements.EndDutyFlow()
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, 0)
 		const aggDutyWontBeNeededEvent = "aggregation duty won't be needed from this validator for this slot"
 		span.AddEvent(aggDutyWontBeNeededEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
 		logger.Debug(aggDutyWontBeNeededEvent, zap.Any("signer", signer))
@@ -189,7 +189,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	}
 
 	r.measurements.StartConsensus()
-
 	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, r.ValCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
@@ -200,7 +199,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_consensus"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
 			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
@@ -297,7 +296,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_post_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -362,16 +361,14 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		logger.Error(errMsg, fields.Took(time.Since(start)), zap.Error(err))
 		return traces.Errorf(span, "%s: %w", errMsg, err)
 	}
+	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot()), spectypes.BNRoleAggregator)
 	const submittedSignedAggregateProofEvent = "✅ successfully submitted signed aggregate and proof"
 	span.AddEvent(submittedSignedAggregateProofEvent)
 	logger.Debug(submittedSignedAggregateProofEvent, fields.Took(time.Since(start)))
 
 	r.bState().Finished = true
 	r.measurements.EndDutyFlow()
-
-	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.bState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot()), spectypes.BNRoleAggregator)
-
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, r.bState().RunningInstance.State.Round)
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -418,7 +415,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))

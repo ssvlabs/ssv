@@ -575,14 +575,7 @@ var StartNodeCmd = &cobra.Command{
 		nodeProber := nodeprobe.New(logger)
 		nodeProber.AddNode(clNodeName, consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		nodeProber.AddNode(elNodeName, executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-
-		probeCtx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
-		defer cancel()
-		if err := nodeProber.ProbeAll(probeCtx); err != nil {
-			logger.Fatal("Ethereum node(s) are not healthy", zap.Error(err))
-		}
-
-		logger.Info("Ethereum node(s) are healthy")
+		ensureEthereumNodesHealthy(cmd.Context(), logger, nodeProber)
 
 		eventSyncer := syncContractEvents(
 			cmd.Context(),

@@ -94,7 +94,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -158,7 +158,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	)
 
 	r.bState().Finished = true
-
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -197,7 +196,7 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(contex
 
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))

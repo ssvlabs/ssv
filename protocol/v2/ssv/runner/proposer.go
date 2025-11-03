@@ -114,7 +114,7 @@ func (r *ProposerRunner) HasRunningDuty() bool {
 
 func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -247,7 +247,6 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	r.measurements.StartConsensus()
-
 	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, r.ValCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
@@ -258,7 +257,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_consensus"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
 			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
@@ -369,7 +368,7 @@ func (r *ProposerRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, 
 
 func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_post_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -459,11 +458,11 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	start := time.Now()
 	if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-
 		const errMsg = "could not submit beacon block"
 		logger.Error(errMsg, fields.Took(time.Since(start)), zap.Error(err))
 		return traces.Errorf(span, "%s: %w", errMsg, err)
 	}
+	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot()), spectypes.BNRoleProposer)
 	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(
 		observability.BeaconSlotAttribute(r.BaseRunner.State.CurrentDuty.DutySlot()),
@@ -475,10 +474,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	r.bState().Finished = true
 	r.measurements.EndDutyFlow()
-
-	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleProposer, r.bState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot()), spectypes.BNRoleProposer)
-
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, r.bState().RunningInstance.State.Round)
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -522,7 +518,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))

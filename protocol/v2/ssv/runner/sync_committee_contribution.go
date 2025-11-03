@@ -86,7 +86,7 @@ func (r *SyncCommitteeAggregatorRunner) HasRunningDuty() bool {
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -104,9 +104,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
-
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot())
-	recordSuccessfulQuorum(ctx, 1, epoch, spectypes.BNRoleSyncCommitteeContribution, attributeConsensusPhasePreConsensus)
 
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleSyncCommitteeContribution)
@@ -148,6 +145,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	if len(selectionProofs) == 0 {
 		r.bState().Finished = true
 		r.measurements.EndDutyFlow()
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, 0)
 		const dutyFinishedNoProofsEvent = "successfully finished duty processing (no selection proofs)"
 		logger.Info(dutyFinishedNoProofsEvent,
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -180,7 +178,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	r.measurements.StartConsensus()
-
 	if err := r.BaseRunner.decide(ctx, logger, r, input.Duty.Slot, input, r.ValCheck); err != nil {
 		return traces.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
@@ -191,7 +188,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_consensus"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
 			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
@@ -301,7 +298,7 @@ func (r *SyncCommitteeAggregatorRunner) OnTimeoutQBFT(ctx context.Context, logge
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_post_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -337,7 +334,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	span.AddEvent(submittingSyncCommitteeEvent)
 	logger.Debug(submittingSyncCommitteeEvent)
 
-	successfullySubmittedContributions := uint32(0)
+	successfullySubmittedContributions := int64(0)
 	start := time.Now()
 	for _, root := range roots {
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
@@ -398,20 +395,17 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			break
 		}
 	}
-
+	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot()), spectypes.BNRoleSyncCommitteeContribution)
 	const submittedSyncCommitteeEvent = "✅ successfully submitted sync committee contributions"
 	span.AddEvent(submittedSyncCommitteeEvent)
 	logger.Debug(submittedSyncCommitteeEvent,
-		zap.Uint32("submitted_contributions", successfullySubmittedContributions),
+		zap.Int64("submitted_contributions", successfullySubmittedContributions),
 		fields.Took(time.Since(start)),
 	)
 
 	r.bState().Finished = true
 	r.measurements.EndDutyFlow()
-
-	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommitteeContribution, r.bState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.bState().CurrentDuty.DutySlot()), spectypes.BNRoleSyncCommitteeContribution)
-
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, r.bState().RunningInstance.State.Round)
 	const dutyFinishedEvent = "successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -494,7 +488,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx 
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
