@@ -883,12 +883,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	// TODO - here we should actually "finish" the duty regardless of whether our success is absolute or partial,
 	// this is because quorum can only be reached once and we won't have another chance to "finish" the duty
 	// (by setting `cr.BaseRunner.State.Finished = true`). But for some reason spec-tests are written in such
-	// a way that we cannot "finish" the duty in case of partial success ... it wants absolute success for some
+	// a way that we cannot "finish" the duty in case of partial success ... it wants 100% success for some
 	// reason, but like I said - the way this code is written, the execution can never get here for the 2nd time.
 	if cr.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
 		cr.BaseRunner.State.Finished = true
 		cr.measurements.EndDutyFlow()
-		const dutyFinishedEvent = "successfully finished duty processing (absolute success)"
+		const dutyFinishedEvent = "successfully finished duty processing (100% success)"
 		logger.Info(dutyFinishedEvent,
 			fields.ConsensusTime(cr.measurements.ConsensusTime()),
 			fields.ConsensusRounds(uint64(cr.bState().RunningInstance.State.Round)),
