@@ -431,9 +431,6 @@ listener:
 	)
 
 	if totalAttestations == 0 && totalSyncCommittee == 0 {
-		cr.BaseRunner.State.Finished = true
-		cr.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.RoleCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
 		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
 		return ErrNoValidDutiesToExecute
 	}
@@ -604,9 +601,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return traces.Errorf(span, "could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
-		cr.BaseRunner.State.Finished = true
-		cr.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.RoleCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
 		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
 		return ErrNoValidDutiesToExecute
 	}
@@ -867,16 +861,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		return executionErr
 	}
 
-	// TODO - here we should actually "finish" the duty regardless of whether our success is absolute or partial,
-	// this is because quorum can only be reached once and we won't have another chance to "finish" the duty
-	// (by setting `cr.BaseRunner.State.Finished = true`). But for some reason spec-tests are written in such
-	// a way that we cannot "finish" the duty in case of partial success ... it wants 100% success for some
-	// reason, but like I said - the way this code is written, the execution can never get here for the 2nd time.
 	if cr.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
 		cr.BaseRunner.State.Finished = true
 		cr.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.RoleCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
-		const dutyFinishedEvent = "successfully finished duty processing (100% success)"
+		const dutyFinishedEvent = "finished duty processing (100% success)"
 		logger.Info(dutyFinishedEvent,
 			fields.ConsensusTime(cr.measurements.ConsensusTime()),
 			fields.ConsensusRounds(uint64(cr.bState().RunningInstance.State.Round)),
@@ -888,10 +877,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
-	//cr.BaseRunner.State.Finished = true // TODO - gotta uncomment & refactor this when spec-tests allow for that
-	cr.measurements.EndDutyFlow()
-	recordTotalDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.RoleCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
-	const dutyFinishedEvent = "successfully finished duty processing (partial success)"
+	const dutyFinishedEvent = "finished duty processing (partial success)"
 	logger.Info(dutyFinishedEvent,
 		fields.ConsensusTime(cr.measurements.ConsensusTime()),
 		fields.ConsensusRounds(uint64(cr.bState().RunningInstance.State.Round)),
