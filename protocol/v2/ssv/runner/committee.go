@@ -287,8 +287,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	cr.measurements.EndConsensus()
 	recordConsensusDuration(ctx, cr.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
-	cr.measurements.StartPostConsensus()
-
 	duty := cr.BaseRunner.State.CurrentDuty
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
@@ -476,14 +474,10 @@ listener:
 		SSVMessage:  ssvMsg,
 	}
 
-	const signedPostEvent = "constructed & signed post consensus partial signature message"
-	logger.Debug(signedPostEvent)
-	span.AddEvent(signedPostEvent)
-
+	cr.measurements.StartPostConsensus()
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
-
 	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
 	logger.Debug(broadcastedPostConsensusMsgEvent)
 	span.AddEvent(broadcastedPostConsensusMsgEvent)
@@ -1075,7 +1069,6 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	defer span.End()
 
 	cr.measurements.StartDutyFlow()
-	cr.measurements.StartPreConsensus()
 
 	start := time.Now()
 	slot := duty.DutySlot()
@@ -1095,7 +1088,6 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Target:    attData.Target,
 	}
 
-	cr.measurements.EndPreConsensus()
 	cr.measurements.StartConsensus()
 	cr.ValCheck = ssv.NewVoteChecker(
 		cr.signer,

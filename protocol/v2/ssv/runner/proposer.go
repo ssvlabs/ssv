@@ -281,8 +281,6 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
 
-	r.measurements.StartPostConsensus()
-
 	cd := decidedValue.(*spectypes.ValidatorConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
@@ -349,11 +347,11 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		SSVMessage:  ssvMsg,
 	}
 
+	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
-
 	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
 	logger.Debug(broadcastedPostConsensusMsgEvent)
 	span.AddEvent(broadcastedPostConsensusMsgEvent)
@@ -525,7 +523,6 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	defer span.End()
 
 	r.measurements.StartDutyFlow()
-	r.measurements.StartPreConsensus()
 
 	proposerDuty := duty.(*spectypes.ValidatorDuty)
 	if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
@@ -582,6 +579,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		SSVMessage:  ssvMsg,
 	}
 
+	r.measurements.StartPreConsensus()
 	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial randao sig: %w", err)

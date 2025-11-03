@@ -212,8 +212,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
-	r.measurements.StartPostConsensus()
-
 	cd := decidedValue.(*spectypes.ValidatorConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
@@ -279,11 +277,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		SSVMessage:  ssvMsg,
 	}
 
+	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
-
 	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
 	logger.Debug(broadcastedPostConsensusMsgEvent)
 	span.AddEvent(broadcastedPostConsensusMsgEvent)
@@ -495,7 +493,6 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 	defer span.End()
 
 	r.measurements.StartDutyFlow()
-	r.measurements.StartPreConsensus()
 
 	// sign selection proofs
 	msgs := &spectypes.PartialSignatureMessages{
@@ -550,6 +547,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		SSVMessage:  ssvMsg,
 	}
 
+	r.measurements.StartPreConsensus()
 	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial contribution proof sig: %w", err)
