@@ -959,23 +959,38 @@ func (c *Collector) checkAndPublishQuorum(logger *zap.Logger, msg *spectypes.Par
 		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
 	}
 
-	// Check each validator in the partial signature for quorum
-	for _, partialMsg := range msg.Messages {
-		_, exists := c.validators.ValidatorByIndex(partialMsg.ValidatorIndex)
-		if !exists {
-			logger.Debug("validator not found by index",
-				zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)))
-			continue
-		}
-		// Initialize tracking for this validator if needed
-		if trace.publishedQuorums[partialMsg.ValidatorIndex] == nil {
-			trace.publishedQuorums[partialMsg.ValidatorIndex] = make(map[spectypes.BeaconRole]string)
-		}
+    // Check each validator in the partial signature for quorum
+    for _, partialMsg := range msg.Messages {
+        _, exists := c.validators.ValidatorByIndex(partialMsg.ValidatorIndex)
+        if !exists {
+            logger.Debug("validator not found by index",
+                zap.Uint64("validator_index", uint64(partialMsg.ValidatorIndex)))
+            continue
+        }
+        // Initialize tracking for this validator if needed
+        if trace.publishedQuorums[partialMsg.ValidatorIndex] == nil {
+            trace.publishedQuorums[partialMsg.ValidatorIndex] = make(map[spectypes.BeaconRole]string)
+        }
 
-		// Check quorum for both attester and sync committee roles
-		c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleAttester, msg, partialMsg, threshold)
-		c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleSyncCommittee, msg, partialMsg, threshold)
-	}
+        // Determine role from the signing root and check quorum only for that role.
+        // We avoid double checking both roles to keep root->role mapping strict.
+        if trace.roleRootsReady {
+            // Compare against derived per-duty roots
+            if bytes.Equal(trace.syncCommitteeRoot[:], partialMsg.SigningRoot[:]) {
+                c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleSyncCommittee, msg, partialMsg, threshold)
+                continue
+            }
+            if bytes.Equal(trace.attestationRoot[:], partialMsg.SigningRoot[:]) {
+                c.checkAndPublishQuorumForRole(logger, trace, spectypes.BNRoleAttester, msg, partialMsg, threshold)
+                continue
+            }
+            // Unknown root; skip quorum publication until role roots are known/matched
+            continue
+        }
+        // If roots are not ready yet, skip publishing — pending entries will be
+        // flushed to role buckets once roots are derived.
+        continue
+    }
 }
 
 // checkAndPublishQuorumForRole checks if quorum is reached for a specific role and publishes if it's the first time
