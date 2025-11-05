@@ -1095,6 +1095,15 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 
 	committee, found := c.validators.Committee(committeeID)
 	if !found || len(committee.Operators) == 0 {
+		operatorsCount := 0
+		if found {
+			operatorsCount = len(committee.Operators)
+		}
+		logger.Debug("skipping quorum check after flush: committee not found or empty",
+			fields.Slot(slot),
+			fields.CommitteeID(committeeID),
+			zap.Bool("found", found),
+			zap.Int("operators_count", operatorsCount))
 		return
 	}
 
@@ -1104,40 +1113,43 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
 	}
 
-	// Check attester quorum for validators who have attestation signatures
-	attesterValidators := make(map[phase0.ValidatorIndex]struct{})
-	for _, sd := range trace.Attester {
+	// Check quorum for both roles
+	c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleAttester, trace.Attester, slot, threshold)
+	c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleSyncCommittee, trace.SyncCommittee, slot, threshold)
+}
+
+// checkRoleQuorumForValidators checks quorum for all validators in the given role's signer data.
+// IMPORTANT: trace must be locked by the caller before calling this function.
+func (c *Collector) checkRoleQuorumForValidators(
+	logger *zap.Logger,
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	signerData []*exporter.SignerData,
+	slot phase0.Slot,
+	threshold uint64,
+) {
+	// Collect all unique validator indices for this role
+	validators := make(map[phase0.ValidatorIndex]struct{})
+	for _, sd := range signerData {
 		for _, idx := range sd.ValidatorIdx {
-			attesterValidators[idx] = struct{}{}
+			validators[idx] = struct{}{}
 		}
-	}
-	for validatorIndex := range attesterValidators {
-		_, exists := c.validators.ValidatorByIndex(validatorIndex)
-		if !exists {
-			continue
-		}
-		if trace.publishedQuorums[validatorIndex] == nil {
-			trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
-		}
-		c.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, validatorIndex, threshold)
 	}
 
-	// Check sync committee quorum for validators who have sync committee signatures
-	syncCommitteeValidators := make(map[phase0.ValidatorIndex]struct{})
-	for _, sd := range trace.SyncCommittee {
-		for _, idx := range sd.ValidatorIdx {
-			syncCommitteeValidators[idx] = struct{}{}
-		}
-	}
-	for validatorIndex := range syncCommitteeValidators {
+	// Check quorum for each validator
+	for validatorIndex := range validators {
 		_, exists := c.validators.ValidatorByIndex(validatorIndex)
 		if !exists {
+			logger.Debug("validator not found by index during quorum check after flush",
+				zap.Uint64("validator_index", uint64(validatorIndex)),
+				fields.BeaconRole(role),
+				fields.Slot(slot))
 			continue
 		}
 		if trace.publishedQuorums[validatorIndex] == nil {
 			trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
 		}
-		c.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleSyncCommittee, slot, validatorIndex, threshold)
+		c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, threshold)
 	}
 }
 
