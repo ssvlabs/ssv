@@ -56,8 +56,7 @@ func (n *p2pNetwork) startDiscovery() error {
 		inbound, outbound := n.connectionStats()
 		vacantOutboundSlots := n.cfg.MaxPeers - (inbound + outbound)
 		if vacantOutboundSlots <= 0 {
-			n.logger.Debug(
-				"no vacant outbound slots, skipping peer selection",
+			n.logger.Debug("no vacant outbound slots, skipping peer selection",
 				zap.Int("inbound_peers", inbound),
 				zap.Int("outbound_peers", outbound),
 				zap.Int("max_peers", n.cfg.MaxPeers),
@@ -65,9 +64,9 @@ func (n *p2pNetwork) startDiscovery() error {
 			return
 		}
 
-		// Compute number of peers we're connected to for each subnet.
+		// Compute the number of peers we're connected to for each subnet.
 		ownSubnets := n.SubscribedSubnets()
-		currentSubnetPeers := SubnetPeers{}
+		currentSubnetPeers := newSubnetPeers()
 		for topic, peers := range n.PeersByTopic() {
 			subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
 			if err != nil {
@@ -90,10 +89,9 @@ func (n *p2pNetwork) startDiscovery() error {
 		// Limit new connections to the remaining outbound slots.
 		maxPeersToConnect := max(vacantOutboundSlots, 1)
 
-		// Repeatedly select the next best peer to connect to,
-		// adding its subnets to pendingSubnetPeers so that the next selection
-		// is scored assuming the previous peers are already connected.
-		pendingSubnetPeers := SubnetPeers{}
+		// Repeatedly select the next best peer to connect to, adding its subnets to pendingSubnetPeers
+		// so that the next selection is scored assuming the previous peers are already connected.
+		pendingSubnetPeers := newSubnetPeers()
 		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		for i := range maxPeersToConnect {
 			optimisticSubnetPeers := currentSubnetPeers.Add(pendingSubnetPeers)
@@ -129,29 +127,25 @@ func (n *p2pNetwork) startDiscovery() error {
 				return true
 			})
 
-			bestPeer, _, ok := peersByPriority.Pop()
+			bestPeer, peerScore, ok := peersByPriority.Pop()
 			if !ok {
 				// No more peers.
 				break
 			}
 
-			// Add the selected peer's subnets to pendingSubnetPeers,
-			// to be used in the next iteration.
-			bestPeerSubnets := SubnetPeers{}
-			subnets, _ := n.PeersIndex().GetPeerSubnets(bestPeer.ID)
-			for subnet, v := range subnets.SubnetList() {
-				bestPeerSubnets[subnet] = uint16(v) // #nosec G115 -- subnets has a constant max len of 128
-			}
-			pendingSubnetPeers = pendingSubnetPeers.Add(bestPeerSubnets)
+			// Add the selected peer's subnets to pendingSubnetPeers to be used on the next iteration.
+			bestPeerSubnets, _ := n.PeersIndex().GetPeerSubnets(bestPeer.ID)
+			bestSubnetPeers := newSubnetPeersFromSubnets(bestPeerSubnets)
+			pendingSubnetPeers = pendingSubnetPeers.Add(bestSubnetPeers)
 			peersToConnect[bestPeer.ID] = bestPeer
 
-			n.logger.Debug(
-				"found the best peer to connect to",
+			n.logger.Debug("found the best peer to connect to",
 				fields.PeerID(bestPeer.ID),
 				zap.String("peer_subnets", bestPeerSubnets.String()),
-				zap.Uint("sample_size", peersByPriority.Size()),
+				zap.Float64("peer_score", peerScore),
 				zap.Float64("min_score", minScore),
 				zap.Float64("max_score", maxScore),
+				zap.Uint("sample_size", peersByPriority.Size()),
 				zap.String("iteration", fmt.Sprintf("%d of %d", i, maxPeersToConnect)),
 			)
 		}

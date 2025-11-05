@@ -141,8 +141,9 @@ func (s *Subnets) String() string {
 	return hex.EncodeToString(s.v[:])
 }
 
+// SubnetList returns a list of subnets; Each subnet in that list is a number in the range [0, SubnetsCount).
 func (s *Subnets) SubnetList() []uint64 {
-	indices := make([]uint64, 0)
+	subnetNumbers := make([]uint64, 0)
 	for byteIdx, b := range s.v {
 		if byteIdx >= SubnetsCount {
 			break
@@ -151,12 +152,11 @@ func (s *Subnets) SubnetList() []uint64 {
 			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of 128
 			if b&bit == bit {
 				subnet := uint64(byteIdx)*8 + bitIdx
-				indices = append(indices, subnet)
+				subnetNumbers = append(subnetNumbers, subnet)
 			}
 		}
 	}
-
-	return indices
+	return subnetNumbers
 }
 
 func (s *Subnets) ActiveCount() int {
