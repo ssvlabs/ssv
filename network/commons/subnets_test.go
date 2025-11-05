@@ -67,7 +67,7 @@ func TestSubnetsParsing(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, strings.Replace(subtest.str, "0x", "", 1), s.String())
+				require.Equal(t, strings.Replace(subtest.str, "0x", "", 1), s.StringHex())
 			}
 		})
 	}

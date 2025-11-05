@@ -17,14 +17,14 @@ type NodeMetadata struct {
 	ExecutionNode string
 	// ConsensusNode is the "name/version" of the beacon node
 	ConsensusNode string
-	// Subnets represents the subnets that our node is subscribed to
-	Subnets string
+	// SubnetsHex represents the subnets that our node is subscribed to
+	SubnetsHex string
 }
 
 // Encode encodes the metadata into bytes
 func (nm *NodeMetadata) Encode() ([]byte, error) {
-	if len(nm.Subnets) != subnetsLength {
-		return nil, fmt.Errorf("invalid subnets length %d", len(nm.Subnets))
+	if len(nm.SubnetsHex) != subnetsLength {
+		return nil, fmt.Errorf("invalid subnets length %d", len(nm.SubnetsHex))
 	}
 
 	return json.Marshal(nm)
@@ -35,8 +35,8 @@ func (nm *NodeMetadata) Decode(data []byte) error {
 	if err := json.Unmarshal(data, nm); err != nil {
 		return err
 	}
-	if len(nm.Subnets) != subnetsLength {
-		return fmt.Errorf("invalid subnets length %d", len(nm.Subnets))
+	if len(nm.SubnetsHex) != subnetsLength {
+		return fmt.Errorf("invalid subnets length %d", len(nm.SubnetsHex))
 	}
 	return nil
 }

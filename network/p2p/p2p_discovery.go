@@ -105,8 +105,8 @@ func (n *p2pNetwork) startDiscovery() error {
 
 				// Predict this peer's score by estimating how much it would contribute to our subscribed subnets,
 				// applying backoff penalty for peers with failed connection attempts:
-				// - the more a peer has been tried the less relevant it is (cooldown grows)
-				// - the more time has passed since last connect attempt the more relevant peer is (waited grows)
+				// - the more a peer has been tried, the less relevant it is (cooldown grows)
+				// - the more time has passed since the last connect attempt the more relevant peer is (waited grows)
 				peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
 				if discoveredPeer.Tries > 0 {
@@ -133,7 +133,7 @@ func (n *p2pNetwork) startDiscovery() error {
 				break
 			}
 
-			// Add the selected peer's subnets to pendingSubnetPeers to be used on the next iteration.
+			// Add the selected(best) peer's subnets to pendingSubnetPeers to be used on the next iteration.
 			bestPeerSubnets, _ := n.PeersIndex().GetPeerSubnets(bestPeer.ID)
 			bestSubnetPeers := newSubnetPeersFromSubnets(bestPeerSubnets)
 			pendingSubnetPeers = pendingSubnetPeers.Add(bestSubnetPeers)
@@ -159,8 +159,7 @@ func (n *p2pNetwork) startDiscovery() error {
 			})
 			connector <- p.AddrInfo
 		}
-		n.logger.Info(
-			"proposed discovered peers",
+		n.logger.Info("proposed discovered peers",
 			zap.Int("count", len(peersToConnect)),
 		)
 	})

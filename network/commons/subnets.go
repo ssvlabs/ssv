@@ -146,8 +146,8 @@ func (s *Subnets) String() string {
 	return strings.TrimSuffix(result.String(), " ")
 }
 
-// HexString returns subnets as a hex-encoded string.
-func (s *Subnets) HexString() string {
+// StringHex returns subnets as a hex-encoded string.
+func (s *Subnets) StringHex() string {
 	return hex.EncodeToString(s.v[:])
 }
 

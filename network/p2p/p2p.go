@@ -500,7 +500,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = n.currentSubnets.String()
+			self.Metadata.SubnetsHex = n.currentSubnets.StringHex()
 			return self
 		})
 

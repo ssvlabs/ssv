@@ -29,7 +29,6 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -195,7 +194,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     n.persistentSubnets.String(),
+		SubnetsHex:  n.persistentSubnets.StringHex(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
@@ -280,11 +279,12 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 		if n.persistentSubnets.HasActive() {
 			discV5Opts.Subnets = n.persistentSubnets
-			logger = logger.With(fields.Subnets(n.persistentSubnets))
+			logger = logger.With(zap.String("persistent_subnets", n.persistentSubnets.String()))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
-			zap.String("ip", discV5Opts.IP))
+			zap.String("ip", discV5Opts.IP),
+		)
 	} else {
 		logger.Info("discovery: using mdns (local)")
 	}

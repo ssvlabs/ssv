@@ -252,7 +252,7 @@ func (n *p2pNetwork) subscribeToFixedSubnets() {
 		return
 	}
 
-	n.logger.Debug("subscribing to fixed subnets", fields.Subnets(n.persistentSubnets))
+	n.logger.Debug("subscribing to fixed subnets", zap.String("persistent_subnets", n.persistentSubnets.String()))
 
 	for _, subnet := range n.persistentSubnets.SubnetList() {
 		if err := n.topicsCtrl.Subscribe(strconv.FormatUint(subnet, 10)); err != nil {
