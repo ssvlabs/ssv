@@ -36,7 +36,7 @@ func TestNodeMetadata_Encode(t *testing.T) {
 				NodeVersion:   "1.0.0",
 				ExecutionNode: "geth/v1.10.8",
 				ConsensusNode: "lighthouse/v1.5.0",
-				SubnetsHex:    tt.subnets,
+				Subnets:       tt.subnets,
 			}
 
 			_, err := nodeMeta.Encode()

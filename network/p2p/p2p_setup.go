@@ -194,7 +194,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		SubnetsHex:  n.persistentSubnets.StringHex(),
+		Subnets:     n.persistentSubnets.StringHex(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey

@@ -50,7 +50,7 @@ func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.peersIndex.Self()
 	resp := identityJSON{
 		PeerID:  h.network.LocalPeer(),
-		Subnets: nodeInfo.Metadata.SubnetsHex,
+		Subnets: nodeInfo.Metadata.Subnets,
 		Version: nodeInfo.Metadata.NodeVersion,
 	}
 	for _, addr := range h.network.ListenAddresses() {

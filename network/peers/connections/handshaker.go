@@ -202,7 +202,7 @@ func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
 	if ni.Metadata != nil {
-		subnets, err := commons.SubnetsFromString(ni.Metadata.SubnetsHex)
+		subnets, err := commons.SubnetsFromString(ni.Metadata.Subnets)
 		if err == nil {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {
