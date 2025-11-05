@@ -859,7 +859,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		cr.BaseRunner.State.Finished = true
 		cr.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.RoleCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
-		const dutyFinishedEvent = "finished duty processing (100% success)"
+		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
 		logger.Info(dutyFinishedEvent,
 			fields.ConsensusTime(cr.measurements.ConsensusTime()),
 			fields.ConsensusRounds(uint64(cr.bState().RunningInstance.State.Round)),
@@ -871,7 +871,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
-	const dutyFinishedEvent = "finished duty processing (partial success)"
+	const dutyFinishedEvent = "✔️finished duty processing (partial success)"
 	logger.Info(dutyFinishedEvent,
 		fields.ConsensusTime(cr.measurements.ConsensusTime()),
 		fields.ConsensusRounds(uint64(cr.bState().RunningInstance.State.Round)),

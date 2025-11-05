@@ -158,7 +158,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	)
 
 	r.bState().Finished = true
-	const dutyFinishedEvent = "successfully finished duty processing"
+	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
 

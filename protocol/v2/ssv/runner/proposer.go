@@ -473,7 +473,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	r.bState().Finished = true
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, r.bState().RunningInstance.State.Round)
-	const dutyFinishedEvent = "successfully finished duty processing"
+	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),

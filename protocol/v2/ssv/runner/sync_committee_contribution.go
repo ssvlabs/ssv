@@ -146,7 +146,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		r.bState().Finished = true
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, 0)
-		const dutyFinishedNoProofsEvent = "successfully finished duty processing (no selection proofs)"
+		const dutyFinishedNoProofsEvent = "✔️successfully finished duty processing (no selection proofs)"
 		logger.Info(dutyFinishedNoProofsEvent,
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
@@ -404,7 +404,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	r.bState().Finished = true
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, r.bState().RunningInstance.State.Round)
-	const dutyFinishedEvent = "successfully finished duty processing"
+	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),

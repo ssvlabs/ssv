@@ -135,7 +135,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	)
 
 	r.bState().Finished = true
-	const dutyFinishedEvent = "successfully finished duty processing"
+	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
 
