@@ -478,7 +478,7 @@ listener:
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
-	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
+	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
 	logger.Debug(broadcastedPostConsensusMsgEvent)
 	span.AddEvent(broadcastedPostConsensusMsgEvent)
 

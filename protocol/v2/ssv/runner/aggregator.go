@@ -284,7 +284,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
 	}
-	const broadcastedPostConsensusMsgEvent = "broadcasted post consensus partial signature message"
+	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
 	logger.Debug(broadcastedPostConsensusMsgEvent)
 	span.AddEvent(broadcastedPostConsensusMsgEvent)
 

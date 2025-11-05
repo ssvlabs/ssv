@@ -245,14 +245,14 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
-	const gotPreConsensusMsgEvent = "got pre-consensus message"
+	const gotPreConsensusMsgEvent = "📬 got pre-consensus message"
 	logger.Debug(gotPreConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
 	span.AddEvent(gotPreConsensusMsgEvent)
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
 
 	if hasQuorum {
-		const gotPreConsensusQuorumEvent = "got pre consensus quorum"
+		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
 		logger.Debug(gotPreConsensusQuorumEvent)
 		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
@@ -328,14 +328,14 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger 
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
-	const gotPostConsensusMsgEvent = "got post-consensus message"
+	const gotPostConsensusMsgEvent = "📬 got post-consensus message"
 	logger.Debug(gotPostConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
 	span.AddEvent(gotPostConsensusMsgEvent)
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
 
 	if hasQuorum {
-		const gotPostConsensusQuorumEvent = "got post consensus quorum"
+		const gotPostConsensusQuorumEvent = "🎯 got post-consensus quorum"
 		logger.Debug(gotPostConsensusQuorumEvent)
 		span.AddEvent(gotPostConsensusQuorumEvent)
 	}
