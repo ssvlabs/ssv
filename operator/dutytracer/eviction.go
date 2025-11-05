@@ -17,11 +17,17 @@ import (
 
 func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) {
 	var links = make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
+
+	// Delete from map FIRST while collecting data to prevent race condition
+	// where new links are added between reading and deletion
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
 		committeeID, found := slotToCommittee.Get(slot)
 		if !found {
 			return true
 		}
+
+		// Remove from map immediately
+		slotToCommittee.Delete(slot)
 
 		links[index] = committeeID
 
@@ -33,11 +39,6 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 		return
 	}
 
-	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
-		slotToCommittee.Delete(slot)
-		return true
-	})
-
 	totalSaved = len(links)
 
 	return
@@ -45,13 +46,22 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 
 func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
 	var duties []*exporter.CommitteeDutyTrace
+
+	// Delete from map FIRST while collecting data to prevent race condition
+	// where new messages arrive between reading and deletion
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
 		if !found {
 			return true
 		}
-		// Warn loudly if we are about to drop pending buffered entries due to roots not being resolved.
+
+		// Remove from map immediately to prevent new messages from modifying this trace
+		slotToTraceMap.Delete(slot)
+
+		// Now safely read the trace data while locked
 		trace.Lock()
+
+		// Warn loudly if we are about to drop pending buffered entries due to roots not being resolved.
 		pendingCount := 0
 		for _, perSigner := range trace.pendingByRoot {
 			for _, byTs := range perSigner {
@@ -68,9 +78,11 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 			// We intentionally drop pending entries here; they are not persisted.
 			trace.pendingByRoot = nil
 		}
+
+		// Deep copy while still holding the lock
+		data := trace.DeepCopy()
 		trace.Unlock()
 
-		data := trace.trace()
 		duties = append(duties, data)
 		return true
 	})
@@ -80,23 +92,25 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		return 0
 	}
 
-	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
-		slotToTraceMap.Delete(slot)
-		return true
-	})
-
 	totalSaved = len(duties)
 	return totalSaved
 }
 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
 	var duties []*exporter.ValidatorDutyTrace
+
+	// Delete from map FIRST while collecting data to prevent race condition
+	// where new messages arrive between reading and deletion
 	c.validatorTraces.Range(func(idx phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
 		if !found {
 			return true
 		}
 
+		// Remove from map immediately to prevent new messages from modifying this trace
+		slotToTraceMap.Delete(slot)
+
+		// Now safely read the trace data
 		for _, role := range trace.roleTraces() {
 			if role.Validator == 0 {
 				c.logger.Info("got trace with missing validator index", fields.ValidatorIndex(idx), fields.Slot(slot))
@@ -113,11 +127,6 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 		c.logger.Error("couldn't save validator duties to disk", zap.Error(err))
 		return 0
 	}
-
-	c.validatorTraces.Range(func(_ phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
-		slotToTraceMap.Delete(slot)
-		return true
-	})
 
 	return len(duties)
 }

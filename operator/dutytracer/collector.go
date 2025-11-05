@@ -140,6 +140,11 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 	start := time.Now()
 	threshold := currentSlot - slotTTL
 
+	// CRITICAL: Update lastEvictedSlot BEFORE dumping to ensure messages arriving
+	// during eviction take the late path and fetch from disk instead of creating
+	// new incomplete in-memory traces
+	c.lastEvictedSlot.Store(uint64(threshold))
+
 	evicted := c.dumpCommitteeToDBPeriodically(threshold)
 	c.logger.Info("evicted committee duty traces to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
@@ -155,9 +160,6 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 
 	// remove old SC roots
 	c.syncCommitteeRootsCache.DeleteExpired()
-
-	// update last evicted slot
-	c.lastEvictedSlot.Store(uint64(threshold))
 }
 
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*validatorDutyTrace, bool, error) {
@@ -615,7 +617,25 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					trace.syncCommitteeRoot = syncRoot
 					trace.attestationRoot = attRoot
 					trace.roleRootsReady = true
+
+					pendingCountBefore := 0
+					for _, perSigner := range trace.pendingByRoot {
+						for _, byTs := range perSigner {
+							for _, idxs := range byTs {
+								pendingCountBefore += len(idxs)
+							}
+						}
+					}
+
 					trace.flushPending()
+
+					c.logger.Info("flushed pending signatures to role buckets",
+						fields.Slot(slot),
+						fields.CommitteeID(committeeID),
+						zap.Int("pending_count_before_flush", pendingCountBefore),
+						zap.Int("attester_signers_after_flush", len(trace.Attester)),
+						zap.Int("sync_committee_signers_after_flush", len(trace.SyncCommittee)))
+
 					// Check quorum for all validators after flushing pending signatures.
 					// This ensures quorum detection happens immediately when signatures that
 					// arrived before the proposal are reclassified into role buckets.
@@ -649,8 +669,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			if late {
+				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
 				_ = c.inFlightCommittee.Delete(committeeID)
-				return c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+				return err
 			}
 
 			return nil
@@ -710,8 +731,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			if late {
+				err := c.store.SaveValidatorDuty(roleDutyTrace)
 				_ = c.inFlightValidator.Delete(index)
-				return c.store.SaveValidatorDuty(roleDutyTrace)
+				return err
 			}
 
 			return nil
@@ -763,9 +785,10 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			c.checkAndPublishQuorum(logger, pSigMessages, committeeID, trace)
 
 			if late {
-				_ = c.inFlightCommittee.Delete(committeeID)
 				c.saveLateValidatorToCommiteeLinks(slot, pSigMessages, committeeID)
-				return c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+				_ = c.inFlightCommittee.Delete(committeeID)
+				return err
 			}
 
 			// cache the link between validator index and committee id
@@ -807,8 +830,9 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		}
 
 		if late {
+			err := c.store.SaveValidatorDuty(roleDutyTrace)
 			_ = c.inFlightValidator.Delete(pSigMessages.Messages[0].ValidatorIndex)
-			return c.store.SaveValidatorDuty(roleDutyTrace)
+			return err
 		}
 
 		return nil
@@ -1095,15 +1119,6 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 
 	committee, found := c.validators.Committee(committeeID)
 	if !found || len(committee.Operators) == 0 {
-		operatorsCount := 0
-		if found {
-			operatorsCount = len(committee.Operators)
-		}
-		logger.Debug("skipping quorum check after flush: committee not found or empty",
-			fields.Slot(slot),
-			fields.CommitteeID(committeeID),
-			zap.Bool("found", found),
-			zap.Int("operators_count", operatorsCount))
 		return
 	}
 
@@ -1112,6 +1127,21 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 	if trace.publishedQuorums == nil {
 		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
 	}
+
+	// Count validators for each role
+	attesterValidators := make(map[phase0.ValidatorIndex]struct{})
+	for _, sd := range trace.Attester {
+		for _, idx := range sd.ValidatorIdx {
+			attesterValidators[idx] = struct{}{}
+		}
+	}
+
+	logger.Debug("checking quorum after flush",
+		fields.Slot(slot),
+		fields.CommitteeID(committeeID),
+		zap.Int("attester_validators", len(attesterValidators)),
+		zap.Int("attester_signers", len(trace.Attester)),
+		zap.Uint64("threshold", threshold))
 
 	// Check quorum for both roles
 	c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleAttester, trace.Attester, slot, threshold)
