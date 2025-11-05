@@ -145,7 +145,7 @@ func (n *p2pNetwork) startDiscovery() error {
 				zap.Float64("peer_score", peerScore),
 				zap.Float64("min_score", minScore),
 				zap.Float64("max_score", maxScore),
-				zap.Uint("sample_size", peersByPriority.Size()),
+				zap.Uint("sample_size", peersByPriority.Size()+1),
 				zap.String("iteration", fmt.Sprintf("%d of %d", i, maxPeersToConnect)),
 			)
 		}

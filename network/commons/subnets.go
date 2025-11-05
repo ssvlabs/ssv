@@ -137,7 +137,17 @@ func (s *Subnets) Clear(i uint64) {
 	s.v[byteIndex] &^= 1 << bitIndex
 }
 
+// String returns human-readable subnets representation.
 func (s *Subnets) String() string {
+	var result strings.Builder
+	for _, subnetNumber := range s.SubnetList() {
+		_, _ = fmt.Fprintf(&result, "%d ", subnetNumber)
+	}
+	return strings.TrimSuffix(result.String(), " ")
+}
+
+// HexString returns subnets as a hex-encoded string.
+func (s *Subnets) HexString() string {
 	return hex.EncodeToString(s.v[:])
 }
 
@@ -149,7 +159,7 @@ func (s *Subnets) SubnetList() []uint64 {
 			break
 		}
 		for bitIdx := uint64(0); bitIdx < 8; bitIdx++ {
-			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of 128
+			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of SubnetsCount
 			if b&bit == bit {
 				subnet := uint64(byteIdx)*8 + bitIdx
 				subnetNumbers = append(subnetNumbers, subnet)

@@ -48,7 +48,7 @@ func getTestingData(t *testing.T) TestData {
 			NodeVersion:   "some-node-version",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
-			Subnets:       commons.AllSubnets.String(),
+			Subnets:       commons.AllSubnets.HexString(),
 		},
 	}
 
@@ -59,7 +59,7 @@ func getTestingData(t *testing.T) TestData {
 				NodeVersion:   "test-node-version",
 				ExecutionNode: "test-execution-node",
 				ConsensusNode: "test-consensus-node",
-				Subnets:       commons.AllSubnets.String(),
+				Subnets:       commons.AllSubnets.HexString(),
 			},
 		},
 		MockSelfSealed: []byte("something"),

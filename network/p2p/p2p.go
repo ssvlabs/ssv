@@ -671,11 +671,11 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 }
 
 func (a SubnetPeers) String() string {
-	var b strings.Builder
+	var result strings.Builder
 	for i, v := range a {
 		if v > 0 {
-			_, _ = fmt.Fprintf(&b, "%d:%d ", i, v)
+			_, _ = fmt.Fprintf(&result, "%d:%d ", i, v)
 		}
 	}
-	return b.String()
+	return strings.TrimSuffix(result.String(), " ")
 }

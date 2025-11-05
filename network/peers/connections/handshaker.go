@@ -205,8 +205,10 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 		if err == nil {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {
-				logger.Debug("[handshake] peer subnets were updated", fields.PeerID(pid),
-					zap.String("subnets", subnets.String()))
+				logger.Debug("[handshake] peer subnets were updated",
+					fields.PeerID(pid),
+					zap.String("subnets", subnets.String()),
+				)
 			}
 		}
 	}
