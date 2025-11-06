@@ -139,11 +139,7 @@ func (s *Subnets) Clear(i uint64) {
 
 // String returns human-readable subnets representation.
 func (s *Subnets) String() string {
-	var result strings.Builder
-	for _, subnetNumber := range s.SubnetList() {
-		_, _ = fmt.Fprintf(&result, "%d ", subnetNumber)
-	}
-	return strings.TrimSuffix(result.String(), " ")
+	return fmt.Sprint(s.SubnetList())
 }
 
 // StringHex returns subnets as a hex-encoded string.
