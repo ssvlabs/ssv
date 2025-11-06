@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -71,13 +72,16 @@ func (i *Instance) uponRoundChange(
 			return errors.Wrap(err, "failed to create proposal")
 		}
 
-		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happens in createproposal
+		valueToProposeRoot, err := specqbft.HashDataRoot(valueToPropose)
+		if err != nil {
+			return errors.Wrap(err, "failed to hash value-to-propose")
+		}
+		logger = logger.With(zap.String("qbft_value_to_propose_root", hex.EncodeToString(valueToProposeRoot[:])))
 
 		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonJustified)
 
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
 			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(i.State.Round))),
-			fields.Root(r),
 		)
 
 		if err := i.Broadcast(proposal); err != nil {
@@ -110,14 +114,14 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 		return errors.Wrap(err, "failed to create round change message")
 	}
 
-	root, err := specqbft.HashDataRoot(i.StartValue)
+	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
 		return errors.Wrap(err, "failed to hash instance start value")
 	}
+	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
 	logger.Debug("📢 broadcasting round change message (got partial quorum)",
 		zap.Uint64("qbft_new_round", uint64(newRound)),
-		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
 	)
 

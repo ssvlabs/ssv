@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"encoding/hex"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
@@ -9,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 )
 
@@ -21,12 +21,11 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		return types.WrapError(types.TimeoutInstanceErrorCode, traces.Errorf(span, "instance stopped processing timeouts"))
 	}
 
-	root, err := specqbft.HashDataRoot(i.StartValue)
+	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
-		return traces.Errorf(span, "could not calculate root for round change: %w", err)
+		return traces.Errorf(span, "failed to hash instance start value: %w", err)
 	}
-
-	logger = logger.With(fields.Root(root))
+	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
 	logger.Debug("⌛ round timed out")
 
@@ -50,11 +49,10 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
 
 	const eventMsg = "📢 broadcasting round change message (this round timed out)"
-	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(root), observability.DutyRoundAttribute(prevRound)))
+	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(startValueRoot), observability.DutyRoundAttribute(prevRound)))
 	logger.Debug(
 		eventMsg,
 		zap.Uint64("qbft_new_round", uint64(newRound)),
-		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
 	)
 
