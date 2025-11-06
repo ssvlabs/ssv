@@ -85,6 +85,8 @@ func (i *Instance) Start(
 		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
+	logger = logger.With(fields.QBFTRound(specqbft.FirstRound), fields.QBFTHeight(height))
+
 	proposerID := i.ProposerForRound(specqbft.FirstRound)
 
 	const startingQBFTInstanceEvent = "ℹ️ starting QBFT instance"
