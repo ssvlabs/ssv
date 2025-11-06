@@ -38,7 +38,7 @@ const (
 	defaultReqTimeout = 10 * time.Second
 	// backoffLow is the min value backoff strategy will use for its delay
 	backoffLow = 10 * time.Second
-	// backoffLow is the max value backoff strategy will use for its delay
+	// backoffHigh is the max value backoff strategy will use for its delay
 	backoffHigh = 5 * time.Minute
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
