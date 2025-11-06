@@ -27,10 +27,7 @@ import (
 
 // setCommitteeLink is a test helper that directly sets validator-to-committee links in the collector's in-memory map
 func setCommitteeLink(c *Collector, slot phase0.Slot, validatorIndex phase0.ValidatorIndex, committeeID spectypes.CommitteeID) {
-	slotToCommittee, found := c.validatorIndexToCommitteeLinks.Get(validatorIndex)
-	if !found {
-		slotToCommittee, _ = c.validatorIndexToCommitteeLinks.GetOrSet(validatorIndex, hashmap.New[phase0.Slot, spectypes.CommitteeID]())
-	}
+	slotToCommittee, _ := c.validatorIndexToCommitteeLinks.GetOrSet(validatorIndex, hashmap.New[phase0.Slot, spectypes.CommitteeID]())
 	slotToCommittee.Set(slot, committeeID)
 }
 

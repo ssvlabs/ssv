@@ -1111,7 +1111,7 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 	}
 
 	if err := c.store.SaveScheduled(slot, schedule); err != nil {
-		return err
+		return fmt.Errorf("save scheduled: %w", err)
 	}
 
 	// Populate committee links only for validators with scheduled duties
