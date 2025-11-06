@@ -141,7 +141,7 @@ func (n *p2pNetwork) startDiscovery() error {
 
 			n.logger.Debug("found the best peer to connect to",
 				fields.PeerID(bestPeer.ID),
-				zap.String("peer_subnets", bestPeerSubnets.String()),
+				zap.String("peer_subnets", bestPeerSubnets.StringHumanReadable()),
 				zap.Float64("peer_score", peerScore),
 				zap.Float64("min_score", minScore),
 				zap.Float64("max_score", maxScore),
