@@ -106,10 +106,10 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.bState().ReconstructBeaconSig(r.bState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.bState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
@@ -134,7 +134,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.bState().Finished = true
+	r.state().Finished = true
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -240,7 +240,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.CurrentDuty.DutySlot())
-	validatorIndex := r.bState().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+	validatorIndex := r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
 		ValidatorIndex: validatorIndex,
@@ -298,7 +298,7 @@ func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
 	return nil
 }
 
-func (r *VoluntaryExitRunner) bState() *State {
+func (r *VoluntaryExitRunner) state() *State {
 	return r.BaseRunner.State
 }
 
