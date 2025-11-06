@@ -247,8 +247,8 @@ func (ch *connHandler) sharesEnoughSubnets(conn libp2pnetwork.Conn) bool {
 
 	ch.logger.Debug("checking if peer shares at least 1 subnet with us",
 		fields.PeerID(pid),
-		zap.String("my_subnets", mySubnets.String()),
-		zap.String("peer_subnets", peerSubnets.String()),
+		zap.String("my_subnets", mySubnets.StringHumanReadable()),
+		zap.String("peer_subnets", peerSubnets.StringHumanReadable()),
 	)
 
 	return len(mySubnets.SharedSubnetsN(peerSubnets, 1)) == 1

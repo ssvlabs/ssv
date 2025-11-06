@@ -473,7 +473,7 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 	}
 
 	if opts.Subnets.HasActive() {
-		logFields = append(logFields, zap.String("subnets", opts.Subnets.String()))
+		logFields = append(logFields, zap.String("subnets", opts.Subnets.StringHumanReadable()))
 	}
 
 	dvs.logger.Debug("node record is ready", logFields...)

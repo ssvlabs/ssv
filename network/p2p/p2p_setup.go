@@ -279,7 +279,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 		if n.persistentSubnets.HasActive() {
 			discV5Opts.Subnets = n.persistentSubnets
-			logger = logger.With(zap.String("persistent_subnets", n.persistentSubnets.String()))
+			logger = logger.With(zap.String("persistent_subnets", n.persistentSubnets.StringHumanReadable()))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),

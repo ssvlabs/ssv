@@ -137,14 +137,21 @@ func (s *Subnets) Clear(i uint64) {
 	s.v[byteIndex] &^= 1 << bitIndex
 }
 
-// String returns human-readable subnets representation.
-func (s *Subnets) String() string {
+// StringHumanReadable returns human-readable subnets representation.
+func (s *Subnets) StringHumanReadable() string {
 	return fmt.Sprint(s.SubnetList())
 }
 
 // StringHex returns subnets as a hex-encoded string.
 func (s *Subnets) StringHex() string {
 	return hex.EncodeToString(s.v[:])
+}
+
+// String returns subnets as a hex-encoded string.
+// DEPRECATED, use StringHex or StringHumanReadable instead, this method is preserved for
+// backward-compatibility since it's used for some p2p-message encoding/decoding.
+func (s *Subnets) String() string {
+	return s.StringHex()
 }
 
 // SubnetList returns a list of subnets; Each subnet in that list is a number in the range [0, SubnetsCount).
