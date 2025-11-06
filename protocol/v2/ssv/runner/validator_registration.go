@@ -26,7 +26,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -104,7 +103,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return traces.Errorf(span, "failed processing validator registration message: %w", err)
+		return tracedErrorf(span, "failed processing validator registration message: %w", err)
 	}
 
 	logger.Debug("got partial sig",
@@ -126,14 +125,14 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return traces.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
+		return tracedErrorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
 	registration, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
 	if err != nil {
-		return traces.Errorf(span, "could not calculate validator registration: %w", err)
+		return tracedErrorf(span, "could not calculate validator registration: %w", err)
 	}
 
 	signedRegistration := &api.VersionedSignedValidatorRegistration{
@@ -146,7 +145,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	span.AddEvent("submitting validator registration")
 	if err := r.validatorRegistrationSubmitter.Enqueue(signedRegistration); err != nil {
-		return traces.Errorf(span, "could not submit validator registration: %w", err)
+		return tracedErrorf(span, "could not submit validator registration: %w", err)
 	}
 
 	const eventMsg = "validator registration submitted successfully"
@@ -199,7 +198,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	vr, err := r.buildValidatorRegistration(duty.DutySlot())
 	if err != nil {
-		return traces.Errorf(span, "could not calculate validator registration: %w", err)
+		return tracedErrorf(span, "could not calculate validator registration: %w", err)
 	}
 
 	// sign partial randao
@@ -213,7 +212,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		spectypes.DomainApplicationBuilder,
 	)
 	if err != nil {
-		return traces.Errorf(span, "could not sign validator registration: %w", err)
+		return tracedErrorf(span, "could not sign validator registration: %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
@@ -225,7 +224,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return traces.Errorf(span, "could not encode validator registration partial sig message: %w", err)
+		return tracedErrorf(span, "could not encode validator registration partial sig message: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -237,7 +236,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return traces.Errorf(span, "could not sign SSVMessage: %w", err)
+		return tracedErrorf(span, "could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -249,7 +248,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return traces.Errorf(span, "can't broadcast partial randao sig: %w", err)
+		return tracedErrorf(span, "can't broadcast partial randao sig: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
