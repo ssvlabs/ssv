@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -66,19 +65,13 @@ func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 
 		if !found {
 			const errMsg = "no committee runner or queue found for slot"
-			logger.Error(errMsg, fields.Slot(slot), fields.MessageID(msg.MsgID))
+			logger.Error(errMsg)
 			span.SetStatus(codes.Error, errMsg)
 			return nil
 		}
 
 		if err := dutyRunner.OnTimeoutQBFT(ctx, logger, *eventMsg); err != nil {
 			return traces.Errorf(span, "timeout event: %w", err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	case types.ExecuteDuty:
-		if err := c.OnExecuteDuty(ctx, logger, eventMsg); err != nil {
-			return traces.Errorf(span, "execute duty event: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil

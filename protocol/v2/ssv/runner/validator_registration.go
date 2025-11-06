@@ -44,7 +44,6 @@ type ValidatorRegistrationRunner struct {
 	network                        specqbft.Network
 	signer                         ekm.BeaconSigner
 	operatorSigner                 ssvtypes.OperatorSigner
-	valCheck                       specqbft.ProposedValueCheckF
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
 	feeRecipientProvider           feeRecipientProvider
 
@@ -132,7 +131,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	registration, err := r.buildValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
+	registration, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
 	if err != nil {
 		return traces.Errorf(span, "could not calculate validator registration: %w", err)
 	}
@@ -163,7 +162,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 }
 
 func (r *ValidatorRegistrationRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return fmt.Errorf("no consensus phase for validator registration")
+	return spectypes.NewError(spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "no consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
@@ -171,14 +170,14 @@ func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger 
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return fmt.Errorf("no post consensus phase for validator registration")
+	return spectypes.NewError(spectypes.ValidatorRegistrationNoPostConsensusPhaseErrorCode, "no post consensus phase for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
+	if r.BaseRunner.State == nil || r.BaseRunner.State.CurrentDuty == nil {
 		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
 	}
-	vr, err := r.buildValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
+	vr, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}
@@ -338,10 +337,6 @@ func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
 
 func (r *ValidatorRegistrationRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return r.valCheck
 }
 
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {

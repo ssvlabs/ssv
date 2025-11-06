@@ -9,12 +9,14 @@ import (
 	"strings"
 	"testing"
 
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
@@ -26,7 +28,7 @@ type StartNewRunnerDutySpecTest struct {
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages          []*spectypes.PartialSignatureMessages
-	ExpectedError           string
+	ExpectedErrorCode       int
 }
 
 func (test *StartNewRunnerDutySpecTest) TestName() string {
@@ -42,11 +44,7 @@ func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
 
 func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	err := test.runPreTesting(logger)
-	if len(test.ExpectedError) > 0 {
-		require.EqualError(t, err, test.ExpectedError)
-	} else {
-		require.NoError(t, err)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
 	// test output message
 	broadcastedSignedMsgs := test.Runner.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
@@ -92,6 +90,37 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 		}
 
 		require.Len(t, test.OutputMessages, index)
+	}
+
+	switch r := test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+	case *runner.AggregatorRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+	case *runner.ProposerRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+	case *runner.SyncCommitteeAggregatorRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
 	}
 
 	// post root

@@ -45,7 +45,6 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
-		dec.TraceContext = ctx
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return
@@ -111,7 +110,6 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
-		dec.TraceContext = ctx
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return

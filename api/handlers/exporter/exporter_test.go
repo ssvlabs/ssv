@@ -1599,6 +1599,52 @@ func TestExporterBuildValidatorSchedule_Filtered(t *testing.T) {
 	assert.ElementsMatch(t, []string{"ATTESTER", "AGGREGATOR"}, entry.Roles)
 }
 
+func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *testing.T) {
+	store := newMockTraceStore()
+	exp := &Exporter{traceStore: store, logger: zap.NewNop()}
+
+	slot := phase0.Slot(42)
+	idx := phase0.ValidatorIndex(10)
+	var cmt spectypes.CommitteeID
+	cmt[0] = 1
+
+	// Resolve CommitteeID for the validator
+	store.GetCommitteeIDFunc = func(s phase0.Slot, i phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+		assert.Equal(t, slot, s)
+		assert.Equal(t, idx, i)
+		return cmt, nil
+	}
+
+	// Case 1: Attester signer data does NOT include the requested index -> filtered out
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+		assert.Equal(t, slot, s)
+		assert.Equal(t, cmt, id)
+		return &exporter.CommitteeDutyTrace{
+			Slot:        s,
+			CommitteeID: id,
+			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{55}}},
+		}, nil
+	}
+	duties, err := exp.getValidatorCommitteeDutiesForRoleAndSlot(spectypes.BNRoleAttester, slot, []phase0.ValidatorIndex{idx})
+	require.NoError(t, err)
+	assert.Len(t, duties, 0)
+
+	// Case 2: Attester signer data includes the requested index -> returned
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+		return &exporter.CommitteeDutyTrace{
+			Slot:        s,
+			CommitteeID: id,
+			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+		}, nil
+	}
+	duties, err = exp.getValidatorCommitteeDutiesForRoleAndSlot(spectypes.BNRoleAttester, slot, []phase0.ValidatorIndex{idx})
+	require.NoError(t, err)
+	require.Len(t, duties, 1)
+	assert.Equal(t, spectypes.BNRoleAttester, duties[0].Role)
+	require.NotNil(t, duties[0].CommitteeID)
+	assert.Equal(t, cmt, *duties[0].CommitteeID)
+}
+
 func TestExporterCommitteeTraces_InvalidJSON(t *testing.T) {
 	store := newMockTraceStore()
 	validatorStore := newMockValidatorStore()

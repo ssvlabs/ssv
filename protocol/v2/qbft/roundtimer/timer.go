@@ -43,8 +43,6 @@ type TimeoutOptions struct {
 type RoundTimer struct {
 	mtx *sync.RWMutex
 	ctx context.Context
-	// cancelCtx cancels the current context, will be called from Kill()
-	cancelCtx context.CancelFunc
 	// timer is the underlying time.Timer
 	timer *time.Timer
 	// result holds the result of the timer
@@ -60,12 +58,10 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
-	ctx, cancelCtx := context.WithCancel(pctx)
+func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
-		cancelCtx:    cancelCtx,
 		timer:        nil,
 		done:         done,
 		role:         role,
@@ -174,10 +170,8 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 }
 
 func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
-	ctx, cancel := context.WithCancel(t.ctx)
-	defer cancel()
 	select {
-	case <-ctx.Done():
+	case <-t.ctx.Done():
 	case <-timeout:
 		if t.Round() == round {
 			func() {

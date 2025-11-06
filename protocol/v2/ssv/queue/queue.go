@@ -6,6 +6,9 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 const (
@@ -43,6 +46,8 @@ type Queue interface {
 }
 
 type priorityQueue struct {
+	logger *zap.Logger
+
 	head     *item
 	inbox    chan *SSVMessage
 	lastRead time.Time
@@ -66,9 +71,10 @@ func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueType string, qu
 
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
-func New(capacity int, opts ...Option) Queue {
+func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 	q := &priorityQueue{
-		inbox: make(chan *SSVMessage, capacity),
+		logger: logger.Named(log.NameSSVMessageQueue),
+		inbox:  make(chan *SSVMessage, capacity),
 	}
 
 	for _, opt := range opts {
@@ -81,6 +87,8 @@ func New(capacity int, opts ...Option) Queue {
 func (q *priorityQueue) Push(msg *SSVMessage) {
 	q.recordInboxSize(int64(len(q.inbox)) + 1)
 
+	q.warnIfInboxIsTooBig()
+
 	q.inbox <- msg
 }
 
@@ -89,6 +97,7 @@ func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 
 	select {
 	case q.inbox <- msg:
+		q.warnIfInboxIsTooBig()
 		return true
 	default:
 		return false
@@ -229,6 +238,14 @@ func (q *priorityQueue) recordInboxSize(inboxSize int64) {
 		metric.WithAttributes(attribute.String("ssv.queue.type", q.queueType)),
 		metric.WithAttributes(attribute.String("ssv.queue.id", q.queueId)),
 	)
+}
+
+// warnIfInboxIsTooBig logs a warning that we'd ideally never want to hit, if we do - we'd want to do
+// something about it.
+func (q *priorityQueue) warnIfInboxIsTooBig() {
+	if len(q.inbox) > cap(q.inbox)/2 {
+		q.logger.Warn("queue is half-full")
+	}
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

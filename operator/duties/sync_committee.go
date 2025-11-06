@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 type SyncCommitteeHandler struct {
@@ -309,7 +310,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	go func() {
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
-		subscriptionCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
 		defer cancel()
 		if !withDeadline {
 			h.logger.Warn("parent-context has no deadline set")

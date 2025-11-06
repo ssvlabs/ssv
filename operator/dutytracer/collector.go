@@ -393,37 +393,41 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 		trace.OperatorIDs = cmt.Operators
 	}
 
-	// collect signers
-	indices := make([]phase0.ValidatorIndex, 0, len(msg.Messages))
-	scIndices := make([]phase0.ValidatorIndex, 0, len(msg.Messages))
+	signer := msg.Messages[0].Signer
+	var attIdxs []phase0.ValidatorIndex
+	var scIdxs []phase0.ValidatorIndex
 
 	for _, partialSigMsg := range msg.Messages {
-		if bytes.Equal(trace.syncCommitteeRoot[:], partialSigMsg.SigningRoot[:]) {
-			scIndices = append(scIndices, partialSigMsg.ValidatorIndex)
+		root := partialSigMsg.SigningRoot
+		if trace.roleRootsReady {
+			if bytes.Equal(trace.syncCommitteeRoot[:], root[:]) {
+				scIdxs = append(scIdxs, partialSigMsg.ValidatorIndex)
+			} else if bytes.Equal(trace.attestationRoot[:], root[:]) {
+				attIdxs = append(attIdxs, partialSigMsg.ValidatorIndex)
+			} else {
+				trace.addPending(root, signer, partialSigMsg.ValidatorIndex, receivedAt)
+			}
 			continue
 		}
-
-		indices = append(indices, partialSigMsg.ValidatorIndex)
+		// Not ready: buffer for later classification
+		trace.addPending(root, signer, partialSigMsg.ValidatorIndex, receivedAt)
 	}
 
-	slices.Sort(indices)
-	indices = slices.Compact(indices)
-
-	slices.Sort(scIndices)
-	scIndices = slices.Compact(scIndices)
-
-	if len(scIndices) > 0 {
+	if len(scIdxs) > 0 {
+		slices.Sort(scIdxs)
+		scIdxs = slices.Compact(scIdxs)
 		trace.SyncCommittee = append(trace.SyncCommittee, &exporter.SignerData{
-			Signer:       msg.Messages[0].Signer,
-			ValidatorIdx: scIndices,
+			Signer:       signer,
+			ValidatorIdx: scIdxs,
 			ReceivedTime: receivedAt,
 		})
 	}
-
-	if len(indices) > 0 {
+	if len(attIdxs) > 0 {
+		slices.Sort(attIdxs)
+		attIdxs = slices.Compact(attIdxs)
 		trace.Attester = append(trace.Attester, &exporter.SignerData{
-			Signer:       msg.Messages[0].Signer,
-			ValidatorIdx: indices,
+			Signer:       signer,
+			ValidatorIdx: attIdxs,
 			ReceivedTime: receivedAt,
 		})
 	}
@@ -497,6 +501,37 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 	}
 
 	return val.(phase0.Root), nil
+}
+
+// computeRoleRoots derives both sync-committee and attestation signing roots
+// from a proposal FullData (BeaconVote) for the given slot.
+func (c *Collector) computeRoleRoots(ctx context.Context, slot phase0.Slot, in []byte) (phase0.Root, phase0.Root, error) {
+	syncRoot, err := c.getSyncCommitteeRoot(ctx, slot, in)
+	if err != nil {
+		return phase0.Root{}, phase0.Root{}, err
+	}
+
+	var vote spectypes.BeaconVote
+	if err := vote.Decode(in); err != nil {
+		return phase0.Root{}, phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
+	}
+	epoch := c.beacon.EstimatedEpochAtSlot(slot)
+	domain, err := c.client.DomainData(ctx, epoch, spectypes.DomainAttester)
+	if err != nil {
+		return phase0.Root{}, phase0.Root{}, fmt.Errorf("get attester domain data: %w", err)
+	}
+	attData := &phase0.AttestationData{
+		Slot:            slot,
+		Index:           0, // Electra semantics (EIP-7549)
+		BeaconBlockRoot: vote.BlockRoot,
+		Source:          vote.Source,
+		Target:          vote.Target,
+	}
+	attRoot, err := spectypes.ComputeETHSigningRoot(attData, domain)
+	if err != nil {
+		return phase0.Root{}, phase0.Root{}, fmt.Errorf("compute attester root: %w", err)
+	}
+	return syncRoot, attRoot, nil
 }
 
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
@@ -573,12 +608,16 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			defer trace.Unlock()
 
 			if len(msg.SignedSSVMessage.FullData) > 0 && subMsg.MsgType == specqbft.ProposalMsgType {
-				// save proposal data
+				// save proposal data and compute role roots
 				trace.ProposalData = msg.SignedSSVMessage.FullData
 
-				root, err := c.getSyncCommitteeRoot(ctx, slot, msg.SignedSSVMessage.FullData)
-				if err == nil {
-					trace.syncCommitteeRoot = root
+				if syncRoot, attRoot, err := c.computeRoleRoots(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
+					trace.syncCommitteeRoot = syncRoot
+					trace.attestationRoot = attRoot
+					trace.roleRootsReady = true
+					trace.flushPending()
+				} else {
+					c.logger.Debug("compute role roots from proposal", zap.Error(err), fields.Slot(slot))
 				}
 			}
 
@@ -815,18 +854,83 @@ func (dt *validatorDutyTrace) roleTraces() (roles []*exporter.ValidatorDutyTrace
 
 type committeeDutyTrace struct {
 	sync.Mutex
+	// Derived roots for classifying committee partial signatures
 	syncCommitteeRoot phase0.Root
+	attestationRoot   phase0.Root
+	roleRootsReady    bool
 	exporter.CommitteeDutyTrace
 
 	// Track published quorums to avoid duplicates (validator -> role -> signers hash)
 	// Not part of the model.CommitteeDutyTrace, because it's not persisted to disk
 	publishedQuorums map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string
+
+	// Pending signatures grouped by SigningRoot and signer until role roots are known.
+	// Shape: pendingByRoot[root][signer][receivedAt] = []validatorIndices
+	pendingByRoot map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex
 }
 
 func (dt *committeeDutyTrace) trace() *exporter.CommitteeDutyTrace {
 	dt.Lock()
 	defer dt.Unlock()
 	return dt.DeepCopy()
+}
+
+// addPending buffers a validator index for a given root and signer.
+func (dt *committeeDutyTrace) addPending(root phase0.Root, signer spectypes.OperatorID, idx phase0.ValidatorIndex, receivedAt uint64) {
+	if dt.pendingByRoot == nil {
+		dt.pendingByRoot = make(map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex)
+	}
+	m := dt.pendingByRoot[root]
+	if m == nil {
+		m = make(map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex)
+		dt.pendingByRoot[root] = m
+	}
+	buckets := m[signer]
+	if buckets == nil {
+		buckets = make(map[uint64][]phase0.ValidatorIndex)
+		m[signer] = buckets
+	}
+	buckets[receivedAt] = append(buckets[receivedAt], idx)
+}
+
+// flushPending routes buffered entries into Attester/SyncCommittee buckets
+// according to derived role roots. Caller must hold dt.Lock().
+func (dt *committeeDutyTrace) flushPending() {
+	if len(dt.pendingByRoot) == 0 {
+		return
+	}
+	for root, perSigner := range dt.pendingByRoot {
+		var role spectypes.BeaconRole
+		switch root {
+		case dt.syncCommitteeRoot:
+			role = spectypes.BNRoleSyncCommittee
+		case dt.attestationRoot:
+			role = spectypes.BNRoleAttester
+		default:
+			// Unknown root; keep buffered
+			continue
+		}
+		for signer, byTs := range perSigner {
+			if len(byTs) == 0 {
+				continue
+			}
+			// For each timestamp bucket, sort/compact indices and emit a SignerData record
+			for ts, idxs := range byTs {
+				if len(idxs) == 0 {
+					continue
+				}
+				slices.Sort(idxs)
+				idxs = slices.Compact(idxs)
+				sd := &exporter.SignerData{Signer: signer, ValidatorIdx: idxs, ReceivedTime: ts}
+				if role == spectypes.BNRoleSyncCommittee {
+					dt.SyncCommittee = append(dt.SyncCommittee, sd)
+				} else {
+					dt.Attester = append(dt.Attester, sd)
+				}
+			}
+		}
+		delete(dt.pendingByRoot, root)
+	}
 }
 
 func getOrCreateRound(trace *exporter.ConsensusTrace, rnd uint64) *exporter.RoundTrace {

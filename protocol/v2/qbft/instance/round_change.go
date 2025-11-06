@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -210,7 +211,7 @@ func (i *Instance) isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if i.proposer(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
+	if i.ProposerForRound(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
 		return errors.New("not proposer")
 	}
 
@@ -250,13 +251,13 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		return errors.New("round change msg type is wrong")
 	}
 	if msg.QBFTMessage.Height != i.State.Height {
-		return errors.New("wrong msg height")
+		return spectypes.WrapError(spectypes.WrongMessageHeightErrorCode, ErrWrongMsgHeight)
 	}
 	if msg.QBFTMessage.Round != round {
-		return errors.New("wrong msg round")
+		return NewRetryableError(spectypes.WrapError(spectypes.WrongMessageRoundErrorCode, ErrWrongMsgRound))
 	}
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
-		return errors.New("msg allows 1 signer")
+		return spectypes.NewError(spectypes.MessageAllowsOneSignerOnlyErrorCode, "msg allows 1 signer")
 	}
 
 	if err := msg.Validate(); err != nil {
@@ -264,7 +265,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
-		return errors.New("signer not in committee")
+		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
 	}
 
 	// Addition to formal spec
@@ -298,11 +299,11 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		}
 
 		if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
-			return errors.New("H(data) != root")
+			return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 		}
 
 		if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgs) {
-			return errors.New("no justifications quorum")
+			return spectypes.NewError(spectypes.JustificationsNoQuorumInvalidErrorCode, "no justifications quorum")
 		}
 
 		if msg.QBFTMessage.DataRound > round {
@@ -326,7 +327,7 @@ func (i *Instance) validRoundChangeForDataVerifySignature(
 
 	// Verify signature
 	if err := spectypes.Verify(msg.SignedMessage, i.State.CommitteeMember.Committee); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
+		return spectypes.WrapError(spectypes.MessageSignatureInvalidErrorCode, fmt.Errorf("msg signature invalid: %w", err))
 	}
 
 	return nil

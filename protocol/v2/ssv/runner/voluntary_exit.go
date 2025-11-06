@@ -35,7 +35,6 @@ type VoluntaryExitRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
 }
@@ -142,7 +141,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 }
 
 func (r *VoluntaryExitRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return errors.New("no consensus phase for voluntary exit")
+	return spectypes.NewError(spectypes.ValidatorExitNoConsensusPhaseErrorCode, "no consensus phase for voluntary exit")
 }
 
 func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
@@ -150,7 +149,7 @@ func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Log
 }
 
 func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return errors.New("no post consensus phase for voluntary exit")
+	return spectypes.NewError(spectypes.ValidatorExitNoPostConsensusPhaseErrorCode, "no post consensus phase for voluntary exit")
 }
 
 func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
@@ -237,8 +236,8 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
-	validatorIndex := r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.CurrentDuty.DutySlot())
+	validatorIndex := r.GetState().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
 		ValidatorIndex: validatorIndex,
@@ -297,10 +296,6 @@ func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
 }
 func (r *VoluntaryExitRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
-	return r.valCheck
 }
 
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {

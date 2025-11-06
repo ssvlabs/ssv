@@ -1,7 +1,6 @@
 package spectest
 
 import (
-	"context"
 	"encoding/hex"
 	"path/filepath"
 	"reflect"
@@ -31,14 +30,14 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
-	lastErr := v.StartDuty(context.TODO(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
+	lastErr := v.StartDuty(t.Context(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSignedSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		err = v.ProcessMessage(context.TODO(), dmsg)
+		err = v.ProcessMessage(t.Context(), logger, dmsg)
 		if err != nil {
 			lastErr = err
 		}

@@ -45,7 +45,8 @@ type Options struct {
 }
 
 type Node struct {
-	logger           *zap.Logger
+	logger *zap.Logger
+
 	network          *networkconfig.Network
 	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
@@ -132,12 +133,11 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start(ctx context.Context) error {
-	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+	n.logger.Info("starting operator node")
 
 	go func() {
 		err := n.startWSServer()
 		if err != nil {
-			// TODO: think if we need to panic
 			return
 		}
 	}()
@@ -210,6 +210,8 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}()
 
+	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
+
 	if err := n.dutyScheduler.Wait(); err != nil {
 		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
 	}
@@ -273,6 +275,7 @@ func (n *Node) reportOperators() {
 	for i := range operators {
 		n.logger.Debug("(reporting) operator fetched from DB",
 			fields.OperatorID(operators[i].ID),
-			fields.OperatorPubKey(operators[i].PublicKey))
+			fields.OperatorPubKey(operators[i].PublicKey),
+		)
 	}
 }

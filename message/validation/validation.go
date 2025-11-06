@@ -323,7 +323,6 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 }
 
 // maxStoredSlots stores max amount of slots message validation stores.
-// It's exported to allow usage outside of message validation
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
 }
