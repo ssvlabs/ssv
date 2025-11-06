@@ -617,32 +617,13 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					trace.syncCommitteeRoot = syncRoot
 					trace.attestationRoot = attRoot
 					trace.roleRootsReady = true
-
-					pendingCountBefore := 0
-					for _, perSigner := range trace.pendingByRoot {
-						for _, byTs := range perSigner {
-							for _, idxs := range byTs {
-								pendingCountBefore += len(idxs)
-							}
-						}
-					}
-
 					trace.flushPending()
-
-					c.logger.Info("flushed pending signatures to role buckets",
-						fields.Slot(slot),
-						fields.CommitteeID(committeeID),
-						zap.Int("pending_count_before_flush", pendingCountBefore),
-						zap.Int("attester_signers_after_flush", len(trace.Attester)),
-						zap.Int("sync_committee_signers_after_flush", len(trace.SyncCommittee)))
-
 					// Check quorum for all validators after flushing pending signatures.
 					// This ensures quorum detection happens immediately when signatures that
 					// arrived before the proposal are reclassified into role buckets.
 					c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
 				} else {
-					// CRITICAL: If we fail to compute role roots, pending signatures will never be flushed
-					// and quorum will never be detected. Count pending entries to understand impact.
+					// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
 					pendingCount := 0
 					pendingRoots := len(trace.pendingByRoot)
 					for _, perSigner := range trace.pendingByRoot {
@@ -1127,21 +1108,6 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 	if trace.publishedQuorums == nil {
 		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
 	}
-
-	// Count validators for each role
-	attesterValidators := make(map[phase0.ValidatorIndex]struct{})
-	for _, sd := range trace.Attester {
-		for _, idx := range sd.ValidatorIdx {
-			attesterValidators[idx] = struct{}{}
-		}
-	}
-
-	logger.Debug("checking quorum after flush",
-		fields.Slot(slot),
-		fields.CommitteeID(committeeID),
-		zap.Int("attester_validators", len(attesterValidators)),
-		zap.Int("attester_signers", len(trace.Attester)),
-		zap.Uint64("threshold", threshold))
 
 	// Check quorum for both roles
 	c.checkRoleQuorumForValidators(logger, trace, spectypes.BNRoleAttester, trace.Attester, slot, threshold)
