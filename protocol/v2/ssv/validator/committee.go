@@ -162,7 +162,6 @@ func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger,
 	return r, q, nil
 }
 
-
 func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	commRunner *runner.CommitteeRunner,
 	q queueContainer,

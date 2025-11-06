@@ -90,17 +90,16 @@ func (v *voteChecker) CheckValue(value []byte) error {
 }
 
 type validatorConsensusDataChecker struct {
-	beaconConfig   *networkconfig.Beacon
+	beaconConfig *networkconfig.Beacon
 }
-
 
 func (v *validatorConsensusDataChecker) CheckValue(value []byte) error {
 	cd := &spectypes.ValidatorConsensusData{}
 	if err := cd.Decode(value); err != nil {
-		return errors.Wrap(err, "failed decoding consensus data")
+		return fmt.Errorf("failed decoding consensus data: %w", err)
 	}
 	if err := cd.Validate(); err != nil {
-		return errors.Wrap(err, "invalid value")
+		return fmt.Errorf("invalid value: %w", err)
 	}
 
 	if v.beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > v.beaconConfig.EstimatedCurrentEpoch()+1 {
