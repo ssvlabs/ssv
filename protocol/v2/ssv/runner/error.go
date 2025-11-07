@@ -6,6 +6,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/traces"
 )
 
@@ -62,7 +63,7 @@ func tracedError(span trace.Span, err error) error {
 	// In case of retryable error, mark this span as "droppable" since we don't necessarily want to
 	// keep track of those retried spans (these generate lots of useless data).
 	if IsRetryable(err) {
-		span.SetAttributes(traces.DroppableSpan())
+		span.SetAttributes(observability.DroppableSpanAttribute())
 	}
 
 	return traces.Error(span, err)

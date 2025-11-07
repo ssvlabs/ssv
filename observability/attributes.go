@@ -19,9 +19,11 @@ import (
 	protocolTypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-const (
-	RunnerRoleAttrKey = "ssv.runner.role"
-)
+// DroppableSpanAttribute is intended to mark a span as "droppable". Note, attributes aren't inherited
+// by child-spans.
+func DroppableSpanAttribute() attribute.KeyValue {
+	return attribute.Bool("ssv.span.droppable", true)
+}
 
 func BeaconRoleAttribute(role spectypes.BeaconRole) attribute.KeyValue {
 	return attribute.String("ssv.beacon.role", role.String())
@@ -39,7 +41,7 @@ func BeaconVersionAttribute(version spec.DataVersion) attribute.KeyValue {
 }
 
 func RunnerRoleAttribute(role spectypes.RunnerRole) attribute.KeyValue {
-	return attribute.String(RunnerRoleAttrKey, utils.FormatRunnerRole(role))
+	return attribute.String("ssv.runner.role", utils.FormatRunnerRole(role))
 }
 
 func BeaconSlotAttribute(slot phase0.Slot) attribute.KeyValue {
