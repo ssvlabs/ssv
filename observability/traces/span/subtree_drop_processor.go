@@ -26,14 +26,20 @@ func NewSubtreeDropProcessor(inner sdktrace.SpanProcessor) *SubtreeDropProcessor
 	// TTL of 5 minutes should be enough to process all the span-drops we might need to process.
 	ttl := 5 * time.Minute
 
+	childToParentCache := ttlcache.New(
+		ttlcache.WithTTL[trace.TraceID, *hashmap.Map[trace.SpanID, trace.SpanID]](ttl),
+	)
+	childToParentCache.Start()
+
+	parentsToDropCache := ttlcache.New(
+		ttlcache.WithTTL[trace.TraceID, *hashmap.Map[trace.SpanID, struct{}]](ttl),
+	)
+	parentsToDropCache.Start()
+
 	return &SubtreeDropProcessor{
-		inner: inner,
-		childToParent: ttlcache.New(
-			ttlcache.WithTTL[trace.TraceID, *hashmap.Map[trace.SpanID, trace.SpanID]](ttl),
-		),
-		parentsToDrop: ttlcache.New(
-			ttlcache.WithTTL[trace.TraceID, *hashmap.Map[trace.SpanID, struct{}]](ttl),
-		),
+		inner:         inner,
+		childToParent: childToParentCache,
+		parentsToDrop: parentsToDropCache,
 	}
 }
 
@@ -97,6 +103,9 @@ func (p *SubtreeDropProcessor) shouldDrop(tId trace.TraceID, sId trace.SpanID) b
 }
 
 func (p *SubtreeDropProcessor) Shutdown(ctx context.Context) error {
+	p.childToParent.Stop()
+	p.parentsToDrop.Stop()
+
 	return p.inner.Shutdown(ctx)
 }
 
