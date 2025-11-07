@@ -294,7 +294,7 @@ func TestSubnetPeers_String(t *testing.T) {
 		{
 			name:     "multiple subnets",
 			peers:    createSubnetPeers(map[int]uint16{1: 1, 5: 3, 10: 2}),
-			expected: "1:1 5:3 10:2 ",
+			expected: "1:1 5:3 10:2",
 		},
 		{
 			name:     "zero value subnets are not included",
