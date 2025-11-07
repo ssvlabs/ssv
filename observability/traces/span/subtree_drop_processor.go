@@ -14,7 +14,7 @@ import (
 // SubtreeDropProcessor drops a marked span and all of its descendants.
 // Call MarkDropSubtree(span.SpanContext()) at any time before those spans are exported.
 type SubtreeDropProcessor struct {
-	inner sdktrace.SpanProcessor
+	delegate sdktrace.SpanProcessor
 
 	// childToParent is a per-trace -> child->parent map
 	childToParent *ttlcache.Cache[trace.TraceID, *hashmap.Map[trace.SpanID, trace.SpanID]]
@@ -37,7 +37,7 @@ func NewSubtreeDropProcessor(inner sdktrace.SpanProcessor) *SubtreeDropProcessor
 	parentsToDropCache.Start()
 
 	return &SubtreeDropProcessor{
-		inner:         inner,
+		delegate:      inner,
 		childToParent: childToParentCache,
 		parentsToDrop: parentsToDropCache,
 	}
@@ -58,18 +58,16 @@ func (p *SubtreeDropProcessor) OnStart(ctx context.Context, s sdktrace.ReadWrite
 	ctp, _ := p.childToParent.GetOrSet(s.SpanContext().TraceID(), hashmap.New[trace.SpanID, trace.SpanID]())
 	ctp.Value().Set(s.SpanContext().SpanID(), s.Parent().SpanID())
 
-	p.inner.OnStart(ctx, s)
+	p.delegate.OnStart(ctx, s)
 }
 
 func (p *SubtreeDropProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
-	if p.shouldDrop(s.SpanContext().TraceID(), s.SpanContext().SpanID()) {
-		return // drop this span
-	}
-
-	p.inner.OnEnd(s)
+	p.delegate.OnEnd(s)
 }
 
-func (p *SubtreeDropProcessor) shouldDrop(tId trace.TraceID, sId trace.SpanID) bool {
+func (p *SubtreeDropProcessor) ShouldDrop(s sdktrace.ReadOnlySpan) bool {
+	tId, sId := s.SpanContext().TraceID(), s.Parent().SpanID()
+
 	parentsToDropItem := p.parentsToDrop.Get(tId)
 	if parentsToDropItem == nil {
 		return false // nothing to drop
@@ -106,9 +104,9 @@ func (p *SubtreeDropProcessor) Shutdown(ctx context.Context) error {
 	p.childToParent.Stop()
 	p.parentsToDrop.Stop()
 
-	return p.inner.Shutdown(ctx)
+	return p.delegate.Shutdown(ctx)
 }
 
 func (p *SubtreeDropProcessor) ForceFlush(ctx context.Context) error {
-	return p.inner.ForceFlush(ctx)
+	return p.delegate.ForceFlush(ctx)
 }

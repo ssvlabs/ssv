@@ -3,6 +3,7 @@ package traces
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -33,10 +34,23 @@ func InitializeProvider(ctx context.Context, resources *resource.Resource, isEna
 
 	spanDropProcessor := span.NewSubtreeDropProcessor(sdktrace.NewBatchSpanProcessor(spanExporter))
 
+	// batchSize must be large enough to accommodate a full trace for a spanDropProcessor to be able to work
+	// correctly, we've observed that some traces can contain up to 10k spans in them - we must set it to a
+	// higher value than that. Note, spanDropProcessor will drop some of those spans to keep the amount of
+	// data emitted manageable.
+	const batchSize = 65536
+	// batchTimeout is similar to batchSize, but "limits" how long a trace can be in terms of a duration. For
+	// spanDropProcessor to work correctly, it needs to be longer than the longest trace we have.
+	const batchTimeout = 120 * time.Second
+
 	provider := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(resources),
 		sdktrace.WithSpanProcessor(spanDropProcessor),
-		sdktrace.WithBatcher(spanExporter),
+		sdktrace.WithBatcher(
+			span.NewSubtreeDropExporter(spanExporter, spanDropProcessor),
+			sdktrace.WithMaxExportBatchSize(batchSize),
+			sdktrace.WithBatchTimeout(batchTimeout),
+		),
 	)
 
 	return provider, spanDropProcessor, spanExporter.Shutdown, nil
