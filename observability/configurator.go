@@ -96,13 +96,14 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 		With(zap.Bool("traces_enabled", config.traces.enabled)).
 		Info("fetching Traces provider")
 
-	traceProvider, shutdownFnc, err := traces.InitializeProvider(ctx, resources, config.traces.enabled)
+	traceProvider, spanProcessor, shutdownFnc, err := traces.InitializeProvider(ctx, resources, config.traces.enabled)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate Traces provider: %w", err)
 	}
 
 	shutdownFuncs = append(shutdownFuncs, shutdownFnc)
 	otel.SetTracerProvider(traceProvider)
+	SpanProcessor = spanProcessor
 
 	localLogger.Info("observability stack initialized")
 
