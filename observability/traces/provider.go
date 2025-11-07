@@ -20,10 +20,10 @@ func InitializeProvider(ctx context.Context, resources *resource.Resource, isEna
 	error,
 ) {
 	if !isEnabled {
-		noopShutdown := func(ctx context.Context) error {
+		noOpShutdown := func(ctx context.Context) error {
 			return nil
 		}
-		return noop.NewTracerProvider(), span.NewNoOpSpanProcessor(), noopShutdown, nil
+		return noop.NewTracerProvider(), span.NewNoOpSpanProcessor(), noOpShutdown, nil
 	}
 
 	spanExporter, err := autoexport.NewSpanExporter(ctx)

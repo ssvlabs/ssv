@@ -4,4 +4,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces/span"
 )
 
-var SpanProcessor span.Processor
+var (
+	SpanProcessor span.Processor = span.NewNoOpSpanProcessor()
+)
