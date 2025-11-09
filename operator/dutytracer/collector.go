@@ -435,26 +435,6 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 	}
 }
 
-func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
-	for _, msg := range msg.Messages {
-		slotToCommittee, found := c.validatorIndexToCommitteeLinks.Get(msg.ValidatorIndex)
-		if !found {
-			slotToCommittee, _ = c.validatorIndexToCommitteeLinks.GetOrSet(msg.ValidatorIndex, hashmap.New[phase0.Slot, spectypes.CommitteeID]())
-		}
-
-		slotToCommittee.Set(slot, committeeID)
-	}
-}
-
-func (c *Collector) saveLateValidatorToCommiteeLinks(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
-	for _, msg := range msg.Messages {
-		if err := c.store.SaveCommitteeDutyLink(slot, msg.ValidatorIndex, committeeID); err != nil {
-			// for late messages we can log with warn
-			c.logger.Warn("save late validator to committee links", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
-		}
-	}
-}
-
 func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, in []byte) (phase0.Root, error) {
 	var beaconVote = new(spectypes.BeaconVote)
 	if err := beaconVote.Decode(in); err != nil {
@@ -766,14 +746,11 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			c.checkAndPublishQuorum(logger, pSigMessages, committeeID, trace)
 
 			if late {
-				c.saveLateValidatorToCommiteeLinks(slot, pSigMessages, committeeID)
 				err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
 				_ = c.inFlightCommittee.Delete(committeeID)
 				return err
 			}
 
-			// cache the link between validator index and committee id
-			c.saveValidatorToCommitteeLink(slot, pSigMessages, committeeID)
 			return nil
 		}
 
@@ -1261,7 +1238,6 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 	// Attester indices for this slot (InCommittee only)
 	if c.duties.Attester != nil {
 		for _, d := range c.duties.Attester.CommitteeSlotDuties(epoch, slot) {
-			// d may be nil in edge cases; guard defensively
 			if d == nil {
 				continue
 			}
@@ -1269,7 +1245,7 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 		}
 	}
 
-	// Proposer indices for this slot (all scheduled proposers)
+	// Proposer indices for this slot
 	if c.duties.Proposer != nil {
 		for _, idx := range c.duties.Proposer.SlotIndices(epoch, slot) {
 			schedule[idx] |= rolemask.BitProposer
@@ -1290,7 +1266,34 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 	if len(schedule) == 0 {
 		return nil
 	}
-	return c.store.SaveScheduled(slot, schedule)
+
+	if err := c.store.SaveScheduled(slot, schedule); err != nil {
+		return fmt.Errorf("save scheduled: %w", err)
+	}
+
+	// Populate committee links only for validators with scheduled duties
+	committees := c.validators.ParticipatingCommittees(epoch)
+	committeeByValidator := buildValidatorToCommitteeIndex(committees)
+
+	for validatorIndex := range schedule {
+		if committeeID, found := committeeByValidator[validatorIndex]; found {
+			slotToCommittee, _ := c.validatorIndexToCommitteeLinks.GetOrSet(validatorIndex, hashmap.New[phase0.Slot, spectypes.CommitteeID]())
+			slotToCommittee.Set(slot, committeeID)
+		}
+	}
+
+	return nil
+}
+
+// buildValidatorToCommitteeIndex creates a reverse lookup map from validator index to committee ID.
+func buildValidatorToCommitteeIndex(committees []*registrystorage.Committee) map[phase0.ValidatorIndex]spectypes.CommitteeID {
+	result := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
+	for _, cmt := range committees {
+		for _, validatorIndex := range cmt.Indices {
+			result[validatorIndex] = cmt.ID
+		}
+	}
+	return result
 }
 
 // runScheduleWorker performs schedule computations and DB writes off the hot path.
