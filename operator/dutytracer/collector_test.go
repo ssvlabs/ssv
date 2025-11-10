@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"sync"
 	"testing"
@@ -1322,62 +1321,6 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 			require.Equal(t, test.want, got)
 		})
 	}
-}
-
-func TestCollector_saveLateValidatorToCommiteeLinks(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
-	dutyStore := new(mockDutyTraceStore)
-
-	slot := phase0.Slot(10)
-
-	partialSigMessage := &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{
-			{ValidatorIndex: 1},
-		},
-	}
-	committeeID := spectypes.CommitteeID{1}
-
-	t.Run("save late validator to committee links", func(t *testing.T) {
-		collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
-
-		var called bool
-		dutyStore.saveCommitteeDutyLinkFn = func(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
-			called = true
-			assert.Equal(t, slot, slot)
-			assert.Equal(t, index, phase0.ValidatorIndex(1))
-			assert.Equal(t, id, committeeID)
-			return nil
-		}
-
-		collector.saveLateValidatorToCommiteeLinks(slot, partialSigMessage, committeeID)
-
-		require.True(t, called)
-	})
-
-	t.Run("save late validator to committee links error", func(t *testing.T) {
-		core, logs := observer.New(zap.DebugLevel)
-		logger := zap.New(core)
-		collector := New(logger, vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
-
-		var called bool
-		dutyStore.saveCommitteeDutyLinkFn = func(phase0.Slot, phase0.ValidatorIndex, spectypes.CommitteeID) error {
-			called = true
-			return errors.New("error")
-		}
-
-		collector.saveLateValidatorToCommiteeLinks(slot, partialSigMessage, committeeID)
-
-		require.True(t, called)
-		require.Equal(t, 1, len(logs.All()))
-
-		entry := logs.All()[0]
-		require.Equal(t, "save late validator to committee links", entry.Message)
-		require.Equal(t, zap.Error(errors.New("error")), entry.Context[0])
-		require.Equal(t, zap.Uint64("slot", uint64(slot)), entry.Context[1])
-		require.Equal(t, zap.Uint64("validator_index", uint64(phase0.ValidatorIndex(1))), entry.Context[2])
-		require.Equal(t, zap.String("committee_id", hex.EncodeToString(committeeID[:])), entry.Context[3])
-	})
 }
 
 func TestCollector_lateMessage(t *testing.T) {
