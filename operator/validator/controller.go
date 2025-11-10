@@ -730,7 +730,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		return nil, false, nil
 	}
 
-	operator, err := c.committeeMemberFromShare(share)
+	committeeMember, err := c.committeeMemberFromShare(share)
 	if err != nil {
 		return nil, true, fmt.Errorf("build committee member from share: %w", err)
 	}
@@ -742,12 +742,12 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, committeeMember, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, true, fmt.Errorf("could not setup runners: %w", err)
 		}
-		opts := c.validatorCommonOpts.NewOptions(share, operator, dutyRunners)
+		opts := c.validatorCommonOpts.NewOptions(share, committeeMember, dutyRunners)
 
 		v = validator.NewValidator(validatorCtx, validatorCancel, c.logger, opts)
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
@@ -756,13 +756,13 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 	}
 
 	// Start a committee validator.
-	vc, found := c.validatorsMap.GetCommittee(operator.CommitteeID)
+	vc, found := c.validatorsMap.GetCommittee(committeeMember.CommitteeID)
 	if !found {
 		// Create dedicated context to use for both the committee and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		committeeCtx, committeeCancel := context.WithCancel(c.ctx)
 
-		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
+		opts := c.validatorCommonOpts.NewOptions(share, committeeMember, nil)
 
 		committeeRunnerFunc := SetupCommitteeRunners(committeeCtx, opts)
 
@@ -771,13 +771,13 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 			committeeCancel,
 			c.logger,
 			c.networkConfig,
-			operator,
+			committeeMember,
 			committeeRunnerFunc,
 			nil,
 			c.dutyGuard,
 		)
 		vc.AddShare(&share.Share)
-		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
+		c.validatorsMap.PutCommittee(committeeMember.CommitteeID, vc)
 
 		c.printShare(share, "set up new committee")
 	} else {
