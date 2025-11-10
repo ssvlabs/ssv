@@ -29,13 +29,6 @@ type queueContainer struct {
 	queueState *queue.State
 }
 
-// messageProcessingState tracks retries and span context for a specific message.
-type messageProcessingState struct {
-	attempts int64
-	ctx      context.Context
-	span     trace.Span
-}
-
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
@@ -104,7 +97,7 @@ func (c *Committee) ConsumeQueue(
 	// to use for its entries - it just needs to be large enough to prevent unnecessary (but non-harmful)
 	// retries from happening.
 	msgStates := ttlcache.New(
-		ttlcache.WithTTL[msgIDType, *messageProcessingState](10 * time.Minute),
+		ttlcache.WithTTL[messageKey, *messageProcessingState](10 * time.Minute),
 	)
 	go msgStates.Start()
 	defer msgStates.Stop()
@@ -153,24 +146,20 @@ func (c *Committee) ConsumeQueue(
 			continue
 		}
 
-		msgType := msg.GetType()
-		msgID := msg.GetID()
-		msgKey := c.messageID(msg)
+		msgKey := c.mKey(msg)
 
-		msgStateItem := msgStates.Get(msgKey)
 		var msgState *messageProcessingState
+		msgStateItem := msgStates.Get(msgKey)
 		if msgStateItem != nil {
 			msgState = msgStateItem.Value()
 		}
+		if msgState == nil {
+			msgCtx := ctx
 
-		var handlerCtx context.Context
-		var span trace.Span
-		if msgState == nil || msgState.span == nil {
-			spanCtx := ctx
 			spanOpts := []trace.SpanStartOption{trace.WithAttributes(
-				observability.ValidatorMsgTypeAttribute(msgType),
-				observability.ValidatorMsgIDAttribute(msgID),
-				observability.RunnerRoleAttribute(msgID.GetRoleType()),
+				observability.ValidatorMsgTypeAttribute(msg.GetType()),
+				observability.ValidatorMsgIDAttribute(msg.GetID()),
+				observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
 				observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
 			)}
 
@@ -185,35 +174,31 @@ func (c *Committee) ConsumeQueue(
 					observability.BeaconSlotAttribute(slot),
 					observability.DutyIDAttribute(dutyID),
 				))
-				spanCtx = traces.Context(spanCtx, dutyID)
+				msgCtx = traces.Context(msgCtx, dutyID)
 			} else {
 				msgLogger.Warn("couldn't get message slot for tracing metadata", zap.Error(slotErr))
 			}
 
-			handlerCtx, span = tracer.Start(spanCtx,
+			msgCtx, msgSpan := tracer.Start(msgCtx,
 				observability.InstrumentName(observabilityNamespace, "process_committee_message"),
 				spanOpts...,
 			)
 			msgState = &messageProcessingState{
-				ctx:  handlerCtx,
-				span: span,
+				attempts: 0,
+				ctx:      msgCtx,
+				span:     msgSpan,
 			}
 			msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
-		} else {
-			handlerCtx = msgState.ctx
-			span = msgState.span
 		}
 
 		currentAttempt := msgState.attempts + 1
-		span.AddEvent("dequeued message for processing", trace.WithAttributes(
+		msgState.span.AddEvent("dequeued message for processing", trace.WithAttributes(
 			attribute.Int64("queue.attempt", currentAttempt),
 		))
 
 		// Handle the message, potentially scheduling a message-replay for later.
-		err = handler(handlerCtx, msgLogger, msg)
+		err = handler(msgState.ctx, msgLogger, msg)
 		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 			// We'll re-queue the message to be replayed later in case the error we got is retryable.
 			// We are aiming to cover most of the slot time (~12s), but we don't need to cover the
 			// full slot (all 12s) since most duties must finish well before that anyway, and will
@@ -223,67 +208,71 @@ func (c *Committee) ConsumeQueue(
 			retryCount := int64(c.networkConfig.SlotDuration / retryDelay)
 
 			msgLogger = logWithMessageMetadata(msgLogger, msg).
-				With(zap.String("message_identifier", string(msgKey))).
+				With(zap.String("message_key", string(msgKey))).
 				With(zap.Int64("attempt", currentAttempt))
 
 			const couldNotHandleMsgLogPrefix = "could not handle message, "
-			retryable := runner.IsRetryable(err) && msgState.attempts < retryCount
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
-				msgLogger.Error("❗ "+couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
-				msgStates.Delete(msgKey)
-				span.End()
-				return
-			case retryable:
-				msgState.attempts++
-				msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
-				msgLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
-				span.AddEvent("message retry scheduled", trace.WithAttributes(
-					attribute.Int64("queue.attempt", currentAttempt),
-				))
-				go func(msg *queue.SSVMessage) {
-					time.Sleep(retryDelay)
-					if pushed := q.Q.TryPush(msg); !pushed {
-						msgLogger.Error("❗ not gonna replay message because the queue is full",
-							zap.String("message_identifier", string(c.messageID(msg))),
-							fields.MessageType(msg.MsgType),
-						)
-					}
-				}(msg)
-			default:
-				msgLogger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
-				span.AddEvent("message dropped due to error", trace.WithAttributes(
+				const droppingMsgDueToNoValidDutiesToExecuteEvent = "❗ " + couldNotHandleMsgLogPrefix + "dropping message and terminating committee-runner"
+				msgLogger.Error(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
+				msgState.span.AddEvent(droppingMsgDueToNoValidDutiesToExecuteEvent, trace.WithAttributes(
 					attribute.String("drop_reason", err.Error()),
 					attribute.Int64("queue.attempt", currentAttempt),
 				))
+				msgState.span.SetStatus(codes.Error, droppingMsgDueToNoValidDutiesToExecuteEvent)
+				msgState.span.End()
 				msgStates.Delete(msgKey)
-				span.End()
+				return
+			case runner.IsRetryable(err) && msgState.attempts < retryCount:
+				msgState.attempts++
+				msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
+				var retryingMsgDueToErrorEvent = fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds())
+				msgLogger.Debug(retryingMsgDueToErrorEvent, zap.Error(err))
+				msgState.span.AddEvent(retryingMsgDueToErrorEvent)
+				go func(msg *queue.SSVMessage, msgState *messageProcessingState) {
+					time.Sleep(retryDelay)
+					if pushed := q.Q.TryPush(msg); !pushed {
+						const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
+						msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
+						msgState.span.AddEvent(droppingMsgDueToQueueIsFullEvent, trace.WithAttributes(
+							attribute.Int64("queue.attempt", currentAttempt),
+						))
+						msgState.span.SetStatus(codes.Error, droppingMsgDueToQueueIsFullEvent)
+						msgState.span.End()
+						msgStates.Delete(msgKey)
+					}
+				}(msg, msgState)
+			default:
+				var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
+				msgLogger.Warn(droppingMsgDueToErrorEvent, zap.Error(err))
+				msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
+					attribute.String("drop_reason", err.Error()),
+					attribute.Int64("queue.attempt", currentAttempt),
+				))
+				msgState.span.SetStatus(codes.Error, droppingMsgDueToErrorEvent)
+				msgState.span.End()
+				msgStates.Delete(msgKey)
 			}
 		} else {
-			span.SetStatus(codes.Ok, "")
-			span.AddEvent("message processed successfully", trace.WithAttributes(
+			msgState.span.AddEvent("message processed successfully", trace.WithAttributes(
 				attribute.Int64("queue.attempt", currentAttempt),
 			))
+			msgState.span.SetStatus(codes.Ok, "")
+			msgState.span.End()
 			msgStates.Delete(msgKey)
-			span.End()
 		}
 	}
 }
 
 // ProcessMessage processes p2p message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
+
+	span.AddEvent("committee.process_message.start")
+
 	msgType := msg.GetType()
-	msgID := msg.GetID()
-	addEvent := func(name string) {
-		if span.IsRecording() {
-			span.AddEvent(name, trace.WithAttributes(
-				observability.ValidatorMsgTypeAttribute(msgType),
-				observability.ValidatorMsgIDAttribute(msgID),
-			))
-		}
-	}
-	addEvent("validator.process_message.start")
 
 	// Validate message (+ verify SignedSSVMessage's signature)
 	if msgType != message.SSVEventMsgType {
@@ -306,39 +295,40 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	if err != nil {
 		return fmt.Errorf("couldn't get message slot: %w", err)
 	}
-	addEvent("validator.process_message.slot_resolved")
 
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
-		addEvent("validator.process_message.consensus")
+		span.AddEvent("committee.process_message.consensus")
+
 		qbftMsg := &specqbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return traces.Errorf(span, "could not decode consensus Message: %w", err)
+			return fmt.Errorf("could not decode consensus Message: %w", err)
 		}
 		if err := qbftMsg.Validate(); err != nil {
-			return traces.Errorf(span, "invalid QBFT Message: %w", err)
+			return fmt.Errorf("invalid QBFT Message: %w", err)
 		}
 		c.mtx.RLock()
 		r, exists := c.Runners[slot]
 		c.mtx.RUnlock()
 		if !exists {
-			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, traces.Errorf(span, "no runner found for message's slot"))
+			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
-		addEvent("validator.process_message.partial_signature")
+		span.AddEvent("committee.process_message.partial_signature")
+
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return traces.Errorf(span, "could not decode PartialSignatureMessages: %w", err)
+			return fmt.Errorf("could not decode PartialSignatureMessages: %w", err)
 		}
 
 		// Validate
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
+			return fmt.Errorf("PartialSignatureMessage has more than 1 signer")
 		}
 
 		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
+			return fmt.Errorf("invalid PartialSignatureMessages: %w", err)
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
@@ -346,21 +336,22 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, traces.Errorf(span, "no runner found for message's slot"))
+				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
 			}
 			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
-				return traces.Error(span, err)
+				return err
 			}
 			return nil
 		}
 	case message.SSVEventMsgType:
-		addEvent("validator.process_message.event")
+		span.AddEvent("committee.process_message.event")
+
 		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
+			return fmt.Errorf("could not handle event message: %w", err)
 		}
 		return nil
 	default:
-		return traces.Errorf(span, "unknown message type: %d", msgType)
+		return fmt.Errorf("unknown message type: %d", msgType)
 	}
 
 	return nil
@@ -379,7 +370,7 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	return logger, nil
 }
 
-// messageID is a wrapper that provides a logger to report errors (if any).
-func (c *Committee) messageID(msg *queue.SSVMessage) msgIDType {
-	return messageID(msg, c.logger)
+// mKey is a wrapper that provides a logger to report errors (if any).
+func (c *Committee) mKey(msg *queue.SSVMessage) messageKey {
+	return mKey(msg, c.logger)
 }
