@@ -10,21 +10,21 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -32,8 +32,8 @@ func TestController_LiquidateCluster(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
+	require.NoError(t, secretKey.SetHexString(secretKeyStrings[0]))
+	require.NoError(t, secretKey2.SetHexString(secretKeyStrings[1]))
 
 	firstValidator := &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
@@ -48,7 +48,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
+	ctrl, logger, sharesStorage, network, _, bc := setupCommonTestComponents(t, operatorPrivateKey)
 	defer ctrl.Finish()
 	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 		spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()): firstValidator,
@@ -63,7 +63,6 @@ func TestController_LiquidateCluster(t *testing.T) {
 		network:             network,
 		operatorDataStore:   operatorDataStore,
 		sharesStorage:       sharesStorage,
-		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
 		validatorCommonOpts: &validator.CommonOptions{},
 	}
@@ -94,9 +93,7 @@ func (signable) GetRoot() ([32]byte, error) {
 func TestController_StopValidator(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
-	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
+	require.NoError(t, secretKey.SetHexString(secretKeyStrings[0]))
 
 	firstValidator := &validator.Validator{
 		DutyRunners: runner.ValidatorDutyRunners{},
@@ -111,7 +108,7 @@ func TestController_StopValidator(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
+	ctrl, logger, sharesStorage, network, signer, bc := setupCommonTestComponents(t, operatorPrivateKey)
 
 	defer ctrl.Finish()
 
@@ -128,7 +125,6 @@ func TestController_StopValidator(t *testing.T) {
 		network:             network,
 		operatorDataStore:   operatorDataStore,
 		sharesStorage:       sharesStorage,
-		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
 		validatorCommonOpts: &validator.CommonOptions{},
 		signer:              signer,
@@ -173,52 +169,75 @@ func TestController_StopValidator(t *testing.T) {
 }
 
 func TestController_ReactivateCluster(t *testing.T) {
-	storageMap := ibftstorage.NewStores()
-	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-	secretKey := &bls.SecretKey{}
-	secretKey2 := &bls.SecretKey{}
-	require.NoError(t, secretKey.SetHexString(sk1Str))
-	require.NoError(t, secretKey2.SetHexString(sk2Str))
+	testCtx := t.Context()
+	numberOfValidators := 4
 
-	shares1, err := threshold.Create(secretKey.Serialize(), 3, 4)
-	require.NoError(t, err)
-	shares2, err := threshold.Create(secretKey2.Serialize(), 3, 4)
-	require.NoError(t, err)
+	secretKeys := make([]*bls.SecretKey, 0, numberOfValidators)
+	toReactivate := make([]*types.SSVShare, 0, numberOfValidators)
+
+	for i := range numberOfValidators {
+		secretKey := &bls.SecretKey{}
+		require.NoError(t, secretKey.SetHexString(secretKeyStrings[i]))
+		secretKeys = append(secretKeys, secretKey)
+
+		share, err := threshold.Create(secretKey.Serialize(), 3, 4)
+		require.NoError(t, err)
+
+		byteShare := share[1].GetPublicKey().Serialize()
+
+		shareToReactivate := types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorIndex:  phase0.ValidatorIndex(i + 1),
+				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+				SharePubKey:     byteShare,
+			},
+			Status:          v1.ValidatorStateActiveOngoing,
+			ActivationEpoch: 1,
+		}
+
+		toReactivate = append(toReactivate, &shareToReactivate)
+	}
 
 	operatorPrivKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	ctrl, logger, sharesStorage, network, signer, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivKey)
+	ctrl, logger, sharesStorage, network, signer, bc := setupCommonTestComponents(t, operatorPrivKey)
 	defer ctrl.Finish()
-	mockValidatorsMap := validators.New(context.TODO())
+
+	mockValidatorsMap := validators.New(testCtx)
+
+	operatorStore, done := newOperatorStorageForTest(log.TestLogger(t))
+	defer done()
+
 	validatorStartFunc := func(validator *validator.Validator) (bool, error) {
 		return true, nil
 	}
+
 	controllerOptions := MockControllerOptions{
 		beacon:            bc,
 		network:           network,
-		operatorDataStore: operatorDataStore,
+		operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 		sharesStorage:     sharesStorage,
-		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
 		networkConfig:     networkconfig.TestNetwork,
 		validatorCommonOpts: &validator.CommonOptions{
-			Storage:       storageMap,
+			Storage:       ibftstorage.NewStores(),
 			NetworkConfig: networkconfig.TestNetwork,
 		},
-		signer: signer,
+		signer:          signer,
+		operatorStorage: operatorStore,
 	}
 	ctr := setupController(t, logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
 	ctr.indicesChangeCh = make(chan struct{})
 
-	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
+	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKeys[0].SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(testCtx, nil, encryptedPrivKey, phase0.BLSPubKey(secretKeys[0].GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
-	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
+	domain, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
 	require.NoError(t, err)
 
 	root, err := signable{}.GetRoot()
@@ -227,52 +246,49 @@ func TestController_ReactivateCluster(t *testing.T) {
 	slot := phase0.Slot(1)
 
 	_, _, err = signer.SignBeaconObject(
-		t.Context(),
+		testCtx,
 		spectypes.SSZBytes(root[:]),
-		d,
-		phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),
+		domain,
+		phase0.BLSPubKey(secretKeys[0].GetPublicKey().Serialize()),
 		slot,
 		spectypes.DomainSyncCommittee,
 	)
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
-	toReactivate := []*types.SSVShare{
-		{
-			Share: spectypes.Share{
-				ValidatorIndex:  1,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
-				SharePubKey:     shares1[1].GetPublicKey().Serialize(),
-			},
-			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
-			ActivationEpoch: 1,
-		},
-		{
-			Share: spectypes.Share{
-				ValidatorIndex:  1,
-				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
-				SharePubKey:     shares2[1].GetPublicKey().Serialize(),
-			},
-			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
-			ActivationEpoch: 1,
-		},
+
+	operatorIDs := []spectypes.OperatorID{1, 2, 3, 4}
+	committee := make([]*spectypes.ShareMember, 0, len(operatorIDs))
+
+	for i, share := range toReactivate {
+		committee = append(committee, &spectypes.ShareMember{
+			Signer:      operatorIDs[i],
+			SharePubKey: share.SharePubKey,
+		})
+
+		_, err := operatorStore.SaveOperatorData(nil, &storage.OperatorData{ID: operatorIDs[i]})
+		require.NoError(t, err)
 	}
-	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
-	recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).AnyTimes().Return(recipientData, true, nil)
+
+	for _, share := range toReactivate {
+		share.Committee = committee
+	}
 
 	indiciesUpdate := make(chan struct{})
 	go func() {
 		<-ctr.indicesChangeCh
 		indiciesUpdate <- struct{}{}
 	}()
-	err = ctr.ReactivateCluster(common.HexToAddress("0x1231231"), []uint64{1, 2, 3, 4}, toReactivate)
+
+	err = ctr.ReactivateCluster(common.HexToAddress("0x1231231"), operatorIDs, toReactivate)
 
 	require.NoError(t, err)
-	require.Equal(t, mockValidatorsMap.SizeValidators(), 2)
-	_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()))
-	require.True(t, ok, "validator not found")
-	_, ok = mockValidatorsMap.GetValidator(spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()))
-	require.True(t, ok, "validator not found")
+	require.Equal(t, 4, mockValidatorsMap.SizeValidators())
+
+	for _, key := range secretKeys {
+		_, ok := mockValidatorsMap.GetValidator(spectypes.ValidatorPK(key.GetPublicKey().Serialize()))
+		require.True(t, ok, "validator not found")
+	}
 
 	select {
 	case <-indiciesUpdate:

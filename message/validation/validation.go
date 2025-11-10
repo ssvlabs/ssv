@@ -53,13 +53,12 @@ type peerIDWithMessageID struct {
 }
 
 type messageValidator struct {
-	logger          *zap.Logger
-	netCfg          *networkconfig.Network
-	pectraForkEpoch phase0.Epoch
-	state           *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
-	validatorStore  validatorStore
-	operators       operators
-	dutyStore       *dutystore.Store
+	logger         *zap.Logger
+	netCfg         *networkconfig.Network
+	state          *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
+	validatorStore validatorStore
+	operators      operators
+	dutyStore      *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
@@ -85,7 +84,6 @@ func New(
 	operators operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
-	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
@@ -96,7 +94,6 @@ func New(
 		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
-		pectraForkEpoch:     pectraForkEpoch,
 	}
 
 	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
@@ -133,8 +130,6 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	defer func() {
 		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
 	}()
-
-	recordMessage(ctx)
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
@@ -331,7 +326,6 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 }
 
 // maxStoredSlots stores max amount of slots message validation stores.
-// It's exported to allow usage outside of message validation
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
 }

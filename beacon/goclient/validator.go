@@ -10,7 +10,6 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
@@ -26,19 +25,15 @@ func (gc *GoClient) GetValidatorData(
 		PubKeys: validatorPubKeys,
 		Common:  api.CommonOpts{Timeout: gc.longTimeout},
 	})
-	recordRequestDuration(ctx, "Validators", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+	recordRequest(ctx, gc.log, "Validators", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Validators"),
-			zap.Error(err),
-		)
-		return nil, fmt.Errorf("failed to obtain validators: %w", err)
+		return nil, errMultiClient(fmt.Errorf("fetch validators: %w", err), "Validators")
 	}
 	if resp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "Validators"),
-		)
-		return nil, fmt.Errorf("validators response is nil")
+		return nil, errMultiClient(fmt.Errorf("validators response is nil"), "Validators")
+	}
+	if resp.Data == nil {
+		return nil, errMultiClient(fmt.Errorf("validators response data is nil"), "Validators")
 	}
 
 	return resp.Data, nil
@@ -46,14 +41,12 @@ func (gc *GoClient) GetValidatorData(
 
 // SubmitValidatorRegistrations submits validator registrations, chunking it if necessary.
 func (gc *GoClient) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
-	// Submit validator registrations in chunks.
 	for chunk := range slices.Chunk(registrations, 500) {
 		reqStart := time.Now()
 		err := gc.multiClient.SubmitValidatorRegistrations(ctx, chunk)
-		recordRequestDuration(ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+		recordRequest(ctx, gc.log, "SubmitValidatorRegistrations", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
 		if err != nil {
-			gc.log.Error(clResponseErrMsg, zap.Error(err))
-			break
+			return errMultiClient(fmt.Errorf("submit validator registrations (chunk size = %d): %w", len(chunk), err), "SubmitValidatorRegistrations")
 		}
 		gc.log.Info("submitted validator registrations", fields.Count(len(chunk)), fields.Duration(reqStart))
 	}

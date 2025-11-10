@@ -2,7 +2,6 @@ package instance
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -32,8 +32,9 @@ type Instance struct {
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
 
-	forceStop  bool
-	StartValue []byte
+	forceStop    bool
+	StartValue   []byte
+	ValueChecker ssv.ValueChecker `json:"-"`
 
 	metrics *metricsRecorder
 }
@@ -45,11 +46,9 @@ func NewInstance(
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
 ) *Instance {
-	var name string
+	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
 	if len(identifier) == 56 {
-		name = spectypes.MessageID(identifier).GetRoleType().String()
-	} else {
-		name = base64.StdEncoding.EncodeToString(identifier)
+		runnerRole = spectypes.MessageID(identifier).GetRoleType()
 	}
 
 	return &Instance{
@@ -67,7 +66,7 @@ func NewInstance(
 		config:      config,
 		signer:      signer,
 		processMsgF: spectypes.NewThreadSafeF(),
-		metrics:     newMetrics(name),
+		metrics:     newMetrics(runnerRole),
 	}
 }
 
@@ -76,7 +75,13 @@ func (i *Instance) ForceStop() {
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(
+	ctx context.Context,
+	logger *zap.Logger,
+	value []byte,
+	height specqbft.Height,
+	valueChecker ssv.ValueChecker,
+) {
 	i.startOnce.Do(func() {
 		_, span := tracer.Start(ctx,
 			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
@@ -86,14 +91,15 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
-		i.metrics.StartStage()
+		i.ValueChecker = valueChecker
+		i.metrics.Start()
 		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
 		logger = logger.With(
 			fields.QBFTRound(i.State.Round),
 			fields.QBFTHeight(i.State.Height))
 
-		proposerID := i.proposer(specqbft.FirstRound)
+		proposerID := i.ProposerForRound(specqbft.FirstRound)
 		const eventMsg = "ℹ️ starting QBFT instance"
 		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
 		span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
@@ -132,7 +138,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 
 func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
 	if !i.CanProcessMessages() {
-		return errors.New("instance stopped processing messages")
+		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
 	}
 
 	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
@@ -149,7 +155,7 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
 func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
 	if !i.CanProcessMessages() {
-		return false, nil, nil, errors.New("instance stopped processing messages")
+		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
 	}
 
 	if err := i.BaseMsgValidation(msg); err != nil {
@@ -191,7 +197,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	// unless we allow decided messages from previous round.
 	decided := msg.QBFTMessage.MsgType == specqbft.CommitMsgType && i.State.CommitteeMember.HasQuorum(len(msg.SignedMessage.OperatorIDs))
 	if !decided && msg.QBFTMessage.Round < i.State.Round {
-		return errors.New("past round")
+		return spectypes.NewError(spectypes.PastRoundErrorCode, "past round")
 	}
 
 	switch msg.QBFTMessage.MsgType {
@@ -200,7 +206,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
-			return errors.New("did not receive proposal for this round")
+			return NewRetryableError(spectypes.WrapError(spectypes.NoProposalForCurrentRoundErrorCode, ErrNoProposalForCurrentRound))
 		}
 
 		return i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(
@@ -211,7 +217,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
-			return errors.New("did not receive proposal for this round")
+			return NewRetryableError(spectypes.WrapError(spectypes.NoProposalForCurrentRoundErrorCode, ErrNoProposalForCurrentRound))
 		}
 		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:

@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	baseDuration            = 1 * time.Millisecond
+	baseDuration            = 100 * time.Millisecond
 	slotDuration            = 15 * baseDuration
 	timeout                 = 20 * baseDuration
-	noActionTimeout         = 7 * baseDuration
+	noActionTimeout         = 2 * baseDuration
 	clockError              = baseDuration
 	testBlockPropagateDelay = baseDuration
 	// testSlotTickerTriggerDelay is used to wait for the slot ticker to be triggered
@@ -187,8 +187,8 @@ func startScheduler(ctx context.Context, t *testing.T, s *Scheduler, schedulerPo
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.ValidatorDuty, executeDutiesCallSize)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
-		func(_ context.Context, duty *spectypes.ValidatorDuty) error {
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
+		func(_ context.Context, _ *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			s.logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 
 			executeDutiesBuffer <- duty
@@ -213,15 +213,15 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 
 	// We are not super interested in checking the exact number of ExecuteDuty calls, hence allow
 	// AnyTimes of these calls here.
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(ctx context.Context, duty *spectypes.ValidatorDuty) error {
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+		func(ctx context.Context, _ *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			s.logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 			return nil
 		},
 	)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
-		func(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
+		func(ctx context.Context, _ *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 			s.logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
 			executeDutiesBuffer <- &committeeDuty{id: committeeID, duty: duty}
 
@@ -404,7 +404,9 @@ func TestScheduler_Run(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	logger := log.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
@@ -456,7 +458,9 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	defer cancel()
 	logger := log.TestLogger(t)
 

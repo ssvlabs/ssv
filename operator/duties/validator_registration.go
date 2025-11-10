@@ -53,9 +53,6 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
-	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
-
 	next := h.ticker.Next()
 	for {
 		select {
@@ -65,32 +62,16 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			shares := h.validatorProvider.SelfValidators()
-			for _, share := range shares {
-				if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
-					// Only attesting validators are eligible for registration duties.
-					continue
-				}
-				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
-					continue
-				}
+			func() {
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				defer cancel()
 
-				pk := phase0.BLSPubKey{}
-				copy(pk[:], share.ValidatorPubKey[:])
-				h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{{
-					Type:           spectypes.BNRoleValidatorRegistration,
-					ValidatorIndex: share.ValidatorIndex,
-					PubKey:         pk,
-					Slot:           slot,
-				}})
-
-				h.logger.Debug("validator registration duty sent",
-					zap.Uint64("slot", uint64(slot)),
-					zap.Uint64("validator_index", uint64(share.ValidatorIndex)),
-					zap.String("validator_pubkey", pk.String()))
-			}
+				h.processExecution(tickCtx, currentEpoch, slot)
+			}()
 
 		case regDescriptor, ok := <-h.validatorRegCh:
 			if !ok {
@@ -123,7 +104,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.Uint64("slot", uint64(dutySlot)),
 				zap.Uint64("validator_index", uint64(regDescriptor.ValidatorIndex)),
 				zap.String("validator_pubkey", regDescriptor.ValidatorPubkey.String()),
-				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient[:])))
+				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient)))
 
 		case <-h.indicesChange:
 			h.logger.Debug("🛠 indicesChange event")
@@ -132,6 +113,39 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 reorg event")
 		}
 	}
+}
+
+func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
+	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
+
+	shares := h.validatorProvider.SelfValidators()
+	duties := make([]*spectypes.ValidatorDuty, 0, len(shares))
+	for _, share := range shares {
+		if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
+			// Only attesting validators are eligible for registration duties.
+			continue
+		}
+		if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
+			continue
+		}
+
+		pk := phase0.BLSPubKey(share.ValidatorPubKey)
+
+		duties = append(duties, &spectypes.ValidatorDuty{
+			Type:           spectypes.BNRoleValidatorRegistration,
+			ValidatorIndex: share.ValidatorIndex,
+			PubKey:         pk,
+			Slot:           slot,
+		})
+
+		h.logger.Debug("validator registration duty sent",
+			zap.Uint64("slot", uint64(slot)),
+			zap.Uint64("validator_index", uint64(share.ValidatorIndex)),
+			zap.String("validator_pubkey", pk.String()))
+	}
+
+	h.dutiesExecutor.ExecuteDuties(ctx, duties)
 }
 
 // blockSlot returns slot that happens (corresponds to) at the same time as block.

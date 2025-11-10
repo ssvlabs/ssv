@@ -7,7 +7,9 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -20,6 +22,7 @@ import (
 type BaseValidatorStore interface {
 	Validator(pubKey []byte) (*types.SSVShare, bool)
 	ValidatorIndex(pubKey spectypes.ValidatorPK) (phase0.ValidatorIndex, bool)
+	ValidatorPubkey(index phase0.ValidatorIndex) (spectypes.ValidatorPK, bool)
 	ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool)
 	Validators() []*types.SSVShare
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
@@ -30,7 +33,7 @@ type BaseValidatorStore interface {
 	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
 	OperatorCommittees(id spectypes.OperatorID) []*Committee
 
-	// TODO: save recipient address
+	GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error)
 }
 
 type ValidatorStore interface {
@@ -74,14 +77,19 @@ type sharesAndCommittees struct {
 }
 
 type validatorStore struct {
-	operatorID func() spectypes.OperatorID
-	shares     func() []*types.SSVShare
-	byPubKey   func([]byte) (*types.SSVShare, bool)
+	operatorID          func() spectypes.OperatorID
+	shares              func() []*types.SSVShare
+	byPubKey            func([]byte) (*types.SSVShare, bool)
+	feeRecipientByOwner func(common.Address) (bellatrix.ExecutionAddress, error)
+	byValidatorIndex    map[phase0.ValidatorIndex]*types.SSVShare
+	byCommitteeID       map[spectypes.CommitteeID]*Committee
+	byOperatorID        map[spectypes.OperatorID]*sharesAndCommittees
 
-	byValidatorPubkey map[spectypes.ValidatorPK]phase0.ValidatorIndex
-	byValidatorIndex  map[phase0.ValidatorIndex]*types.SSVShare
-	byCommitteeID     map[spectypes.CommitteeID]*Committee
-	byOperatorID      map[spectypes.OperatorID]*sharesAndCommittees
+	// pubkeyToIndex is a permanent (no deletion) mapping of validator pubkey -> index
+	pubkeyToIndex map[spectypes.ValidatorPK]phase0.ValidatorIndex
+
+	// indexToPubkey is a (no deletion) mapping of validator index -> pubkey
+	indexToPubkey map[phase0.ValidatorIndex]spectypes.ValidatorPK
 
 	beaconCfg *networkconfig.Beacon
 
@@ -91,17 +99,26 @@ type validatorStore struct {
 func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
-	pubkeyIndexMapping map[spectypes.ValidatorPK]phase0.ValidatorIndex,
+	feeRecipientByOwner func(owner common.Address) (bellatrix.ExecutionAddress, error),
+	pubkeyToIndex map[spectypes.ValidatorPK]phase0.ValidatorIndex,
 	beaconCfg *networkconfig.Beacon,
 ) *validatorStore {
+	// Build an index -> pubkey mapping by inverting the provided mapping.
+	indexToPubkey := make(map[phase0.ValidatorIndex]spectypes.ValidatorPK, len(pubkeyToIndex))
+	for pk, idx := range pubkeyToIndex {
+		indexToPubkey[idx] = pk
+	}
+
 	return &validatorStore{
-		shares:            shares,
-		byPubKey:          shareByPubKey,
-		byValidatorPubkey: pubkeyIndexMapping,
-		byValidatorIndex:  make(map[phase0.ValidatorIndex]*types.SSVShare),
-		byCommitteeID:     make(map[spectypes.CommitteeID]*Committee),
-		byOperatorID:      make(map[spectypes.OperatorID]*sharesAndCommittees),
-		beaconCfg:         beaconCfg,
+		shares:              shares,
+		byPubKey:            shareByPubKey,
+		pubkeyToIndex:       pubkeyToIndex,
+		indexToPubkey:       indexToPubkey,
+		feeRecipientByOwner: feeRecipientByOwner,
+		byValidatorIndex:    make(map[phase0.ValidatorIndex]*types.SSVShare),
+		byCommitteeID:       make(map[spectypes.CommitteeID]*Committee),
+		byOperatorID:        make(map[spectypes.OperatorID]*sharesAndCommittees),
+		beaconCfg:           beaconCfg,
 	}
 }
 
@@ -113,12 +130,23 @@ func (c *validatorStore) ValidatorIndex(pubkey spectypes.ValidatorPK) (phase0.Va
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	index, found := c.byValidatorPubkey[pubkey]
+	index, found := c.pubkeyToIndex[pubkey]
 	if !found {
 		return 0, false
 	}
 
 	return index, true
+}
+
+func (c *validatorStore) ValidatorPubkey(index phase0.ValidatorIndex) (spectypes.ValidatorPK, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	pk, found := c.indexToPubkey[index]
+	if !found {
+		return spectypes.ValidatorPK{}, false
+	}
+	return pk, true
 }
 
 func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool) {
@@ -247,6 +275,29 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 	return participating
 }
 
+// GetFeeRecipient returns the fee recipient for a validator.
+// Returns an error if the validator is not found or if no fee recipient is configured.
+func (c *validatorStore) GetFeeRecipient(validatorPK spectypes.ValidatorPK) (bellatrix.ExecutionAddress, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	validatorIndex, found := c.pubkeyToIndex[validatorPK]
+	if !found {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("validator not found")
+	}
+
+	share := c.byValidatorIndex[validatorIndex]
+	if share == nil {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("validator share is nil for index %d", validatorIndex)
+	}
+
+	recipient, err := c.feeRecipientByOwner(share.OwnerAddress)
+	if err != nil {
+		return bellatrix.ExecutionAddress{}, fmt.Errorf("no fee recipient for owner %s: %w", share.OwnerAddress.Hex(), err)
+	}
+	return recipient, nil
+}
+
 func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -259,7 +310,8 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 		// Update byValidatorIndex and mapping
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.ValidatorIndex] = share
-			c.byValidatorPubkey[share.ValidatorPubKey] = share.ValidatorIndex
+			c.pubkeyToIndex[share.ValidatorPubKey] = share.ValidatorIndex
+			c.indexToPubkey[share.ValidatorIndex] = share.ValidatorPubKey
 		}
 
 		// Update byCommitteeID
@@ -411,7 +463,8 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 		// Update byValidatorIndex and mapping
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.ValidatorIndex] = share
-			c.byValidatorPubkey[share.ValidatorPubKey] = share.ValidatorIndex
+			c.pubkeyToIndex[share.ValidatorPubKey] = share.ValidatorIndex
+			c.indexToPubkey[share.ValidatorIndex] = share.ValidatorPubKey
 		}
 
 		// Update byCommitteeID

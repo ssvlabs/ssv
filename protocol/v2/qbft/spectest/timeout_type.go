@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -21,17 +22,13 @@ type SpecTest struct {
 	PostRoot           string
 	OutputMessages     []*spectypes.SignedSSVMessage
 	ExpectedTimerState *testingutils.TimerState
-	ExpectedError      string
+	ExpectedErrorCode  int
 }
 
 func RunTimeout(t *testing.T, test *SpecTest) {
 	logger := log.TestLogger(t)
 	err := test.Pre.UponRoundTimeout(context.TODO(), logger)
-	if test.ExpectedError != "" {
-		require.EqualError(t, err, test.ExpectedError)
-	} else {
-		require.NoError(t, err)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
 	// test calling timeout
 	timer, ok := test.Pre.GetConfig().GetTimer().(*roundtimer.TestQBFTTimer)

@@ -1,15 +1,17 @@
 //go:build lfs
-// +build lfs
 
 package validator
 
 import (
+	"encoding/hex"
 	"os"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -39,9 +41,9 @@ func TestEviction(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon)
+	collector := New(zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	for _, trace := range traces {
 		collector.Collect(t.Context(), trace, dummyVerify)
@@ -52,7 +54,7 @@ func TestEviction(t *testing.T) {
 	collector.evict(slot1)
 	collector.evict(slot2)
 
-	collector.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+	collector.validatorTraces.Range(func(_ phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		_, found := slotToTraceMap.Get(slot1)
 		if found {
 			t.Fatalf("validator: slot %d not evicted", slot1)
@@ -127,13 +129,93 @@ func TestEviction(t *testing.T) {
 	}
 
 	{
-		// links
+		// links - committee links are now populated during schedule computation, not message collection
+		// This test only collects messages without running schedule worker, so no links are expected
 		links, err := dutyStore.GetCommitteeDutyLinks(3707881)
 		require.NoError(t, err)
-		require.Len(t, links, 787)
+		require.Len(t, links, 0)
 
 		links, err = dutyStore.GetCommitteeDutyLinks(3707882)
 		require.NoError(t, err)
-		require.Len(t, links, 799)
+		require.Len(t, links, 0)
 	}
+}
+
+func TestPendingDetails_FieldShape(t *testing.T) {
+	// Build a small pending map with one root, one signer and two timestamp buckets
+	var root phase0.Root
+	copy(root[:], []byte{1, 2, 3})
+	signer := spectypes.OperatorID(99)
+	ts1 := uint64(1000)
+	ts2 := uint64(2000)
+
+	data := map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex{
+		root: {
+			signer: {
+				ts1: {phase0.ValidatorIndex(5), phase0.ValidatorIndex(5), phase0.ValidatorIndex(7)},
+				ts2: {phase0.ValidatorIndex(7), phase0.ValidatorIndex(9)},
+			},
+		},
+	}
+
+	core, logs := observer.New(zap.DebugLevel)
+	logger := zap.New(core)
+	logger.Debug("pending-details", pendingDetails(data))
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	entry := entries[0]
+
+	// Find our field
+	var fieldFound bool
+	var payload any
+	for _, f := range entry.Context {
+		if f.Key == "pending_signers_by_root" {
+			fieldFound = true
+			payload = f.Interface
+			break
+		}
+	}
+	require.True(t, fieldFound, "expected pending_signers_by_root field")
+
+	// Decode the shape: map[rootHex] -> map[signer] -> { union_indices, by_timestamp }
+	m, ok := payload.(map[string]map[string]any)
+	if !ok {
+		// fallback: cope with reflection producing slightly different types
+		// but still validate that the field is a map
+		require.FailNow(t, "unexpected payload type for pending_signers_by_root: %T", payload)
+	}
+
+	rhex := hex.EncodeToString(root[:])
+	inner, ok := m[rhex]
+	require.True(t, ok)
+
+	skey := "99"
+	sdata, ok := inner[skey].(map[string]any)
+	require.True(t, ok)
+
+	// union_indices should contain 5,7,9 (dedup + sort)
+	union, ok := sdata["union_indices"].([]uint64)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []uint64{5, 7, 9}, union)
+
+	// by_timestamp should be a list ordered by t ascending
+	buckets, ok := sdata["by_timestamp"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, buckets, 2)
+
+	// First bucket is ts1
+	t1, ok := buckets[0]["t"].(uint64)
+	require.True(t, ok)
+	t2, ok := buckets[1]["t"].(uint64)
+	require.True(t, ok)
+	assert.Less(t, t1, t2)
+
+	// Indices content
+	idxs1, ok := buckets[0]["indices"].([]uint64)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []uint64{5, 7}, idxs1)
+	idxs2, ok := buckets[1]["indices"].([]uint64)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []uint64{7, 9}, idxs2)
 }

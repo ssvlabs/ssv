@@ -110,9 +110,8 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
-		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		waitForDuties = &SafeValue[bool]{}
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -122,10 +121,12 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 		},
 	})
 
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	waitForSlotN(scheduler.beaconConfig, 1)
-	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
@@ -144,9 +145,8 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
-		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		waitForDuties = &SafeValue[bool]{}
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -156,9 +156,11 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 		},
 	})
 
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	ticker.Send(phase0.Slot(0))
@@ -185,11 +187,13 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -246,11 +250,13 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -318,12 +324,14 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
 
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
@@ -405,11 +413,13 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
@@ -424,8 +434,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	})
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
-	mockTicker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
 	waitForDuties.Set(true)
+	mockTicker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
 	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -501,7 +511,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -514,7 +524,9 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
@@ -585,7 +597,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
@@ -598,7 +610,9 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 	})
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
@@ -679,11 +693,13 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
@@ -771,11 +787,13 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
@@ -872,9 +890,8 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
-		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
-		waitForDuties = &SafeValue[bool]{}
+		handler   = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 	)
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -885,9 +902,11 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, &SafeValue[bool]{})
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	mockTicker.Send(phase0.Slot(0))
@@ -904,7 +923,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-	startTime := time.Now()
+	slotStartTime := time.Now()
 	mockTicker.Send(phase0.Slot(2))
 
 	// STEP 4: trigger head event (block arrival)
@@ -915,7 +934,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.beaconConfig.SlotDuration/3)
+	require.Less(t, time.Since(slotStartTime), scheduler.beaconConfig.SlotDuration/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -926,11 +945,13 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-1)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
@@ -967,11 +988,13 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
+		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		waitForDuties = &SafeValue[bool]{}
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch/2-3)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch/2-3)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)

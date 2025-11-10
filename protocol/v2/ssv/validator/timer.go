@@ -19,11 +19,12 @@ import (
 
 func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
-		v.mtx.RLock() // read-lock for v.Queues, v.state
+		v.mtx.RLock() // read-lock for v.Queues
 		defer v.mtx.RUnlock()
 
-		// only run if the validator is started
-		if v.state != uint32(Started) {
+		// The relevant queue might not have been initialized yet, hence we need to check for nil here
+		q := v.Queues[identifier.GetRoleType()]
+		if q == nil {
 			return
 		}
 
@@ -44,17 +45,17 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
-		dec.TraceContext = ctx
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return
 		}
 
-		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
+		if pushed := q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.RunnerRole(identifier.GetRoleType()))
+				fields.RunnerRole(identifier.GetRoleType()),
+			)
+			return
 		}
-		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}
 }
 
@@ -109,7 +110,6 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
-		dec.TraceContext = ctx
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return

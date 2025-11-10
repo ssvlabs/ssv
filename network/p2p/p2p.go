@@ -20,6 +20,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -33,7 +35,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
@@ -69,8 +70,8 @@ type HostProvider interface {
 	Host() host.Host
 }
 
-type validatorStatusAndSubnet struct {
-	status     validatorStatus
+type statusWithSubnet struct {
+	status     committeeSubscriptionStatus
 	subnet     uint64
 	subnetAlan uint64
 }
@@ -99,7 +100,8 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeCommittees *hashmap.Map[string, validatorStatusAndSubnet]
+	// subscribedCommittees tracks committee subscription statuses for committees we've subscribed to.
+	subscribedCommittees *hashmap.Map[string, statusWithSubnet]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
@@ -141,7 +143,7 @@ func New(
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
-		activeCommittees:        hashmap.New[string, validatorStatusAndSubnet](),
+		subscribedCommittees:    hashmap.New[string, statusWithSubnet](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -459,7 +461,7 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
-		n.logger.Panic("could not setup discovery", zap.Error(err))
+		n.logger.Fatal("could not setup discovery", zap.Error(err))
 	}
 }
 

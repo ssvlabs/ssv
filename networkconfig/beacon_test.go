@@ -42,6 +42,11 @@ func TestForkAtEpoch(t *testing.T) {
 				PreviousVersion: phase0.Version{4},
 				CurrentVersion:  phase0.Version{5},
 			},
+			spec.DataVersionFulu: {
+				Epoch:           phase0.Epoch(60),
+				PreviousVersion: phase0.Version{5},
+				CurrentVersion:  phase0.Version{6},
+			},
 		},
 	}
 
@@ -109,6 +114,16 @@ func TestForkAtEpoch(t *testing.T) {
 			Epoch:           phase0.Epoch(50),
 			PreviousVersion: phase0.Version{4},
 			CurrentVersion:  phase0.Version{5},
+		}},
+		{epoch: 60, version: spec.DataVersionFulu, fork: phase0.Fork{
+			Epoch:           phase0.Epoch(60),
+			PreviousVersion: phase0.Version{5},
+			CurrentVersion:  phase0.Version{6},
+		}},
+		{epoch: 65, version: spec.DataVersionFulu, fork: phase0.Fork{
+			Epoch:           phase0.Epoch(60),
+			PreviousVersion: phase0.Version{5},
+			CurrentVersion:  phase0.Version{6},
 		}},
 	}
 

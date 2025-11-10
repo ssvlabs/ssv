@@ -2,10 +2,8 @@ package validator
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -20,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -28,17 +25,24 @@ import (
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
-// Each validator has multiple DutyRunners, for each duty type.
+// Each validator has multiple DutyRunners - one per duty-type.
 type Validator struct {
 	logger *zap.Logger
 
-	mtx *sync.RWMutex
+	// mtx ensures the consistent Validator lifecycle (the correct usage of Start and Stop methods),
+	// as well as syncs access to validator-managed data (such as Queues) across go-routines.
+	mtx sync.RWMutex
+
+	// Started reflects whether this validator has already been started. Once the Validator has been stopped, it
+	// cannot be restarted.
+	started bool
+	// Stopped reflects whether this validator has already been stopped.
+	stopped bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	NetworkConfig *networkconfig.Network
-	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 
 	Operator       *spectypes.CommitteeMember
@@ -46,19 +50,18 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Queues map[spectypes.RunnerRole]QueueContainer
+	Queues map[spectypes.RunnerRole]queue.Queue
 
-	state uint32
+	DutyRunners runner.ValidatorDutyRunners
 
 	messageValidator validation.MessageValidator
 }
 
 // NewValidator creates a new instance of Validator.
-func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
+func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, options *Options) *Validator {
 	v := &Validator{
 		logger:           logger.Named(log.NameValidator).With(fields.PubKey(options.SSVShare.ValidatorPubKey[:])),
-		mtx:              &sync.RWMutex{},
-		ctx:              pctx,
+		ctx:              ctx,
 		cancel:           cancel,
 		NetworkConfig:    options.NetworkConfig,
 		DutyRunners:      options.DutyRunners,
@@ -67,27 +70,22 @@ func NewValidator(pctx context.Context, cancel func(), logger *zap.Logger, optio
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
 		OperatorSigner:   options.OperatorSigner,
-		Queues:           make(map[spectypes.RunnerRole]QueueContainer),
-		state:            uint32(NotStarted),
+		Queues:           make(map[spectypes.RunnerRole]queue.Queue),
 		messageValidator: options.MessageValidator,
 	}
 
+	// some additional steps to prepare duty runners for handling duties
 	for _, dutyRunner := range options.DutyRunners {
-		// Set timeout function.
-		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
-
-		//Setup the queue.
-		role := dutyRunner.GetBaseRunner().RunnerRoleType
-
-		v.Queues[role] = QueueContainer{
-			Q: queue.New(options.QueueSize),
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             0,
-				Slot:               0,
-				//Quorum:             options.SSVShare.Share,// TODO
-			},
-		}
+		dutyRunner.SetTimeoutFunc(v.onTimeout)
+		v.Queues[dutyRunner.GetRole()] = queue.New(
+			logger,
+			options.QueueSize,
+			queue.WithInboxSizeMetric(
+				queue.InboxSizeMetric,
+				queue.ValidatorQueueMetricType,
+				queue.ValidatorMetricID(dutyRunner.GetRole()),
+			),
+		)
 	}
 
 	return v
@@ -122,126 +120,5 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	}
 
 	span.SetStatus(codes.Ok, "")
-	return nil
-}
-
-// ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) error {
-	msgType := msg.GetType()
-	msgID := msg.GetID()
-
-	// Validate message (+ verify SignedSSVMessage's signature)
-	if msgType != message.SSVEventMsgType {
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
-		}
-		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err)
-		}
-	}
-
-	slot, err := msg.Slot()
-	if err != nil {
-		return fmt.Errorf("couldn't get message slot: %w", err)
-	}
-	dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
-
-	logger := v.logger.
-		With(fields.MessageType(msgType)).
-		With(fields.MessageID(msgID)).
-		With(fields.RunnerRole(msgID.GetRoleType())).
-		With(fields.Slot(slot)).
-		With(fields.DutyID(dutyID))
-
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "process_message"),
-		trace.WithAttributes(
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.ValidatorMsgIDAttribute(msgID),
-			observability.RunnerRoleAttribute(msgID.GetRoleType()),
-			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
-		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
-	defer span.End()
-
-	// Get runner
-	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-	if dutyRunner == nil {
-		return traces.Errorf(span, "could not get duty runner for msg ID %v", msgID)
-	}
-
-	// Validate message for runner
-	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return traces.Errorf(span, "message invalid for msg ID %v: %w", msgID, err)
-	}
-	switch msgType {
-	case spectypes.SSVConsensusMsgType:
-		qbftMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok {
-			return traces.Errorf(span, "could not decode consensus message from network message")
-		}
-
-		if err := qbftMsg.Validate(); err != nil {
-			return traces.Errorf(span, "invalid QBFT Message: %w", err)
-		}
-
-		logger = logger.With(fields.QBFTHeight(qbftMsg.Height))
-
-		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
-			return traces.Error(span, err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
-		if !ok {
-			return traces.Errorf(span, "could not decode post consensus message from network message")
-		}
-
-		span.SetAttributes(observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type))
-
-		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
-		}
-
-		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
-		}
-
-		if signedMsg.Type == spectypes.PostConsensusPartialSig {
-			span.AddEvent("processing post-consensus message")
-			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
-				return traces.Error(span, err)
-			}
-			span.SetStatus(codes.Ok, "")
-			return nil
-		}
-		span.AddEvent("processing pre-consensus message")
-		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
-			return traces.Error(span, err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	case message.SSVEventMsgType:
-		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	default:
-		return traces.Errorf(span, "unknown message type %d", msgType)
-	}
-}
-
-func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
-	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
-		return errors.New("msg ID doesn't match validator ID")
-	}
-
-	if len(msg.GetData()) == 0 {
-		return errors.New("msg data is invalid")
-	}
-
 	return nil
 }

@@ -3,6 +3,7 @@ package spectest
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -10,17 +11,18 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv-spec/ssv"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spec "github.com/ssvlabs/ssv-spec/ssv"
+	stests "github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -35,7 +37,7 @@ type CommitteeSpecTest struct {
 	PostDutyCommittee      spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
-	ExpectedError          string
+	ExpectedErrorCode      int
 }
 
 func (test *CommitteeSpecTest) TestName() string {
@@ -50,17 +52,13 @@ func (test *CommitteeSpecTest) FullName() string {
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	logger := log.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
 	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := runner.GetBeaconNode().(*tests.TestingBeaconNodeWrapped)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
 		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
 	}
@@ -94,7 +92,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
-			err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
+			_, _, err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
 			if err != nil {
 				lastErr = err
 			}
@@ -103,7 +101,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
-			err = test.Committee.ProcessMessage(context.TODO(), msg)
+			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
 				lastErr = err
 			}
@@ -123,7 +121,7 @@ func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
 
 func (test *CommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
 	lastErr := test.runPreTesting(logger)
-	if lastErr != nil && len(test.ExpectedError) == 0 {
+	if lastErr != nil && test.ExpectedErrorCode == 0 {
 		return nil, lastErr
 	}
 
@@ -165,8 +163,13 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 	ret := make(map[string]spectypes.Root, len(tests.Tests))
 	for _, test := range tests.Tests {
 		err := test.runPreTesting(logger)
-		if err != nil && test.ExpectedError != err.Error() {
-			return nil, err
+		if err != nil && !stests.MatchesErrorCode(test.ExpectedErrorCode, err) {
+			return nil, fmt.Errorf(
+				"(%s) expected error with code: %d, got error: %w",
+				test.TestName(),
+				test.ExpectedErrorCode,
+				err,
+			)
 		}
 		ret[test.Name] = test.Committee
 	}
@@ -174,7 +177,7 @@ func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface
 }
 
 func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecTest, name string, testType string) {
-	specCommittee := &ssv.Committee{}
+	specCommittee := &spec.Committee{}
 	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	specCommittee, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, specCommittee)
@@ -186,8 +189,12 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	for _, r := range committee.Runners {
-		r.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	for i := range committee.Runners {
+		committee.Runners[i].BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		committee.Runners[i].ValCheck = qbfttesting.TestingValueChecker{}
+	}
+	for i := range test.Committee.Runners {
+		test.Committee.Runners[i].ValCheck = qbfttesting.TestingValueChecker{}
 	}
 
 	root, err := committee.GetRoot()

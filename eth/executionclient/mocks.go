@@ -149,10 +149,10 @@ func (mr *MockProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 }
 
 // StreamLogs mocks base method.
-func (m *MockProvider) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+func (m *MockProvider) StreamLogs(ctx context.Context, fromBlock uint64) chan BlockLogs {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamLogs", ctx, fromBlock)
-	ret0, _ := ret[0].(<-chan BlockLogs)
+	ret0, _ := ret[0].(chan BlockLogs)
 	return ret0
 }
 
@@ -306,10 +306,10 @@ func (mr *MockSingleClientProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 }
 
 // StreamLogs mocks base method.
-func (m *MockSingleClientProvider) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+func (m *MockSingleClientProvider) StreamLogs(ctx context.Context, fromBlock uint64) chan BlockLogs {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StreamLogs", ctx, fromBlock)
-	ret0, _ := ret[0].(<-chan BlockLogs)
+	ret0, _ := ret[0].(chan BlockLogs)
 	return ret0
 }
 
@@ -350,12 +350,13 @@ func (mr *MockSingleClientProviderMockRecorder) SyncProgress(ctx any) *gomock.Ca
 }
 
 // streamLogsToChan mocks base method.
-func (m *MockSingleClientProvider) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+func (m *MockSingleClientProvider) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "streamLogsToChan", ctx, logCh, fromBlock)
 	ret0, _ := ret[0].(uint64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // streamLogsToChan indicates an expected call of streamLogsToChan.
