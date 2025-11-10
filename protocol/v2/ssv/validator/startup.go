@@ -29,7 +29,7 @@ func (v *Validator) Start() (started bool, err error) {
 			return false, err
 		}
 		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
-		go v.StartQueueConsumer(identifier, v.ProcessMessage)
+		v.StartQueueConsumer(identifier, v.ProcessMessage)
 	}
 
 	v.started = true

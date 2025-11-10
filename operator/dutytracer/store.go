@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -38,6 +39,10 @@ type DutyTraceStore interface {
 	GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
 	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error)
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error)
+
+	// Compact scheduled duties I/O
+	SaveScheduled(slot phase0.Slot, schedule map[phase0.ValidatorIndex]rolemask.Mask) error
+	GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
 }
 
 func (c *Collector) GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
@@ -188,7 +193,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 	return clone, nil
 }
 
-// hasSignersForRole checks if the duty has signers for the given role
+// hasSignersForRoles checks if the duty has signers for the given role
 // since we don't store a boolean flag to separate duties by their role in the db
 // we rely on the fact that during collection we separate the signers in their
 // corresponding fields (Attester and SyncCommittee) based on the role

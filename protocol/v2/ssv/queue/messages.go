@@ -1,7 +1,6 @@
 package queue
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -19,9 +18,6 @@ var (
 
 // SSVMessage is a bundle of spectypes.SSVMessage and it's decoding.
 type SSVMessage struct {
-	// TraceContext is used to track message flow through the internal queue system,
-	// linking message producers and consumers to help with debugging and monitoring.
-	TraceContext     context.Context
 	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 

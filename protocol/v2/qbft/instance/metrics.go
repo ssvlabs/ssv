@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/metric"
 
@@ -28,7 +28,7 @@ func (m *metricsRecorder) Start() {
 	m.stageStart = time.Now()
 }
 
-func (m *metricsRecorder) EndStage(ctx context.Context, round qbft.Round, s stage) {
+func (m *metricsRecorder) EndStage(ctx context.Context, round specqbft.Round, s stage) {
 	validatorStageDurationHistogram.Record(
 		ctx,
 		time.Since(m.stageStart).Seconds(),
@@ -41,7 +41,7 @@ func (m *metricsRecorder) EndStage(ctx context.Context, round qbft.Round, s stag
 }
 
 // RecordRoundChange records a round change event with the specified reason.
-func (m *metricsRecorder) RecordRoundChange(ctx context.Context, round qbft.Round, reason roundChangeReason) {
+func (m *metricsRecorder) RecordRoundChange(ctx context.Context, round specqbft.Round, reason roundChangeReason) {
 	roundsChangedCounter.Add(
 		ctx,
 		1,
