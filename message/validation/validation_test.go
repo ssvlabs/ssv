@@ -1638,7 +1638,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		for _, tc := range tt {
 			t.Run(tc.name, func(t *testing.T) {
-				validator := New(tc.cfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+				validator := New(tc.cfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
 
