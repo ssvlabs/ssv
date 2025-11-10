@@ -19,7 +19,9 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/api/handlers"
+	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
+	hnode "github.com/ssvlabs/ssv/api/handlers/node"
+	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -125,9 +127,9 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	logger := zaptest.NewLogger(t)
-	node := &handlers.Node{}
-	validators := &handlers.Validators{}
-	exporter := &handlers.Exporter{}
+	node := &hnode.Node{}
+	validators := &hvalidators.Validators{}
+	exporter := &hexporter.Exporter{}
 
 	server := New(
 		logger,
@@ -167,9 +169,9 @@ func TestRun_ActualExecution(t *testing.T) {
 	srv := New(
 		logger,
 		addr,
-		&handlers.Node{},
-		&handlers.Validators{},
-		&handlers.Exporter{},
+		&hnode.Node{},
+		&hvalidators.Validators{},
+		&hexporter.Exporter{},
 		false,
 	)
 
@@ -232,9 +234,9 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 	srv := New(
 		logger,
 		addr,
-		&handlers.Node{},
-		&handlers.Validators{},
-		&handlers.Exporter{},
+		&hnode.Node{},
+		&hvalidators.Validators{},
+		&hexporter.Exporter{},
 		true,
 	)
 

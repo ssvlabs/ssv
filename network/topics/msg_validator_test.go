@@ -4,14 +4,13 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -56,7 +55,6 @@ func TestMsgValidator(t *testing.T) {
 		ns,
 		dutystore.New(),
 		signatureVerifier,
-		phase0.Epoch(0),
 		validation.WithLogger(logger),
 	)
 
@@ -83,7 +81,7 @@ func TestMsgValidator(t *testing.T) {
 	operatorSigner := spectestingutils.NewOperatorSigner(ks, operatorID)
 
 	t.Run("valid consensus msg", func(t *testing.T) {
-		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], qbft.Height(slot))
+		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], specqbft.Height(slot))
 		require.NoError(t, err)
 
 		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
@@ -111,7 +109,7 @@ func TestMsgValidator(t *testing.T) {
 	})
 
 	t.Run("wrong topic", func(t *testing.T) {
-		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], qbft.Height(slot))
+		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], specqbft.Height(slot))
 		require.NoError(t, err)
 
 		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
@@ -145,7 +143,7 @@ func TestMsgValidator(t *testing.T) {
 	})
 
 	t.Run("invalid validator public key", func(t *testing.T) {
-		ssvMsg, err := dummySSVConsensusMsg([]byte{1, 2, 3, 4, 5}, qbft.Height(slot))
+		ssvMsg, err := dummySSVConsensusMsg([]byte{1, 2, 3, 4, 5}, specqbft.Height(slot))
 		require.NoError(t, err)
 
 		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
@@ -183,12 +181,12 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 	return pmsg
 }
 
-func dummySSVConsensusMsg(dutyExecutorID []byte, height qbft.Height) (*spectypes.SSVMessage, error) {
+func dummySSVConsensusMsg(dutyExecutorID []byte, height specqbft.Height) (*spectypes.SSVMessage, error) {
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, spectypes.RoleCommittee)
-	qbftMsg := &qbft.Message{
-		MsgType:    qbft.RoundChangeMsgType,
+	qbftMsg := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     height,
-		Round:      qbft.FirstRound,
+		Round:      specqbft.FirstRound,
 		Identifier: id[:],
 		Root:       spectestingutils.TestingQBFTRootData,
 	}

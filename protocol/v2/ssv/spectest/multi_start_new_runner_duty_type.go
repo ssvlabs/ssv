@@ -9,16 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type StartNewRunnerDutySpecTest struct {
@@ -29,7 +28,7 @@ type StartNewRunnerDutySpecTest struct {
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages          []*spectypes.PartialSignatureMessages
-	ExpectedError           string
+	ExpectedErrorCode       int
 }
 
 func (test *StartNewRunnerDutySpecTest) TestName() string {
@@ -45,11 +44,7 @@ func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
 
 func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	err := test.runPreTesting(logger)
-	if len(test.ExpectedError) > 0 {
-		require.EqualError(t, err, test.ExpectedError)
-	} else {
-		require.NoError(t, err)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
 	// test output message
 	broadcastedSignedMsgs := test.Runner.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
@@ -95,6 +90,37 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 		}
 
 		require.Len(t, test.OutputMessages, index)
+	}
+
+	switch r := test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+	case *runner.AggregatorRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+	case *runner.ProposerRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+	case *runner.SyncCommitteeAggregatorRunner:
+		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
+		if r.BaseRunner.State.RunningInstance != nil {
+			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+		}
 	}
 
 	// post root
@@ -143,31 +169,8 @@ func (tests *MultiStartNewRunnerDutySpecTest) overrideStateComparison(t *testing
 }
 
 func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *StartNewRunnerDutySpecTest, name string, testType string) {
-	var r runner.Runner
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		r = &runner.CommitteeRunner{}
-	case *runner.AggregatorRunner:
-		r = &runner.AggregatorRunner{}
-	case *runner.ProposerRunner:
-		r = &runner.ProposerRunner{}
-	case *runner.SyncCommitteeAggregatorRunner:
-		r = &runner.SyncCommitteeAggregatorRunner{}
-	case *runner.ValidatorRegistrationRunner:
-		r = &runner.ValidatorRegistrationRunner{}
-	case *runner.VoluntaryExitRunner:
-		r = &runner.VoluntaryExitRunner{}
-	default:
-		t.Fatalf("unknown runner type")
-	}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
-	require.NoError(t, err)
-	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
-	require.NoError(t, err)
+	r := runnerForTest(t, test.Runner, name, testType)
 
-	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
-
-	// override
 	test.PostDutyRunnerState = r
 
 	root, err := r.GetRoot()

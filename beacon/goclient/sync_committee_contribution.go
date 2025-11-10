@@ -13,7 +13,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -58,25 +57,15 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(ctx, &api.BeaconBlockRootOpts{
 		Block: fmt.Sprint(slot),
 	})
-	recordRequestDuration(ctx, "BeaconBlockRoot", gc.multiClient.Address(), http.MethodGet, time.Since(scDataReqStart), err)
+	recordRequest(ctx, gc.log, "BeaconBlockRoot", gc.multiClient, http.MethodGet, true, time.Since(scDataReqStart), err)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "BeaconBlockRoot"),
-			zap.Error(err),
-		)
-		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("fetch beacon block root: %w", err), "BeaconBlockRoot")
 	}
 	if beaconBlockRootResp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "BeaconBlockRoot"),
-		)
-		return nil, DataVersionNil, fmt.Errorf("beacon block root response is nil")
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("beacon block root response is nil"), "BeaconBlockRoot")
 	}
 	if beaconBlockRootResp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "BeaconBlockRoot"),
-		)
-		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
+		return nil, DataVersionNil, errMultiClient(fmt.Errorf("beacon block root response data is nil"), "BeaconBlockRoot")
 	}
 
 	blockRoot := beaconBlockRootResp.Data
@@ -99,25 +88,15 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 				SubcommitteeIndex: subnetIDs[index],
 				BeaconBlockRoot:   *blockRoot,
 			})
-			recordRequestDuration(ctx, "SyncCommitteeContribution", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+			recordRequest(ctx, gc.log, "SyncCommitteeContribution", gc.multiClient, http.MethodGet, true, time.Since(start), err)
 			if err != nil {
-				gc.log.Error(clResponseErrMsg,
-					zap.String("api", "SyncCommitteeContribution"),
-					zap.Error(err),
-				)
-				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)
+				return errMultiClient(fmt.Errorf("fetch sync committee contribution: %w", err), "SyncCommitteeContribution")
 			}
 			if syncCommitteeContrResp == nil {
-				gc.log.Error(clNilResponseErrMsg,
-					zap.String("api", "SyncCommitteeContribution"),
-				)
-				return fmt.Errorf("sync committee contribution response is nil")
+				return errMultiClient(fmt.Errorf("sync committee contribution response is nil"), "SyncCommitteeContribution")
 			}
 			if syncCommitteeContrResp.Data == nil {
-				gc.log.Error(clNilResponseDataErrMsg,
-					zap.String("api", "SyncCommitteeContribution"),
-				)
-				return fmt.Errorf("sync committee contribution data is nil")
+				return errMultiClient(fmt.Errorf("sync committee contribution response data is nil"), "SyncCommitteeContribution")
 			}
 
 			contribution := syncCommitteeContrResp.Data
@@ -140,20 +119,13 @@ func (gc *GoClient) SubmitSignedContributionAndProof(
 	ctx context.Context,
 	contribution *altair.SignedContributionAndProof,
 ) error {
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitSyncCommitteeContributions"),
-		zap.String("client_addr", clientAddress))
-
 	start := time.Now()
 	err := gc.multiClient.SubmitSyncCommitteeContributions(ctx, []*altair.SignedContributionAndProof{contribution})
-	recordRequestDuration(ctx, "SubmitSyncCommitteeContributions", clientAddress, http.MethodPost, time.Since(start), err)
+	recordRequest(ctx, gc.log, "SubmitSyncCommitteeContributions", gc.multiClient, http.MethodPost, true, time.Since(start), err)
 	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
+		return errMultiClient(fmt.Errorf("submit sync committee contributions: %w", err), "SubmitSyncCommitteeContributions")
 	}
 
-	logger.Debug("consensus client submitted signed contribution and proof")
 	return nil
 }
 

@@ -17,13 +17,13 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
+func (c *Controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
 	return c.logger.Named(log.NameControllerTaskExecutor).
 		With(zap.String("task", taskName)).
 		With(fields...)
 }
 
-func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
+func (c *Controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
 	validatorsRemovedCounter.Add(c.ctx, 1)
@@ -34,7 +34,7 @@ func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 	return nil
 }
 
-func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toLiquidate []*types.SSVShare) error {
+func (c *Controller) LiquidateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toLiquidate []*types.SSVShare) error {
 	logger := c.taskLogger("LiquidateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
 
 	for _, share := range toLiquidate {
@@ -45,7 +45,7 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []specty
 	return nil
 }
 
-func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toReactivate []*types.SSVShare) error {
+func (c *Controller) ReactivateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toReactivate []*types.SSVShare) error {
 	logger := c.taskLogger("ReactivateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
 	var startedValidators int
 	var errs error
@@ -60,10 +60,16 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 		}
 	}
 	if startedValidators > 0 {
-		// Notify DutyScheduler about the changes in validator indices without blocking.
+		// Notify DutyScheduler and FeeRecipientController about the changes in validators without blocking.
 		go func() {
+			// Notify duty scheduler about validator indices changes so the scheduler can update its duties
 			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
+			}
+			// Notify about fee recipient changes so the fee recipient controller can submit
+			// new proposal preparations for the reactivated validators
+			if !c.reportFeeRecipientChange(c.ctx) {
+				logger.Error("failed to notify fee recipient change")
 			}
 		}()
 	}
@@ -74,22 +80,21 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	return errs
 }
 
-func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
+func (c *Controller) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
 	logger := c.taskLogger("UpdateFeeRecipient",
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
+	var updated bool
 	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
-			v.Share.FeeRecipientAddress = recipient
-			logger.Debug("updated recipient address")
+			updated = true
 
-			pk := phase0.BLSPubKey{}
-			copy(pk[:], v.Share.ValidatorPubKey[:])
+			pk := phase0.BLSPubKey(v.Share.ValidatorPubKey)
 			regDesc := duties.RegistrationDescriptor{
 				ValidatorIndex:  v.Share.ValidatorIndex,
 				ValidatorPubkey: pk,
-				FeeRecipient:    v.Share.FeeRecipientAddress[:],
+				FeeRecipient:    recipient[:],
 				BlockNumber:     blockNumber,
 			}
 
@@ -107,10 +112,20 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 		return true
 	})
 
+	if updated {
+		go func() {
+			// Notify the fee recipient controller about the fee recipient address change
+			// so it can submit updated proposal preparations with the new fee recipient
+			if !c.reportFeeRecipientChange(c.ctx) {
+				logger.Error("failed to notify fee recipient change")
+			}
+		}()
+	}
+
 	return nil
 }
 
-func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
+func (c *Controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
 	logger := c.taskLogger("ExitValidator",
 		fields.PubKey(pubKey[:]),
 		fields.BlockNumber(blockNumber),

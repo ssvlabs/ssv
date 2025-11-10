@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -180,7 +179,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	cfg := NewNetConfig(keys, format.OperatorPubKeyHash(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
@@ -190,7 +189,6 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		nodeStorage,
 		dutyStore,
 		signatureVerifier,
-		phase0.Epoch(0),
 	)
 	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
@@ -217,7 +215,6 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			phase0.Epoch(0),
 			validation.WithSelfAccept(selfPeerID, true),
 		)
 	}

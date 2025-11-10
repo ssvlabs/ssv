@@ -20,12 +20,6 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	messageValidationsCounter = metrics.New(
-		meter.Int64Counter(
-			observabilityNamespace,
-			metric.WithUnit("{message_validation}"),
-			metric.WithDescription("total number of messages validated")))
-
 	messageValidationsAcceptedCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "accepted"),
@@ -54,10 +48,6 @@ var (
 
 func reasonAttribute(reason string) attribute.KeyValue {
 	return attribute.String("ssv.p2p.message.validation.discard_reason", reason)
-}
-
-func recordMessage(ctx context.Context) {
-	messageValidationsCounter.Add(ctx, 1)
 }
 
 func recordAcceptedMessage(ctx context.Context, role types.RunnerRole) {

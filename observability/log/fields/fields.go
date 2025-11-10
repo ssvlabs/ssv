@@ -21,68 +21,70 @@ import (
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/observability/log/fields/stringer"
+	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
 const (
-	FieldAddress             = "address"
-	FieldAddresses           = "addresses"
-	FieldBindIP              = "bind_ip"
-	FieldBlock               = "block"
-	FieldBlockHash           = "block_hash"
-	FieldBlockCacheMetrics   = "block_cache_metrics_field"
-	FieldCommittee           = "committee"
-	FieldCommitteeID         = "committee_id"
-	FieldConnectionID        = "connection_id"
-	FieldPreConsensusTime    = "pre_consensus_time"
-	FieldPostConsensusTime   = "post_consensus_time"
-	FieldConsensusTime       = "consensus_time"
-	FieldBlockTime           = "block_time"
-	FieldCount               = "count"
-	FieldCurrentSlot         = "current_slot"
-	FieldDomain              = "domain"
-	FieldDuration            = "duration"
-	FieldDuties              = "duties"
-	FieldDutyExecutorID      = "duty_executor_id"
-	FieldDutyID              = "duty_id"
-	FieldENR                 = "enr"
-	FieldEpoch               = "epoch"
-	FieldEvent               = "event"
-	FieldFeeRecipient        = "fee_recipient"
-	FieldFromBlock           = "from_block"
-	FieldQBFTHeight          = "qbft_height"
-	FieldQBFTRound           = "qbft_round"
-	FieldIndexCacheMetrics   = "index_cache_metrics"
-	FieldMessageID           = "msg_id"
-	FieldMessageType         = "msg_type"
-	FieldName                = "name"
-	FieldOperatorId          = "operator_id"
-	FieldOperatorIDs         = "operator_ids"
-	FieldOperatorPubKey      = "operator_pubkey"
-	FieldOwnerAddress        = "owner_address"
-	FieldPeerID              = "peer_id"
-	FieldPeerScore           = "peer_score"
-	FieldPrivKey             = "privkey"
-	FieldProtocolID          = "protocol_id"
-	FieldPubKey              = "pubkey"
-	FieldBeaconRole          = "beacon_role"
-	FieldRunnerRole          = "runner_role"
-	FieldSlot                = "slot"
-	FieldSlotStartTime       = "slot_start_time"
-	FieldSubmissionTime      = "submission_time"
-	FieldTotalConsensusTime  = "total_consensus_time"
-	FieldTotalDutyTime       = "total_duty_time"
-	FieldSubnets             = "subnets"
-	FieldTargetNodeENR       = "target_node_enr"
-	FieldToBlock             = "to_block"
-	FieldTook                = "took"
-	FieldTopic               = "topic"
-	FieldTxHash              = "tx_hash"
-	FieldType                = "type"
-	FieldUpdatedENRLocalNode = "updated_enr"
-	FieldValidator           = "validator"
-	FieldValidatorIndex      = "validator_index"
+	FieldAddress               = "address"
+	FieldAddresses             = "addresses"
+	FieldBindIP                = "bind_ip"
+	FieldBlock                 = "block"
+	FieldBlockHash             = "block_hash"
+	FieldBlockCacheMetrics     = "block_cache_metrics_field"
+	FieldCommittee             = "committee"
+	FieldCommitteeID           = "committee_id"
+	FieldConnectionID          = "connection_id"
+	FieldPreConsensusTime      = "pre_consensus_time"
+	FieldPostConsensusTime     = "post_consensus_time"
+	FieldConsensusTime         = "consensus_time"
+	FieldBlockTime             = "block_time"
+	FieldCount                 = "count"
+	FieldEstimatedCurrentEpoch = "estimated_current_epoch"
+	FieldEstimatedCurrentSlot  = "estimated_current_slot"
+	FieldDomain                = "domain"
+	FieldDuration              = "duration"
+	FieldDuties                = "duties"
+	FieldDutyExecutorID        = "duty_executor_id"
+	FieldDutyID                = "duty_id"
+	FieldENR                   = "enr"
+	FieldEpoch                 = "epoch"
+	FieldEvent                 = "event"
+	FieldFeeRecipient          = "fee_recipient"
+	FieldFromBlock             = "from_block"
+	FieldQBFTHeight            = "qbft_height"
+	FieldQBFTRound             = "qbft_round"
+	FieldIndexCacheMetrics     = "index_cache_metrics"
+	FieldMessageID             = "msg_id"
+	FieldMessageType           = "msg_type"
+	FieldName                  = "name"
+	FieldOperatorId            = "operator_id"
+	FieldOperatorIDs           = "operator_ids"
+	FieldOperatorPubKey        = "operator_pubkey"
+	FieldOwnerAddress          = "owner_address"
+	FieldPeerID                = "peer_id"
+	FieldPeerScore             = "peer_score"
+	FieldPrivKey               = "privkey"
+	FieldProtocolID            = "protocol_id"
+	FieldPubKey                = "pubkey"
+	FieldBeaconRole            = "beacon_role"
+	FieldRunnerRole            = "runner_role"
+	FieldSlot                  = "slot"
+	FieldSlotStartTime         = "slot_start_time"
+	FieldSubmissionTime        = "submission_time"
+	FieldTotalConsensusTime    = "total_consensus_time"
+	FieldTotalDutyTime         = "total_duty_time"
+	FieldSubnets               = "subnets"
+	FieldTargetNodeENR         = "target_node_enr"
+	FieldToBlock               = "to_block"
+	FieldTook                  = "took"
+	FieldTopic                 = "topic"
+	FieldTxHash                = "tx_hash"
+	FieldType                  = "type"
+	FieldUpdatedENRLocalNode   = "updated_enr"
+	FieldValidator             = "validator"
+	FieldValidatorIndex        = "validator_index"
 )
 
 func FromBlock(val uint64) zapcore.Field { return zap.Uint64(FieldFromBlock, val) }
@@ -159,14 +161,6 @@ func Duration(val time.Time) zapcore.Field {
 	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
 }
 
-func CurrentSlot(slot phase0.Slot) zapcore.Field {
-	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(slot)})
-}
-
-func SlotStartTime(time time.Time) zapcore.Field {
-	return zap.Time(FieldSlotStartTime, time)
-}
-
 func BlockCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
 	return zap.Stringer(FieldBlockCacheMetrics, metrics)
 }
@@ -196,7 +190,7 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 }
 
 func RunnerRole(val spectypes.RunnerRole) zap.Field {
-	return zap.String(FieldRunnerRole, formatRunnerRole(val))
+	return zap.String(FieldRunnerRole, utils.FormatRunnerRole(val))
 }
 
 func MessageID(val spectypes.MessageID) zap.Field {
@@ -240,7 +234,7 @@ func Topic(val string) zap.Field {
 }
 
 func PreConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldPreConsensusTime, formatDuration(val))
+	return zap.String(FieldPreConsensusTime, utils.FormatDuration(val))
 }
 
 func ConsensusTime(val time.Duration) zap.Field {
@@ -248,23 +242,23 @@ func ConsensusTime(val time.Duration) zap.Field {
 }
 
 func PostConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldPostConsensusTime, formatDuration(val))
+	return zap.String(FieldPostConsensusTime, utils.FormatDuration(val))
 }
 
 func BlockTime(val time.Duration) zap.Field {
-	return zap.String(FieldBlockTime, formatDuration(val))
+	return zap.String(FieldBlockTime, utils.FormatDuration(val))
 }
 
 func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, formatDuration(val))
+	return zap.String(FieldSubmissionTime, utils.FormatDuration(val))
 }
 
 func TotalConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldTotalConsensusTime, formatDuration(val))
+	return zap.String(FieldTotalConsensusTime, utils.FormatDuration(val))
 }
 
 func TotalDutyTime(val time.Duration) zap.Field {
-	return zap.String(FieldTotalDutyTime, formatDuration(val))
+	return zap.String(FieldTotalDutyTime, utils.FormatDuration(val))
 }
 
 func DutyID(val string) zap.Field {
@@ -277,6 +271,14 @@ func Epoch(val phase0.Epoch) zap.Field {
 
 func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
+}
+
+func EstimatedCurrentEpoch(val phase0.Epoch) zapcore.Field {
+	return zap.Stringer(FieldEstimatedCurrentEpoch, stringer.Uint64Stringer{Val: uint64(val)})
+}
+
+func EstimatedCurrentSlot(val phase0.Slot) zapcore.Field {
+	return zap.Stringer(FieldEstimatedCurrentSlot, stringer.Uint64Stringer{Val: uint64(val)})
 }
 
 func Domain(val spectypes.DomainType) zap.Field {
@@ -295,13 +297,19 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty) zap.Field {
+// Duties formats a list of duties as a single log field, truncating the output if needed.
+// Use truncateAfter<=0 to disable truncation.
+func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty, truncateAfter int) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {
 			b.WriteString(", ")
 		}
 		b.WriteString(BuildDutyID(epoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex))
+		if truncateAfter > 0 && i+1 >= truncateAfter {
+			b.WriteString(", (truncated) ...")
+			break
+		}
 	}
 	return zap.String(FieldDuties, b.String())
 }
@@ -314,7 +322,7 @@ func BlockRoot(r [32]byte) zap.Field {
 }
 
 func Committee(operatorIDs []spectypes.OperatorID) zap.Field {
-	return zap.String(FieldCommittee, formatCommittee(operatorIDs))
+	return zap.String(FieldCommittee, utils.FormatCommittee(operatorIDs))
 }
 
 func CommitteeID(val spectypes.CommitteeID) zap.Field {

@@ -5,7 +5,7 @@ import (
 )
 
 func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	sigs := state.PreConsensusContainer.GetSignatures(state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root)
+	sigs := state.PreConsensusContainer.GetSignatures(state.CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root)
 	signers := make([]spectypes.OperatorID, 0, len(sigs))
 	for op := range sigs {
 		signers = append(signers, op)
@@ -14,7 +14,7 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 }
 
 func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	duties := state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties
+	duties := state.CurrentDuty.(*spectypes.CommitteeDuty).ValidatorDuties
 
 	have := make(map[spectypes.OperatorID]struct{}, len(duties))
 	signersUnique := make([]spectypes.OperatorID, 0, len(duties))
@@ -33,7 +33,7 @@ func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.O
 }
 
 func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	sigs := state.PostConsensusContainer.GetSignatures(state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root)
+	sigs := state.PostConsensusContainer.GetSignatures(state.CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root)
 	signers := make([]spectypes.OperatorID, 0, len(sigs))
 	for op := range sigs {
 		signers = append(signers, op)

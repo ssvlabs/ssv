@@ -2,16 +2,22 @@ package validator
 
 import (
 	"fmt"
-	"sync/atomic"
 
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// Start starts a Validator.
+// Start starts Validator.
 func (v *Validator) Start() (started bool, err error) {
-	if !atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
-		return false, nil
+	v.mtx.Lock()
+	defer v.mtx.Unlock()
+
+	if v.stopped {
+		return false, fmt.Errorf("stopped validator cannot be restarted")
+	}
+
+	if v.started {
+		return false, nil // nothing to do
 	}
 
 	n, ok := v.Network.(p2p.Subscriber)
@@ -19,26 +25,28 @@ func (v *Validator) Start() (started bool, err error) {
 		return false, fmt.Errorf("network does not support subscription")
 	}
 	for role := range v.DutyRunners {
-		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
-
 		if err := n.Subscribe(v.Share.ValidatorPubKey); err != nil {
-			atomic.StoreUint32(&v.state, uint32(NotStarted))
 			return false, err
 		}
-		go v.StartQueueConsumer(identifier, v.ProcessMessage)
+		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		v.StartQueueConsumer(identifier, v.ProcessMessage)
 	}
+
+	v.started = true
+
 	return true, nil
 }
 
-// Stop stops a Validator.
+// Stop stops Validator.
 func (v *Validator) Stop() {
-	if atomic.CompareAndSwapUint32(&v.state, uint32(Started), uint32(NotStarted)) {
-		v.cancel()
+	v.mtx.Lock()
+	defer v.mtx.Unlock()
 
-		v.mtx.Lock() // write-lock for v.Queues
-		defer v.mtx.Unlock()
-
-		// clear the msg q
-		v.Queues = make(map[spectypes.RunnerRole]QueueContainer)
+	if v.stopped || !v.started {
+		return // nothing to do
 	}
+
+	v.cancel()
+
+	v.stopped = true
 }
