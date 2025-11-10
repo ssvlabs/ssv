@@ -211,7 +211,7 @@ func (v *Validator) StartQueueConsumer(
 			))
 
 			// Handle the message, potentially scheduling a message-replay for later.
-			err = handler(ctx, msgLogger, msg)
+			err = handler(msgState.ctx, msgLogger, msg)
 			if err != nil {
 				// We'll re-queue the message to be replayed later in case the error we got is retryable.
 				// We are aiming to cover most of the slot time (~10s), but we don't need to cover the
@@ -234,7 +234,11 @@ func (v *Validator) StartQueueConsumer(
 					msgLogger.Debug(retryingMsgDueToErrorEvent, zap.Error(err))
 					msgState.span.AddEvent(retryingMsgDueToErrorEvent)
 					go func(msg *queue.SSVMessage, msgState *messageProcessingState) {
-						time.Sleep(retryDelay)
+						select {
+						case <-time.After(retryDelay):
+						case <-msgState.ctx.Done():
+							return
+						}
 						if pushed := q.TryPush(msg); !pushed {
 							const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
 							msgLogger.Error(droppingMsgDueToQueueIsFullEvent)

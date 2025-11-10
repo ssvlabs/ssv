@@ -231,7 +231,11 @@ func (c *Committee) ConsumeQueue(
 				msgLogger.Debug(retryingMsgDueToErrorEvent, zap.Error(err))
 				msgState.span.AddEvent(retryingMsgDueToErrorEvent)
 				go func(msg *queue.SSVMessage, msgState *messageProcessingState) {
-					time.Sleep(retryDelay)
+					select {
+					case <-time.After(retryDelay):
+					case <-msgState.ctx.Done():
+						return
+					}
 					if pushed := q.Q.TryPush(msg); !pushed {
 						const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
 						msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
