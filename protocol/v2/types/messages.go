@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -42,7 +43,8 @@ type ExecuteDutyData struct {
 }
 
 type ExecuteCommitteeDutyData struct {
-	Duty *spectypes.CommitteeDuty
+	Duty    *spectypes.CommitteeDuty       `json:"duty,omitempty"`
+	AggDuty *types.AggregatorCommitteeDuty `json:"agg_duty,omitempty"`
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {

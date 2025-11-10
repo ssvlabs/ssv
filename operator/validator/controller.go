@@ -154,9 +154,11 @@ type Controller struct {
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
 	committeesObserversMutex sync.Mutex
 
-	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
-	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
+	attesterRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	aggregatorRoots      *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots        *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommContribRoots *ttlcache.Cache[phase0.Root, struct{}]
+	beaconVoteRoots      *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
 
 	domainCache *validator.DomainCache
 
@@ -234,7 +236,13 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		attesterRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
+		aggregatorRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
 		syncCommRoots: ttlcache.New(
+			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
+		),
+		syncCommContribRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
@@ -260,7 +268,9 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	go ctrl.committeesObservers.Start()
 	// Delete old root and domain entries.
 	go ctrl.attesterRoots.Start()
+	go ctrl.aggregatorRoots.Start()
 	go ctrl.syncCommRoots.Start()
+	go ctrl.syncCommContribRoots.Start()
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 
@@ -347,9 +357,10 @@ func (c *Controller) handleRouterMessages() {
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
-	spectypes.RoleCommittee:  64,
-	spectypes.RoleProposer:   4,
-	spectypes.RoleAggregator: 4,
+	spectypes.RoleCommittee:           64,
+	spectypes.RoleAggregatorCommittee: 64,
+	spectypes.RoleProposer:            4,
+	spectypes.RoleAggregator:          4,
 	//spectypes.BNRoleSyncCommittee:             4,
 	spectypes.RoleSyncCommitteeContribution: 4,
 }
@@ -362,18 +373,20 @@ func (c *Controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 	item := c.committeesObservers.Get(ssvMsg.GetID())
 	if item == nil || item.Value() == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
-			Logger:            c.logger,
-			BeaconConfig:      c.networkConfig.Beacon,
-			ValidatorStore:    c.validatorStore,
-			Network:           c.validatorCommonOpts.Network,
-			Storage:           c.validatorCommonOpts.Storage,
-			FullNode:          c.validatorCommonOpts.FullNode,
-			OperatorSigner:    c.validatorCommonOpts.OperatorSigner,
-			NewDecidedHandler: c.validatorCommonOpts.NewDecidedHandler,
-			AttesterRoots:     c.attesterRoots,
-			SyncCommRoots:     c.syncCommRoots,
-			DomainCache:       c.domainCache,
-			BeaconVoteRoots:   c.beaconVoteRoots,
+			Logger:               c.logger,
+			BeaconConfig:         c.networkConfig.Beacon,
+			ValidatorStore:       c.validatorStore,
+			Network:              c.validatorCommonOpts.Network,
+			Storage:              c.validatorCommonOpts.Storage,
+			FullNode:             c.validatorCommonOpts.FullNode,
+			OperatorSigner:       c.validatorCommonOpts.OperatorSigner,
+			NewDecidedHandler:    c.validatorCommonOpts.NewDecidedHandler,
+			AttesterRoots:        c.attesterRoots,
+			AggregatorRoots:      c.aggregatorRoots,
+			SyncCommRoots:        c.syncCommRoots,
+			SyncCommContribRoots: c.syncCommContribRoots,
+			DomainCache:          c.domainCache,
+			BeaconVoteRoots:      c.beaconVoteRoots,
 		}
 
 		ncv = validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions)
@@ -405,7 +418,8 @@ func (c *Controller) handleNonCommitteeMessages(
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		// Process proposal messages for committee consensus only to get the roots
-		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+		role := msg.MsgID.GetRoleType()
+		if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee {
 			return nil
 		}
 
@@ -655,7 +669,7 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot)
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot, duty.RunnerRole())
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
@@ -677,6 +691,50 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	cm.ConsumeQueue(ctx, logger, q, cm.ProcessMessage, r)
+
+	span.SetStatus(codes.Ok, "")
+}
+
+func (c *Controller) ExecuteAggregatorCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty) {
+	cm, ok := c.validatorsMap.GetCommittee(committeeID)
+	if !ok {
+		const eventMsg = "could not find committee"
+		c.logger.Warn(eventMsg, fields.CommitteeID(committeeID))
+		return
+	}
+
+	committee := make([]spectypes.OperatorID, 0, len(cm.CommitteeMember.Committee))
+	for _, operator := range cm.CommitteeMember.Committee {
+		committee = append(committee, operator.OperatorID)
+	}
+
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot, duty.RunnerRole())
+	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "execute_aggregator_committee_duty"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconEpochAttribute(dutyEpoch),
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.CommitteeIDAttribute(committeeID),
+			observability.DutyIDAttribute(dutyID),
+		),
+		trace.WithLinks(trace.LinkFromContext(ctx)))
+	defer span.End()
+
+	logger := c.logger.
+		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.Slot(duty.Slot)).
+		With(fields.CommitteeID(committeeID)).
+		With(fields.DutyID(dutyID))
+
+	span.AddEvent("executing committee duty")
+	if err := cm.ExecuteAggregatorDuty(ctx, duty); err != nil {
+		logger.Error("could not execute committee duty", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
 
 	span.SetStatus(codes.Ok, "")
 }
@@ -759,12 +817,14 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 	if !found {
 		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
 		committeeRunnerFunc := SetupCommitteeRunners(c.ctx, opts)
+		aggregatorCommitteeRunnerFunc := SetupAggregatorCommitteeRunners(committeeCtx, opts)
 
 		vc = validator.NewCommittee(
 			c.logger,
 			c.networkConfig,
 			operator,
 			committeeRunnerFunc,
+			aggregatorCommitteeRunnerFunc,
 			nil,
 			c.dutyGuard,
 		)
@@ -1055,6 +1115,50 @@ func SetupCommitteeRunners(
 			return nil, err
 		}
 		return crunner.(*runner.CommitteeRunner), nil
+	}
+}
+
+func SetupAggregatorCommitteeRunners(
+	ctx context.Context,
+	options *validator.Options,
+) validator.AggregatorCommitteeRunnerFunc {
+	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
+		config := &qbft.Config{
+			BeaconSigner: options.Signer,
+			Domain:       options.NetworkConfig.DomainType,
+			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+				leader := qbft.RoundRobinProposer(state, round)
+				return leader
+			},
+			Network:     options.Network,
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound: roundtimer.CutOffRound,
+		}
+
+		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)
+		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
+		return qbftCtrl
+	}
+
+	return func(
+		shares map[phase0.ValidatorIndex]*spectypes.Share,
+		attestingValidators []phase0.BLSPubKey,
+	) (*runner.AggregatorCommitteeRunner, error) {
+		aggCommRunner, err := runner.NewAggregatorCommitteeRunner(
+			options.NetworkConfig,
+			shares,
+			attestingValidators,
+			buildController(spectypes.RoleAggregatorCommittee),
+			options.Beacon,
+			options.Network,
+			options.Signer,
+			options.OperatorSigner,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return aggCommRunner.(*runner.AggregatorCommitteeRunner), nil
 	}
 }
 

@@ -39,18 +39,10 @@ func (bn *BeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch,
 	return bn.Bn.DomainData(epoch, domain)
 }
 func (bn *BeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	v, err := bn.Bn.SyncCommitteeSubnetID(index)
-	if err != nil {
-		panic("unexpected error from SyncCommitteeSubnetID")
-	}
-	return v
+	return bn.Bn.SyncCommitteeSubnetID(index)
 }
 func (bn *BeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
-	v, err := bn.Bn.IsSyncCommitteeAggregator(proof)
-	if err != nil {
-		panic("unexpected error from IsSyncCommitteeAggregator")
-	}
-	return v
+	return bn.Bn.IsSyncCommitteeAggregator(proof)
 }
 func (bn *BeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)
@@ -62,7 +54,12 @@ func (bn *BeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return bn.Bn.GetBeaconNetwork()
 }
 func (bn *BeaconNodeWrapped) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
-	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
+	p, _, err := bn.Bn.GetBeaconBlock(slot, graffiti, randao)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return spectestingutils.TestingBeaconBlockV(spectestingutils.VersionBySlot(slot)), p, nil // workaround to get *api.VersionedProposal
 }
 func (bn *BeaconNodeWrapped) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
 	for _, registration := range registrations {

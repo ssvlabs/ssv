@@ -44,7 +44,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		logger.Error("❌ couldn't get message slot", zap.Error(err))
 		return
 	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType())
 
 	logger = logger.
 		With(fields.Slot(slot)).
@@ -83,11 +83,10 @@ func (c *Committee) ConsumeQueue(
 	logger *zap.Logger,
 	q queueContainer,
 	handler MessageHandler, // should be c.ProcessMessage, it is a param so can be mocked out for testing
-	rnr *runner.CommitteeRunner,
+	rnr runner.Runner,
 ) {
 	logger.Debug("📬 queue consumer is running")
 	defer logger.Debug("📪 queue consumer is closed")
-
 	// Construct a representation of the current state.
 	state := *q.queueState
 

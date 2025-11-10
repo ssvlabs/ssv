@@ -285,11 +285,35 @@ var baseCommitteeWithRunnerSample = func(
 		return r.(*runner.CommitteeRunner), err
 	}
 
+	createAggregatorRunnerF := func(
+		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
+		attestingValidators []phase0.BLSPubKey,
+	) (*runner.AggregatorCommitteeRunner, error) {
+		r, err := runner.NewAggregatorCommitteeRunner(
+			networkconfig.TestNetwork,
+			shareMap,
+			attestingValidators,
+			controller.NewController(
+				runnerSample.BaseRunner.QBFTController.Identifier,
+				runnerSample.BaseRunner.QBFTController.CommitteeMember,
+				runnerSample.BaseRunner.QBFTController.GetConfig(),
+				spectestingutils.TestingOperatorSigner(keySetSample),
+				false,
+			),
+			runnerSample.GetBeaconNode(),
+			runnerSample.GetNetwork(),
+			runnerSample.GetSigner(),
+			runnerSample.GetOperatorSigner(),
+		)
+		return r.(*runner.AggregatorCommitteeRunner), err
+	}
+
 	c := validator.NewCommittee(
 		logger,
 		runnerSample.BaseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
+		createAggregatorRunnerF,
 		shareMap,
 		committeeDutyGuard,
 	)

@@ -19,7 +19,7 @@ type dutyHandler interface {
 		logger *zap.Logger,
 		beaconNode BeaconNode,
 		executionClient ExecutionClient,
-		beaconConfig *networkconfig.Beacon,
+		netCfg *networkconfig.Network,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
@@ -36,7 +36,7 @@ type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        *networkconfig.Beacon
+	netCfg              *networkconfig.Network
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	dutiesExecutor      DutiesExecutor
@@ -53,7 +53,7 @@ func (h *baseHandler) Setup(
 	logger *zap.Logger,
 	beaconNode BeaconNode,
 	executionClient ExecutionClient,
-	beaconConfig *networkconfig.Beacon,
+	netCfg *networkconfig.Network,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,
@@ -64,7 +64,7 @@ func (h *baseHandler) Setup(
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient
-	h.beaconConfig = beaconConfig
+	h.netCfg = netCfg
 	h.validatorProvider = validatorProvider
 	h.validatorController = validatorController
 	h.dutiesExecutor = dutiesExecutor
@@ -85,5 +85,5 @@ func (h *baseHandler) HandleInitialDuties(context.Context) {
 // ctxWithDeadlineOnNextSlot returns the derived context with deadline set to next slot (+ some safety margin
 // to account for clock skews).
 func (h *baseHandler) ctxWithDeadlineOnNextSlot(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
-	return context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
+	return context.WithDeadline(ctx, h.netCfg.SlotStartTime(slot+1).Add(100*time.Millisecond))
 }

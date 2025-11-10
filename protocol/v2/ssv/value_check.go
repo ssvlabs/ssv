@@ -2,6 +2,7 @@ package ssv
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 
@@ -84,6 +85,39 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	if bv.Target.Root != v.expectedVote.Target.Root {
 		return fmt.Errorf("unexpected target root %x, expected %x", bv.Target.Root, v.expectedVote.Target.Root)
 	}
+
+	return nil
+}
+
+type validatorConsensusDataChecker struct {
+	beaconConfig *networkconfig.Beacon
+}
+
+func (v *validatorConsensusDataChecker) CheckValue(value []byte) error {
+	cd := &spectypes.ValidatorConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return fmt.Errorf("failed decoding consensus data: %w", err)
+	}
+	if err := cd.Validate(); err != nil {
+		return fmt.Errorf("invalid value: %w", err)
+	}
+
+	if v.beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > v.beaconConfig.EstimatedCurrentEpoch()+1 {
+		return errors.New("duty epoch is into far future")
+	}
+
+	if spectypes.BNRoleAggregatorCommittee != cd.Duty.Type {
+		return errors.New("wrong beacon role type")
+	}
+
+	// TODO: should it be checked?
+	//if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
+	//	return errors.New("wrong validator pk")
+	//}
+	//
+	//if validatorIndex != cd.Duty.ValidatorIndex {
+	//	return errors.New("wrong validator index")
+	//}
 
 	return nil
 }

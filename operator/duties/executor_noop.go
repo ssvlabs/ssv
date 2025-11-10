@@ -18,5 +18,8 @@ func (n *noopExecutor) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty
 func (n *noopExecutor) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, _ spectypes.CommitteeID, _ *spectypes.CommitteeDuty) {
 }
 
+func (n *noopExecutor) ExecuteAggregatorCommitteeDuty(ctx context.Context, _ spectypes.CommitteeID, _ *spectypes.AggregatorCommitteeDuty) {
+}
+
 // Ensure interface conformance.
 var _ DutyExecutor = (*noopExecutor)(nil)
