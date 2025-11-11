@@ -7,21 +7,29 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 
-	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	registrymocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
+
+// setCommitteeLink is a test helper that directly sets validator-to-committee links in the collector's in-memory map
+func setCommitteeLink(c *Collector, slot phase0.Slot, validatorIndex phase0.ValidatorIndex, committeeID spectypes.CommitteeID) {
+	slotToCommittee, _ := c.validatorIndexToCommitteeLinks.GetOrSet(validatorIndex, hashmap.New[phase0.Slot, spectypes.CommitteeID]())
+	slotToCommittee.Set(slot, committeeID)
+}
 
 func TestValidatorCommitteeMapping(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
@@ -30,9 +38,9 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -41,20 +49,12 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	committeeID2[0] = 2
 
 	slot4 := phase0.Slot(4)
-	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 2}},
-	}, committeeID1)
-	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 1}},
-	}, committeeID2)
+	setCommitteeLink(collector, slot4, 2, committeeID1)
+	setCommitteeLink(collector, slot4, 1, committeeID2)
 
 	slot5 := phase0.Slot(5)
-	collector.saveValidatorToCommitteeLink(slot5, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 1}},
-	}, committeeID1)
-	collector.saveValidatorToCommitteeLink(slot5, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 2}},
-	}, committeeID2)
+	setCommitteeLink(collector, slot5, 1, committeeID1)
+	setCommitteeLink(collector, slot5, 2, committeeID2)
 
 	// assert that validator committee mapping is available (in memory)
 	cmt1, err := collector.getCommitteeIDBySlotAndIndex(slot4, 1)
@@ -119,27 +119,20 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 }
 
 func TestCommitteeDutyStore(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	vstore := registrymocks.NewMockValidatorStore(ctrl)
+
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	dutyStore := store.New(db)
 
-	// setup validator validatorPK -> index mapping
-	var validatorPK spectypes.ValidatorPK
-	validatorPK[0] = 7
+	// setup validator index mapping
+	index1 := setupValidatorStoreMock(vstore, 1)
 
-	var index = phase0.ValidatorIndex(1)
-	value := make([]byte, 8)
-	binary.LittleEndian.PutUint64(value, uint64(index))
-
-	err = db.Set([]byte("val_pki"), validatorPK[:], value)
-	require.NoError(t, err)
-
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
-
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -152,7 +145,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	dutyTrace3, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
 	require.NoError(t, err)
-	dutyTrace3.Decideds = append(dutyTrace3.Decideds, &model.DecidedTrace{
+	dutyTrace3.Decideds = append(dutyTrace3.Decideds, &exporter.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace3)
@@ -165,7 +158,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	dutyTrace5, _, err := collector.getOrCreateCommitteeTrace(slot7, committeeID1)
 	require.NoError(t, err)
-	dutyTrace5.Decideds = append(dutyTrace5.Decideds, &model.DecidedTrace{
+	dutyTrace5.Decideds = append(dutyTrace5.Decideds, &exporter.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace5)
@@ -197,10 +190,8 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 		// assert that decideds are available (in memory)
 		for _, slot := range []phase0.Slot{slot4, slot7} {
-			collector.saveValidatorToCommitteeLink(slot, &spectypes.PartialSignatureMessages{
-				Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index}},
-			}, committeeID1)
-			dd, err := collector.GetCommitteeDecideds(slot, validatorPK)
+			setCommitteeLink(collector, slot, index1, committeeID1)
+			dd, err := collector.GetCommitteeDecideds(slot, index1)
 			require.NoError(t, err)
 			require.NotNil(t, dd)
 			require.Len(t, dd, 1)
@@ -235,7 +226,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 		}
 
 		for _, slot := range []phase0.Slot{slot4, slot7} {
-			dd, err := collector.GetCommitteeDecideds(slot, validatorPK)
+			dd, err := collector.GetCommitteeDecideds(slot, index1)
 			require.NoError(t, err)
 			require.NotNil(t, dd)
 			require.Len(t, dd, 1)
@@ -278,17 +269,17 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.Nil(t, storedDuty7_2)
 
 	{ // check that sync committee and attester signers are included in decideds
-		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &model.SignerData{Signer: 1})
-		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &model.SignerData{Signer: 2})
-		dutyTrace5.Attester = append(dutyTrace5.Attester, &model.SignerData{Signer: 3})
-		dd, err := collector.GetCommitteeDecideds(slot7, validatorPK)
+		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &exporter.SignerData{Signer: 1})
+		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &exporter.SignerData{Signer: 2})
+		dutyTrace5.Attester = append(dutyTrace5.Attester, &exporter.SignerData{Signer: 3})
+		dd, err := collector.GetCommitteeDecideds(slot7, index1)
 		require.NoError(t, err)
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
 		require.Equal(t, []spectypes.OperatorID{1, 2, 3}, dd[0].Signers)
 	}
 
-	err = dutyStore.SaveCommitteeDutyLink(slot7, index, committeeID1)
+	err = dutyStore.SaveCommitteeDutyLink(slot7, index1, committeeID1)
 	require.NoError(t, err)
 
 	dd, err := collector.GetAllCommitteeDecideds(slot7)
@@ -315,7 +306,8 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	dutyStore := store.New(db)
 	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
 	require.NoError(t, err)
-	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+
+	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 	shares.Save(db, &types.SSVShare{
 		Status: eth2apiv1.ValidatorStateActiveOngoing,
 		Share: spectypes.Share{
@@ -323,18 +315,16 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 			ValidatorPubKey: validatorPK7,
 		},
 	})
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	// Create a new trace
 	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
 	require.NoError(t, err)
-	dutyTrace.Decideds = append(dutyTrace.Decideds, &model.DecidedTrace{
+	dutyTrace.Decideds = append(dutyTrace.Decideds, &exporter.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace)
-	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index1}},
-	}, committeeID1)
+	setCommitteeLink(collector, slot4, index1, committeeID1)
 
 	// Fetch trace from memory cache and check
 	{
@@ -342,7 +332,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
-		require.Equal(t, validatorPK7, dd[0].PubKey)
+		require.Equal(t, index1, dd[0].Index)
 	}
 
 	// Evict to disk
@@ -355,82 +345,84 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, dd)
 		require.Len(t, dd, 1)
-		require.Equal(t, validatorPK7, dd[0].PubKey)
+		require.Equal(t, index1, dd[0].Index)
 	}
 }
 
+func setupValidatorStoreMock(store *registrymocks.MockValidatorStore, idx int) phase0.ValidatorIndex {
+	index := phase0.ValidatorIndex(idx)
+	var validatorPK spectypes.ValidatorPK
+	binary.BigEndian.PutUint32(validatorPK[:], uint32(idx))
+
+	store.EXPECT().Validator(validatorPK).Return(&types.SSVShare{Share: spectypes.Share{ValidatorIndex: index, ValidatorPubKey: validatorPK}}, true).AnyTimes()
+	store.EXPECT().ValidatorIndex(validatorPK).Return(index, true).AnyTimes()
+	store.EXPECT().ValidatorByIndex(index).Return(&types.SSVShare{Share: spectypes.Share{ValidatorIndex: index, ValidatorPubKey: validatorPK}}, true).AnyTimes()
+	return index
+}
+
 func TestValidatorDutyStore(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	vstore := registrymocks.NewMockValidatorStore(ctrl)
+
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	dutyStore := store.New(db)
 
 	// setup validator pubkey -> index mapping
 	// this is used to get the validator index from the pubkey
 	// when the duty is not found in the cache
 	// because on disk the validator index is stored
-	var validatorPK1 spectypes.ValidatorPK
-	validatorPK1[0] = 1
+	index1 := setupValidatorStoreMock(vstore, 1)
+	index2 := setupValidatorStoreMock(vstore, 2)
 
-	var validatorPK2 spectypes.ValidatorPK
-	validatorPK2[0] = 2
-
-	var index = phase0.ValidatorIndex(1)
-	value := make([]byte, 8)
-	binary.LittleEndian.PutUint64(value, uint64(index))
-
-	err = db.Set([]byte("val_pki"), validatorPK1[:], value)
-	require.NoError(t, err)
-
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
-
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	slot4 := phase0.Slot(4)
 
-	dutyTrace, _, err := collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK1)
+	dutyTrace, _, err := collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, index1)
 	require.NoError(t, err)
 	roleDutyTrace := dutyTrace.getOrCreate(slot4, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = index
-	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
+	roleDutyTrace.Validator = index1
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &exporter.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 
 	require.NotNil(t, dutyTrace)
 
-	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK2)
+	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, index2)
 	require.NoError(t, err)
 	roleDutyTrace = dutyTrace.getOrCreate(slot4, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = phase0.ValidatorIndex(2)
+	roleDutyTrace.Validator = index2
 	require.NotNil(t, dutyTrace)
 
 	slot7 := phase0.Slot(7)
 
-	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK1)
+	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, index1)
 	require.NoError(t, err)
 	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = index
-	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
+	roleDutyTrace.Validator = index1
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &exporter.DecidedTrace{
 		Signers: []spectypes.OperatorID{5},
 	})
 
 	require.NotNil(t, dutyTrace)
 
-	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK2)
+	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, index2)
 	require.NoError(t, err)
 	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
-	roleDutyTrace.Validator = phase0.ValidatorIndex(2)
+	roleDutyTrace.Validator = index2
 	require.NotNil(t, dutyTrace)
 
-	dd, err := collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
+	dd, err := collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []phase0.ValidatorIndex{index1})
 	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{1}, dd[0].Signers)
 
-	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK1})
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []phase0.ValidatorIndex{index1})
 	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
@@ -438,12 +430,12 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	// test that decideds include signers in the 'Post' consensus messages
 	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
-	roleDutyTrace.Post = append(roleDutyTrace.Post, &model.PartialSigTrace{Signer: 99})
-	roleDutyTrace.Post = append(roleDutyTrace.Post, &model.PartialSigTrace{Signer: 100})
-	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
+	roleDutyTrace.Post = append(roleDutyTrace.Post, &exporter.PartialSigTrace{Signer: 99})
+	roleDutyTrace.Post = append(roleDutyTrace.Post, &exporter.PartialSigTrace{Signer: 100})
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &exporter.DecidedTrace{
 		Signers: []spectypes.OperatorID{100},
 	})
-	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK2})
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []phase0.ValidatorIndex{index2})
 	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
@@ -454,7 +446,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	collector.dumpValidatorToDBPeriodically(threshold)
 
 	var inMem = make(map[phase0.Slot]struct{})
-	collector.validatorTraces.Range(func(key spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+	collector.validatorTraces.Range(func(key phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		slotToTraceMap.Range(func(slot phase0.Slot, dutyTrace *validatorDutyTrace) bool {
 			inMem[slot] = struct{}{}
 			return true
@@ -467,13 +459,13 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.True(t, found)
 
 	// assert that decideds are available after eviction
-	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []phase0.ValidatorIndex{index1})
 	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{1}, dd[0].Signers)
 
-	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK1})
+	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []phase0.ValidatorIndex{index1})
 	require.NoError(t, err)
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
@@ -490,7 +482,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, storedDuty4_2)
 	assert.Equal(t, slot4, storedDuty4_2.Slot)
-	assert.Equal(t, phase0.ValidatorIndex(2), storedDuty4_2.Validator)
+	assert.Equal(t, index2, storedDuty4_2.Validator)
 
 	// assert non-evicted traces are not on disk
 	storedDuty7_1, err := dutyStore.GetValidatorDuty(slot7, spectypes.BNRoleProposer, 1)

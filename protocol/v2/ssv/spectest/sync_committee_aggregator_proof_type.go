@@ -1,7 +1,6 @@
 package spectest
 
 import (
-	"context"
 	"encoding/hex"
 	"path/filepath"
 	"reflect"
@@ -14,8 +13,7 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/integration/qbft/tests"
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -27,19 +25,19 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks, testingutils.TestingValidatorIndex)
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, testingutils.KeySetForShare(share))
 	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
-	r.GetBeaconNode().(*tests.TestingBeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
+	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
-	lastErr := v.StartDuty(context.TODO(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
+	lastErr := v.StartDuty(t.Context(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSignedSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		err = v.ProcessMessage(context.TODO(), logger, dmsg)
+		err = v.ProcessMessage(t.Context(), logger, dmsg)
 		if err != nil {
 			lastErr = err
 		}
@@ -51,7 +49,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	}
 
 	// post root
-	postRoot, err := r.GetBaseRunner().State.GetRoot()
+	postRoot, err := r.GetStateRoot()
 	require.NoError(t, err)
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 }

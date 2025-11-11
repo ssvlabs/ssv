@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -33,7 +32,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
-	"github.com/ssvlabs/ssv/api/handlers"
+	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
+	hnode "github.com/ssvlabs/ssv/api/handlers/node"
+	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
@@ -49,18 +50,18 @@ import (
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/migrations"
-	"github.com/ssvlabs/ssv/monitoring/metrics"
 	"github.com/ssvlabs/ssv/network"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/observability"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -71,6 +72,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/badger"
@@ -94,7 +96,7 @@ type SSVSignerConfig struct {
 }
 
 type config struct {
-	global_config.GlobalConfig   `yaml:"global"`
+	global_config.Global         `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExporterOptions              exporter.Options        `yaml:"exporter"`
@@ -129,16 +131,27 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		logger, err := setupGlobal()
-		if err != nil {
-			log.Fatal("could not create logger ", err)
+		if globalArgs.ConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
+				log.Fatal("could not read config needed for logger initialization: %w", err)
+			}
+		}
+		if globalArgs.ShareConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
+				log.Fatal("could not read share config needed for logger initialization: %w", err)
+			}
 		}
 
-		defer logging.CapturePanic(logger)
-
-		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
-
-		var observabilityOptions []observability.Option
+		observabilityOptions := []observability.Option{
+			observability.WithLogger(
+				cfg.LogLevel,
+				cfg.LogLevelFormat,
+				cfg.LogFormat,
+				cfg.LogFilePath,
+				cfg.LogFileSize,
+				cfg.LogFileBackups,
+			),
+		}
 		if cfg.MetricsAPIPort > 0 {
 			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
 		}
@@ -146,16 +159,19 @@ var StartNodeCmd = &cobra.Command{
 			observabilityOptions = append(observabilityOptions, observability.WithTraces())
 		}
 
-		logger.Info("initializing observability")
 		observabilityShutdown, err := observability.Initialize(
 			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			logger,
 			observabilityOptions...)
 		if err != nil {
-			logger.Fatal("could not initialize observability configuration", zap.Error(err))
+			log.Fatal("could not initialize observability configuration", zap.Error(err))
 		}
+
+		logger := zap.L()
+		defer ssvlog.CapturePanic(logger)
+
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		defer func() {
 			if err = observabilityShutdown(cmd.Context()); err != nil {
@@ -168,16 +184,23 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
+		logger.Info("connecting CL(s)",
+			fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			zap.Bool("with_weighted_attestation_data", cfg.ConsensusClient.WithWeightedAttestationData),
+			zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
+		)
+
 		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
 		if err != nil {
-			logger.Fatal("failed to create beacon go-client", zap.Error(err),
-				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+			logger.Fatal("failed to create beacon go-client",
+				zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			)
 		}
 
-		networkConfig := &networkconfig.NetworkConfig{
-			Name:         cfg.SSVOptions.NetworkName,
-			SSVConfig:    ssvNetworkConfig,
-			BeaconConfig: consensusClient.BeaconConfig(),
+		networkConfig := &networkconfig.Network{
+			SSV:    ssvNetworkConfig,
+			Beacon: consensusClient.BeaconConfig(),
 		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
@@ -273,10 +296,10 @@ var StartNodeCmd = &cobra.Command{
 		var db basedb.Database
 		if cfg.ExporterOptions.Enabled {
 			logger.Info("using pebble db")
-			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+			db, err = setupPebbleDB(logger, networkConfig.Beacon, operatorPrivKey)
 		} else {
 			logger.Info("using badger db")
-			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+			db, err = setupBadgerDB(logger, networkConfig.Beacon, operatorPrivKey)
 		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -287,7 +310,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
+		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig.Beacon, logger, db)
 		if err != nil {
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
@@ -307,31 +330,34 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents, usingSSVSigner); err != nil {
+		if err := validateConfig(nodeStorage, networkConfig.StorageName(), usingLocalEvents, usingSSVSigner); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
+		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
+		validatorRegistrationSubmitter := runner.NewVRSubmitter(cmd.Context(), logger, networkConfig.Beacon, consensusClient, validatorProvider)
 
-		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
+		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
 		if len(executionAddrList) == 0 {
 			logger.Fatal("no execution node address provided")
 		}
 
-		var executionClient executionclient.Provider
+		logger.Info("connecting EL(s)",
+			fields.Addresses(executionAddrList),
+			zap.Duration("request_timeout", cfg.ExecutionClient.ConnectionTimeout),
+			zap.Uint64("sync_distance_tolerance", cfg.ExecutionClient.SyncDistanceTolerance),
+		)
 
+		var executionClient executionclient.Provider
 		if len(executionAddrList) == 1 {
 			ec, err := executionclient.New(
 				cmd.Context(),
 				executionAddrList[0],
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
-				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
-				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
-				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
+				executionclient.WithReqTimeout(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
 			if err != nil {
@@ -345,11 +371,7 @@ var StartNodeCmd = &cobra.Command{
 				executionAddrList,
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
-				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
-				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithReconnectionInitialIntervalMulti(executionclient.DefaultReconnectionInitialInterval),
-				executionclient.WithReconnectionMaxIntervalMulti(executionclient.DefaultReconnectionMaxInterval),
-				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
+				executionclient.WithReqTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
 			if err != nil {
@@ -360,12 +382,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var keyManager ekm.KeyManager
-
 		if usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
 				logger,
-				networkConfig,
+				networkConfig.Beacon,
 				ssvSignerClient,
 				db,
 				operatorDataStore.GetOperatorID,
@@ -378,7 +399,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.OperatorSigner = remoteKeyManager
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
 		} else {
-			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig, operatorPrivKey)
+			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig.Beacon, operatorPrivKey)
 			if err != nil {
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
@@ -389,7 +410,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorDataStore.GetOperatorData().PublicKey)
+		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorPubKeyHash(operatorDataStore.GetOperatorData().PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.NetworkConfig = networkConfig
@@ -407,7 +428,6 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			networkConfig.BeaconConfig.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 
@@ -432,7 +452,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
-		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
+		cfg.SSVOptions.ValidatorOptions.ValidatorRegistrationSubmitter = validatorRegistrationSubmitter
 
 		var decidedStreamPublisherFn func(dutytracer.DecidedInfo)
 		if cfg.WsAPIPort != 0 {
@@ -440,7 +460,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
-			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws)
+			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -493,7 +513,7 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			networkConfig,
 			nodeStorage.Shares(),
-			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+			validatorProvider,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -511,7 +531,8 @@ var StartNodeCmd = &cobra.Command{
 				}
 				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
-					dstore, networkConfig.BeaconConfig, decidedStreamPublisherFn)
+					dstore, networkConfig.Beacon, decidedStreamPublisherFn,
+					dutyStore)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
@@ -525,9 +546,9 @@ var StartNodeCmd = &cobra.Command{
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
-				BeaconConfig:       networkConfig.BeaconConfig,
+				BeaconConfig:       networkConfig.Beacon,
 				BeaconNode:         consensusClient,
-				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+				ValidatorProvider:  validatorProvider,
 				SlotTickerProvider: slotTickerProvider,
 				Logger:             logger,
 			})
@@ -545,27 +566,25 @@ var StartNodeCmd = &cobra.Command{
 		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
+			go func() {
+				metricsHandler := metrics.NewHandler(logger, db, cfg.EnableProfile, operatorNode)
+				if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", cfg.MetricsAPIPort)); err != nil {
+					logger.Fatal("failed to serve metrics", zap.Error(err))
+				}
+			}()
 		}
 
-		nodeProber := nodeprobe.NewProber(
-			logger,
-			func() {
-				logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.")
-			},
-			map[string]nodeprobe.Node{
-				"execution client": executionClient,
+		nodeProber := nodeprobe.New(logger)
+		nodeProber.AddNode(clNodeName, consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+		nodeProber.AddNode(elNodeName, executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 
-				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
-				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-				"consensus client": consensusClient,
-			},
-		)
+		probeCtx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
+		defer cancel()
+		if err := nodeProber.ProbeAll(probeCtx); err != nil {
+			logger.Fatal("Ethereum node(s) are not healthy", zap.Error(err))
+		}
 
-		nodeProber.Start(cmd.Context())
-		nodeProber.Wait()
-		logger.Info("ethereum node(s) are healthy")
+		logger.Info("Ethereum node(s) are healthy")
 
 		eventSyncer := syncContractEvents(
 			cmd.Context(),
@@ -580,8 +599,9 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode("event syncer", eventSyncer)
+			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
+		go startNodeProber(cmd.Context(), logger, nodeProber)
 
 		if _, err := metadataSyncer.SyncAll(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
@@ -642,18 +662,21 @@ var StartNodeCmd = &cobra.Command{
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
-				&handlers.Node{
+				hnode.NewNode(
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
-					ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
-					PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
-					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
-					NodeProber:      nodeProber,
-				},
-				&handlers.Validators{
+					[]string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+					p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					p2pNetwork.(hnode.TopicIndex),
+					nodeProber,
+					clNodeName,
+					elNodeName,
+					eventSyncerNodeName,
+				),
+				&hvalidators.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
@@ -663,7 +686,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		if err := operatorNode.Start(); err != nil {
+		if err := operatorNode.Start(cfg.SSVOptions.Context); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
@@ -676,8 +699,8 @@ func ensureNoMissingKeys(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	ssvSignerClient *ssvsigner.Client,
 ) {
-	if operatorDataStore.GetOperatorID() == 0 {
-		logger.Fatal("operator ID is not ready")
+	if !operatorDataStore.OperatorIDReady() {
+		return
 	}
 
 	shares := nodeStorage.Shares().List(
@@ -689,7 +712,7 @@ func ensureNoMissingKeys(
 		return
 	}
 
-	var localKeys []phase0.BLSPubKey
+	localKeys := make([]phase0.BLSPubKey, 0, len(shares))
 	for _, share := range shares {
 		localKeys = append(localKeys, phase0.BLSPubKey(share.SharePubKey))
 	}
@@ -813,38 +836,9 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func setupGlobal() (*zap.Logger, error) {
-	if globalArgs.ConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read config: %w", err)
-		}
-	}
-	if globalArgs.ShareConfigPath != "" {
-		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %w", err)
-		}
-	}
-
-	err := logging.SetGlobalLogger(
-		cfg.LogLevel,
-		cfg.LogLevelFormat,
-		cfg.LogFormat,
-		&logging.LogFileOptions{
-			FilePath:   cfg.LogFilePath,
-			MaxSize:    cfg.LogFileSize,
-			MaxBackups: cfg.LogFileBackups,
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
-	}
-
-	return zap.L(), nil
-}
-
 func setupBadgerDB(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
@@ -861,7 +855,7 @@ func setupBadgerDB(
 
 func setupPebbleDB(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
@@ -880,7 +874,7 @@ func setupPebbleDB(
 
 func applyMigrations(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 	db basedb.Database,
 	dbPath string,
@@ -1012,14 +1006,14 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSVConfig, error) {
-	var ssvConfig *networkconfig.SSVConfig
+func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
+	var ssvConfig *networkconfig.SSV
 
 	if cfg.SSVOptions.CustomNetwork != nil {
 		ssvConfig = cfg.SSVOptions.CustomNetwork
 		logger.Info("using custom network config")
 	} else if cfg.SSVOptions.NetworkName != "" {
-		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
+		snc, err := networkconfig.SSVConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
 			return ssvConfig, err
 		}
@@ -1084,8 +1078,8 @@ func syncContractEvents(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient executionclient.Provider,
-	validatorCtrl validator.Controller,
-	networkConfig *networkconfig.NetworkConfig,
+	validatorCtrl *validator.Controller,
+	networkConfig *networkconfig.Network,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
@@ -1152,8 +1146,15 @@ func syncContractEvents(
 		switch {
 		case errors.Is(err, executionclient.ErrNothingToSync):
 			// Nothing was synced, keep fromBlock as is.
+			logger.Info("finished syncing historical events, nothing to sync",
+				zap.Uint64("from_block", fromBlock.Uint64()),
+			)
 		case err == nil:
-			// Advance fromBlock to the block after lastProcessedBlock.
+			// Successfully synced up to a fresh block, advance fromBlock to the block after lastProcessedBlock.
+			logger.Info("finished syncing historical events to a fresh block",
+				zap.Uint64("from_block", fromBlock.Uint64()),
+				zap.Uint64("last_processed_block", lastProcessedBlock),
+			)
 			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
 		default:
 			logger.Fatal("failed to sync historical registry events", zap.Error(err))
@@ -1161,7 +1162,7 @@ func syncContractEvents(
 
 		// Print registry stats.
 		shares := nodeStorage.Shares().List(nil)
-		operators, err := nodeStorage.ListOperators(nil, 0, 0)
+		operators, err := nodeStorage.ListOperatorsAll(nil)
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}
@@ -1187,28 +1188,20 @@ func syncContractEvents(
 			zap.Int("my_validators", operatorValidators),
 		)
 
-		// Sync ongoing registry events in the background.
+		// Sync ongoing registry events in the background, crash if ongoing sync has stopped because
+		// the SSV node cannot work without being up to date with Ethereum events.
 		go func() {
-			err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
-
-			// Crash if ongoing sync has stopped, regardless of the reason.
-			logger.Fatal("failed syncing ongoing registry events",
-				zap.Uint64("last_processed_block", lastProcessedBlock),
-				zap.Error(err))
+			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
+			if err != nil && !errors.Is(err, context.Canceled) {
+				logger.Fatal("failed syncing ongoing registry events",
+					zap.Uint64("last_processed_block", lastProcessedBlock),
+					zap.Error(err),
+				)
+			}
 		}()
 	}
 
 	return eventSyncer
-}
-
-func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
-	logger = logger.Named(logging.NameMetricsHandler)
-	// init and start HTTP handler
-	metricsHandler := metrics.NewHandler(logger, db, enableProf, opNode)
-	addr := fmt.Sprintf(":%d", port)
-	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
-		logger.Panic("failed to serve metrics", zap.Error(err))
-	}
 }
 
 func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {

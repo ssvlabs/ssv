@@ -2,15 +2,20 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -29,76 +34,112 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	requestDurationHistogram = observability.NewMetric(
+	requestDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "request.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("execution client request duration in seconds"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	syncDistanceGauge = observability.NewMetric(
+	syncDistanceGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "sync.distance"),
 			metric.WithUnit("{block}"),
 			metric.WithDescription("execution client sync distance which is a delta between highest and current blocks")))
 
-	clientStatusGauge = observability.NewMetric(
+	clientStatusGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "sync.status"),
 			metric.WithDescription("execution client sync status")))
 
-	lastProcessedBlockGauge = observability.NewMetric(
+	lastProcessedBlockGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "sync.last_processed_block"),
 			metric.WithUnit("{block_number}"),
 			metric.WithDescription("last processed block by execution client")))
 
 	// MultiClient metrics
-	clientSwitchCounter = observability.NewMetric(
+	clientSwitchCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "client.switch"),
 			metric.WithDescription("number of times the execution client has been switched")))
 
-	multiClientMethodCallsCounter = observability.NewMetric(
+	multiClientMethodCallsCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "multi_client.method_calls"),
 			metric.WithDescription("number of method calls to the multi client")))
 
-	multiClientMethodErrorsCounter = observability.NewMetric(
+	multiClientMethodErrorsCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "multi_client.method_errors"),
 			metric.WithDescription("number of method call errors in the multi client")))
 
-	multiClientMethodDurationHistogram = observability.NewMetric(
+	multiClientMethodDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "multi_client.method_duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("multi client method call duration in seconds"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	healthyClientsGauge = observability.NewMetric(
+	healthyClientsGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "multi_client.healthy_clients"),
 			metric.WithUnit("{clients}"),
 			metric.WithDescription("number of healthy clients in the multi client")))
 
-	allClientsGauge = observability.NewMetric(
+	allClientsGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "multi_client.all_clients"),
 			metric.WithUnit("{clients}"),
 			metric.WithDescription("number of clients in the multi client")))
 
-	clientInitCounter = observability.NewMetric(
+	clientInitCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "client.init"),
 			metric.WithDescription("number of times a client was initialized")))
 )
 
-func recordRequestDuration(ctx context.Context, serverAddr string, duration time.Duration) {
+func recordRequest(
+	ctx context.Context,
+	logger *zap.Logger,
+	routeName string,
+	client interface{ Address() string },
+	duration time.Duration,
+	err error,
+) {
+	// Log the request, but only if it has errored or if it took long enough that we want to pay attention
+	// to it (there are too many requests being made to log them every time, some requests don't even result
+	// into a network-based call due to caching implemented for some routes).
+	if err != nil || duration > 1*time.Millisecond {
+		logger.Debug("EL request done",
+			zap.String("route_name", routeName),
+			zap.String("client_addr", client.Address()),
+			fields.Took(duration),
+			zap.Bool("success", err == nil),
+			zap.Error(err),
+		)
+	}
+
+	// Build metric attributes, add error-code attribute in case there is an error.
+	attr := []attribute.KeyValue{
+		semconv.ServerAddress(client.Address()),
+		attribute.String("rpc.route_name", routeName),
+	}
+	if err != nil {
+		// Error code of 0 signifies the presence of some error, see if we can clarify if further by checking
+		// for rpc error codes.
+		errCode := 0
+		var rpcErr rpc.Error
+		if errors.As(err, &rpcErr) {
+			errCode = rpcErr.ErrorCode()
+		}
+		attr = append(attr, attribute.Int("rpc.response.error_status_code", errCode))
+	}
+	// Record the request as a metric.
 	requestDurationHistogram.Record(
 		ctx,
 		duration.Seconds(),
-		metric.WithAttributes(semconv.ServerAddress(serverAddr)))
+		metric.WithAttributes(attr...))
 }
 
 func executionClientStatusAttribute(value executionClientStatus) attribute.KeyValue {

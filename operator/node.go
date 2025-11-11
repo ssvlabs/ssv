@@ -10,10 +10,10 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/fee_recipient"
@@ -27,16 +27,16 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NetworkName         string                   `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
-	CustomNetwork       *networkconfig.SSVConfig `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
-	CustomDomainType    string                   `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
-	NetworkConfig       *networkconfig.NetworkConfig
+	NetworkName         string             `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
+	CustomNetwork       *networkconfig.SSV `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
+	CustomDomainType    string             `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
+	NetworkConfig       *networkconfig.Network
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     executionclient.Provider
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	DB                  basedb.Database
-	ValidatorController validator.Controller
+	ValidatorController *validator.Controller
 	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
@@ -45,10 +45,10 @@ type Options struct {
 }
 
 type Node struct {
-	logger           *zap.Logger
-	network          *networkconfig.NetworkConfig
-	context          context.Context
-	validatorsCtrl   validator.Controller
+	logger *zap.Logger
+
+	network          *networkconfig.Network
+	validatorsCtrl   *validator.Controller
 	validatorOptions validator.ControllerOptions
 	exporterOptions  exporter.Options
 	consensusClient  beaconprotocol.BeaconNode
@@ -65,9 +65,31 @@ type Node struct {
 
 // New is the constructor of Node
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
+
+	// Prepare scheduler wiring; in exporter mode we swap to AllShares provider,
+	// a prefetching beacon adapter, and a no-op executor.
+	var schedulerBeacon duties.BeaconNode = opts.BeaconNode
+	validatorProvider := any(selfValidatorStore).(duties.ValidatorProvider)
+	dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
+
+	if exporterOpts.Enabled {
+		validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
+		dutyExecutor = duties.NewNoopExecutor()
+		schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
+	}
+
+	feeRecipientCtrl := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
+		Ctx:                opts.Context,
+		BeaconClient:       opts.BeaconNode,
+		BeaconConfig:       opts.NetworkConfig.Beacon,
+		ValidatorProvider:  selfValidatorStore,
+		OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
+		SlotTickerProvider: slotTickerProvider,
+	})
+
 	node := &Node{
-		logger:           logger.Named(logging.NameOperator),
-		context:          opts.Context,
+		logger:           logger.Named(log.NameOperator),
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
 		exporterOptions:  exporterOpts,
@@ -78,45 +100,44 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(logger, &duties.SchedulerOptions{
-			Ctx:                 opts.Context,
-			BeaconNode:          opts.BeaconNode,
-			ExecutionClient:     opts.ExecutionClient,
-			BeaconConfig:        opts.NetworkConfig,
-			ValidatorProvider:   opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
-			ValidatorController: opts.ValidatorController,
-			DutyExecutor:        opts.ValidatorController,
-			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
-			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
-			DutyStore:           opts.DutyStore,
-			SlotTickerProvider:  slotTickerProvider,
-			P2PNetwork:          opts.P2PNetwork,
+			Ctx:                     opts.Context,
+			BeaconNode:              schedulerBeacon,
+			ExecutionClient:         opts.ExecutionClient,
+			BeaconConfig:            opts.NetworkConfig.Beacon,
+			ValidatorProvider:       validatorProvider,
+			ValidatorController:     opts.ValidatorController,
+			DutyExecutor:            dutyExecutor,
+			IndicesChg:              opts.ValidatorController.IndicesChangeChan(),
+			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
+			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
+			DutyStore:               opts.DutyStore,
+			SlotTickerProvider:      slotTickerProvider,
+			P2PNetwork:              opts.P2PNetwork,
+			ExporterMode:            exporterOpts.Enabled,
 		}),
-		feeRecipientCtrl: fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
-			Ctx:                opts.Context,
-			BeaconClient:       opts.BeaconNode,
-			BeaconConfig:       opts.NetworkConfig.BeaconConfig,
-			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
-			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
-			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
-			SlotTickerProvider: slotTickerProvider,
-		}),
+		feeRecipientCtrl: feeRecipientCtrl,
 
 		ws:        opts.WS,
 		wsAPIPort: opts.WsAPIPort,
 	}
 
+	// Wire the beacon client to the fee recipient controller
+	// This allows the beacon client to pull proposal preparations on reconnect
+	opts.BeaconNode.SetProposalPreparationsProvider(feeRecipientCtrl.GetProposalPreparations)
+
+	// Subscribe fee recipient controller to validator controller's change notifications
+	feeRecipientCtrl.SubscribeToFeeRecipientChanges(opts.ValidatorController.FeeRecipientChangeChan())
+
 	return node
 }
 
 // Start starts to stream duties and run IBFT instances
-func (n *Node) Start() error {
-	ctx := n.context // TODO: pass it to Start
-	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+func (n *Node) Start(ctx context.Context) error {
+	n.logger.Info("starting operator node")
 
 	go func() {
 		err := n.startWSServer()
 		if err != nil {
-			// TODO: think if we need to panic
 			return
 		}
 	}()
@@ -129,19 +150,57 @@ func (n *Node) Start() error {
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	if n.exporterOptions.Enabled {
-		// Subscribe to all subnets.
-		err := n.net.SubscribeAll()
+	// IMPORTANT: We must initialize validators regardless of whether we are running exporter or
+	// a regular SSV node.
+	validatorsInitialized, err := n.validatorsCtrl.InitValidators()
+	if err != nil {
+		return fmt.Errorf("init validators: %w", err)
+	}
+
+	// For regular SSV node, starting a validator will also connect us to subnets that correspond
+	// to that validator. But if we don't have validators to start (if none were initialized) -
+	// have to subscribe to at least 1 random subnet explicitly to just be able to participate
+	// in the network.
+	startValidators := func() error {
+		if len(validatorsInitialized) == 0 {
+			if err := n.net.SubscribeRandoms(1); err != nil {
+				return fmt.Errorf("subscribe to 1 random subnet: %w", err)
+			}
+
+			n.logger.Info("no validators to start, successfully subscribed to random subnet")
+
+			return nil
+		}
+
+		err = n.validatorsCtrl.StartValidators(ctx, validatorsInitialized)
 		if err != nil {
-			n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
+			return fmt.Errorf("start validators: %w", err)
+		}
+
+		return nil
+	}
+	if n.exporterOptions.Enabled {
+		// For exporter, we want to connect to all subnets.
+		startValidators = func() error {
+			err := n.net.SubscribeAll()
+			if err != nil {
+				n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
+				return nil
+			}
+			return nil
 		}
 	}
+	if err = startValidators(); err != nil {
+		return err
+	}
+
 	go n.net.UpdateSubnets()
 	go n.net.UpdateScoreParams()
-	n.validatorsCtrl.StartValidators(ctx)
+
 	go n.reportOperators()
 
 	go n.feeRecipientCtrl.Start(ctx)
+
 	go n.validatorsCtrl.HandleMetadataUpdates(ctx)
 	go n.validatorsCtrl.ReportValidatorStatuses(ctx)
 
@@ -150,6 +209,8 @@ func (n *Node) Start() error {
 			n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
 		}
 	}()
+
+	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
@@ -205,15 +266,16 @@ func (n *Node) startWSServer() error {
 }
 
 func (n *Node) reportOperators() {
-	operators, err := n.storage.ListOperators(nil, 0, 1000) // TODO more than 1000?
+	operators, err := n.storage.ListOperatorsAll(nil)
 	if err != nil {
-		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		n.logger.Warn("(reporting) couldn't fetch all operators from DB", zap.Error(err))
 		return
 	}
-	n.logger.Debug("reporting operators", zap.Int("count", len(operators)))
+	n.logger.Debug("(reporting) fetched all stored operators from DB", zap.Int("count", len(operators)))
 	for i := range operators {
-		n.logger.Debug("report operator public key",
+		n.logger.Debug("(reporting) operator fetched from DB",
 			fields.OperatorID(operators[i].ID),
-			fields.OperatorPubKey(operators[i].PublicKey))
+			fields.OperatorPubKey(operators[i].PublicKey),
+		)
 	}
 }

@@ -13,9 +13,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -31,7 +31,7 @@ var (
 )
 
 func TestSaveAndGetPrivateKeyHash(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
@@ -59,14 +59,14 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 }
 
 func TestDropRegistryData(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
 		_ = db.Close()
 	}()
 
-	storage, err := NewNodeStorage(network, logger, db)
+	storage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
 	sharePubkey := func(id int) []byte {
@@ -107,12 +107,8 @@ func TestDropRegistryData(t *testing.T) {
 	for _, owner := range recipientOwners {
 		var fr bellatrix.ExecutionAddress
 		copy(fr[:], append([]byte{1}, owner[:]...))
-		_, err := storage.SaveRecipientData(nil, &registrystorage.RecipientData{
-			Owner:        owner,
-			FeeRecipient: fr,
-		})
+		_, err := storage.SaveRecipientData(nil, owner, fr)
 		require.NoError(t, err)
-
 	}
 
 	// Check that everything was saved.
@@ -125,15 +121,21 @@ func TestDropRegistryData(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, allShares, shares)
 
-		allRecipients, err := storage.GetRecipientDataMany(nil, recipientOwners)
-		require.NoError(t, err)
-		require.Len(t, allRecipients, recipients)
+		// Check that all recipients were saved
+		recipientCount := 0
+		for _, owner := range recipientOwners {
+			_, err := storage.GetFeeRecipient(owner)
+			if err == nil {
+				recipientCount++
+			}
+		}
+		require.Equal(t, recipients, recipientCount)
 	}
 	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
 
 	// Re-open storage and check again that everything is still saved.
 	// Re-opening helps ensure that the changes were persisted and not just cached.
-	storage, err = NewNodeStorage(network, logger, db)
+	storage, err = NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
 
@@ -145,19 +147,19 @@ func TestDropRegistryData(t *testing.T) {
 	requireSaved(t, 0, 0, 0)
 
 	// Re-open storage and check again that everything is still dropped.
-	storage, err = NewNodeStorage(network, logger, db)
+	storage, err = NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 }
 
 func TestNetworkAndLocalEventsConfig(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
 		_ = db.Close()
 	}()
 
-	storage, err := NewNodeStorage(network, logger, db)
+	storage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
 	storedCfg, found, err := storage.GetConfig(nil)
@@ -166,7 +168,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	require.Nil(t, storedCfg)
 
 	c1 := &ConfigLock{
-		NetworkName:      networkconfig.TestNetwork.Name,
+		NetworkName:      networkconfig.TestNetwork.StorageName(),
 		UsingLocalEvents: false,
 	}
 	require.NoError(t, storage.SaveConfig(nil, c1))
@@ -177,7 +179,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	require.Equal(t, c1, storedCfg)
 
 	c2 := &ConfigLock{
-		NetworkName:      networkconfig.TestNetwork.Name + "1",
+		NetworkName:      networkconfig.TestNetwork.StorageName() + "1",
 		UsingLocalEvents: false,
 	}
 	require.NoError(t, storage.SaveConfig(nil, c2))
@@ -189,7 +191,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 }
 
 func TestGetOperatorsPrefix(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -197,28 +199,13 @@ func TestGetOperatorsPrefix(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 	require.Equal(t, []byte("operators"), operatorStorage.GetOperatorsPrefix())
 }
 
-func TestGetRecipientsPrefix(t *testing.T) {
-	logger := logging.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer func() {
-		_ = db.Close()
-	}()
-
-	require.NoError(t, err)
-
-	operatorStorage, err := NewNodeStorage(network, logger, db)
-	require.NoError(t, err)
-
-	require.Equal(t, []byte("recipients"), operatorStorage.GetRecipientsPrefix())
-}
-
 func Test_Config(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -226,7 +213,7 @@ func Test_Config(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
 	cfgData := &ConfigLock{
@@ -253,7 +240,7 @@ func Test_Config(t *testing.T) {
 }
 
 func Test_LastProcessedBlock(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -261,7 +248,7 @@ func Test_LastProcessedBlock(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
 	_, found, err := operatorStorage.GetLastProcessedBlock(nil)
@@ -278,7 +265,7 @@ func Test_LastProcessedBlock(t *testing.T) {
 }
 
 func Test_OperatorData(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -286,7 +273,7 @@ func Test_OperatorData(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
 	operatorIDs := []uint64{1, 2, 3}
@@ -324,7 +311,7 @@ func Test_OperatorData(t *testing.T) {
 }
 
 func Test_NonceBumping(t *testing.T) {
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
@@ -332,7 +319,7 @@ func Test_NonceBumping(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
 	owner := common.Address{1}
@@ -340,17 +327,13 @@ func Test_NonceBumping(t *testing.T) {
 	var fr bellatrix.ExecutionAddress
 	copy(fr[:], append([]byte{1}, owner[:]...))
 
-	recipientData := &registrystorage.RecipientData{
-		Owner:        owner,
-		FeeRecipient: fr,
-	}
-	_, err = operatorStorage.SaveRecipientData(nil, recipientData)
+	_, err = operatorStorage.SaveRecipientData(nil, owner, fr)
 	require.NoError(t, err)
 
-	data, found, err := operatorStorage.GetRecipientData(nil, owner)
+	// Check that fee recipient was saved
+	recipient, err := operatorStorage.GetFeeRecipient(owner)
 	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, *recipientData, *data)
+	require.Equal(t, fr, recipient)
 
 	require.NoError(t, operatorStorage.BumpNonce(nil, owner))
 	require.NoError(t, operatorStorage.BumpNonce(nil, owner))
@@ -361,10 +344,9 @@ func Test_NonceBumping(t *testing.T) {
 	err = operatorStorage.DeleteRecipientData(nil, owner)
 	require.NoError(t, err)
 
-	data, found, err = operatorStorage.GetRecipientData(nil, owner)
-	require.NoError(t, err)
-	require.False(t, found)
-	require.Nil(t, data)
+	// Check that fee recipient was deleted
+	_, err = operatorStorage.GetFeeRecipient(owner)
+	require.Error(t, err)
 
 	nonce, err = operatorStorage.GetNextNonce(nil, owner)
 	require.NoError(t, err)

@@ -12,27 +12,27 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// Event names
+// Ethereum SSV network contract event names.
 const (
 	OperatorAdded              = "OperatorAdded"
 	OperatorRemoved            = "OperatorRemoved"
@@ -54,7 +54,7 @@ type taskExecutor interface {
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
+	UpdateFeeRecipient(owner, recipient ethcommon.Address, blockNumber uint64) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
@@ -66,7 +66,7 @@ type EventHandler struct {
 	nodeStorage         nodestorage.Storage
 	taskExecutor        taskExecutor
 	eventParser         eventparser.Parser
-	networkConfig       networkconfig.Network
+	networkConfig       *networkconfig.Network
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorDecrypter   keys.OperatorDecrypter
 	keyManager          ekm.KeyManager
@@ -80,7 +80,7 @@ func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
@@ -106,23 +106,29 @@ func New(
 	return eh, nil
 }
 
-func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
-	for blockLogs := range logs {
+func (eh *EventHandler) HandleBlockEventsStream(
+	ctx context.Context,
+	logStreamCh <-chan executionclient.BlockLogs,
+	executeTasks bool,
+) (lastProcessedBlock uint64, progressed bool, err error) {
+	for blockLogs := range logStreamCh {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
 		tasks, err := eh.processBlockEvents(ctx, blockLogs)
+		if err != nil {
+			return lastProcessedBlock, progressed, fmt.Errorf("process block events: %w", err)
+		}
+
 		logger.Debug("processed events from block",
 			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
-			zap.Error(err))
+		)
 
-		if err != nil {
-			return 0, fmt.Errorf("failed to process block events: %w", err)
-		}
+		progressed = true
 		lastProcessedBlock = blockLogs.BlockNumber
 
-		observability.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
+		metrics.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
 
 		if !executeTasks || len(tasks) == 0 {
 			continue
@@ -134,7 +140,6 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 			logger = logger.With(fields.Type(task))
 			logger.Debug("executing task")
 			if err := task.Execute(); err != nil {
-				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				logger.Error("failed to execute task", zap.Error(err))
 			} else {
 				logger.Debug("executed task")
@@ -142,7 +147,7 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		}
 	}
 
-	return
+	return lastProcessedBlock, progressed, nil
 }
 
 func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {
@@ -399,7 +404,12 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
+		task := NewUpdateFeeRecipientTask(
+			eh.taskExecutor,
+			feeRecipientAddressUpdatedEvent.Owner,
+			feeRecipientAddressUpdatedEvent.RecipientAddress,
+			feeRecipientAddressUpdatedEvent.Raw.BlockNumber,
+		)
 		return task, nil
 
 	case ValidatorExited:

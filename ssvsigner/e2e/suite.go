@@ -28,7 +28,7 @@ func (s *E2ETestSuite) SetupTest() {
 	s.ctx = s.T().Context()
 
 	// Create test environment
-	env, err := testenv.NewTestEnvironment(s.ctx, s.T())
+	env, err := testenv.NewTestEnvironment(s.ctx)
 	s.Require().NoError(err, "Failed to create test environment")
 	s.env = env
 
@@ -58,11 +58,11 @@ func (s *E2ETestSuite) GetContext() context.Context {
 
 // CalculateDomain computes the signing domain for a given domain type and epoch
 func (s *E2ETestSuite) CalculateDomain(domainType phase0.DomainType, epoch phase0.Epoch) (phase0.Domain, error) {
-	_, fork := s.env.GetMockBeacon().BeaconForkAtEpoch(epoch)
+	_, fork := s.env.GetBeaconConfig().BeaconForkAtEpoch(epoch)
 
 	forkData := &phase0.ForkData{
 		CurrentVersion:        fork.CurrentVersion,
-		GenesisValidatorsRoot: s.env.GetMockBeacon().GetGenesisValidatorsRoot(),
+		GenesisValidatorsRoot: s.env.GetBeaconConfig().GenesisValidatorsRoot,
 	}
 
 	forkDataRoot, err := forkData.HashTreeRoot()
@@ -95,7 +95,7 @@ func (s *E2ETestSuite) SignWeb3Signer(
 ) (spectypes.Signature, phase0.Root, error) {
 	web3SignerClient := s.env.GetWeb3SignerClient()
 
-	epoch := s.env.GetMockBeacon().EstimatedEpochAtSlot(slot)
+	epoch := s.env.GetBeaconConfig().EstimatedEpochAtSlot(slot)
 
 	req := web3signer.SignRequest{
 		ForkInfo: s.env.GetRemoteKeyManager().GetForkInfo(epoch),
@@ -111,7 +111,8 @@ func (s *E2ETestSuite) SignWeb3Signer(
 		req.Attestation = data
 
 	case spectypes.DomainProposer:
-		beaconBlockData, err := web3signer.ConvertBlockToBeaconBlockData(obj)
+		version, _ := s.env.GetBeaconConfig().BeaconForkAtEpoch(epoch)
+		beaconBlockData, err := web3signer.ConvertBlockToBeaconBlockData(obj, version)
 		if err != nil {
 			return nil, phase0.Root{}, err
 		}
@@ -167,7 +168,7 @@ func (s *E2ETestSuite) RequireValidSigning(
 	slot phase0.Slot,
 	domainType phase0.DomainType,
 ) spectypes.Signature {
-	epoch := s.env.GetMockBeacon().EstimatedEpochAtSlot(slot)
+	epoch := s.env.GetBeaconConfig().EstimatedEpochAtSlot(slot)
 
 	domain, err := s.CalculateDomain(domainType, epoch)
 	s.Require().NoError(err, "Failed to calculate domain")
@@ -216,7 +217,7 @@ func (s *E2ETestSuite) RequireFailedSigning(
 		panic(fmt.Sprintf("unsupported domain type: %s", domainType))
 	}
 
-	epoch := s.env.GetMockBeacon().EstimatedEpochAtSlot(slot)
+	epoch := s.env.GetBeaconConfig().EstimatedEpochAtSlot(slot)
 
 	domain, err := s.CalculateDomain(domainType, epoch)
 	s.Require().NoError(err, "Failed to calculate domain")

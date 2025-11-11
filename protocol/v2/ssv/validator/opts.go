@@ -18,10 +18,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-const (
-	DefaultQueueSize = 32
-)
-
 // Options represents validator-specific options.
 type Options struct {
 	CommonOptions
@@ -33,7 +29,7 @@ type Options struct {
 
 // CommonOptions represents options that all validators share.
 type CommonOptions struct {
-	NetworkConfig       networkconfig.Network
+	NetworkConfig       *networkconfig.Network
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
@@ -51,7 +47,7 @@ type CommonOptions struct {
 }
 
 func NewCommonOptions(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	network specqbft.Network,
 	beacon beacon.BeaconNode,
 	storage *storage.ParticipantStores,
@@ -78,7 +74,7 @@ func NewCommonOptions(
 		NewDecidedHandler:   newDecidedHandler,
 		FullNode:            fullNode,
 		ExporterOptions:     exporterOptions,
-		QueueSize:           DefaultQueueSize,
+		QueueSize:           1000,
 		GasLimit:            gasLimit,
 		MessageValidator:    messageValidator,
 		Graffiti:            graffiti,
@@ -106,13 +102,3 @@ func (o *CommonOptions) NewOptions(
 		DutyRunners: dutyRunners,
 	}
 }
-
-// State of the validator
-type State uint32
-
-const (
-	// NotStarted the validator hasn't started
-	NotStarted State = iota
-	// Started validator is running
-	Started
-)

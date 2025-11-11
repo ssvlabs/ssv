@@ -85,7 +85,7 @@ func (cm *measurementsStore) EndPostConsensus() {
 	}
 }
 
-// StartDutyFullFlow stores duty full flow start time.
+// StartDutyFlow stores duty full flow start time.
 func (cm *measurementsStore) StartDutyFlow() {
 	if cm != nil {
 		cm.dutyStart = time.Now()

@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
 )
 
 func (gc *GoClient) ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*apiv1.ValidatorLiveness, error) {
@@ -18,23 +17,15 @@ func (gc *GoClient) ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, v
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(ctx, "ValidatorLiveness", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
-
-	logger := gc.log.With(zap.String("api", "ValidatorLiveness"))
-
+	recordRequest(ctx, gc.log, "ValidatorLiveness", gc.multiClient, http.MethodPost, true, time.Since(start), err)
 	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return nil, err
+		return nil, errMultiClient(fmt.Errorf("fetch validator liveness: %w", err), "ValidatorLiveness")
 	}
-
 	if resp == nil {
-		logger.Error(clNilResponseErrMsg)
-		return nil, fmt.Errorf("validator liveness response is nil")
+		return nil, errMultiClient(fmt.Errorf("validator liveness response is nil"), "ValidatorLiveness")
 	}
-
 	if resp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg)
-		return nil, fmt.Errorf("validator liveness data is nil")
+		return nil, errMultiClient(fmt.Errorf("validator liveness response data is nil"), "ValidatorLiveness")
 	}
 
 	return resp.Data, nil

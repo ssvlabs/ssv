@@ -64,7 +64,7 @@ type LocalKeyManager struct {
 func NewLocalKeyManager(
 	logger *zap.Logger,
 	db basedb.Database,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
 	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
@@ -162,6 +162,11 @@ func (km *LocalKeyManager) signBeaconObject(
 			}
 			return km.signer.SignBeaconBlock(vBlock, domain, pubKey[:])
 		case *electra.BeaconBlock:
+			// Note: Fulu fork reuses electra.BeaconBlock type without structural changes.
+			// We always use DataVersionElectra here, while RemoteKeyManager determines
+			// version from slot for Web3Signer compatibility. This difference is acceptable
+			// because eth2-key-manager uses the domain parameter (not Version field) for
+			// signature computation, and the domain already contains fork-specific information.
 			vBlock := &spec.VersionedBeaconBlock{
 				Version: spec.DataVersionElectra,
 				Electra: v,
@@ -180,6 +185,7 @@ func (km *LocalKeyManager) signBeaconObject(
 			}
 			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pubKey[:])
 		case *apiv1electra.BlindedBeaconBlock:
+			// Note: Same as regular blocks - Fulu reuses Electra blinded block types
 			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
 				Version: spec.DataVersionElectra,
 				Electra: v,

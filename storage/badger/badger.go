@@ -3,6 +3,7 @@ package badger
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -10,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -32,11 +33,6 @@ type DB struct {
 // New creates a persistent DB instance.
 func New(logger *zap.Logger, options basedb.Options) (*DB, error) {
 	return createDB(logger, options, false)
-}
-
-// NewInMemory creates an in-memory DB instance.
-func NewInMemory(logger *zap.Logger, options basedb.Options) (*DB, error) {
-	return createDB(logger, options, true)
 }
 
 func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*DB, error) {
@@ -203,7 +199,7 @@ func (b *DB) Close() error {
 
 // report the db size and metrics
 func (b *DB) report() {
-	logger := b.logger.Named(logging.NameBadgerDBReporting)
+	logger := b.logger.Named(log.NameBadgerDBReporting)
 	lsm, vlog := b.db.Size()
 	blockCache := b.db.BlockCacheMetrics()
 	indexCache := b.db.IndexCacheMetrics()
@@ -259,14 +255,11 @@ func (b *DB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(
 			trimmedResKey := bytes.TrimPrefix(k, prefix)
 			item, err := txn.Get(k)
 			if err != nil {
-				b.logger.Error("failed to get value", zap.Error(err),
-					zap.String("trimmedResKey", string(trimmedResKey)))
-				continue
+				return fmt.Errorf("get value from db for key: %s: %w", string(trimmedResKey), err)
 			}
 			val, err := item.ValueCopy(nil)
 			if err != nil {
-				b.logger.Error("failed to copy value", zap.Error(err))
-				continue
+				return fmt.Errorf("copy value for key: %s: %w", string(trimmedResKey), err)
 			}
 			if err := handler(i, basedb.Obj{
 				Key:   trimmedResKey,
@@ -289,13 +282,11 @@ func (b *DB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb.Obj) 
 					b.logger.Debug("item not found", zap.String("key", string(k)))
 					continue
 				}
-				b.logger.Warn("failed to get item", zap.String("key", string(k)))
-				return err
+				return fmt.Errorf("get value from db for key: %s: %w", string(k), err)
 			}
 			value, err = item.ValueCopy(value)
 			if err != nil {
-				b.logger.Warn("failed to copy item value", zap.String("key", string(k)))
-				return err
+				return fmt.Errorf("copy value for key: %s: %w", string(k), err)
 			}
 			cp = make([]byte, len(value))
 			copy(cp, value)

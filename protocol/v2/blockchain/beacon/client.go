@@ -8,12 +8,9 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 )
-
-// TODO: add missing tests
 
 //go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
 
@@ -28,11 +25,13 @@ type AttesterCalls interface {
 // ProposerCalls interface has all block proposer duty specific calls
 type ProposerCalls interface {
 	// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
-	GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error)
+	// Returns:
+	//   - *api.VersionedProposal: The full versioned proposal containing all block variants
+	//   - ssz.Marshaler: The specific versioned block for the current fork (e.g., beaconBlock.Capella, beaconBlock.Deneb)
+	//   - error: Any error encountered during block retrieval
+	GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error)
 	// SubmitBeaconBlock submit the block to the node
 	SubmitBeaconBlock(ctx context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error
-	// SubmitBlindedBeaconBlock submit the blinded block to the node
-	SubmitBlindedBeaconBlock(ctx context.Context, block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error
 }
 
 // AggregatorCalls interface has all attestation aggregator duty specific calls
@@ -45,8 +44,6 @@ type AggregatorCalls interface {
 
 // SyncCommitteeCalls interface has all sync committee duty specific calls
 type SyncCommitteeCalls interface {
-	// GetSyncMessageBlockRoot returns beacon block root for sync committee
-	GetSyncMessageBlockRoot(ctx context.Context) (phase0.Root, spec.DataVersion, error)
 	// SubmitSyncMessages submits signed sync committee messages
 	SubmitSyncMessages(ctx context.Context, msgs []*altair.SyncCommitteeMessage) error
 }
@@ -65,8 +62,8 @@ type SyncCommitteeContributionCalls interface {
 
 // ValidatorRegistrationCalls interface has all validator registration duty specific calls
 type ValidatorRegistrationCalls interface {
-	// SubmitValidatorRegistration submits a validator registration
-	SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error
+	// SubmitValidatorRegistrations submits validator registrations, chunking it if necessary.
+	SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error
 }
 
 // VoluntaryExitCalls interface has all validator voluntary exit duty specific calls
@@ -100,9 +97,12 @@ type beaconValidator interface {
 	GetValidatorData(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error)
 }
 
-type proposer interface {
-	// SubmitProposalPreparation with fee recipients
-	SubmitProposalPreparation(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error
+type proposalPreparations interface {
+	// SubmitProposalPreparations submits proposal preparations
+	SubmitProposalPreparations(ctx context.Context, preparations []*eth2apiv1.ProposalPreparation) error
+	// SetProposalPreparationsProvider sets a callback to retrieve current proposal preparations
+	// This is used to re-submit preparations when beacon nodes reconnect
+	SetProposalPreparationsProvider(provider func() ([]*eth2apiv1.ProposalPreparation, error))
 }
 
 // TODO need to handle differently (by spec)
@@ -127,7 +127,7 @@ type BeaconNode interface {
 	beaconSubscriber
 	beaconValidator
 	signer // TODO need to handle differently
-	proposer
+	proposalPreparations
 }
 
 // Options for controller struct creation

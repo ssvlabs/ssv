@@ -12,22 +12,25 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 type ProposerHandler struct {
 	baseHandler
 
-	duties     *dutystore.Duties[eth2apiv1.ProposerDuty]
-	fetchFirst bool
+	duties       *dutystore.Duties[eth2apiv1.ProposerDuty]
+	fetchFirst   bool
+	exporterMode bool
 }
 
-func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
+func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty], exporterMode bool) *ProposerHandler {
 	return &ProposerHandler{
-		duties:     duties,
-		fetchFirst: true,
+		duties:       duties,
+		fetchFirst:   true,
+		exporterMode: exporterMode,
 	}
 }
 
@@ -70,23 +73,26 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			if h.fetchFirst {
-				h.fetchFirst = false
-				h.indicesChanged = false
-				h.processFetching(ctx, currentEpoch)
-				h.processExecution(ctx, currentEpoch, slot)
-			} else {
-				h.processExecution(ctx, currentEpoch, slot)
-				if h.indicesChanged {
+			func() {
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				defer cancel()
+
+				if h.fetchFirst {
+					h.fetchFirst = false
 					h.indicesChanged = false
-					h.processFetching(ctx, currentEpoch)
+					h.processFetching(tickCtx, currentEpoch)
+					h.processExecution(tickCtx, currentEpoch, slot)
+				} else {
+					h.processExecution(tickCtx, currentEpoch, slot)
+					if h.indicesChanged {
+						h.indicesChanged = false
+						h.processFetching(tickCtx, currentEpoch)
+					}
 				}
-			}
-			cancel()
+			}()
 
 			// last slot of epoch
-			if uint64(slot)%h.beaconConfig.GetSlotsPerEpoch() == h.beaconConfig.GetSlotsPerEpoch()-1 {
+			if uint64(slot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}
@@ -114,7 +120,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.GetSlotDuration()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration/2)
 	defer cancel()
 
 	epoch := h.beaconConfig.EstimatedCurrentEpoch()
@@ -130,9 +136,6 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		))
 	defer span.End()
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	span.AddEvent("fetching duties")
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
 		// Set empty duties to inform DutyStore that fetch for this epoch is done.
@@ -146,6 +149,10 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	if h.exporterMode {
+		return
+	}
+
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.execute"),
 		trace.WithAttributes(
@@ -189,7 +196,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	var allEligibleIndices []phase0.ValidatorIndex
 	for _, share := range h.validatorProvider.Validators() {
-		if share.IsParticipatingAndAttesting(epoch) {
+		if share.IsAttesting(epoch) {
 			allEligibleIndices = append(allEligibleIndices, share.ValidatorIndex)
 		}
 	}
@@ -203,7 +210,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
 	for _, share := range h.validatorProvider.SelfValidators() {
-		if share.IsParticipatingAndAttesting(epoch) {
+		if share.IsAttesting(epoch) {
 			selfEligibleIndices[share.ValidatorIndex] = struct{}{}
 		}
 	}
@@ -211,7 +218,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(allEligibleIndices))))
 	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allEligibleIndices)
 	if err != nil {
-		return observability.Errorf(span, "failed to fetch proposer duties: %w", err)
+		return traces.Errorf(span, "failed to fetch proposer duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -231,10 +238,14 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(epoch, storeDuties)
 
+	truncate := -1
+	if h.exporterMode {
+		truncate = 10
+	}
 	h.logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.Duties(epoch, specDuties),
+		fields.Duties(epoch, specDuties, truncate),
 		fields.Duration(start))
 
 	span.SetStatus(codes.Ok, "")

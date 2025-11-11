@@ -6,17 +6,19 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -62,8 +64,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return fmt.Errorf("could not check if operator exists: %w", err)
 	}
 	if existsById {
-		logger.Warn("malformed event: operator ID already exists",
-			fields.OperatorID(event.OperatorId))
+		logger.Warn("malformed event: operator ID already exists")
 		return &MalformedEventError{Err: ErrOperatorIDAlreadyExists}
 	}
 
@@ -168,7 +169,6 @@ func (eh *EventHandler) handleValidatorAdded(
 		logger.Warn("malformed event: event shares length is not correct",
 			zap.Int("expected", sharesExpectedLength),
 			zap.Int("got", len(event.Shares)))
-
 		return nil, &MalformedEventError{Err: ErrIncorrectSharesLength}
 	}
 
@@ -184,7 +184,6 @@ func (eh *EventHandler) handleValidatorAdded(
 			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
 			zap.Uint16("expected_nonce", uint16(nonce)),
 			zap.Error(err))
-
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
@@ -195,10 +194,8 @@ func (eh *EventHandler) handleValidatorAdded(
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
-
 				return nil, err
 			}
-
 			return nil, err
 		}
 
@@ -222,7 +219,7 @@ func (eh *EventHandler) handleValidatorAdded(
 	}
 
 	logger.Debug("processed event")
-	return
+	return ownShare, nil
 }
 
 // handleShareCreation is called when a validator was added/updated during registry sync
@@ -322,7 +319,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		encryptedKey = encryptedKeys[i]
 	}
 
-	validatorShare.DomainType = eh.networkConfig.GetDomainType()
+	validatorShare.DomainType = eh.networkConfig.DomainType
 	validatorShare.Committee = shareMembers
 
 	return &validatorShare, encryptedKey, nil
@@ -460,27 +457,19 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 		fields.Owner(event.Owner),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
 	)
+
 	logger.Debug("processing event")
 
-	recipientData, found, err := eh.nodeStorage.GetRecipientData(txn, event.Owner)
-	if err != nil {
-		return false, fmt.Errorf("get recipient data: %w", err)
-	}
+	feeRecipient := bellatrix.ExecutionAddress(event.RecipientAddress)
 
-	if !found || recipientData == nil {
-		recipientData = &registrystorage.RecipientData{
-			Owner: event.Owner,
-		}
-	}
-
-	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
-
-	r, err := eh.nodeStorage.SaveRecipientData(txn, recipientData)
+	// Save or update fee recipient (handles all logic internally)
+	r, err := eh.nodeStorage.SaveRecipientData(txn, event.Owner, feeRecipient)
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
 
 	logger.Debug("processed event")
+
 	return r != nil, nil
 }
 
@@ -512,8 +501,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, nil
 	}
 
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], share.ValidatorPubKey[:])
+	pk := phase0.BLSPubKey(share.ValidatorPubKey)
 
 	ed := &duties.ExitDescriptor{
 		OwnValidator:   false,

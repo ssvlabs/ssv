@@ -3,13 +3,14 @@ package instance
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -35,8 +36,8 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger = logger.With(
-		fields.Round(i.State.Round),
-		fields.Height(i.State.Height),
+		fields.QBFTRound(i.State.Round),
+		fields.QBFTHeight(i.State.Height),
 		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
 	)
 
@@ -70,12 +71,12 @@ func (i *Instance) uponRoundChange(
 			return errors.Wrap(err, "failed to create proposal")
 		}
 
-		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happenes in createproposal
+		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happens in createproposal
 
 		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonJustified)
 
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
-			fields.Round(i.State.Round),
+			fields.QBFTRound(i.State.Round),
 			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(i.State.Round))),
 			fields.Root(r))
 
@@ -115,10 +116,10 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	}
 
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.Height(i.State.Height),
+		fields.QBFTHeight(i.State.Height),
 		zap.String("reason", "partial-quorum"))
 
 	if err := i.Broadcast(roundChange); err != nil {
@@ -141,10 +142,13 @@ func (i *Instance) hasReceivedPartialQuorum() (bool, []*specqbft.ProcessingMessa
 	return specqbft.HasPartialQuorum(i.State.CommitteeMember, rc), rc
 }
 
-// hasReceivedProposalJustificationForLeadingRound returns
-// if first round or not received round change msgs with prepare justification - returns first rc msg in container and value to propose
-// if received round change msgs with prepare justification - returns the highest prepare justification round change msg and value to propose
-// (all the above considering the operator is a leader for the round
+// hasReceivedProposalJustificationForLeadingRound (if operator is a leader for the round):
+//   - if first round or not received round change msgs with prepare justification
+//     returns first round change msg in container and value to propose
+//   - if received round change msgs with prepare justification returns the highest
+//     prepare justification round change msg and value to propose
+//
+// If operator is not a leader for the round - return nil, nil, nil.
 func (i *Instance) hasReceivedProposalJustificationForLeadingRound(
 	roundChangeMessage *specqbft.ProcessingMessage,
 ) (*specqbft.ProcessingMessage, []byte, error) {
@@ -155,7 +159,7 @@ func (i *Instance) hasReceivedProposalJustificationForLeadingRound(
 	}
 
 	// Important!
-	// We iterate on all round chance msgs for liveliness in case the last round change msg is malicious.
+	// We iterate on all round change msgs for liveliness in case the last round change msg is malicious.
 	for _, containerRoundChangeMessage := range roundChanges {
 		// Chose proposal value.
 		// If justifiedRoundChangeMsg has no prepare justification chose state value
@@ -207,7 +211,7 @@ func (i *Instance) isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if i.proposer(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
+	if i.ProposerForRound(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
 		return errors.New("not proposer")
 	}
 
@@ -247,13 +251,13 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		return errors.New("round change msg type is wrong")
 	}
 	if msg.QBFTMessage.Height != i.State.Height {
-		return errors.New("wrong msg height")
+		return spectypes.WrapError(spectypes.WrongMessageHeightErrorCode, ErrWrongMsgHeight)
 	}
 	if msg.QBFTMessage.Round != round {
-		return errors.New("wrong msg round")
+		return NewRetryableError(spectypes.WrapError(spectypes.WrongMessageRoundErrorCode, ErrWrongMsgRound))
 	}
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
-		return errors.New("msg allows 1 signer")
+		return spectypes.NewError(spectypes.MessageAllowsOneSignerOnlyErrorCode, "msg allows 1 signer")
 	}
 
 	if err := msg.Validate(); err != nil {
@@ -261,7 +265,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
-		return errors.New("signer not in committee")
+		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
 	}
 
 	// Addition to formal spec
@@ -295,11 +299,11 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		}
 
 		if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
-			return errors.New("H(data) != root")
+			return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 		}
 
 		if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgs) {
-			return errors.New("no justifications quorum")
+			return spectypes.NewError(spectypes.JustificationsNoQuorumInvalidErrorCode, "no justifications quorum")
 		}
 
 		if msg.QBFTMessage.DataRound > round {
@@ -323,7 +327,7 @@ func (i *Instance) validRoundChangeForDataVerifySignature(
 
 	// Verify signature
 	if err := spectypes.Verify(msg.SignedMessage, i.State.CommitteeMember.Committee); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
+		return spectypes.WrapError(spectypes.MessageSignatureInvalidErrorCode, fmt.Errorf("msg signature invalid: %w", err))
 	}
 
 	return nil
@@ -351,7 +355,7 @@ func highestPrepared(roundChanges []*specqbft.ProcessingMessage) (*specqbft.Proc
 	return ret, nil
 }
 
-// returns the min round number out of the signed round change messages and the current round
+// returns the min round number out of the signed round change messages
 func minRound(roundChangeMsgs []*specqbft.ProcessingMessage) specqbft.Round {
 	ret := specqbft.NoRound
 	for _, msg := range roundChangeMsgs {

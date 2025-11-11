@@ -163,7 +163,7 @@ func NewOpts(epochDuration time.Duration, activeValidators uint64, subnets int) 
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(netCfg *networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
+func NewSubnetTopicOpts(netCfg *networkconfig.Network, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
 	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()
@@ -261,7 +261,6 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 
 // Sanitizes a pubsub.TopicScoreParams by assigning default values in case a parameter is NaN or Inf
 func sanitizeTopicParams(params *pubsub.TopicScoreParams) *pubsub.TopicScoreParams {
-
 	sanitizeParameter := func(value float64, defaultValue float64) float64 {
 		if math.IsNaN(value) || math.IsInf(value, 0) {
 			return defaultValue

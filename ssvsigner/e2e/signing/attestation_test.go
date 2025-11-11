@@ -34,8 +34,8 @@ func (s *AttestationSlashingTestSuite) TestAttestationDoubleVote() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing first valid attestation")
-	testEpoch := testCurrentEpoch + 1                                       // One epoch ahead of mocked current
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 1 // First slot + 1 of the epoch
+	testEpoch := testCurrentEpoch + 1                                        // One epoch ahead of mocked current
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 1 // First slot + 1 of the epoch
 	initialAttestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 
 	s.RequireValidSigning(
@@ -62,7 +62,7 @@ func (s *AttestationSlashingTestSuite) TestAttestationDoubleVote() {
 
 	s.T().Logf("✅ Phase 3: Testing valid progression to higher epoch")
 	validNextEpoch := testEpoch + 1
-	validNextSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(validNextEpoch) + 1
+	validNextSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(validNextEpoch) + 1
 	validProgressionAttData := common.NewTestAttestationData(testEpoch, validNextEpoch, validNextSlot)
 
 	s.RequireValidSigning(
@@ -87,8 +87,8 @@ func (s *AttestationSlashingTestSuite) TestAttestationSurroundingVote() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial narrow attestation")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 1
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 1
 	initialAttestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 
 	s.RequireValidSigning(
@@ -115,7 +115,7 @@ func (s *AttestationSlashingTestSuite) TestAttestationSurroundingVote() {
 
 	s.T().Logf("✅ Phase 3: Testing valid progression after rejection")
 	validNextEpoch := testEpoch + 2
-	validNextSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(validNextEpoch) + 1
+	validNextSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(validNextEpoch) + 1
 	validProgressionAttData := common.NewTestAttestationData(testEpoch, validNextEpoch, validNextSlot)
 
 	s.RequireValidSigning(
@@ -140,8 +140,8 @@ func (s *AttestationSlashingTestSuite) TestAttestationSurroundedVote() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing wide attestation first")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 1
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 1
 	initialAttestationData := common.NewTestAttestationData(testEpoch-2, testEpoch+1, testSlot+32)
 
 	s.RequireValidSigning(
@@ -167,9 +167,9 @@ func (s *AttestationSlashingTestSuite) TestAttestationSurroundedVote() {
 	)
 
 	s.T().Logf("✅ Phase 3: Testing valid progression after rejection")
-	validNextEpoch := testEpoch + 10
-	validNextSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(validNextEpoch) + 1
-	validProgressionAttData := common.NewTestAttestationData(testEpoch+5, validNextEpoch, validNextSlot)
+	validNextEpoch := testEpoch + 2
+	validNextSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(validNextEpoch) + 1
+	validProgressionAttData := common.NewTestAttestationData(testEpoch+1, validNextEpoch, validNextSlot)
 
 	s.RequireValidSigning(
 		ctx,
@@ -193,12 +193,12 @@ func (s *AttestationSlashingTestSuite) TestAttestationValidProgression() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Creating sequence of valid progressive attestations")
-	startEpoch := testCurrentEpoch + 10
-	startSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(startEpoch) + 1
+	startEpoch := testCurrentEpoch + 1
+	startSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(startEpoch) + 1
 
 	// Define a series of valid sequential attestations
-	attestations := make([]*phase0.AttestationData, 5)
-	for i := 0; i < 5; i++ {
+	attestations := make([]*phase0.AttestationData, 3)
+	for i := 0; i < 3; i++ {
 		sourceEpoch := startEpoch - 1 + phase0.Epoch(i)
 		targetEpoch := sourceEpoch + 1
 		slot := startSlot + phase0.Slot(i*32)
@@ -209,7 +209,8 @@ func (s *AttestationSlashingTestSuite) TestAttestationValidProgression() {
 	}
 
 	s.T().Logf("✍️ Phase 2: Signing attestations sequentially")
-	var allSigs []spectypes.Signature
+
+	allSigs := make([]spectypes.Signature, 0, len(attestations))
 
 	for _, attestationData := range attestations {
 		sig := s.RequireValidSigning(
@@ -242,8 +243,8 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 
 	validatorKeyPair := s.AddValidator(ctx)
 
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	attestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 	attestationData.BeaconBlockRoot = phase0.Root{0x42} // Distinguish this concurrent test attestation
 
@@ -310,8 +311,8 @@ func (s *AttestationSlashingTestSuite) TestWeb3SignerRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial attestation before restart")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialAttestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 
 	s.RequireValidSigning(
@@ -338,9 +339,9 @@ func (s *AttestationSlashingTestSuite) TestWeb3SignerRestart() {
 	)
 
 	s.T().Logf("✅ Phase 4: Testing valid operations after restart")
-	higherTestEpoch := testEpoch + 5
-	higherTestSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(higherTestEpoch) + 1
-	validAttestationData := common.NewTestAttestationData(testEpoch+2, higherTestEpoch, higherTestSlot)
+	higherTestEpoch := testEpoch + 2
+	higherTestSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(higherTestEpoch) + 1
+	validAttestationData := common.NewTestAttestationData(testEpoch+1, higherTestEpoch, higherTestSlot)
 
 	s.RequireValidSigning(
 		ctx,
@@ -363,8 +364,8 @@ func (s *AttestationSlashingTestSuite) TestWeb3SignerPostgreSQLRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial attestation to populate database")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialAttestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 
 	s.RequireValidSigning(
@@ -391,8 +392,8 @@ func (s *AttestationSlashingTestSuite) TestWeb3SignerPostgreSQLRestart() {
 	)
 
 	s.T().Logf("✅ Phase 4: Signing new valid attestation with different epoch")
-	freshTestEpoch := testEpoch + 10
-	freshTestSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(freshTestEpoch) + 1
+	freshTestEpoch := testEpoch + 2
+	freshTestSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(freshTestEpoch) + 1
 	freshAttestationData := common.NewTestAttestationData(freshTestEpoch-1, freshTestEpoch, freshTestSlot)
 
 	s.RequireValidSigning(
@@ -428,8 +429,8 @@ func (s *AttestationSlashingTestSuite) TestSSVSignerRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial attestation before restart")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialAttestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 
 	s.RequireValidSigning(
@@ -496,8 +497,8 @@ func (s *AttestationSlashingTestSuite) TestConcurrentSigningStress() {
 		}
 	}
 
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	domain, err := s.CalculateDomain(spectypes.DomainAttester, testEpoch)
 	s.Require().NoError(err)
 

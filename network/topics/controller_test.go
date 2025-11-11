@@ -12,7 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -25,13 +26,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
@@ -42,7 +43,7 @@ import (
 // TODO: fix this test to run post-fork
 func TestTopicManager(t *testing.T) {
 	// TODO: reduce running time of this test, use channels instead of long timeouts
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	// TODO: rework this test to use message validation
 	t.Run("happy flow", func(t *testing.T) {
@@ -91,8 +92,7 @@ func TestTopicManager(t *testing.T) {
 			validatorStore,
 			operators,
 			dutyStore,
-			signatureVerifier,
-			phase0.Epoch(0))
+			signatureVerifier)
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
 
@@ -406,13 +406,14 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		ScoreInspectorInterval: 100 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
 	}
+
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, func(owner common.Address) (bellatrix.ExecutionAddress, error) {
+		return bellatrix.ExecutionAddress{}, nil
+	}, []byte("test"))
+	require.NoError(t, err)
 
 	ps, tm, err := topics.NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)

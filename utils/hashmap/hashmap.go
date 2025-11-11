@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Map implements a thread-safe map with a sync.Map under the hood.
+// Map implements a thread-safe map with a sync.Map under the hood, it's best for read-heavy workloads.
 type Map[Key comparable, Value any] struct {
 	m sync.Map
 }
@@ -34,8 +34,8 @@ func (m *Map[Key, Value]) GetOrSet(key Key, value Value) (Value, bool) {
 	return actual.(Value), loaded
 }
 
-func (m *Map[Key, Value]) CompareAndSwap(key Key, old, new Value) (swapped bool) {
-	return m.m.CompareAndSwap(key, old, new)
+func (m *Map[Key, Value]) CompareAndSwap(key Key, oldValue, newValue Value) (swapped bool) {
+	return m.m.CompareAndSwap(key, oldValue, newValue)
 }
 
 func (m *Map[Key, Value]) Set(key Key, value Value) {

@@ -8,9 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-const HoleskyName = "holesky"
-
-var HoleskySSV = &SSVConfig{
+var HoleskySSV = &SSV{
+	Name:                 "holesky",
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x2},
 	RegistrySyncOffset:   new(big.Int).SetInt64(181612),
 	RegistryContractAddr: ethcommon.HexToAddress("0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"),

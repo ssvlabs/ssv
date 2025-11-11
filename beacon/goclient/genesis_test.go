@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 const (
@@ -22,10 +22,10 @@ const (
 func Test_genesisForClient(t *testing.T) {
 	ctx := t.Context()
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{
 					"data": {
@@ -59,8 +59,7 @@ func Test_genesisForClient(t *testing.T) {
 						"SYNC_COMMITTEE_SIZE": "512",
 						"SYNC_COMMITTEE_SUBNET_COUNT": "4",
 						"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
-						"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
-						"INTERVALS_PER_SLOT": "3"
+						"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16"
 					}
 				}`), nil
 			}
@@ -72,7 +71,7 @@ func Test_genesisForClient(t *testing.T) {
 			ctx,
 			logger,
 			Options{
-				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.Beacon,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
@@ -80,7 +79,7 @@ func Test_genesisForClient(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		genesis, err := genesisForClient(ctx, logger, client.multiClient)
+		genesis, err := client.genesisForClient(ctx, client.multiClient)
 		require.NoError(t, err)
 		require.NotNil(t, genesis)
 
@@ -89,7 +88,7 @@ func Test_genesisForClient(t *testing.T) {
 	})
 
 	t.Run("nil_data", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
@@ -101,19 +100,19 @@ func Test_genesisForClient(t *testing.T) {
 			ctx,
 			logger,
 			Options{
-				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.Beacon,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
 		)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "timed out awaiting config initialization") // node cannot initialize if it cannot get genesis
+		require.Contains(t, err.Error(), "timed out awaiting Beacon config initialization") // node cannot initialize if it cannot get genesis
 		require.Nil(t, client)
 	})
 
 	t.Run("error", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`malformed`), nil
 			}
@@ -125,14 +124,14 @@ func Test_genesisForClient(t *testing.T) {
 			ctx,
 			logger,
 			Options{
-				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.Beacon,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
 		)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "timed out awaiting config initialization") // node cannot initialize if it cannot get genesis
+		require.Contains(t, err.Error(), "timed out awaiting Beacon config initialization") // node cannot initialize if it cannot get genesis
 		require.Nil(t, client)
 	})
 }

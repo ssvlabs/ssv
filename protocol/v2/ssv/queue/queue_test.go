@@ -13,8 +13,10 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/observability/log"
 )
 
 var mockState = &State{
@@ -25,12 +27,12 @@ var mockState = &State{
 }
 
 func TestPriorityQueue_TryPop(t *testing.T) {
-	queue := NewDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
-	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
-	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
+	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: specqbft.PrepareMsgType}, mockState)
 	require.False(t, queue.Empty())
 
 	// Pop 1st message.
@@ -49,42 +51,42 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 }
 
 func TestPriorityQueue_Filter(t *testing.T) {
-	queue := NewDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
-	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
+	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
 	require.False(t, queue.Empty())
 
 	// Pop non-matching message.
 	popped := queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 101
+		return msg.Body.(*specqbft.Message).Height == 101
 	})
 	require.False(t, queue.Empty())
 	require.Nil(t, popped)
 
 	// Pop matching message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 100
+		return msg.Body.(*specqbft.Message).Height == 100
 	})
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
 	require.Equal(t, msg, popped)
 
 	// Push 2 messages.
-	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
-	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
+	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: specqbft.PrepareMsgType}, mockState)
 
 	// Pop 2nd message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 101
+		return msg.Body.(*specqbft.Message).Height == 101
 	})
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop 1st message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 100
+		return msg.Body.(*specqbft.Message).Height == 100
 	})
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
@@ -92,7 +94,7 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop nil.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *SSVMessage) bool {
-		return msg.Body.(*qbft.Message).Height == 100
+		return msg.Body.(*specqbft.Message).Height == 100
 	})
 	require.Nil(t, popped)
 }
@@ -107,10 +109,10 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		pushDelay      = 50 * time.Millisecond
 		precision      = 50 * time.Millisecond
 	)
-	queue := New(capacity)
+	queue := New(log.TestLogger(t), capacity)
 	require.True(t, queue.Empty())
 
-	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 
 	// Push messages.
@@ -159,7 +161,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 	for _, test := range messagePriorityTests {
 		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
 			// Create the PriorityQueue and populate it with messages.
-			q := NewDefault()
+			q := New(log.TestLogger(t), 32)
 
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
@@ -186,7 +188,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
-	queue := NewDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -200,16 +202,16 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 		Quorum:             4,
 	}
 
-	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
-	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
+	decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(1), Type: specqbft.CommitMsgType}, state)
+	decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(1), Type: specqbft.CommitMsgType}, state)
 	time.Sleep(50 * time.Millisecond)
 	require.Equal(t, 2, queue.Len())
-	expectedMsg := decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(2), Type: qbft.CommitMsgType}, state)
+	expectedMsg := decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(2), Type: specqbft.CommitMsgType}, state)
 
 	go func() {
 		defer wg.Done()
 		matchHeight2 := func(msg *SSVMessage) bool {
-			return msg.Body.(*qbft.Message).Height == 2
+			return msg.Body.(*specqbft.Message).Height == 2
 		}
 		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), matchHeight2)
 		require.Equal(t, expectedMsg, popped)
@@ -222,7 +224,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
-	queue := NewDefault()
+	queue := New(log.TestLogger(t), 32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -240,27 +242,26 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 	go func() {
 		defer wg.Done()
 		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
-			_, ok := msg.Body.(*qbft.Message)
+			_, ok := msg.Body.(*specqbft.Message)
 			if !ok {
 				return true
 			}
-			return msg.Body.(*qbft.Message).MsgType != qbft.CommitMsgType
+			return msg.Body.(*specqbft.Message).MsgType != specqbft.CommitMsgType
 		})
 		require.NotNil(t, popped)
-
 	}()
 
 	// Simulate delay before pushing messages.
 	time.Sleep(100 * time.Millisecond)
 
 	// Push non-matching message.
-	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
+	decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(1), Type: specqbft.CommitMsgType}, state)
 
 	// Push one matching message.
 	decodeAndPush(t, queue, mockNonConsensusMessage{Slot: 1, Type: spectypes.PostConsensusPartialSig}, state)
 
 	// Push non-matching message.
-	decodeAndPush(t, queue, mockConsensusMessage{Height: qbft.Height(1), Type: qbft.CommitMsgType}, state)
+	decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(1), Type: specqbft.CommitMsgType}, state)
 
 	wg.Wait()
 
@@ -270,12 +271,14 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(32)
+		return New(log.BenchLogger(b), 32)
 	}, false)
 }
 
 func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
-	benchmarkPriorityQueueParallel(b, NewDefault, true)
+	benchmarkPriorityQueueParallel(b, func() Queue {
+		return New(log.BenchLogger(b), 32)
+	}, true)
 }
 
 func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bool) {
@@ -292,7 +295,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 	messages := make([]*SSVMessage, messageCount)
 	for i := range messages {
 		var err error
-		msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+		msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: specqbft.Height(rand.Intn(messageCount)), Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
 		require.NoError(b, err)
 		messages[i] = msg
 	}
@@ -409,13 +412,13 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
-	queue := NewDefault()
+	queue := New(log.BenchLogger(b), 32)
 
 	messageCount := 10_000
-	types := []qbft.MessageType{qbft.PrepareMsgType, qbft.CommitMsgType, qbft.RoundChangeMsgType}
+	types := []specqbft.MessageType{specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType}
 	msgs := make(chan *SSVMessage, messageCount*len(types))
 	for _, i := range rand.Perm(messageCount) {
-		height := qbft.FirstHeight + qbft.Height(i)
+		height := specqbft.FirstHeight + specqbft.Height(i)
 		for _, t := range types {
 			decoded, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: height, Type: t}.ssvMessage(mockState))
 			require.NoError(b, err)

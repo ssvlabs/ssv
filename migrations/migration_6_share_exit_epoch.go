@@ -100,17 +100,20 @@ func mapShare(share *migration_6_OldStorageShare) *storage.Share {
 
 	domainShare := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorPubKey:     validatorPubKey,
-			SharePubKey:         share.SharePubKey,
-			Committee:           committee,
-			DomainType:          share.DomainType,
-			FeeRecipientAddress: share.FeeRecipientAddress,
-			Graffiti:            share.Graffiti,
-			ValidatorIndex:      phase0.ValidatorIndex(share.ValidatorIndex),
+			ValidatorPubKey: validatorPubKey,
+			SharePubKey:     share.SharePubKey,
+			Committee:       committee,
+			DomainType:      share.DomainType,
+			// FeeRecipientAddress is not mapped - it's now managed in Recipients storage.
+			// Removing this line doesn't affect the migration since the field is unused.
+			// Operators who haven't run this migration yet will not be affected - the field
+			// will simply remain empty in new shares, which is fine since it's not used.
+			Graffiti:       share.Graffiti,
+			ValidatorIndex: phase0.ValidatorIndex(share.ValidatorIndex),
 		},
 		OwnerAddress:    share.OwnerAddress,
 		Liquidated:      share.Liquidated,
-		Status:          v1.ValidatorState(share.Status), // nolint: gosec //G115: integer overflow conversion uint64 -> int
+		Status:          v1.ValidatorState(share.Status), //nolint: gosec //G115: integer overflow conversion uint64 -> int
 		ActivationEpoch: phase0.Epoch(share.ActivationEpoch),
 	}
 

@@ -34,7 +34,7 @@ import (
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
 	logger       *zap.Logger
-	beaconConfig networkconfig.Beacon
+	beaconConfig *networkconfig.Beacon
 	signerClient signerClient
 
 	getOperatorId     func() spectypes.OperatorID
@@ -58,7 +58,7 @@ type signerClient interface {
 func NewRemoteKeyManager(
 	ctx context.Context,
 	logger *zap.Logger,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	signerClient signerClient,
 	db basedb.Database,
 	getOperatorId func() spectypes.OperatorID,
@@ -280,7 +280,7 @@ func (km *RemoteKeyManager) prepareSignRequest(
 		val.Lock()
 		defer val.Unlock()
 
-		block, err := km.handleDomainProposer(obj, sharePubkey)
+		block, err := km.handleDomainProposer(obj, slot, sharePubkey)
 		if err != nil {
 			return web3signer.SignRequest{}, phase0.Root{}, err
 		}
@@ -426,9 +426,12 @@ func (km *RemoteKeyManager) handleDomainAttester(
 
 func (km *RemoteKeyManager) handleDomainProposer(
 	obj ssz.HashRoot,
+	slot phase0.Slot,
 	sharePubkey phase0.BLSPubKey,
 ) (*web3signer.BeaconBlockData, error) {
-	ret, err := web3signer.ConvertBlockToBeaconBlockData(obj)
+	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
+	version, _ := km.beaconConfig.BeaconForkAtEpoch(epoch)
+	ret, err := web3signer.ConvertBlockToBeaconBlockData(obj, version)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +458,7 @@ func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo 
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
-		GenesisValidatorsRoot: km.beaconConfig.GetGenesisValidatorsRoot(),
+		GenesisValidatorsRoot: km.beaconConfig.GenesisValidatorsRoot,
 	}
 }
 

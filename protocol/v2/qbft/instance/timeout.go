@@ -4,11 +4,13 @@ import (
 	"context"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 )
 
 func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {
@@ -16,11 +18,13 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer span.End()
 
 	if !i.CanProcessMessages() {
-		return observability.Errorf(span, "instance stopped processing timeouts")
+		return types.WrapError(types.TimeoutInstanceErrorCode, traces.Errorf(span, "instance stopped processing timeouts"))
 	}
 
-	newRound := i.State.Round + 1
-	logger.Debug("⌛ round timed out", fields.Round(newRound))
+	prevRound := i.State.Round
+	newRound := prevRound + 1
+
+	logger.Debug("⌛ round timed out", fields.QBFTRound(prevRound))
 
 	// TODO: previously this was done outside of a defer, which caused the
 	// round to be bumped before the round change message was created & broadcasted.
@@ -33,15 +37,15 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
-		return observability.Errorf(span, "could not generate round change msg: %w", err)
+		return traces.Errorf(span, "could not generate round change msg: %w", err)
 	}
 
 	root, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
-		return observability.Errorf(span, "could not calculate root for round change: %w", err)
+		return traces.Errorf(span, "could not calculate root for round change: %w", err)
 	}
 
-	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
+	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
 
 	const eventMsg = "📢 broadcasting round change message"
 	span.AddEvent(eventMsg,
@@ -51,14 +55,14 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		))
 
 	logger.Debug(eventMsg,
-		fields.Round(i.State.Round),
+		fields.QBFTRound(i.State.Round),
 		fields.Root(root),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.Height(i.State.Height),
+		fields.QBFTHeight(i.State.Height),
 		zap.String("reason", "timeout"))
 
 	if err := i.Broadcast(roundChange); err != nil {
-		return observability.Errorf(span, "failed to broadcast round change message: %w", err)
+		return traces.Errorf(span, "failed to broadcast round change message: %w", err)
 	}
 
 	return nil

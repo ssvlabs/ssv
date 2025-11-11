@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -24,7 +25,7 @@ type BlockSlashingTestSuite struct {
 // Ensures both SSV and Web3Signer prevent signing two different blocks for the same slot.
 func (s *BlockSlashingTestSuite) TestBlockDoubleProposal() {
 	s.T().Logf("🧪 Testing double proposal slashing protection")
-	testCurrentEpoch := phase0.Epoch(4200)
+	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
@@ -34,7 +35,7 @@ func (s *BlockSlashingTestSuite) TestBlockDoubleProposal() {
 
 	s.T().Logf("✍️ Phase 1: Signing first valid block proposal")
 	testEpoch := testCurrentEpoch + 1
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
@@ -74,7 +75,7 @@ func (s *BlockSlashingTestSuite) TestBlockDoubleProposal() {
 // Ensures both layers prevent signing blocks with slots lower than previously signed.
 func (s *BlockSlashingTestSuite) TestBlockLowerSlotProposal() {
 	s.T().Logf("🧪 Testing lower slot proposal slashing protection")
-	testCurrentEpoch := phase0.Epoch(4200)
+	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
@@ -83,8 +84,8 @@ func (s *BlockSlashingTestSuite) TestBlockLowerSlotProposal() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing block at higher slot")
-	testEpoch := testCurrentEpoch + 10
-	higherSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 15
+	testEpoch := testCurrentEpoch + 1
+	higherSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 15
 	initialBlock := common.NewTestBlock(higherSlot, 0)
 
 	s.RequireValidSigning(
@@ -124,7 +125,7 @@ func (s *BlockSlashingTestSuite) TestBlockLowerSlotProposal() {
 // Ensures valid sequential block proposals with increasing slots are signed successfully.
 func (s *BlockSlashingTestSuite) TestBlockValidProgression() {
 	s.T().Logf("🧪 Testing valid block proposal progression")
-	testCurrentEpoch := phase0.Epoch(4200)
+	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
@@ -133,8 +134,8 @@ func (s *BlockSlashingTestSuite) TestBlockValidProgression() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Creating sequence of valid progressive block proposals")
-	startEpoch := testCurrentEpoch + 10
-	startSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(startEpoch) + 1
+	startEpoch := testCurrentEpoch + 1
+	startSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(startEpoch) + 1
 
 	// Define a series of valid sequential block proposals with increasing slots
 	blocks := make([]*electra.BeaconBlock, 5)
@@ -145,7 +146,8 @@ func (s *BlockSlashingTestSuite) TestBlockValidProgression() {
 	}
 
 	s.T().Logf("✍️ Phase 2: Signing blocks sequentially")
-	var allSigs []spectypes.Signature
+
+	allSigs := make([]spectypes.Signature, 0, len(blocks))
 
 	for _, block := range blocks {
 		sig := s.RequireValidSigning(
@@ -170,7 +172,7 @@ func (s *BlockSlashingTestSuite) TestBlockValidProgression() {
 // Ensures SSV allows only one concurrent signature while Web3Signer allows all.
 func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 	s.T().Logf("🔄 Testing concurrent block signing")
-	testCurrentEpoch := phase0.Epoch(4200)
+	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
@@ -178,8 +180,8 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 
 	validatorKeyPair := s.AddValidator(ctx)
 
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	block := common.NewTestBlock(testSlot, 0)
 	block.ParentRoot = phase0.Root{0x42} // Distinguish this concurrent test block
 
@@ -237,7 +239,7 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 // TestBlockRestart validates slashing protection persistence across restarts.
 func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	s.T().Logf("🔄 Testing block restart persistence")
-	testCurrentEpoch := phase0.Epoch(4200)
+	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
@@ -246,8 +248,8 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial block before restart")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
@@ -290,7 +292,7 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 // TestWeb3SignerPostgreSQLRestart validates slashing protection persistence across PostgreSQL restarts.
 func (s *BlockSlashingTestSuite) TestWeb3SignerPostgreSQLRestart() {
 	s.T().Logf("💾 Testing Web3Signer PostgreSQL restart with block persistence")
-	testCurrentEpoch := phase0.Epoch(4200)
+	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
@@ -299,8 +301,8 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerPostgreSQLRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial block to populate database")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
@@ -355,7 +357,7 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerPostgreSQLRestart() {
 // TestSSVSignerRestart validates SSV-Signer restart functionality with blocks.
 func (s *BlockSlashingTestSuite) TestSSVSignerRestart() {
 	s.T().Logf("🔄 Testing SSV-Signer restart with block functionality")
-	testCurrentEpoch := phase0.Epoch(4200)
+	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
@@ -364,8 +366,8 @@ func (s *BlockSlashingTestSuite) TestSSVSignerRestart() {
 	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial block before restart")
-	testEpoch := testCurrentEpoch + 10
-	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	testEpoch := testCurrentEpoch + 1
+	testSlot := s.GetEnv().GetBeaconConfig().FirstSlotAtEpoch(testEpoch) + 5
 	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(

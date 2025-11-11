@@ -3,16 +3,16 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type EventType int
 
 const (
-	// Timeout in order to run timeoutData process
+	// Timeout for processing QBFT timeouts.
 	Timeout EventType = iota
-	// ExecuteDuty for when to start duty runner
+	// ExecuteDuty for starting duty execution.
 	ExecuteDuty
 )
 
@@ -33,16 +33,16 @@ type EventMsg struct {
 }
 
 type TimeoutData struct {
-	Height qbft.Height
-	Round  qbft.Round
+	Height specqbft.Height
+	Round  specqbft.Round
 }
 
 type ExecuteDutyData struct {
-	Duty *types.ValidatorDuty
+	Duty *spectypes.ValidatorDuty
 }
 
 type ExecuteCommitteeDutyData struct {
-	Duty *types.CommitteeDuty
+	Duty *spectypes.CommitteeDuty
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {

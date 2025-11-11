@@ -124,6 +124,15 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 			Expected: true,
 		},
 		{
+			Name: "Is Attesting and Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateActiveOngoing,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
 			Name: "Pending Queued with Future Activation Epoch",
 			Share: &SSVShare{
 				Status:          eth2apiv1.ValidatorStatePendingQueued,
@@ -210,7 +219,7 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsParticipating(networkconfig.TestNetwork, tc.Epoch)
+			result := tc.Share.IsParticipating(networkconfig.TestNetwork.Beacon, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}
@@ -300,11 +309,21 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 			Epoch:    currentEpoch,
 			Expected: false,
 		},
+		{
+			Name: "Exited Share Within Same Period and Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch:  epochSamePeriod,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsSyncCommitteeEligible(networkconfig.TestNetwork, tc.Epoch)
+			result := tc.Share.isSyncCommitteeEligible(networkconfig.TestNetwork.Beacon, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}

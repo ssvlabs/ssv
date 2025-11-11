@@ -2,6 +2,8 @@ package ssv
 
 import (
 	"encoding/hex"
+	"maps"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -15,6 +17,9 @@ import (
 type SigningRoot string
 
 type PartialSigContainer struct {
+	// signaturesMu protects access to the Signatures map to prevent concurrent read/write access
+	// from multiple goroutines
+	signaturesMu sync.RWMutex
 	// Signature map: validator index -> signing root -> operator id (signer) -> signature (from the signer for the validator's signing root)
 	Signatures map[phase0.ValidatorIndex]map[specssv.SigningRoot]map[spectypes.OperatorID]spectypes.Signature
 	// Quorum is the number of min signatures needed for quorum
@@ -29,6 +34,9 @@ func NewPartialSigContainer(quorum uint64) *PartialSigContainer {
 }
 
 func (ps *PartialSigContainer) AddSignature(sigMsg *spectypes.PartialSignatureMessage) {
+	ps.signaturesMu.Lock()
+	defer ps.signaturesMu.Unlock()
+
 	if ps.Signatures[sigMsg.ValidatorIndex] == nil {
 		ps.Signatures[sigMsg.ValidatorIndex] = make(map[specssv.SigningRoot]map[spectypes.OperatorID]spectypes.Signature)
 	}
@@ -51,6 +59,9 @@ func (ps *PartialSigContainer) HasSignature(validatorIndex phase0.ValidatorIndex
 
 // GetSignature returns the signature for a given root and signer
 func (ps *PartialSigContainer) GetSignature(validatorIndex phase0.ValidatorIndex, signer spectypes.OperatorID, signingRoot [32]byte) (spectypes.Signature, error) {
+	ps.signaturesMu.RLock()
+	defer ps.signaturesMu.RUnlock()
+
 	if ps.Signatures[validatorIndex] == nil {
 		return nil, errors.New("Dont have signature for the given validator index")
 	}
@@ -65,14 +76,26 @@ func (ps *PartialSigContainer) GetSignature(validatorIndex phase0.ValidatorIndex
 
 // GetSignatures Return signature map for given root
 func (ps *PartialSigContainer) GetSignatures(validatorIndex phase0.ValidatorIndex, signingRoot [32]byte) map[spectypes.OperatorID]spectypes.Signature {
-	if ps.Signatures[validatorIndex] == nil {
+	ps.signaturesMu.RLock()
+	defer ps.signaturesMu.RUnlock()
+
+	signatures := ps.Signatures[validatorIndex][signingRootHex(signingRoot)]
+	if signatures == nil {
 		return nil
 	}
-	return ps.Signatures[validatorIndex][signingRootHex(signingRoot)]
+
+	signaturesCopy := make(map[spectypes.OperatorID]spectypes.Signature, len(signatures))
+	maps.Copy(signaturesCopy, signatures)
+
+	// Return a copy to avoid external mutation and avoid data races
+	return signaturesCopy
 }
 
 // Remove signer from signature map
 func (ps *PartialSigContainer) Remove(validatorIndex phase0.ValidatorIndex, signer uint64, signingRoot [32]byte) {
+	ps.signaturesMu.Lock()
+	defer ps.signaturesMu.Unlock()
+
 	if ps.Signatures[validatorIndex] == nil {
 		return
 	}
@@ -86,6 +109,9 @@ func (ps *PartialSigContainer) Remove(validatorIndex phase0.ValidatorIndex, sign
 }
 
 func (ps *PartialSigContainer) ReconstructSignature(root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+	ps.signaturesMu.RLock()
+	defer ps.signaturesMu.RUnlock()
+
 	// Reconstruct signatures
 	if ps.Signatures[validatorIndex] == nil {
 		return nil, errors.New("no signatures for the given validator index")
@@ -114,6 +140,9 @@ func (ps *PartialSigContainer) ReconstructSignature(root [32]byte, validatorPubK
 }
 
 func (ps *PartialSigContainer) HasQuorum(validatorIndex phase0.ValidatorIndex, root [32]byte) bool {
+	ps.signaturesMu.RLock()
+	defer ps.signaturesMu.RUnlock()
+
 	return uint64(len(ps.Signatures[validatorIndex][signingRootHex(root)])) >= ps.Quorum
 }
 

@@ -22,8 +22,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -33,6 +31,8 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/utils/async"
@@ -70,8 +70,8 @@ type HostProvider interface {
 	Host() host.Host
 }
 
-type validatorStatusAndSubnet struct {
-	status     validatorStatus
+type statusWithSubnet struct {
+	status     committeeSubscriptionStatus
 	subnet     uint64
 	subnetAlan uint64
 }
@@ -100,7 +100,8 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeCommittees *hashmap.Map[string, validatorStatusAndSubnet]
+	// subscribedCommittees tracks committee subscription statuses for committees we've subscribed to.
+	subscribedCommittees *hashmap.Map[string, statusWithSubnet]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
@@ -137,12 +138,12 @@ func New(
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		logger:                  logger.Named(logging.NameP2PNetwork),
+		logger:                  logger.Named(log.NameP2PNetwork),
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
-		activeCommittees:        hashmap.New[string, validatorStatusAndSubnet](),
+		subscribedCommittees:    hashmap.New[string, statusWithSubnet](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -363,7 +364,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			if in < n.inboundLimit() {
 				return // skip trim iteration
 			}
-			if rand.Intn(5) > 0 { // nolint: gosec
+			if rand.Intn(5) > 0 { //nolint: gosec
 				return // skip trim iteration
 			}
 			trimInboundOnly = true
@@ -460,7 +461,7 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
-		n.logger.Panic("could not setup discovery", zap.Error(err))
+		n.logger.Fatal("could not setup discovery", zap.Error(err))
 	}
 }
 
@@ -578,7 +579,6 @@ func (n *p2pNetwork) UpdateScoreParams() {
 
 	// Run immediately and then once every epoch
 	for ; true; <-timer.C {
-
 		// Update score parameters
 		err := n.topicsCtrl.UpdateScoreParams()
 		if err != nil {

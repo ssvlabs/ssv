@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -11,11 +12,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
+// voluntaryExitSlotsToPostpone defines how many slots we want to wait out before
+// executing voluntary exit duty.
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
 type ExitDescriptor struct {
@@ -57,24 +60,36 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			currentSlot := h.ticker.Slot()
+			slot := h.ticker.Slot()
 			next = h.ticker.Next()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-			h.processExecution(ctx, currentSlot)
+			func() {
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				defer cancel()
+
+				h.processExecution(tickCtx, slot)
+			}()
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
 				return
 			}
 
+			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
+			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
+			// top to ensure the duty is scheduled with a slot number never in the past since several slots
+			// might have passed by the time we are processing this event here.
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
-				h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
-					zap.Error(err))
+				h.logger.Warn(
+					"failed to convert block number to slot number, skipping voluntary exit duty",
+					zap.Error(err),
+				)
 				continue
 			}
-
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
 			duty := &spectypes.ValidatorDuty{
@@ -123,7 +138,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingDuties
-	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.GetSlotsPerEpoch()))
+	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.SlotsPerEpoch))
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
@@ -136,8 +151,9 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	span.SetStatus(codes.Ok, "")
 }
 
-// blockSlot gets slots happened at the same time as block,
-// it prevents calling execution client multiple times if there are several validator exit events on the same block
+// blockSlot returns slot that happens (corresponds to) at the same time as block.
+// It caches the result to avoid calling execution client multiple times when there are several
+// validator exit events present in the same block.
 func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
 	blockSlot, ok := h.blockSlots[blockNumber]
 	if ok {
@@ -146,14 +162,17 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 
 	header, err := h.executionClient.HeaderByNumber(ctx, new(big.Int).SetUint64(blockNumber))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
 	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
+
+	// Clean up older cached values since they are not relevant anymore.
 	for k, v := range h.blockSlots {
-		if v < blockSlot && blockSlot-v >= voluntaryExitSlotsToPostpone {
+		const recentlyQueriedBlocks = 10
+		if blockSlot >= v+recentlyQueriedBlocks {
 			delete(h.blockSlots, k)
 		}
 	}

@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -31,7 +31,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	//temporary to override state comparisons from file not inputted one
 	overrideStateComparisonForControllerSpecTest(t, test)
 
-	logger := logging.TestLogger(t)
+	logger := log.TestLogger(t)
 	contr := generateController(logger)
 
 	if test.StartHeight != nil {
@@ -49,15 +49,11 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		height++
 	}
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 }
 
 func generateController(logger *zap.Logger) *controller.Controller {
-	identifier := []byte{1, 2, 3, 4}
+	identifier := spectestingutils.TestingIdentifier
 	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
 	return qbfttesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
@@ -91,14 +87,14 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(context.TODO(), logger, msg)
+		decidedMsg, err := contr.ProcessMsg(context.TODO(), logger, msg)
 		if err != nil {
 			lastErr = err
 		}
-		if decided != nil {
+		if decidedMsg != nil {
 			decidedCnt++
 
-			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decided.FullData)
+			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decidedMsg.FullData)
 		}
 	}
 	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt, lastErr)
@@ -120,7 +116,6 @@ func testBroadcastedDecided(
 		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
 		found := false
 		for _, msg := range broadcastedSignedMsgs {
-
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
 			msgID := spectypes.MessageID{}
 			copy(msgID[:], identifier)
@@ -146,8 +141,14 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue)
+func runInstanceWithData(
+	t *testing.T,
+	logger *zap.Logger,
+	height specqbft.Height,
+	contr *controller.Controller,
+	runData *spectests.RunInstanceData,
+) error {
+	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, qbfttesting.TestingValueChecker{})
 	var lastErr error
 	if err != nil {
 		lastErr = err

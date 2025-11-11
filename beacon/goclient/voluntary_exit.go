@@ -2,22 +2,19 @@ package goclient
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
 )
 
 func (gc *GoClient) SubmitVoluntaryExit(ctx context.Context, voluntaryExit *phase0.SignedVoluntaryExit) error {
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitVoluntaryExit"),
-		zap.String("client_addr", clientAddress))
-
-	if err := gc.multiClient.SubmitVoluntaryExit(ctx, voluntaryExit); err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
+	reqStart := time.Now()
+	err := gc.multiClient.SubmitVoluntaryExit(ctx, voluntaryExit)
+	recordRequest(ctx, gc.log, "SubmitVoluntaryExit", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
+	if err != nil {
+		return errMultiClient(fmt.Errorf("submit voluntary exit: %w", err), "SubmitVoluntaryExit")
 	}
-
-	logger.Debug("consensus client submitted voluntary exit")
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
@@ -90,7 +90,7 @@ func (h *Handler) HandleParticipantsQuery(store *storage.ParticipantStores, nm *
 	}
 	roleStorage := store.Get(role)
 	if roleStorage == nil {
-		h.logger.Warn("role storage doesn't exist", fields.ExporterRole(role))
+		h.logger.Warn("role storage doesn't exist", fields.BeaconRole(role))
 		res.Data = []string{"internal error - role storage doesn't exist", role.String()}
 		nm.Msg = res
 		return

@@ -2,7 +2,9 @@ package duties
 
 import (
 	"context"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -17,7 +19,7 @@ type dutyHandler interface {
 		logger *zap.Logger,
 		beaconNode BeaconNode,
 		executionClient ExecutionClient,
-		beaconConfig networkconfig.Beacon,
+		beaconConfig *networkconfig.Beacon,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
@@ -34,7 +36,7 @@ type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        networkconfig.Beacon
+	beaconConfig        *networkconfig.Beacon
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	dutiesExecutor      DutiesExecutor
@@ -51,7 +53,7 @@ func (h *baseHandler) Setup(
 	logger *zap.Logger,
 	beaconNode BeaconNode,
 	executionClient ExecutionClient,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,
@@ -78,4 +80,10 @@ func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
 
 func (h *baseHandler) HandleInitialDuties(context.Context) {
 	// Do nothing
+}
+
+// ctxWithDeadlineOnNextSlot returns the derived context with deadline set to next slot (+ some safety margin
+// to account for clock skews).
+func (h *baseHandler) ctxWithDeadlineOnNextSlot(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
+	return context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
 }

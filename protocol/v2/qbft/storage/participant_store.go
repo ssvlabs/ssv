@@ -2,7 +2,6 @@ package qbftstorage
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -22,16 +21,6 @@ type Participation struct {
 type StoredInstance struct {
 	State          *specqbft.State
 	DecidedMessage *spectypes.SignedSSVMessage
-}
-
-// Encode returns a StoredInstance encoded bytes or error.
-func (si *StoredInstance) Encode() ([]byte, error) {
-	return json.Marshal(si)
-}
-
-// Decode returns error if decoding failed.
-func (si *StoredInstance) Decode(data []byte) error {
-	return json.Unmarshal(data, &si)
 }
 
 type ParticipantsRangeEntry struct {
@@ -57,7 +46,7 @@ type ParticipantStore interface {
 	// GetParticipants returns participants in quorum for the given slot.
 	GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error)
 
-	// InitialSlotGC performs an initial cleanup (blocking) of slots bellow the retained threshold
+	// InitialSlotGC performs an initial cleanup (blocking) of slots below the retained threshold
 	Prune(ctx context.Context, below phase0.Slot)
 
 	// SlotGC continuously removes old slots

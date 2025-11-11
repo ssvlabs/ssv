@@ -53,22 +53,21 @@ type peerIDWithMessageID struct {
 }
 
 type messageValidator struct {
-	logger          *zap.Logger
-	netCfg          networkconfig.Network
-	pectraForkEpoch phase0.Epoch
-	state           *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
-	validatorStore  validatorStore
-	operators       operators
-	dutyStore       *dutystore.Store
+	logger         *zap.Logger
+	netCfg         *networkconfig.Network
+	state          *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
+	validatorStore validatorStore
+	operators      operators
+	dutyStore      *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
-	// same ID apply any state modifications (during message validation - which is not
-	// stateless) in isolated synchronised manner with respect to each other.
+	// the same ID apply any state modifications (during message validation - which is not
+	// stateless) in an isolated synchronized manner with respect to each other.
 	validationLockCache *ttlcache.Cache[peerIDWithMessageID, *sync.Mutex]
 	// validationLocksInflight helps us prevent generating 2 different validation locks
-	// for messages that must lock on the same lock (messages with same ID) when undergoing
+	// for messages that must lock on the same lock (messages with the same ID) when undergoing
 	// validation (that validation is not stateless - it often requires messageValidator to
 	// update some state).
 	validationLocksInflight singleflight.Group[peerIDWithMessageID, *sync.Mutex]
@@ -80,12 +79,11 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 // It starts a goroutine that cleans up the state.
 func New(
-	netCfg networkconfig.Network,
+	netCfg *networkconfig.Network,
 	validatorStore validatorStore,
 	operators operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
-	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
@@ -96,10 +94,9 @@ func New(
 		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
-		pectraForkEpoch:     pectraForkEpoch,
 	}
 
-	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.GetSlotDuration() // #nosec G115 -- amount of slots cannot exceed int64
+	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
 	mv.state = ttlcache.New(
 		ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
 	)
@@ -133,8 +130,6 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	defer func() {
 		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
 	}()
-
-	recordMessage(ctx)
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
@@ -331,7 +326,6 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 }
 
 // maxStoredSlots stores max amount of slots message validation stores.
-// It's exported to allow usage outside of message validation
 func (mv *messageValidator) maxStoredSlots() uint64 {
-	return mv.netCfg.GetSlotsPerEpoch() + LateSlotAllowance
+	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
 }

@@ -3,11 +3,11 @@ package validator
 import (
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (c *controller) reportValidatorStatus(share *types.SSVShare) {
+func (c *Controller) reportValidatorStatus(share *types.SSVShare) {
 	if share == nil {
 		c.logger.Debug("checking validator: validator share not found")
 		return

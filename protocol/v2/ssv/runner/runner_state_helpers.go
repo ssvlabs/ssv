@@ -1,15 +1,12 @@
 package runner
 
 import (
-	"encoding/hex"
-
-	"github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	sigs := state.PreConsensusContainer.Signatures[state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
-	var signers []spectypes.OperatorID
+	sigs := state.PreConsensusContainer.GetSignatures(state.CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root)
+	signers := make([]spectypes.OperatorID, 0, len(sigs))
 	for op := range sigs {
 		signers = append(signers, op)
 	}
@@ -17,21 +14,18 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 }
 
 func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	var signers []spectypes.OperatorID
+	duties := state.CurrentDuty.(*spectypes.CommitteeDuty).ValidatorDuties
 
-	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties {
-		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
+	have := make(map[spectypes.OperatorID]struct{}, len(duties))
+	signersUnique := make([]spectypes.OperatorID, 0, len(duties))
+
+	for _, duty := range duties {
+		sigs := state.PostConsensusContainer.GetSignatures(duty.ValidatorIndex, root)
 		for op := range sigs {
-			signers = append(signers, op)
-		}
-	}
-
-	have := make(map[spectypes.OperatorID]struct{})
-	var signersUnique []spectypes.OperatorID
-	for _, opId := range signers {
-		if _, ok := have[opId]; !ok {
-			have[opId] = struct{}{}
-			signersUnique = append(signersUnique, opId)
+			if _, seen := have[op]; !seen {
+				have[op] = struct{}{}
+				signersUnique = append(signersUnique, op)
+			}
 		}
 	}
 
@@ -39,12 +33,10 @@ func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.O
 }
 
 func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	var signers []spectypes.OperatorID
-	valIdx := state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
-	sigs := state.PostConsensusContainer.Signatures[valIdx][ssv.SigningRoot(hex.EncodeToString(root[:]))]
+	sigs := state.PostConsensusContainer.GetSignatures(state.CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex, root)
+	signers := make([]spectypes.OperatorID, 0, len(sigs))
 	for op := range sigs {
 		signers = append(signers, op)
 	}
-
 	return signers
 }

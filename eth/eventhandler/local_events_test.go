@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -48,10 +49,8 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
-		if err != nil {
-			t.Fatal(err)
-		}
+		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
+		require.NoError(t, err)
 
 		require.NoError(t, eh.HandleLocalEvents(ctx, parsedData))
 	})
@@ -75,10 +74,8 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
-		if err != nil {
-			t.Fatal(err)
-		}
+		eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
+		require.NoError(t, err)
 
 		for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 			od := &storage.OperatorData{

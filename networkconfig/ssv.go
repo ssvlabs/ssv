@@ -12,20 +12,17 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./ssv_mock.go -source=./ssv.go
-
-var supportedSSVConfigs = map[string]*SSVConfig{
-	MainnetName:      MainnetSSV,
-	HoleskyName:      HoleskySSV,
-	HoleskyStageName: HoleskyStageSSV,
-	LocalTestnetName: LocalTestnetSSV,
-	HoleskyE2EName:   HoleskyE2ESSV,
-	HoodiName:        HoodiSSV,
-	HoodiStageName:   HoodiStageSSV,
-	SepoliaName:      SepoliaSSV,
+var supportedSSVConfigs = map[string]*SSV{
+	MainnetSSV.Name:      MainnetSSV,
+	HoleskySSV.Name:      HoleskySSV,
+	HoleskyStageSSV.Name: HoleskyStageSSV,
+	LocalTestnetSSV.Name: LocalTestnetSSV,
+	HoodiSSV.Name:        HoodiSSV,
+	HoodiStageSSV.Name:   HoodiStageSSV,
+	SepoliaSSV.Name:      SepoliaSSV,
 }
 
-func GetSSVConfigByName(name string) (*SSVConfig, error) {
+func SSVConfigByName(name string) (*SSV, error) {
 	if network, ok := supportedSSVConfigs[name]; ok {
 		return network, nil
 	}
@@ -33,11 +30,11 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 	return nil, fmt.Errorf("network not supported: %v", name)
 }
 
-type SSV interface {
-	GetDomainType() spectypes.DomainType
-}
-
-type SSVConfig struct {
+type SSV struct {
+	// Name looks similar to Beacon.Name, however, it's used to differentiate configs on the same
+	// beacon network, e.g. holesky, holesky-stage, holesky-e2e, disallowing node start with different config,
+	// even if the beacon network is the same.
+	Name                 string
 	DomainType           spectypes.DomainType
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr ethcommon.Address
@@ -50,12 +47,14 @@ type SSVConfig struct {
 }
 
 type SSVForks struct {
-	Alan            phase0.Epoch
+	Alan phase0.Epoch
+	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
+	// to 36_000_000.
 	GasLimit36      phase0.Epoch
 	NetworkTopology phase0.Epoch // the name may be changed in the future
 }
 
-func (s *SSVConfig) String() string {
+func (s *SSV) String() string {
 	marshaled, err := json.Marshal(s)
 	if err != nil {
 		panic(err)
@@ -65,18 +64,20 @@ func (s *SSVConfig) String() string {
 }
 
 type marshaledConfig struct {
-	DomainType              hexutil.Bytes     `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
-	RegistrySyncOffset      *big.Int          `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
-	RegistryContractAddr    ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
-	Bootnodes               []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
-	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
-	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
-	Forks                   SSVForks          `json:"Forks,omitempty" yaml:"Forks,omitempty"`
+	Name                    string            `json:"name,omitempty" yaml:"Name,omitempty"`
+	DomainType              hexutil.Bytes     `json:"domain_type,omitempty" yaml:"DomainType,omitempty"`
+	RegistrySyncOffset      *big.Int          `json:"registry_sync_offset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr    ethcommon.Address `json:"registry_contract_addr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes               []string          `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID     hexutil.Bytes     `json:"discovery_protocol_id,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	TotalEthereumValidators int               `json:"total_ethereum_validators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
+	Forks                   SSVForks          `json:"forks,omitempty" yaml:"Forks,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
-func (s *SSVConfig) marshal() *marshaledConfig {
+func (s *SSV) marshal() *marshaledConfig {
 	return &marshaledConfig{
+		Name:                    s.Name,
 		DomainType:              s.DomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
 		RegistryContractAddr:    s.RegistryContractAddr,
@@ -87,16 +88,16 @@ func (s *SSVConfig) marshal() *marshaledConfig {
 	}
 }
 
-func (s *SSVConfig) MarshalJSON() ([]byte, error) {
+func (s *SSV) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.marshal())
 }
 
-func (s *SSVConfig) MarshalYAML() (interface{}, error) {
+func (s *SSV) MarshalYAML() (interface{}, error) {
 	return s.marshal(), nil
 }
 
 // Helper method to avoid duplication between UnmarshalJSON and UnmarshalYAML
-func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
+func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	if len(aux.DomainType) != 4 {
 		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
 	}
@@ -105,7 +106,8 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
 	}
 
-	*s = SSVConfig{
+	*s = SSV{
+		Name:                    aux.Name,
 		DomainType:              spectypes.DomainType(aux.DomainType),
 		RegistrySyncOffset:      aux.RegistrySyncOffset,
 		RegistryContractAddr:    aux.RegistryContractAddr,
@@ -118,7 +120,7 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 	return nil
 }
 
-func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var aux marshaledConfig
 	if err := unmarshal(&aux); err != nil {
 		return err
@@ -127,15 +129,11 @@ func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return s.unmarshalFromConfig(aux)
 }
 
-func (s *SSVConfig) UnmarshalJSON(data []byte) error {
+func (s *SSV) UnmarshalJSON(data []byte) error {
 	var aux marshaledConfig
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 
 	return s.unmarshalFromConfig(aux)
-}
-
-func (s *SSVConfig) GetDomainType() spectypes.DomainType {
-	return s.DomainType
 }

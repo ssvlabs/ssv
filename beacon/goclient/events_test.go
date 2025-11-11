@@ -12,14 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 )
 
 func TestSubscribeToHeadEvents(t *testing.T) {
 	t.Run("Should launch event listener when go client is instantiated", func(t *testing.T) {
 		eventsEndpointSubscribedCh := make(chan any)
 		var subscribedTopics []string
-		server := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		server := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if strings.Contains(r.URL.Path, "/eth/v1/events") {
 				queryValues := r.URL.Query()
 				require.True(t, queryValues.Has("topics"))
@@ -50,7 +50,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	})
 
 	t.Run("Should create subscriber", func(t *testing.T) {
-		server := tests.MockServer(nil)
+		server := mocks.NewServer(nil)
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
@@ -64,9 +64,9 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	})
 
 	t.Run("Should not create subscriber and return error when supported topics does not contain HeadEventTopic", func(t *testing.T) {
-		server := tests.MockServer(nil)
+		server := mocks.NewServer(nil)
 		client := eventsTestClient(t, server.URL)
-		client.supportedTopics = []EventTopic{}
+		client.supportedTopics = []eventTopic{}
 		defer server.Close()
 
 		err := client.SubscribeToHeadEvents(t.Context(), "test_caller", make(chan<- *apiv1.HeadEvent))
@@ -83,7 +83,8 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 		zap.NewNop(),
 		Options{
 			BeaconNodeAddr: serverURL,
-		})
+		},
+	)
 
 	require.NoError(t, err)
 	return server

@@ -10,9 +10,9 @@ import (
 	"github.com/oleiade/lane/v2"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/async"
 )
 
@@ -80,7 +80,7 @@ func (n *p2pNetwork) startDiscovery() error {
 					zap.String("topic", topic), zap.Int("subnet", int(subnet)))
 				continue
 			}
-			currentSubnetPeers[subnet] = uint16(len(peers)) // nolint: gosec
+			currentSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
 		}
 
 		n.logger.Debug("selecting discovered peers",

@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -61,9 +61,17 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
-
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
-			h.processExecution(ctx, period, epoch, slot)
+
+			func() {
+				// Attestations and sync-committee submissions are rewarded as long as they are finished within
+				// 2 slots after the target slot (the target slot itself, plus the next slot after that), hence
+				// we are setting the deadline here to target slot + 2.
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+1)
+				defer cancel()
+
+				h.processExecution(tickCtx, period, epoch, slot)
+			}()
 
 		case <-h.reorg:
 			h.logger.Debug("🛠 reorg event")
@@ -195,7 +203,7 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 
 func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch phase0.Epoch) bool {
 	share, found := h.validatorProvider.Validator(duty.PubKey[:])
-	if !found || !share.IsParticipatingAndAttesting(epoch) {
+	if !found || !share.IsAttesting(epoch) {
 		return false
 	}
 
@@ -206,8 +214,8 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = h.beaconConfig.GetSlotsPerEpoch()
-	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
+	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {

@@ -14,20 +14,22 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-type validatorStatus int
+// committeeSubscriptionStatus reflects the state of committee subscription (whether we are subscribed to the
+// corresponding p2p topic).
+type committeeSubscriptionStatus int
 
 const (
-	validatorStatusInactive    validatorStatus = 0
-	validatorStatusSubscribing validatorStatus = 1
-	validatorStatusSubscribed  validatorStatus = 2
+	committeeSubscriptionStatusInactive    committeeSubscriptionStatus = 0
+	committeeSubscriptionStatusSubscribing committeeSubscriptionStatus = 1
+	committeeSubscriptionStatusSubscribed  committeeSubscriptionStatus = 2
 )
 
 // UseMessageRouter registers a message router to handle incoming messages
@@ -142,12 +144,13 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 	return nil
 }
 
-// SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets and the active committees/validators.
+// SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets
+// and the active committees/validators.
 func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	updatedSubnets := n.persistentSubnets
 
-	n.activeCommittees.Range(func(encodedCommittee string, statusAndSubnet validatorStatusAndSubnet) bool {
+	n.subscribedCommittees.Range(func(encodedCommittee string, statusAndSubnet statusWithSubnet) bool {
 		updatedSubnets.Set(statusAndSubnet.subnet)
 		// We use both pre-fork and post-fork subnets before fork to make sure we have everything ready when fork happens.
 		// Afterwards, we just need the post-fork algorithm.
@@ -178,19 +181,18 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	return nil
 }
 
+// subscribeCommittee subscribes us to the topic that corresponds to cid committee, also
+// ensuring we only subscribe once (when the committee is "newly activated").
 func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 	cid := share.CommitteeID()
-	committee := share.OperatorIDs()
 
-	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid), fields.OperatorIDs(committee))
-
-	statusToSet := validatorStatusAndSubnet{
-		status:     validatorStatusSubscribing,
+	statusToSet := statusWithSubnet{
+		status:     committeeSubscriptionStatusSubscribing,
 		subnet:     share.CommitteeSubnet(),
 		subnetAlan: share.CommitteeSubnetAlan(),
 	}
-	currentStatus, found := n.activeCommittees.GetOrSet(string(cid[:]), statusToSet)
-	if found && currentStatus.status != validatorStatusInactive {
+	currentStatus, found := n.subscribedCommittees.GetOrSet(string(cid[:]), statusToSet)
+	if found && currentStatus.status != committeeSubscriptionStatusInactive {
 		return nil
 	}
 
@@ -207,14 +209,16 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 		}
 	}
 
+	n.logger.Debug("subscribing to a topic corresponding to a newly activated committee", fields.CommitteeID(cid))
+
 	for topic := range topicSet {
 		if err := n.topicsCtrl.Subscribe(topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
 
-	statusToSet.status = validatorStatusSubscribed
-	n.activeCommittees.Set(string(cid[:]), statusToSet)
+	statusToSet.status = committeeSubscriptionStatusSubscribed
+	n.subscribedCommittees.Set(string(cid[:]), statusToSet)
 
 	return nil
 }
@@ -263,7 +267,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	}
 
 	cid := share.CommitteeID()
-	n.activeCommittees.Delete(string(cid[:]))
+	n.subscribedCommittees.Delete(string(cid[:]))
 	return nil
 }
 

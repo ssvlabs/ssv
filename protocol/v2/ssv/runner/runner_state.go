@@ -18,25 +18,24 @@ type State struct {
 	PostConsensusContainer *ssv.PartialSigContainer
 	RunningInstance        *instance.Instance
 	DecidedValue           []byte //spectypes.Encoder
-	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
-	StartingDuty spectypes.Duty `json:"StartingDuty,omitempty"`
-	// flags
-	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
+	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different
+	// from the actual duty operators will have decided upon.
+	CurrentDuty spectypes.Duty `json:"CurrentDuty,omitempty"`
+	// Finished marked true when the full successful cycle (pre, consensus and post) got quorum.
+	Finished bool
 }
 
 func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 	return &State{
 		PreConsensusContainer:  ssv.NewPartialSigContainer(quorum),
 		PostConsensusContainer: ssv.NewPartialSigContainer(quorum),
-
-		StartingDuty: duty,
-		Finished:     false,
+		CurrentDuty:            duty,
+		Finished:               false,
 	}
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
 func (pcs *State) ReconstructBeaconSig(container *ssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
-	// Reconstruct signatures
 	signature, err := container.ReconstructSignature(root, validatorPubKey, validatorIndex)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not reconstruct beacon sig")
@@ -84,13 +83,13 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 		Finished:               pcs.Finished,
 	}
 
-	if pcs.StartingDuty != nil {
-		if ValidatorDuty, ok := pcs.StartingDuty.(*spectypes.ValidatorDuty); ok {
+	if pcs.CurrentDuty != nil {
+		if ValidatorDuty, ok := pcs.CurrentDuty.(*spectypes.ValidatorDuty); ok {
 			alias.ValidatorDuty = ValidatorDuty
-		} else if committeeDuty, ok := pcs.StartingDuty.(*spectypes.CommitteeDuty); ok {
+		} else if committeeDuty, ok := pcs.CurrentDuty.(*spectypes.CommitteeDuty); ok {
 			alias.CommitteeDuty = committeeDuty
 		} else {
-			return nil, errors.New("can't marshal because BaseRunner.State.StartingDuty isn't ValidatorDuty or CommitteeDuty")
+			return nil, errors.New("can't marshal because BaseRunner.State.CurrentDuty isn't ValidatorDuty or CommitteeDuty")
 		}
 	}
 	byts, err := json.Marshal(alias)
@@ -99,7 +98,6 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 }
 
 func (pcs *State) UnmarshalJSON(data []byte) error {
-
 	// Create alias without duty
 	type StateAlias struct {
 		PreConsensusContainer  *ssv.PartialSigContainer
@@ -126,9 +124,9 @@ func (pcs *State) UnmarshalJSON(data []byte) error {
 
 	// Determine which type of duty was marshaled
 	if aux.ValidatorDuty != nil {
-		pcs.StartingDuty = aux.ValidatorDuty
+		pcs.CurrentDuty = aux.ValidatorDuty
 	} else if aux.CommitteeDuty != nil {
-		pcs.StartingDuty = aux.CommitteeDuty
+		pcs.CurrentDuty = aux.CommitteeDuty
 	} else {
 		panic("no starting duty")
 	}

@@ -4,25 +4,24 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	global_config "github.com/ssvlabs/ssv/cli/config"
-	"github.com/ssvlabs/ssv/logging"
+	globalcfg "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvlog "github.com/ssvlabs/ssv/observability/log"
 	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 type config struct {
-	global_config.GlobalConfig `yaml:"global"`
-	Options                    bootnode.Options `yaml:"bootnode"`
+	globalcfg.Global `yaml:"global"`
+	Options          bootnode.Options `yaml:"bootnode"`
 }
 
 var cfg config
 
-var globalArgs global_config.Args
+var globalArgs globalcfg.Args
 
 // StartBootNodeCmd is the command to start SSV boot node
 var StartBootNodeCmd = &cobra.Command{
@@ -31,32 +30,35 @@ var StartBootNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
-		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			log.Fatal(err)
+		err := globalcfg.Prepare(&cfg, &globalArgs)
+		if err != nil {
+			log.Fatalf("could not prepare config: %v", err)
 		}
 
-		err := logging.SetGlobalLogger(
+		err = ssvlog.SetGlobal(
 			cfg.LogLevel,
 			cfg.LogLevelFormat,
 			cfg.LogFormat,
-			&logging.LogFileOptions{
+			&ssvlog.LogFileOptions{
 				FilePath:   cfg.LogFilePath,
 				MaxSize:    cfg.LogFileSize,
 				MaxBackups: cfg.LogFileBackups,
 			},
 		)
-
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("could not create logger: %v", err)
 		}
 
 		logger := zap.L()
+		defer ssvlog.CapturePanic(logger)
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		networkConfig, err := networkconfig.GetSSVConfigByName(cfg.Options.Network)
+		networkConfig, err := networkconfig.SSVConfigByName(cfg.Options.Network)
 		if err != nil {
-			logger.Fatal("failed to get network config", zap.Error(err))
+			logger.Fatal("failed to get network config",
+				zap.String("network", cfg.Options.Network),
+				zap.Error(err))
 		}
 
 		bootNode, err := bootnode.New(logger, networkConfig, cfg.Options)
@@ -71,5 +73,5 @@ var StartBootNodeCmd = &cobra.Command{
 }
 
 func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartBootNodeCmd)
+	globalcfg.ProcessArgs(&cfg, &globalArgs, StartBootNodeCmd)
 }

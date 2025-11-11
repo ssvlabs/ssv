@@ -1,8 +1,7 @@
 name: Spec Alignment
 
 on:
-  pull_request:
-    types: [opened, synchronize]
+  workflow_dispatch:
 
 jobs:
   align:

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -13,16 +12,15 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -78,28 +76,20 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 }
 
 // runConsumeQueueAsync wraps ConsumeQueue execution in a goroutine.
-func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
-	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
-	committeeRunner *runner.CommitteeRunner) {
-
+func runConsumeQueueAsync(
+	t *testing.T,
+	ctx context.Context,
+	committee *Committee,
+	q queueContainer,
+	logger *zap.Logger,
+	handler MessageHandler,
+	committeeRunner *runner.CommitteeRunner,
+) {
 	t.Helper()
 
-	errCh := make(chan error, 1)
 	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			errCh <- err
-		}
-		close(errCh)
+		committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
 	}()
-
-	select {
-	case err, ok := <-errCh:
-		if ok && err != nil {
-			t.Errorf("ConsumeQueue returned an unexpected error: %v", err)
-		}
-	default:
-	}
 }
 
 // collectMessagesFromQueue collects and returns messages received on the provided channel.
@@ -145,10 +135,10 @@ func collectMessagesFromQueue(t *testing.T, msgChannel <-chan *queue.SSVMessage,
 
 // setupMessageCollection creates a message channel and handler function for queue message processing.
 // It returns the message channel and the handler function that adds messages to this channel.
-func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.Context, *zap.Logger, *queue.SSVMessage) error) {
+func setupMessageCollection(capacity int) (chan *queue.SSVMessage, MessageHandler) {
 	msgChannel := make(chan *queue.SSVMessage, max(1, capacity))
 
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		msgChannel <- msg
 		return nil
 	}
@@ -167,23 +157,21 @@ func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.
 // 4. Verify that a new queue was created for the message's slot
 // 5. Confirm the queue has the correct properties (non-nil and proper slot)
 func TestHandleMessageCreatesQueue(t *testing.T) {
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	slot := phase0.Slot(123)
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
-	mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot)
 
 	committee := &Committee{
-		ctx:             ctx,
+		logger:          logger,
+		networkConfig:   networkconfig.TestNetwork,
 		Queues:          make(map[phase0.Slot]queueContainer),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig:    mockBeaconConfig,
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
@@ -195,7 +183,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	}
 	testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
 
-	committee.HandleMessage(ctx, logger, testMsg)
+	committee.EnqueueMessage(ctx, testMsg)
 
 	q, ok := committee.Queues[slot]
 
@@ -226,15 +214,16 @@ func TestConsumeQueueBasic(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
-		ctx:          ctx,
-		Queues:       make(map[phase0.Slot]queueContainer),
-		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig: networkconfig.NewMockBeacon(ctrl),
+		logger:        logger,
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -256,7 +245,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID2, qbftMsg2)
 
 	q := queueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -295,70 +284,6 @@ func TestConsumeQueueBasic(t *testing.T) {
 	assert.Equal(t, specqbft.PrepareMsgType, receivedMessages[1].Body.(*specqbft.Message).MsgType)
 }
 
-// TestStartConsumeQueue tests the StartConsumeQueue method, which orchestrates queue processing
-// for a specific slot. This test verifies error handling in various scenarios:
-// - Missing queue for a slot
-// - Missing runner for a slot
-// - Successful queue consumption start
-//
-// Flow:
-// 1. Set up a committee with a queue for a specific slot and a corresponding runner
-// 2. Test scenario 1: Call StartConsumeQueue with a duty for a nonexistent slot (should error)
-// 3. Test scenario 2: Delete runner and call StartConsumeQueue for the existing slot (should error)
-// 4. Test scenario 3: Restore runner and call StartConsumeQueue for the valid slot (should succeed)
-func TestStartConsumeQueue(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	logger, _ := zap.NewDevelopment()
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
-	mockBeaconConfig.EXPECT().EstimatedTimeAtSlot(gomock.Any())
-
-	committee := &Committee{
-		ctx:          ctx,
-		Queues:       make(map[phase0.Slot]queueContainer),
-		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig: mockBeaconConfig,
-	}
-
-	slot := phase0.Slot(123)
-
-	q := queueContainer{
-		Q: queue.New(1000),
-		queueState: &queue.State{
-			HasRunningInstance: false,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-		},
-	}
-	committee.Queues[slot] = q
-
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{},
-		},
-	}
-	committee.Runners[slot] = committeeRunner
-
-	duty := &spectypes.CommitteeDuty{
-		Slot: phase0.Slot(124),
-	}
-	err := committee.StartConsumeQueue(t.Context(), logger, duty)
-	assert.Error(t, err)
-
-	duty.Slot = slot
-	delete(committee.Runners, slot)
-	err = committee.StartConsumeQueue(t.Context(), logger, duty)
-	assert.Error(t, err)
-
-	committee.Runners[slot] = committeeRunner
-	err = committee.StartConsumeQueue(t.Context(), logger, duty)
-	assert.NoError(t, err)
-}
-
 // TestFilterNoProposalAccepted tests the message filtering behavior when no proposal
 // is accepted for the current round. In this state, the queue should:
 // - Process proposal messages (always)
@@ -375,14 +300,14 @@ func TestStartConsumeQueue(t *testing.T) {
 // 6. Verify prepare and commit messages for current round are filtered out
 // 7. Confirm messages from future rounds are processed regardless of type
 func TestFilterNoProposalAccepted(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -425,7 +350,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	})
 
 	q := queueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -494,14 +419,14 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 // 5. Verify only the consensus message is processed
 // 6. Confirm the partial signature message was filtered out
 func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -531,7 +456,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
 	q := queueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -573,14 +498,14 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 // TestFilterDecidedAllowsAll verifies that all message types are processed
 // when the consensus instance has reached a decision.
 func TestFilterDecidedAllowsAll(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -610,7 +535,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
 	q := queueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -665,7 +590,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 // 3. Second test: Use a runner with proposal accepted where prepare should process
 // 4. Verify prepare messages are properly filtered based on ProposalAccepted state
 func TestChangingFilterState(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 
 	slot := phase0.Slot(123)
 	round := specqbft.Round(1)
@@ -691,7 +616,7 @@ func TestChangingFilterState(t *testing.T) {
 		}
 
 		q := queueContainer{
-			Q: queue.New(1),
+			Q: queue.New(logger, 1),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -701,8 +626,10 @@ func TestChangingFilterState(t *testing.T) {
 		}
 		q.Q.TryPush(prepareMsg)
 
-		c := &Committee{}
-		_ = c.ConsumeQueue(ctx, q, logger, handler, rnr)
+		c := &Committee{
+			networkConfig: networkconfig.TestNetwork,
+		}
+		c.ConsumeQueue(ctx, logger, q, handler, rnr)
 		return seen
 	}
 
@@ -802,20 +729,20 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			logger, _ := zap.NewDevelopment()
+			logger := log.TestLogger(t)
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
 
 			committee := &Committee{
-				ctx:     ctx,
-				Queues:  make(map[phase0.Slot]queueContainer),
-				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+				networkConfig: networkconfig.TestNetwork,
+				Queues:        make(map[phase0.Slot]queueContainer),
+				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
 
 			q := queueContainer{
-				Q: queue.New(10),
+				Q: queue.New(logger, 10),
 				queueState: &queue.State{
 					HasRunningInstance: tc.hasRunningDuty,
 					Height:             specqbft.Height(slot),
@@ -852,7 +779,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
 
-			handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+			handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 				msgChannel <- msg
 				return nil
 			}
@@ -963,20 +890,20 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			logger, _ := zap.NewDevelopment()
+			logger := log.TestLogger(t)
 			ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 			defer cancel()
 
 			committee := &Committee{
-				ctx:     ctx,
-				Queues:  make(map[phase0.Slot]queueContainer),
-				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+				networkConfig: networkconfig.TestNetwork,
+				Queues:        make(map[phase0.Slot]queueContainer),
+				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
 
 			q := queueContainer{
-				Q: queue.New(10),
+				Q: queue.New(logger, 10),
 				queueState: &queue.State{
 					HasRunningInstance: true,
 					Height:             specqbft.Height(slot),
@@ -1049,14 +976,14 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 //  4. Commit
 //  5. RoundChange (lowest among consensus types)
 func TestConsumeQueuePrioritization(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	committee := &Committee{
-		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -1084,7 +1011,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	}
 
 	q := queueContainer{
-		Q: queue.New(10),
+		Q: queue.New(logger, 10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1143,7 +1070,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	assert.Equal(t, message.SSVEventMsgType, received[0].MsgType)
 	assert.Equal(t, eventMsgBody, received[0].Body.(*types.EventMsg))
 
-	var actual []specqbft.MessageType
+	actual := make([]specqbft.MessageType, 0, len(received[1:]))
 	for _, m := range received[1:] {
 		actual = append(actual, m.Body.(*specqbft.Message).MsgType)
 	}
@@ -1170,27 +1097,24 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	slot := phase0.Slot(123)
 
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
-	mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).Times(3)
-
 	queueCapacity := 2
 	committee := &Committee{
-		ctx:             ctx,
+		logger:          logger,
+		networkConfig:   networkconfig.TestNetwork,
 		Queues:          make(map[phase0.Slot]queueContainer),
 		CommitteeMember: &spectypes.CommitteeMember{},
-		beaconConfig:    mockBeaconConfig,
 	}
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
 	qContainer := queueContainer{
-		Q: queue.New(queueCapacity),
+		Q: queue.New(logger, queueCapacity),
 		queueState: &queue.State{
 			HasRunningInstance: false,
 			Height:             specqbft.Height(slot),
@@ -1207,7 +1131,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		msgID[3] = byte(i) // Unique ID
 		qbftMsg := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType}
 		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
-		committee.HandleMessage(ctx, logger, testMsg)
+		committee.EnqueueMessage(ctx, testMsg)
 	}
 
 	require.Equal(t, queueCapacity, qContainer.Q.Len())
@@ -1218,7 +1142,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	qbftMsgDrop := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.PrepareMsgType}
 	testMsgDrop := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, droppedMsgID, qbftMsgDrop)
 
-	committee.HandleMessage(ctx, logger, testMsgDrop)
+	committee.EnqueueMessage(ctx, testMsgDrop)
 
 	assert.Equal(t, queueCapacity, qContainer.Q.Len())
 
@@ -1266,29 +1190,29 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 }
 
 // TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
-// processing further messages if the handler returns runner.ErrNoValidDuties.
+// processing further messages if the handler returns runner.ErrNoValidDutiesToExecute.
 //
 // Flow:
 //  1. Set up a committee and a queue container with multiple messages.
 //  2. Initialize a basic committee runner.
 //  3. Define a message handler that:
 //     a. Increments a counter for processed messages.
-//     b. Returns runner.ErrNoValidDuties if a specific (e.g., the first) message is processed.
+//     b. Returns runner.ErrNoValidDutiesToExecute if a specific (e.g., the first) message is processed.
 //  4. Call ConsumeQueue with this handler.
 //  5. Verify that only the message(s) processed before the error was returned were handled.
 //  6. Verify that remaining messages are still in the queue.
 func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
-		ctx: ctx,
+		networkConfig: networkconfig.TestNetwork,
 	}
 
 	slot := phase0.Slot(123)
 	q := queueContainer{
-		Q: queue.New(10),
+		Q: queue.New(logger, 10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1310,21 +1234,20 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	}
 
 	var processedMessagesCount int32
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		atomic.AddInt32(&processedMessagesCount, 1)
 		if msg.MsgID == msg1.MsgID { // Return error after processing the first message
-			return runner.ErrNoValidDuties
+			return runner.ErrNoValidDutiesToExecute
 		}
 		return nil
 	}
 
 	// Run ConsumeQueue. It should stop after processing the first message because the handler
-	// returns runner.ErrNoValidDuties.
+	// returns runner.ErrNoValidDutiesToExecute.
 	// The ConsumeQueue method itself is designed to break its processing loop and return nil
-	// when its handler signals ErrNoValidDuties, treating it as a normal stop condition for the queue.
+	// when its handler signals ErrNoValidDutiesToExecute, treating it as a normal stop condition for the queue.
 	// Thus, we expect no error from the ConsumeQueue call.
-	err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	require.NoError(t, err)
+	committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&processedMessagesCount))
 	assert.Equal(t, 2, q.Q.Len())
@@ -1343,19 +1266,19 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 //  7. Verify that the priorities of popped messages are non-decreasing.
 //  8. Verify that the actual counts of processed messages per priority bucket match the expected counts.
 func TestConsumeQueueBurstTraffic(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
+	logger := log.TestLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	// --- Setup a single-slot committee and its queue ---
 	slot := phase0.Slot(42)
 	committee := &Committee{
-		ctx:     ctx,
-		Queues:  make(map[phase0.Slot]queueContainer),
-		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 	qc := queueContainer{
-		Q: queue.New(1000),
+		Q: queue.New(logger, 1000),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1481,14 +1404,9 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 		return nil
 	}
 
-	errCh := make(chan error, 1)
 	go func() {
 		defer close(bucketChan)
-		err := committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			errCh <- err
-		}
-		close(errCh)
+		committee.ConsumeQueue(ctx, logger, qc, handler, committee.Runners[slot])
 	}()
 
 	// Wait for exactly len(allMsgs) messages (or fail on timeout)
@@ -1556,23 +1474,22 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mainLogger, _ := zap.NewDevelopment()
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
+	logger := log.TestLogger(t)
 
 	t.Run("drop when inbox strictly full", func(t *testing.T) {
-		logger := mainLogger.Named("DropWhenInboxStrictlyFull")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
+		logger = logger.Named("DropWhenInboxStrictlyFull")
+
 		slot := phase0.Slot(123)
-		mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).AnyTimes()
 
 		committee := &Committee{
-			ctx:             ctx,
+			logger:          logger,
+			networkConfig:   networkconfig.TestNetwork,
 			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			beaconConfig:    mockBeaconConfig,
 		}
 
 		currentRound := specqbft.Round(1)
@@ -1580,7 +1497,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		queueCapacity := 3
 
 		qContainer := queueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1595,14 +1512,14 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			msgID := spectypes.MessageID{byte(i + 1)}
 			prepareMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareMsgBody)
-			committee.HandleMessage(ctx, logger, testMsg)
+			committee.EnqueueMessage(ctx, testMsg)
 		}
 		require.Equal(t, queueCapacity, qContainer.Q.Len())
 
 		// 2. Attempt to HandleMessage a new Prepare message for the *nextRound*.
 		poppableMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.PrepareMsgType}
 		poppableTestMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{0xAA}, poppableMsgBody)
-		committee.HandleMessage(ctx, logger, poppableTestMsg)
+		committee.EnqueueMessage(ctx, poppableTestMsg)
 
 		// 3. Verify the poppable message was dropped.
 		assert.Equal(t, queueCapacity, qContainer.Q.Len())
@@ -1636,26 +1553,26 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	})
 
 	t.Run("high priority messages dropped when queue full", func(t *testing.T) {
-		logger := mainLogger.Named("HighPriorityDropping")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
+		logger = logger.Named("HighPriorityDropping")
+
 		slot := phase0.Slot(789)
-		mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).AnyTimes()
 
 		committee := &Committee{
-			ctx:             ctx,
+			logger:          logger,
+			networkConfig:   networkconfig.TestNetwork,
 			Queues:          make(map[phase0.Slot]queueContainer),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
-			beaconConfig:    mockBeaconConfig,
 		}
 
 		currentRound := specqbft.Round(1)
 		queueCapacity := 3
 
 		qContainer := queueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1674,7 +1591,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 				MsgType: specqbft.CommitMsgType, // Low priority consensus message
 			}
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, commitMsgBody)
-			committee.HandleMessage(ctx, logger, testMsg)
+			committee.EnqueueMessage(ctx, testMsg)
 		}
 		require.Equal(t, queueCapacity, qContainer.Q.Len(), "Queue should be at capacity")
 
@@ -1693,7 +1610,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		// Attempt to push using HandleMessage
 		// This should be dropped because the queue is full, even though it's a higher priority message
-		committee.HandleMessage(ctx, logger, highPriorityMsg)
+		committee.EnqueueMessage(ctx, highPriorityMsg)
 
 		// 3. Verify queue length still at capacity
 		assert.Equal(t, queueCapacity, qContainer.Q.Len())
@@ -1733,14 +1650,15 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	})
 
 	t.Run("prioritization when saturated with filtered messages", func(t *testing.T) {
-		logger := mainLogger.Named("PrioritizationWhenSaturated")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
+		logger := logger.Named("PrioritizationWhenSaturated")
+
 		committee := &Committee{
-			ctx:     ctx,
-			Queues:  make(map[phase0.Slot]queueContainer),
-			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+			networkConfig: networkconfig.TestNetwork,
+			Queues:        make(map[phase0.Slot]queueContainer),
+			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
 
 		queueCapacity := 5
@@ -1763,7 +1681,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		slot := phase0.Slot(456)
 
 		q := queueContainer{
-			Q: queue.New(queueCapacity),
+			Q: queue.New(logger, queueCapacity),
 			queueState: &queue.State{
 				HasRunningInstance: true,
 				Height:             specqbft.Height(slot),
@@ -1790,13 +1708,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		var consumerWg sync.WaitGroup
 		consumerWg.Add(1)
 
-		consumerErrCh := make(chan error, 1)
 		go func() {
 			defer consumerWg.Done()
-			err := committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
-			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				consumerErrCh <- err
-			}
+			committee.ConsumeQueue(consumerCtx, logger, q, processFn, committeeRunner)
 		}()
 
 		// Fill with filtered Prepare messages
@@ -1849,13 +1763,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		var consumer2Wg sync.WaitGroup
 		consumer2Wg.Add(1)
 
-		consumer2ErrCh := make(chan error, 1)
 		go func() {
 			defer consumer2Wg.Done()
-			err := committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
-			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				consumer2ErrCh <- err
-			}
+			committee.ConsumeQueue(consumer2Ctx, logger, q, processFn, committeeRunner)
 		}()
 
 		// Observe how many of the old Prepares now drain

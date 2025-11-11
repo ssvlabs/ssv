@@ -9,7 +9,6 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -27,6 +26,13 @@ const (
 )
 
 // SSVShare is a spectypes.Share with extra data that fully describes SSV validator share.
+//
+// WARNING: Do NOT use FeeRecipientAddress from spectypes.Share - it's deprecated.
+// Fee recipients are stored separately because SSVShare is accessed concurrently by multiple
+// goroutines (network handlers, duty runners, API handlers, etc). Updating FeeRecipientAddress
+// here would cause torn reads - corrupted addresses when one goroutine reads while another writes.
+//
+// Always use ValidatorStore.GetFeeRecipient() which provides proper synchronization.
 type SSVShare struct {
 	spectypes.Share
 
@@ -99,11 +105,6 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.Status != eth2apiv1.ValidatorStateUnknown
 }
 
-func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
-	return s.HasBeaconMetadata() &&
-		(s.Status.IsAttesting() || (s.Status == eth2apiv1.ValidatorStatePendingQueued && s.ActivationEpoch <= epoch))
-}
-
 // Pending returns true if the validator is pending
 func (s *SSVShare) Pending() bool {
 	return s.Status.IsPending()
@@ -130,19 +131,29 @@ func (s *SSVShare) Slashed() bool {
 }
 
 // IsParticipating returns true if the validator can participate in *any* SSV duty at the given epoch.
-// Note: the validator may be eligible only for sync committee, but not to attest and propose. See IsParticipatingAndAttesting.
+// Note: the validator may be eligible only for sync committee, but not to attest and propose. See IsAttesting.
 // Requirements: not liquidated and attesting or exited in the current or previous sync committee period.
-func (s *SSVShare) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
-	return !s.Liquidated && s.IsSyncCommitteeEligible(beaconCfg, epoch)
+func (s *SSVShare) IsParticipating(beaconCfg *networkconfig.Beacon, epoch phase0.Epoch) bool {
+	return s.isSyncCommitteeEligible(beaconCfg, epoch)
 }
 
-// IsParticipatingAndAttesting returns true if the validator can participate in *all* SSV duties at the given epoch.
+// IsAttesting returns true if the validator can participate in *all* SSV duties at the given epoch.
 // Requirements: not liquidated and attesting.
-func (s *SSVShare) IsParticipatingAndAttesting(epoch phase0.Epoch) bool {
-	return !s.Liquidated && s.IsAttesting(epoch)
+func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
+	if s.Liquidated || !s.HasBeaconMetadata() {
+		return false
+	}
+	if s.Status.IsAttesting() {
+		return true
+	}
+
+	return s.Status == eth2apiv1.ValidatorStatePendingQueued && s.ActivationEpoch <= epoch
 }
 
-func (s *SSVShare) IsSyncCommitteeEligible(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
+func (s *SSVShare) isSyncCommitteeEligible(beaconCfg *networkconfig.Beacon, epoch phase0.Epoch) bool {
+	if s.Liquidated {
+		return false
+	}
 	if s.IsAttesting(epoch) {
 		return true
 	}
@@ -164,10 +175,6 @@ func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {
 
 func (s *SSVShare) MinParticipationEpoch() phase0.Epoch {
 	return s.minParticipationEpoch
-}
-
-func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
-	s.FeeRecipientAddress = feeRecipient
 }
 
 // CommitteeID safely retrieves or computes the CommitteeID.
