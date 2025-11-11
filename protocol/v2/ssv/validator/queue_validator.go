@@ -194,7 +194,7 @@ func (v *Validator) StartQueueConsumer(
 				}
 
 				msgCtx, msgSpan := tracer.Start(msgCtx,
-					observability.InstrumentName(observabilityNamespace, "process_committee_message"),
+					observability.InstrumentName(observabilityNamespace, "process_validator_message"),
 					spanOpts...,
 				)
 				msgState = &messageProcessingState{
