@@ -236,7 +236,7 @@ func (v *Validator) StartQueueConsumer(
 						attribute.String("retry_reason", err.Error()),
 						attribute.Int64("attempt", currentAttempt),
 					))
-					go func(msg *queue.SSVMessage, msgState *messageProcessingState) {
+					go func(msg *queue.SSVMessage, msgState *messageProcessingState, attempt int64) {
 						select {
 						case <-time.After(retryDelay):
 						case <-msgState.ctx.Done():
@@ -246,13 +246,13 @@ func (v *Validator) StartQueueConsumer(
 							const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
 							msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
 							msgState.span.AddEvent(droppingMsgDueToQueueIsFullEvent, trace.WithAttributes(
-								attribute.Int64("attempt", currentAttempt),
+								attribute.Int64("attempt", attempt),
 							))
 							msgState.span.SetStatus(codes.Error, droppingMsgDueToQueueIsFullEvent)
 							msgState.span.End()
 							msgStates.Delete(msgKey)
 						}
-					}(msg, msgState)
+					}(msg, msgState, currentAttempt)
 				default:
 					var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
 					msgLogger.Warn(droppingMsgDueToErrorEvent, zap.Error(err))
