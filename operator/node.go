@@ -119,8 +119,8 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start(ctx context.Context) error {
-	n.logger.Info("shota is starting SSV operator node...")
-	fmt.Print("shota is starting SSV operator node...")
+	n.logger.Info("shota and roy starting SSV operator node...")
+	fmt.Print("shota and roy starting SSV operator node...")
 
 	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
