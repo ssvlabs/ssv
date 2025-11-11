@@ -147,6 +147,13 @@ func (c *Committee) ConsumeQueue(
 		// Handle the message, potentially scheduling a message-replay for later.
 		err = handler(ctx, msgLogger, msg)
 		if err != nil {
+			msgLogger = logWithMessageMetadata(msgLogger, msg)
+
+			if shouldDropNoRunningDutyError(err, rnr) {
+				msgLogger.Debug("dropping message because duty already finished", zap.Error(err))
+				continue
+			}
+
 			// We'll re-queue the message to be replayed later in case the error we got is retryable.
 			// We are aiming to cover most of the slot time (~12s), but we don't need to cover the
 			// full slot (all 12s) since most duties must finish well before that anyway, and will
@@ -162,7 +169,7 @@ func (c *Committee) ConsumeQueue(
 			}
 			msgRetryCnt := msgRetryItem.Value()
 
-			msgLogger = logWithMessageMetadata(msgLogger, msg).
+			msgLogger = msgLogger.
 				With(zap.String("message_identifier", string(c.messageID(msg)))).
 				With(zap.Int64("attempt", msgRetryCnt+1))
 
@@ -309,4 +316,28 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 // messageID is a wrapper that provides a logger to report errors (if any).
 func (c *Committee) messageID(msg *queue.SSVMessage) msgIDType {
 	return messageID(msg, c.logger)
+}
+
+func shouldDropNoRunningDutyError(err error, rnr *runner.CommitteeRunner) bool {
+	if !isNoRunningDutyError(err) {
+		return false
+	}
+	if rnr == nil || rnr.BaseRunner == nil {
+		return false
+	}
+	state := rnr.BaseRunner.State
+	if state == nil {
+		return false // duty hasn't started yet
+	}
+
+	return !rnr.HasRunningDuty()
+}
+
+func isNoRunningDutyError(err error) bool {
+	if errors.Is(err, runner.ErrNoRunningDuty) {
+		return true
+	}
+
+	var specErr *spectypes.Error
+	return errors.As(err, &specErr) && specErr.Code == spectypes.NoRunningDutyErrorCode
 }

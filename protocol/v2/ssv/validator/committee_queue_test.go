@@ -1253,6 +1253,208 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	assert.Equal(t, 2, q.Q.Len())
 }
 
+// TestConsumeQueueDropsNoRunningDutyErrors ensures that retryable errors caused by a finished duty
+// are not re-queued endlessly.
+func TestConsumeQueueDropsNoRunningDutyErrors(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	slot := phase0.Slot(456)
+
+	q := queueContainer{
+		Q: queue.New(logger, 5),
+		queueState: &queue.State{
+			HasRunningInstance: false,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+		},
+	}
+
+	msg := makeTestSSVMessage(
+		t,
+		spectypes.SSVConsensusMsgType,
+		spectypes.MessageID{9},
+		&specqbft.Message{
+			Height: specqbft.Height(slot),
+			Round:  1,
+		},
+	)
+	require.True(t, q.Q.TryPush(msg))
+
+	committee := &Committee{
+		logger:        logger,
+		networkConfig: networkconfig.TestNetwork,
+	}
+	committeeRunner := &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{
+			State: &runner.State{
+				Finished: true,
+				CurrentDuty: &spectypes.CommitteeDuty{
+					Slot: slot,
+				},
+			},
+		},
+	}
+
+	var attempts int32
+	handler := func(context.Context, *zap.Logger, *queue.SSVMessage) error {
+		atomic.AddInt32(&attempts, 1)
+		return runner.NewRetryableError(
+			spectypes.WrapError(spectypes.NoRunningDutyErrorCode, runner.ErrNoRunningDuty),
+		)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
+		close(done)
+	}()
+
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt32(&attempts) == 1
+	}, time.Second, 10*time.Millisecond)
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&attempts), "message should not be retried after duty finishes")
+	assert.Zero(t, q.Q.Len(), "message must not be re-enqueued once duty finished")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ConsumeQueue did not exit in time")
+	}
+}
+
+// TestConsumeQueueRetriesNoRunningDutyErrors confirms that retryable ErrNoRunningDuty errors are replayed
+// while the duty is still in progress.
+func TestConsumeQueueRetriesNoRunningDutyErrors(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	slot := phase0.Slot(789)
+	q := queueContainer{
+		Q: queue.New(logger, 5),
+		queueState: &queue.State{
+			HasRunningInstance: true,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+		},
+	}
+
+	msg := makeTestSSVMessage(
+		t,
+		spectypes.SSVConsensusMsgType,
+		spectypes.MessageID{10},
+		&specqbft.Message{
+			Height: specqbft.Height(slot),
+			Round:  1,
+		},
+	)
+	require.True(t, q.Q.TryPush(msg))
+
+	committee := &Committee{
+		logger:        logger,
+		networkConfig: networkconfig.TestNetwork,
+	}
+	committeeRunner := &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{
+			State: &runner.State{
+				Finished: false,
+				CurrentDuty: &spectypes.CommitteeDuty{
+					Slot: slot,
+				},
+			},
+		},
+	}
+
+	var attempts int32
+	handler := func(context.Context, *zap.Logger, *queue.SSVMessage) error {
+		atomic.AddInt32(&attempts, 1)
+		return runner.NewRetryableError(
+			spectypes.WrapError(spectypes.NoRunningDutyErrorCode, runner.ErrNoRunningDuty),
+		)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
+		close(done)
+	}()
+
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt32(&attempts) >= 2
+	}, time.Second, 10*time.Millisecond)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ConsumeQueue did not exit in time")
+	}
+}
+
+// TestConsumeQueueRetriesNoRunningDutyErrorsBeforeRunnerStarts ensures messages keep retrying
+// while the duty hasn't started yet (runner has no state).
+func TestConsumeQueueRetriesNoRunningDutyErrorsBeforeRunnerStarts(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	slot := phase0.Slot(654)
+	q := queueContainer{
+		Q: queue.New(logger, 5),
+		queueState: &queue.State{
+			HasRunningInstance: false,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+		},
+	}
+
+	msg := makeTestSSVMessage(
+		t,
+		spectypes.SSVConsensusMsgType,
+		spectypes.MessageID{12},
+		&specqbft.Message{Height: specqbft.Height(slot), Round: 1},
+	)
+	require.True(t, q.Q.TryPush(msg))
+
+	committee := &Committee{
+		logger:        logger,
+		networkConfig: networkconfig.TestNetwork,
+	}
+	committeeRunner := &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{},
+	}
+
+	var attempts int32
+	handler := func(context.Context, *zap.Logger, *queue.SSVMessage) error {
+		atomic.AddInt32(&attempts, 1)
+		return runner.NewRetryableError(
+			spectypes.WrapError(spectypes.NoRunningDutyErrorCode, runner.ErrNoRunningDuty),
+		)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
+		close(done)
+	}()
+
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt32(&attempts) >= 2
+	}, time.Second, 10*time.Millisecond)
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ConsumeQueue did not exit in time")
+	}
+}
+
 // TestConsumeQueueBurstTraffic verifies that under a burst of interleaved messages,
 // the queue pops messages in non-decreasing priority order and processes all enqueued messages.
 //
