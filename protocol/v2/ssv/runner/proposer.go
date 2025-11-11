@@ -16,7 +16,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -112,17 +111,12 @@ func (r *ProposerRunner) HasRunningDuty() bool {
 }
 
 func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
-		trace.WithAttributes(
-			observability.BeaconSlotAttribute(signedMsg.Slot),
-			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return tracedErrorf(span, "failed processing randao message: %w", err)
+		return fmt.Errorf("failed processing randao message: %w", err)
 	}
 
 	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
@@ -134,7 +128,6 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {
 		span.AddEvent("no quorum")
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -150,7 +143,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return tracedErrorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
+		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	logger.Debug(
 		"🧩 reconstructed partial RANDAO signatures",
@@ -183,7 +176,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.BlockTime(time.Since(start)),
 			zap.Error(err))
-		return tracedErrorf(span, "%s: %w", errMsg, err)
+		return fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	// Log essentials about the retrieved block.
@@ -222,12 +215,12 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
 	if err != nil {
-		return tracedErrorf(span, "failed to blind full block: %w", err)
+		return fmt.Errorf("failed to blind full block: %w", err)
 	}
 
 	byts, err := blindedMarshaler.MarshalSSZ()
 	if err != nil {
-		return tracedErrorf(span, "could not marshal blinded beacon block: %w", err)
+		return fmt.Errorf("could not marshal blinded beacon block: %w", err)
 	}
 
 	// Store the original block (we are only interested in full blocks) for later re-use
@@ -246,33 +239,25 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	r.measurements.StartConsensus()
 
 	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, r.ValCheck); err != nil {
-		return tracedErrorf(span, "can't start new duty runner instance for duty: %w", err)
+		return fmt.Errorf("can't start new duty runner instance for duty: %w", err)
 	}
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
-		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
-			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
-			observability.RunnerRoleAttribute(signedMsg.SSVMessage.GetID().GetRoleType()),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("checking if instance is decided")
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
-		return tracedErrorf(span, "failed processing consensus message: %w", err)
+		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
 
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
 		span.AddEvent("instance is not decided")
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -290,7 +275,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	versionedBlock, blkRootToSign, err := cd.GetBlockData()
 	if err != nil {
-		return tracedErrorf(span, "could not get block data from consensus data: %w", err)
+		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
 
 	if versionedBlock.Blinded {
@@ -315,7 +300,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		spectypes.DomainProposer,
 	)
 	if err != nil {
-		return tracedErrorf(span, "failed signing block: %w", err)
+		return fmt.Errorf("failed signing block: %w", err)
 	}
 
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
@@ -327,7 +312,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
-		return tracedErrorf(span, "could not encode post consensus partial signature message: %w", err)
+		return fmt.Errorf("could not encode post consensus partial signature message: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -353,7 +338,6 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -362,21 +346,15 @@ func (r *ProposerRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, 
 }
 
 func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
-		trace.WithAttributes(
-			observability.BeaconSlotAttribute(signedMsg.Slot),
-			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return tracedErrorf(span, "failed processing post consensus message: %w", err)
+		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
 	if !hasQuorum {
 		span.AddEvent("no quorum")
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -388,7 +366,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return tracedErrorf(span, "got post-consensus quorum but it has invalid signatures: %w", err)
+		return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
@@ -423,11 +401,11 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return tracedErrorf(span, "could not decode decided validator consensus data: %w", err)
+		return fmt.Errorf("could not decode decided validator consensus data: %w", err)
 	}
 	vBlk, _, err := validatorConsensusData.GetBlockData()
 	if err != nil {
-		return tracedErrorf(span, "could not get block data from consensus data: %w", err)
+		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
 	leaderID := r.GetState().RunningInstance.Proposer()
 	if r.cachedFullBlock != nil && leaderID == r.operatorSigner.GetOperatorID() {
@@ -464,7 +442,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		logger.Error(errMsg,
 			fields.SubmissionTime(time.Since(start)),
 			zap.Error(err))
-		return tracedErrorf(span, "%s: %w", errMsg, err)
+		return fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	const eventMsg = "✅ successfully submitted block proposal"
@@ -492,7 +470,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		spectypes.BNRoleProposer,
 	)
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -523,12 +500,8 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	r.measurements.StartDutyFlow()
 	r.measurements.StartPreConsensus()
@@ -555,7 +528,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		spectypes.DomainRandao,
 	)
 	if err != nil {
-		return tracedErrorf(span, "could not sign randao: %w", err)
+		return fmt.Errorf("could not sign randao: %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
@@ -567,7 +540,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return tracedErrorf(span, "could not encode randao partial signature message: %w", err)
+		return fmt.Errorf("could not encode randao partial signature message: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -579,7 +552,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return tracedErrorf(span, "could not sign SSVMessage: %w", err)
+		return fmt.Errorf("could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -590,12 +563,11 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return tracedErrorf(span, "can't broadcast partial randao sig: %w", err)
+		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
 	}
 
 	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

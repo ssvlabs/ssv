@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"hash"
 	"sync"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -105,22 +105,16 @@ func (r *AggregatorRunner) HasRunningDuty() bool {
 }
 
 func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
-		trace.WithAttributes(
-			observability.BeaconSlotAttribute(signedMsg.Slot),
-			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return tracedErrorf(span, "failed processing selection proof message: %w", err)
+		return fmt.Errorf("failed processing selection proof message: %w", err)
 	}
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {
 		span.AddEvent("no quorum")
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -139,7 +133,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return tracedErrorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
+		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
 	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
@@ -161,7 +155,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		const aggDutyWontBeNeededEvent = "aggregation duty won't be needed from this validator for this slot"
 		span.AddEvent(aggDutyWontBeNeededEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
 		logger.Debug(aggDutyWontBeNeededEvent, zap.Any("signer", signer))
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -173,13 +166,13 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex)))
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
-		return tracedErrorf(span, "failed to submit aggregate and proof: %w", err)
+		return fmt.Errorf("failed to submit aggregate and proof: %w", err)
 	}
 	r.measurements.ContinueDutyFlow()
 
 	byts, err := res.MarshalSSZ()
 	if err != nil {
-		return tracedErrorf(span, "could not marshal aggregate and proof: %w", err)
+		return fmt.Errorf("could not marshal aggregate and proof: %w", err)
 	}
 	input := &spectypes.ValidatorConsensusData{
 		Duty:    *duty,
@@ -188,33 +181,25 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	}
 
 	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, r.ValCheck); err != nil {
-		return tracedErrorf(span, "can't start new duty runner instance for duty: %w", err)
+		return fmt.Errorf("can't start new duty runner instance for duty: %w", err)
 	}
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
-		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
-			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
-			observability.RunnerRoleAttribute(signedMsg.SSVMessage.GetID().GetRoleType()),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("checking if instance is decided")
 	decided, encDecidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
-		return tracedErrorf(span, "failed processing consensus message: %w", err)
+		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
 
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
 		span.AddEvent("instance is not decided")
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -232,7 +217,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	_, aggregateAndProofHashRoot, err := decidedValue.GetAggregateAndProof()
 	if err != nil {
-		return tracedErrorf(span, "could not get aggregate and proof: %w", err)
+		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
 	span.AddEvent("signing post consensus")
@@ -246,7 +231,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		spectypes.DomainAggregateAndProof,
 	)
 	if err != nil {
-		return tracedErrorf(span, "failed signing aggregate and proof: %w", err)
+		return fmt.Errorf("failed signing aggregate and proof: %w", err)
 	}
 
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
@@ -259,7 +244,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
-		return tracedErrorf(span, "could not encode post consensus partial signature message: %w", err)
+		return fmt.Errorf("could not encode post consensus partial signature message: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -271,7 +256,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	span.AddEvent("signing post consensus partial signature message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return tracedErrorf(span, "could not sign post-consensus partial signature message: %w", err)
+		return fmt.Errorf("could not sign post-consensus partial signature message: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -282,25 +267,19 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return tracedErrorf(span, "can't broadcast partial post consensus sig: %w", err)
+		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
-		trace.WithAttributes(
-			observability.BeaconSlotAttribute(signedMsg.Slot),
-			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return tracedErrorf(span, "failed processing post consensus message: %w", err)
+		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
 
 	span.SetAttributes(
@@ -310,7 +289,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	if !hasQuorum {
 		span.AddEvent("no quorum")
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -325,7 +303,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return tracedErrorf(span, "got post-consensus quorum but it has invalid signatures: %w", err)
+		return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
@@ -333,16 +311,16 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	cd := &spectypes.ValidatorConsensusData{}
 	err = cd.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return tracedErrorf(span, "could not decode consensus data: %w", err)
+		return fmt.Errorf("could not decode consensus data: %w", err)
 	}
 	aggregateAndProof, _, err := cd.GetAggregateAndProof()
 	if err != nil {
-		return tracedErrorf(span, "could not get aggregate and proof: %w", err)
+		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
 	msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
 	if err != nil {
-		return tracedErrorf(span, "could not construct versioned aggregate and proof: %w", err)
+		return fmt.Errorf("could not construct versioned aggregate and proof: %w", err)
 	}
 
 	start := time.Now()
@@ -350,7 +328,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
 		const errMsg = "could not submit to Beacon chain reconstructed contribution and proof"
 		logger.Error(errMsg, fields.SubmissionTime(time.Since(start)), zap.Error(err))
-		return tracedErrorf(span, "%s: %w", errMsg, err)
+		return fmt.Errorf("%s: %w", errMsg, err)
 	}
 	const eventMsg = "✅ successful submitted aggregate"
 	span.AddEvent(eventMsg)
@@ -367,7 +345,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
 	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().CurrentDuty.DutySlot()), spectypes.BNRoleAggregator)
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -401,12 +378,8 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	r.measurements.StartDutyFlow()
 	r.measurements.StartPreConsensus()
@@ -422,7 +395,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		spectypes.DomainSelectionProof,
 	)
 	if err != nil {
-		return tracedErrorf(span, "could not sign randao: %w", err)
+		return fmt.Errorf("could not sign randao: %w", err)
 	}
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.SelectionProofPartialSig,
@@ -433,7 +406,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return tracedErrorf(span, "could not encode selection proof partial signature message: %w", err)
+		return fmt.Errorf("could not encode selection proof partial signature message: %w", err)
 	}
 
 	r.measurements.StartConsensus()
@@ -447,7 +420,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return tracedErrorf(span, "could not sign SSVMessage: %w", err)
+		return fmt.Errorf("could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -458,10 +431,9 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return tracedErrorf(span, "can't broadcast partial selection proof sig: %w", err)
+		return fmt.Errorf("can't broadcast partial selection proof sig: %w", err)
 	}
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

@@ -11,14 +11,12 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -206,23 +204,15 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "base_runner.start_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
-
 	if err := b.ShouldProcessDuty(duty); err != nil {
-		return tracedErrorf(span, "can't start duty: %w", err)
+		return fmt.Errorf("can't start duty: %w", err)
 	}
 
 	b.baseSetupForNewDuty(duty, quorum)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
-		return tracedErrorf(span, "failed to execute duty: %w", err)
+		return fmt.Errorf("failed to execute duty: %w", err)
 	}
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -384,20 +374,16 @@ func (b *BaseRunner) decide(
 	input spectypes.Encoder,
 	valueChecker ssv.ValueChecker,
 ) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(runner.GetRole()),
-			observability.BeaconSlotAttribute(slot)))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	byts, err := input.Encode()
 	if err != nil {
-		return tracedErrorf(span, "could not encode input data for consensus: %w", err)
+		return fmt.Errorf("could not encode input data for consensus: %w", err)
 	}
 
 	if err := valueChecker.CheckValue(byts); err != nil {
-		return tracedErrorf(span, "input data invalid: %w", err)
+		return fmt.Errorf("input data invalid: %w", err)
 	}
 
 	span.AddEvent("start new instance")
@@ -408,11 +394,11 @@ func (b *BaseRunner) decide(
 		byts,
 		valueChecker,
 	); err != nil {
-		return tracedErrorf(span, "could not start new QBFT instance: %w", err)
+		return fmt.Errorf("could not start new QBFT instance: %w", err)
 	}
 	newInstance := b.QBFTController.StoredInstances.FindInstance(b.QBFTController.Height)
 	if newInstance == nil {
-		return tracedErrorf(span, "could not find newly created QBFT instance")
+		return fmt.Errorf("could not find newly created QBFT instance")
 	}
 
 	b.State.RunningInstance = newInstance
@@ -420,7 +406,6 @@ func (b *BaseRunner) decide(
 	span.AddEvent("register timeout handler")
 	b.registerTimeoutHandler(ctx, logger, newInstance, b.QBFTController.Height)
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
