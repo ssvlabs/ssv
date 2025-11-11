@@ -207,7 +207,7 @@ func (v *Validator) StartQueueConsumer(
 
 			currentAttempt := msgState.attempts + 1
 			msgState.span.AddEvent("dequeued message for processing", trace.WithAttributes(
-				attribute.Int64("queue.attempt", currentAttempt),
+				attribute.Int64("attempt", currentAttempt),
 			))
 
 			// Handle the message, potentially scheduling a message-replay for later.
@@ -232,7 +232,10 @@ func (v *Validator) StartQueueConsumer(
 					msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
 					var retryingMsgDueToErrorEvent = fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds())
 					msgLogger.Debug(retryingMsgDueToErrorEvent, zap.Error(err))
-					msgState.span.AddEvent(retryingMsgDueToErrorEvent)
+					msgState.span.AddEvent(retryingMsgDueToErrorEvent, trace.WithAttributes(
+						attribute.String("retry_reason", err.Error()),
+						attribute.Int64("attempt", currentAttempt),
+					))
 					go func(msg *queue.SSVMessage, msgState *messageProcessingState) {
 						select {
 						case <-time.After(retryDelay):
@@ -243,7 +246,7 @@ func (v *Validator) StartQueueConsumer(
 							const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
 							msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
 							msgState.span.AddEvent(droppingMsgDueToQueueIsFullEvent, trace.WithAttributes(
-								attribute.Int64("queue.attempt", currentAttempt),
+								attribute.Int64("attempt", currentAttempt),
 							))
 							msgState.span.SetStatus(codes.Error, droppingMsgDueToQueueIsFullEvent)
 							msgState.span.End()
@@ -255,7 +258,7 @@ func (v *Validator) StartQueueConsumer(
 					msgLogger.Warn(droppingMsgDueToErrorEvent, zap.Error(err))
 					msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
 						attribute.String("drop_reason", err.Error()),
-						attribute.Int64("queue.attempt", currentAttempt),
+						attribute.Int64("attempt", currentAttempt),
 					))
 					msgState.span.SetStatus(codes.Error, droppingMsgDueToErrorEvent)
 					msgState.span.End()
@@ -263,7 +266,7 @@ func (v *Validator) StartQueueConsumer(
 				}
 			} else {
 				msgState.span.AddEvent("message processed successfully", trace.WithAttributes(
-					attribute.Int64("queue.attempt", currentAttempt),
+					attribute.Int64("attempt", currentAttempt),
 				))
 				msgState.span.SetStatus(codes.Ok, "")
 				msgState.span.End()
@@ -286,6 +289,11 @@ func (v *Validator) StartQueueConsumer(
 
 // ProcessMessage processes p2p message of all types
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
+
+	span.AddEvent("got validator message to process")
+
 	msgType := msg.GetType()
 	msgID := msg.GetID()
 
@@ -299,11 +307,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 	}
 
-	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
-	span := trace.SpanFromContext(ctx)
-
-	span.AddEvent("validator.process_message.start")
-
 	// Get runner
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msgID)
 	if dutyRunner == nil {
@@ -316,7 +319,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	}
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
-		span.AddEvent("validator.process_message.consensus")
+		span.AddEvent("process validator message = consensus message")
 
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
@@ -332,8 +335,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 		return nil
 	case spectypes.SSVPartialSignatureMsgType:
-		span.AddEvent("validator.process_message.partial_signature")
-
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			return fmt.Errorf("could not decode post consensus message from network message")
@@ -348,19 +349,20 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
-			span.AddEvent("processing post-consensus message")
+			span.AddEvent("process validator message = post-consensus message")
 			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
 				return err
 			}
 			return nil
 		}
-		span.AddEvent("processing pre-consensus message")
+
+		span.AddEvent("process validator message = pre-consensus message")
 		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
 			return err
 		}
 		return nil
 	case message.SSVEventMsgType:
-		span.AddEvent("validator.process_message.event")
+		span.AddEvent("process validator message = event message")
 
 		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
 			return fmt.Errorf("could not handle event message: %w", err)

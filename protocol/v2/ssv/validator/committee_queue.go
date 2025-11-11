@@ -193,7 +193,7 @@ func (c *Committee) ConsumeQueue(
 
 		currentAttempt := msgState.attempts + 1
 		msgState.span.AddEvent("dequeued message for processing", trace.WithAttributes(
-			attribute.Int64("queue.attempt", currentAttempt),
+			attribute.Int64("attempt", currentAttempt),
 		))
 
 		// Handle the message, potentially scheduling a message-replay for later.
@@ -218,7 +218,7 @@ func (c *Committee) ConsumeQueue(
 				msgLogger.Error(droppingMsgDueToNoValidDutiesToExecuteEvent, zap.Error(err))
 				msgState.span.AddEvent(droppingMsgDueToNoValidDutiesToExecuteEvent, trace.WithAttributes(
 					attribute.String("drop_reason", err.Error()),
-					attribute.Int64("queue.attempt", currentAttempt),
+					attribute.Int64("attempt", currentAttempt),
 				))
 				msgState.span.SetStatus(codes.Error, droppingMsgDueToNoValidDutiesToExecuteEvent)
 				msgState.span.End()
@@ -229,7 +229,10 @@ func (c *Committee) ConsumeQueue(
 				msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
 				var retryingMsgDueToErrorEvent = fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds())
 				msgLogger.Debug(retryingMsgDueToErrorEvent, zap.Error(err))
-				msgState.span.AddEvent(retryingMsgDueToErrorEvent)
+				msgState.span.AddEvent(retryingMsgDueToErrorEvent, trace.WithAttributes(
+					attribute.String("retry_reason", err.Error()),
+					attribute.Int64("attempt", currentAttempt),
+				))
 				go func(msg *queue.SSVMessage, msgState *messageProcessingState) {
 					select {
 					case <-time.After(retryDelay):
@@ -240,7 +243,7 @@ func (c *Committee) ConsumeQueue(
 						const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
 						msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
 						msgState.span.AddEvent(droppingMsgDueToQueueIsFullEvent, trace.WithAttributes(
-							attribute.Int64("queue.attempt", currentAttempt),
+							attribute.Int64("attempt", currentAttempt),
 						))
 						msgState.span.SetStatus(codes.Error, droppingMsgDueToQueueIsFullEvent)
 						msgState.span.End()
@@ -252,7 +255,7 @@ func (c *Committee) ConsumeQueue(
 				msgLogger.Warn(droppingMsgDueToErrorEvent, zap.Error(err))
 				msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
 					attribute.String("drop_reason", err.Error()),
-					attribute.Int64("queue.attempt", currentAttempt),
+					attribute.Int64("attempt", currentAttempt),
 				))
 				msgState.span.SetStatus(codes.Error, droppingMsgDueToErrorEvent)
 				msgState.span.End()
@@ -260,7 +263,7 @@ func (c *Committee) ConsumeQueue(
 			}
 		} else {
 			msgState.span.AddEvent("message processed successfully", trace.WithAttributes(
-				attribute.Int64("queue.attempt", currentAttempt),
+				attribute.Int64("attempt", currentAttempt),
 			))
 			msgState.span.SetStatus(codes.Ok, "")
 			msgState.span.End()
@@ -274,7 +277,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	span.AddEvent("committee.process_message.start")
+	span.AddEvent("got committee message to process")
 
 	msgType := msg.GetType()
 
@@ -302,7 +305,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
-		span.AddEvent("committee.process_message.consensus")
+		span.AddEvent("process committee message = consensus message")
 
 		qbftMsg := &specqbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
@@ -319,8 +322,6 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
-		span.AddEvent("committee.process_message.partial_signature")
-
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return fmt.Errorf("could not decode PartialSignatureMessages: %w", err)
@@ -336,6 +337,8 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
+			span.AddEvent("process committee message = post-consensus message")
+
 			c.mtx.RLock()
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
@@ -348,7 +351,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			return nil
 		}
 	case message.SSVEventMsgType:
-		span.AddEvent("committee.process_message.event")
+		span.AddEvent("process committee message = event message")
 
 		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
 			return fmt.Errorf("could not handle event message: %w", err)
