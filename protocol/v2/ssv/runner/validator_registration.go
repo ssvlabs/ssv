@@ -94,7 +94,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -102,7 +102,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
 		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
 		// also needs to be retried.
@@ -113,8 +113,9 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	}
 
 	logger.Debug("got partial sig",
-		zap.Uint64("signer", signedMsg.Messages[0].Signer),
-		zap.Bool("quorum", hasQuorum))
+		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
+		zap.Bool("quorum", hasQuorum),
+	)
 
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {
@@ -127,10 +128,10 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	root := roots[0]
 
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return tracedErrorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
@@ -158,9 +159,13 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		fields.FeeRecipient(registration.FeeRecipient[:]),
-		zap.String("signature", hex.EncodeToString(specSig[:])))
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+	)
 
-	r.GetState().Finished = true
+	r.state().Finished = true
+	const dutyFinishedEvent = "✔️successfully finished duty processing"
+	logger.Info(dutyFinishedEvent)
+	span.AddEvent(dutyFinishedEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -170,8 +175,8 @@ func (r *ValidatorRegistrationRunner) ProcessConsensus(ctx context.Context, logg
 	return spectypes.NewError(spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "no consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
-	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
+func (r *ValidatorRegistrationRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, timeoutData)
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -196,7 +201,7 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(contex
 
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
@@ -340,7 +345,7 @@ func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
 	return nil
 }
 
-func (r *ValidatorRegistrationRunner) GetState() *State {
+func (r *ValidatorRegistrationRunner) state() *State {
 	return r.BaseRunner.State
 }
 

@@ -77,7 +77,7 @@ func (r *VoluntaryExitRunner) HasRunningDuty() bool {
 // if has quorum, constructs SignedVoluntaryExit and submits to BeaconNode
 func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
+		observability.InstrumentName(observabilityNamespace, "process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -90,7 +90,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		span.SetAttributes(observability.ValidatorIndexAttribute(validatorIndex))
 	}
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
 		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
 		// also needs to be retried.
@@ -110,10 +110,10 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return tracedErrorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
@@ -138,7 +138,10 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.GetState().Finished = true
+	r.state().Finished = true
+	const dutyFinishedEvent = "✔️successfully finished duty processing"
+	logger.Info(dutyFinishedEvent)
+	span.AddEvent(dutyFinishedEvent)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -148,8 +151,8 @@ func (r *VoluntaryExitRunner) ProcessConsensus(ctx context.Context, logger *zap.
 	return spectypes.NewError(spectypes.ValidatorExitNoConsensusPhaseErrorCode, "no consensus phase for voluntary exit")
 }
 
-func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
-	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
+func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, timeoutData)
 }
 
 func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -171,7 +174,7 @@ func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Contex
 
 func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
@@ -241,7 +244,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.CurrentDuty.DutySlot())
-	validatorIndex := r.GetState().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+	validatorIndex := r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
 		ValidatorIndex: validatorIndex,
@@ -298,7 +301,8 @@ func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
 	}
 	return nil
 }
-func (r *VoluntaryExitRunner) GetState() *State {
+
+func (r *VoluntaryExitRunner) state() *State {
 	return r.BaseRunner.State
 }
 
