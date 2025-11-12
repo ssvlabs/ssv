@@ -35,10 +35,10 @@ import (
 const (
 	// defaultReqTimeout is the default timeout used for stream requests
 	defaultReqTimeout = 10 * time.Second
-	// backoffLow is when we start the backoff exponent interval
+	// backoffLow is the min value backoff strategy will use for its delay
 	backoffLow = 10 * time.Second
-	// backoffLow is when we stop the backoff exponent interval
-	backoffHigh = 30 * time.Minute
+	// backoffHigh is the max value backoff strategy will use for its delay
+	backoffHigh = 5 * time.Minute
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
 	// backoffConnectorCacheSize is the cache size of the backoff connector
