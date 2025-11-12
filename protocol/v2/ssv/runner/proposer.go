@@ -121,6 +121,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	defer span.End()
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+		// also needs to be retried.
+		err = NewRetryableError(err)
+	}
 	if err != nil {
 		return tracedErrorf(span, "failed processing randao message: %w", err)
 	}
@@ -371,6 +376,11 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	defer span.End()
 
 	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+		// also needs to be retried.
+		err = NewRetryableError(err)
+	}
 	if err != nil {
 		return tracedErrorf(span, "failed processing post consensus message: %w", err)
 	}

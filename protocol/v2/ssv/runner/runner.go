@@ -229,7 +229,7 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 // baseStartNewNonBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
 func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty *spectypes.ValidatorDuty, quorum uint64) error {
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
-		return errors.Wrap(err, "can't start non-beacon duty")
+		return fmt.Errorf("can't start non-beacon duty: %w", err)
 	}
 	b.baseSetupForNewDuty(duty, quorum)
 	return runner.executeDuty(ctx, logger, duty)
@@ -242,7 +242,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(
 	signedMsg *spectypes.PartialSignatureMessages,
 ) (bool, [][32]byte, error) {
 	if err := b.ValidatePreConsensusMsg(ctx, runner, signedMsg); err != nil {
-		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
+		return false, nil, fmt.Errorf("invalid pre-consensus message: %w", err)
 	}
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
@@ -282,16 +282,16 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	}
 
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
-		return true, nil, errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
+		return true, nil, fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err)
 	}
 
 	if err := b.validateDecidedConsensusData(valueCheckFn, decidedValue); err != nil {
-		return true, nil, errors.Wrap(err, "decided ValidatorConsensusData invalid")
+		return true, nil, fmt.Errorf("decided ValidatorConsensusData invalid: %w", err)
 	}
 
 	decidedValueEncoded, err := decidedValue.Encode()
 	if err != nil {
-		return true, nil, errors.Wrap(err, "could not encode decided value")
+		return true, nil, fmt.Errorf("could not encode decided value: %w", err)
 	}
 
 	// update the decided and the highest decided slot
@@ -304,7 +304,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
 func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
 	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
-		return false, nil, errors.Wrap(err, "invalid post-consensus message")
+		return false, nil, fmt.Errorf("invalid post-consensus message: %w", err)
 	}
 
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
@@ -432,7 +432,22 @@ func (b *BaseRunner) hasRunningDuty() bool {
 	if b.State == nil {
 		return false
 	}
+
 	return !b.State.Finished
+}
+
+func (b *BaseRunner) hasDutyAssigned() bool {
+	b.mtx.RLock() // reads b.State
+	defer b.mtx.RUnlock()
+
+	return b.State != nil
+}
+
+func (b *BaseRunner) hasDutyFinished() bool {
+	b.mtx.RLock() // reads b.State
+	defer b.mtx.RUnlock()
+
+	return b.State.Finished
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
