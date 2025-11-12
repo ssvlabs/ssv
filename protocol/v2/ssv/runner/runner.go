@@ -447,6 +447,10 @@ func (b *BaseRunner) hasDutyFinished() bool {
 	b.mtx.RLock() // reads b.State
 	defer b.mtx.RUnlock()
 
+	if b.State == nil {
+		return false
+	}
+
 	return b.State.Finished
 }
 
