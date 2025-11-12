@@ -10,14 +10,13 @@ import (
 	"testing"
 
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-
-	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type StartNewRunnerDutySpecTest struct {
@@ -95,31 +94,31 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 	switch r := test.Runner.(type) {
 	case *runner.CommitteeRunner:
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.AggregatorRunner:
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.ProposerRunner:
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = qbfttesting.TestingValueChecker{}
+			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.BaseRunner.State.RunningInstance != nil {
-			r.BaseRunner.State.RunningInstance.ValueChecker = qbfttesting.TestingValueChecker{}
+			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	}
 

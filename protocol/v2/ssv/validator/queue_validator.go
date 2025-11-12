@@ -179,17 +179,17 @@ func (v *Validator) StartQueueConsumer(
 					msgRetries.Set(v.messageID(msg), 0, ttlcache.DefaultTTL)
 					msgRetryItem = msgRetries.Get(v.messageID(msg))
 				}
-				msgRetryCnt := msgRetryItem.Value()
+				attempt := msgRetryItem.Value() + 1
 
 				msgLogger = logWithMessageMetadata(msgLogger, msg).
 					With(zap.String("message_identifier", string(v.messageID(msg)))).
-					With(zap.Int64("attempt", msgRetryCnt+1))
+					With(zap.Int64("attempt", attempt))
 
 				const couldNotHandleMsgLogPrefix = "could not handle message, "
 				switch {
-				case runner.IsRetryable(err) && msgRetryCnt < retryCount:
+				case runner.IsRetryable(err) && attempt <= retryCount:
 					msgLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
-					msgRetries.Set(v.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+					msgRetries.Set(v.messageID(msg), attempt, ttlcache.DefaultTTL)
 					go func(msg *queue.SSVMessage) {
 						time.Sleep(retryDelay)
 						if pushed := q.TryPush(msg); !pushed {
@@ -200,7 +200,7 @@ func (v *Validator) StartQueueConsumer(
 						}
 					}(msg)
 				default:
-					msgLogger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+					msgLogger.Debug(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 				}
 			}
 		}
@@ -216,118 +216,6 @@ func (v *Validator) StartQueueConsumer(
 			}
 		}
 	}()
-}
-
-// ProcessMessage processes p2p message of all types
-func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	msgType := msg.GetType()
-	msgID := msg.GetID()
-
-	// Validate message (+ verify SignedSSVMessage's signature)
-	if msgType != message.SSVEventMsgType {
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
-		}
-		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			return spectypes.WrapError(spectypes.SSVMessageHasInvalidSignatureErrorCode, fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err))
-		}
-	}
-
-	slot, err := msg.Slot()
-	if err != nil {
-		return fmt.Errorf("couldn't get message slot: %w", err)
-	}
-	dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
-
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "process_message"),
-		trace.WithAttributes(
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.ValidatorMsgIDAttribute(msgID),
-			observability.RunnerRoleAttribute(msgID.GetRoleType()),
-			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
-		),
-	)
-	defer span.End()
-
-	// Get runner
-	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-	if dutyRunner == nil {
-		return traces.Errorf(span, "could not get duty runner for msg ID %v", msgID)
-	}
-
-	// Validate message for runner
-	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return traces.Errorf(span, "message invalid for msg ID %v: %w", msgID, err)
-	}
-	switch msgType {
-	case spectypes.SSVConsensusMsgType:
-		qbftMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok {
-			return traces.Errorf(span, "could not decode consensus message from network message")
-		}
-
-		if err := qbftMsg.Validate(); err != nil {
-			return traces.Errorf(span, "invalid QBFT Message: %w", err)
-		}
-
-		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
-			return traces.Error(span, err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
-		if !ok {
-			return traces.Errorf(span, "could not decode post consensus message from network message")
-		}
-
-		span.SetAttributes(observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type))
-
-		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
-		}
-
-		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
-		}
-
-		if signedMsg.Type == spectypes.PostConsensusPartialSig {
-			span.AddEvent("processing post-consensus message")
-			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
-				return traces.Error(span, err)
-			}
-			span.SetStatus(codes.Ok, "")
-			return nil
-		}
-		span.AddEvent("processing pre-consensus message")
-		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
-			return traces.Error(span, err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	case message.SSVEventMsgType:
-		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	default:
-		return traces.Errorf(span, "unknown message type %d", msgType)
-	}
-}
-
-func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
-	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
-		return errors.New("msg ID doesn't match validator ID")
-	}
-
-	if len(msg.GetData()) == 0 {
-		return errors.New("msg data is invalid")
-	}
-
-	return nil
 }
 
 func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) (*zap.Logger, error) {
@@ -351,6 +239,19 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
 		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
+	}
+	if msg.MsgType == message.SSVEventMsgType {
+		eventMsg, ok := msg.Body.(*types.EventMsg)
+		if !ok {
+			return nil, fmt.Errorf("could not decode event message")
+		}
+		if eventMsg.Type == types.Timeout {
+			timeoutData, err := eventMsg.GetTimeoutData()
+			if err != nil {
+				return nil, fmt.Errorf("get timeout data: %w", err)
+			}
+			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
+		}
 	}
 
 	return logger, nil

@@ -13,7 +13,6 @@ import (
 const (
 	// InstanceContainerDefaultCapacity is the default capacity for InstanceContainer.
 	InstanceContainerDefaultCapacity int = 2
-
 	// InstanceContainerTestCapacity is the capacity for InstanceContainer used in tests.
 	InstanceContainerTestCapacity int = 1024
 )
@@ -21,8 +20,8 @@ const (
 // InstanceContainer is a fixed-capacity container for instances.
 type InstanceContainer []*instance.Instance
 
-func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
-	for _, inst := range i {
+func (ic *InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
+	for _, inst := range *ic {
 		if inst != nil {
 			if inst.GetHeight() == height {
 				return inst
@@ -32,64 +31,65 @@ func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instan
 	return nil
 }
 
-// addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
-func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
-	if cap(*i) == 0 {
-		*i = make(InstanceContainer, 0, InstanceContainerDefaultCapacity)
+// addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up
+// (ejecting the last one if necessary)
+func (ic *InstanceContainer) addNewInstance(instance *instance.Instance) {
+	if cap(*ic) == 0 {
+		*ic = make(InstanceContainer, 0, InstanceContainerDefaultCapacity)
 	}
 
-	indexToInsert := len(*i)
-	for index, existingInstance := range *i {
+	indexToInsert := len(*ic)
+	for index, existingInstance := range *ic {
 		if existingInstance.GetHeight() < instance.GetHeight() {
 			indexToInsert = index
 			break
 		}
 	}
 
-	if indexToInsert == len(*i) {
+	if indexToInsert == len(*ic) {
 		// Append the new instance, only if there's free space for it.
-		if len(*i) < cap(*i) {
-			*i = append(*i, instance)
+		if len(*ic) < cap(*ic) {
+			*ic = append(*ic, instance)
 		}
 	} else {
-		if len(*i) == cap(*i) {
+		if len(*ic) == cap(*ic) {
 			// Shift the instances to the right and insert the new instance.
-			copy((*i)[indexToInsert+1:], (*i)[indexToInsert:])
-			(*i)[indexToInsert] = instance
+			copy((*ic)[indexToInsert+1:], (*ic)[indexToInsert:])
+			(*ic)[indexToInsert] = instance
 		} else {
 			// Shift the instances to the right and append the new instance.
-			*i = append(*i, nil)
-			copy((*i)[indexToInsert+1:], (*i)[indexToInsert:])
-			(*i)[indexToInsert] = instance
+			*ic = append(*ic, nil)
+			copy((*ic)[indexToInsert+1:], (*ic)[indexToInsert:])
+			(*ic)[indexToInsert] = instance
 		}
 	}
 }
 
 // String returns a human-readable representation of the instances. Useful for debugging.
-func (i *InstanceContainer) String() string {
-	heights := make([]string, len(*i))
-	for index, inst := range *i {
+func (ic *InstanceContainer) String() string {
+	heights := make([]string, len(*ic))
+	for index, inst := range *ic {
 		heights[index] = fmt.Sprint(inst.GetHeight())
 	}
-	return fmt.Sprintf("Instances(len=%d, cap=%d, heights=(%s))", len(*i), cap(*i), strings.Join(heights, ", "))
+	return fmt.Sprintf("Instances(len=%d, cap=%d, heights=(%s))", len(*ic), cap(*ic), strings.Join(heights, ", "))
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface for InstanceContainer
-func (c *InstanceContainer) UnmarshalJSON(data []byte) error {
+func (ic *InstanceContainer) UnmarshalJSON(data []byte) error {
 	// InstanceContainer must always have correct capacity on initialization
 	// because addition to instance container doesn't grow beyond cap removing values that don't fit.
 	// Therefore, we need to initialize it properly on unmarshaling
 	// to allow spec tests grow StoredInstances as much as they need to.
 	instances := make([]*instance.Instance, 0, InstanceContainerTestCapacity)
-	if cap(*c) != 0 {
-		instances = *c
+	if cap(*ic) != 0 {
+		instances = *ic
 	}
 
 	if err := json.Unmarshal(data, &instances); err != nil {
 		return err
 	}
 
-	*c = instances
+	*ic = instances
 
 	return nil
 }

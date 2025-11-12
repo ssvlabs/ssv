@@ -47,6 +47,6 @@ func newStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectyp
 	return stores
 }
 
-func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
+func testingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
 	return newStoresFromRoles(logger, getDB(logger), allRoles...)
 }

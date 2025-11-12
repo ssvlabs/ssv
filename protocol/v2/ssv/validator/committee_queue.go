@@ -160,19 +160,18 @@ func (c *Committee) ConsumeQueue(
 				msgRetries.Set(c.messageID(msg), 0, ttlcache.DefaultTTL)
 				msgRetryItem = msgRetries.Get(c.messageID(msg))
 			}
-			msgRetryCnt := msgRetryItem.Value()
+			attempt := msgRetryItem.Value() + 1
 
 			msgLogger = logWithMessageMetadata(msgLogger, msg).
 				With(zap.String("message_identifier", string(c.messageID(msg)))).
-				With(zap.Int64("attempt", msgRetryCnt+1))
+				With(zap.Int64("attempt", attempt))
 
 			const couldNotHandleMsgLogPrefix = "could not handle message, "
 			switch {
 			case errors.Is(err, runner.ErrNoValidDutiesToExecute):
 				msgLogger.Error("❗ "+couldNotHandleMsgLogPrefix+"dropping message and terminating committee-runner", zap.Error(err))
-			case runner.IsRetryable(err) && msgRetryCnt < retryCount:
-				msgLogger.Debug(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds()), zap.Error(err))
-				msgRetries.Set(c.messageID(msg), msgRetryCnt+1, ttlcache.DefaultTTL)
+			case runner.IsRetryable(err) && attempt <= retryCount:
+				msgRetries.Set(c.messageID(msg), attempt, ttlcache.DefaultTTL)
 				go func(msg *queue.SSVMessage) {
 					time.Sleep(retryDelay)
 					if pushed := q.Q.TryPush(msg); !pushed {
@@ -183,7 +182,7 @@ func (c *Committee) ConsumeQueue(
 					}
 				}(msg)
 			default:
-				msgLogger.Warn(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
+				msgLogger.Debug(couldNotHandleMsgLogPrefix+"dropping message", zap.Error(err))
 			}
 
 			if errors.Is(err, runner.ErrNoValidDutiesToExecute) {
@@ -194,105 +193,6 @@ func (c *Committee) ConsumeQueue(
 	}
 }
 
-// ProcessMessage processes p2p message of all types
-func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	msgType := msg.GetType()
-	msgID := msg.GetID()
-
-	// Validate message (+ verify SignedSSVMessage's signature)
-	if msgType != message.SSVEventMsgType {
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return fmt.Errorf("invalid SignedSSVMessage: %w", err)
-		}
-		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return spectypes.WrapError(spectypes.SSVMessageHasInvalidSignatureErrorCode, fmt.Errorf("SignedSSVMessage has an invalid signature: %w", err))
-		}
-		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			// TODO - we should improve this error message as is suggested by the commented-out code here
-			// (and also remove nolint annotation), currently we cannot do it due to spec-tests expecting
-			// this exact format we are stuck with.
-			//return fmt.Errorf("SSVMessage invalid: %w", err)
-			return fmt.Errorf("Message invalid: %w", err) //nolint:staticcheck
-		}
-	}
-
-	slot, err := msg.Slot()
-	if err != nil {
-		return fmt.Errorf("couldn't get message slot: %w", err)
-	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
-
-	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
-		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
-		trace.WithAttributes(
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.ValidatorMsgIDAttribute(msgID),
-			observability.RunnerRoleAttribute(msgID.GetRoleType()),
-			observability.CommitteeIDAttribute(c.CommitteeMember.CommitteeID),
-			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
-		),
-	)
-	defer span.End()
-
-	switch msgType {
-	case spectypes.SSVConsensusMsgType:
-		qbftMsg := &specqbft.Message{}
-		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return traces.Errorf(span, "could not decode consensus Message: %w", err)
-		}
-		if err := qbftMsg.Validate(); err != nil {
-			return traces.Errorf(span, "invalid QBFT Message: %w", err)
-		}
-		c.mtx.RLock()
-		r, exists := c.Runners[slot]
-		c.mtx.RUnlock()
-		if !exists {
-			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, traces.Errorf(span, "no runner found for message's slot"))
-		}
-		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
-	case spectypes.SSVPartialSignatureMsgType:
-		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return traces.Errorf(span, "could not decode PartialSignatureMessages: %w", err)
-		}
-
-		// Validate
-		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return traces.Errorf(span, "PartialSignatureMessage has more than 1 signer")
-		}
-
-		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return traces.Errorf(span, "invalid PartialSignatureMessages: %w", err)
-		}
-
-		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			c.mtx.RLock()
-			r, exists := c.Runners[pSigMessages.Slot]
-			c.mtx.RUnlock()
-			if !exists {
-				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, traces.Errorf(span, "no runner found for message's slot"))
-			}
-			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
-				return traces.Error(span, err)
-			}
-			span.SetStatus(codes.Ok, "")
-			return nil
-		}
-	case message.SSVEventMsgType:
-		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
-			return traces.Errorf(span, "could not handle event message: %w", err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	default:
-		return traces.Errorf(span, "unknown message type: %d", msgType)
-	}
-
-	span.SetStatus(codes.Ok, "")
-	return nil
-}
-
 func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) (*zap.Logger, error) {
 	msgType := msg.GetType()
 
@@ -301,6 +201,19 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
 		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
+	}
+	if msg.MsgType == message.SSVEventMsgType {
+		eventMsg, ok := msg.Body.(*types.EventMsg)
+		if !ok {
+			return nil, fmt.Errorf("could not decode event message")
+		}
+		if eventMsg.Type == types.Timeout {
+			timeoutData, err := eventMsg.GetTimeoutData()
+			if err != nil {
+				return nil, fmt.Errorf("get timeout data: %w", err)
+			}
+			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
+		}
 	}
 
 	return logger, nil
