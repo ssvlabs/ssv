@@ -11,14 +11,12 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -206,23 +204,15 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "base_runner.start_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
-
 	if err := b.ShouldProcessDuty(duty); err != nil {
-		return tracedErrorf(span, "can't start duty: %w", err)
+		return fmt.Errorf("can't start duty: %w", err)
 	}
 
 	b.baseSetupForNewDuty(duty, quorum)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
-		return tracedErrorf(span, "failed to execute duty: %w", err)
+		return fmt.Errorf("failed to execute duty: %w", err)
 	}
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -237,8 +227,8 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
 func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "process_pre_consensus.base_msg_processing"))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	if err := b.ValidatePreConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, fmt.Errorf("invalid pre-consensus message: %w", err)
@@ -261,8 +251,8 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, valueCheckFn specqbft.ProposedValueCheckF, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "process_consensus.base_msg_processing"))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
@@ -320,8 +310,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
 func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "process_post_consensus.base_msg_processing"))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, fmt.Errorf("invalid post-consensus message: %w", err)
@@ -410,25 +400,20 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 func (b *BaseRunner) decide(
 	ctx context.Context,
 	logger *zap.Logger,
-	runner Runner,
 	slot phase0.Slot,
 	input spectypes.Encoder,
 	valueChecker ssv.ValueChecker,
 ) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(runner.GetRole()),
-			observability.BeaconSlotAttribute(slot)))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	byts, err := input.Encode()
 	if err != nil {
-		return tracedErrorf(span, "could not encode input data for consensus: %w", err)
+		return fmt.Errorf("could not encode input data for consensus: %w", err)
 	}
 
 	if err := valueChecker.CheckValue(byts); err != nil {
-		return tracedErrorf(span, "input data invalid: %w", err)
+		return fmt.Errorf("input data invalid: %w", err)
 	}
 
 	newInstance, err := b.QBFTController.StartNewInstance(
@@ -439,10 +424,10 @@ func (b *BaseRunner) decide(
 		valueChecker,
 	)
 	if err != nil {
-		return tracedErrorf(span, "could not start new QBFT instance: %w", err)
+		return fmt.Errorf("could not start new QBFT instance: %w", err)
 	}
 	if newInstance == nil {
-		return tracedErrorf(span, "could not start new QBFT instance: instance is nil")
+		return fmt.Errorf("could not start new QBFT instance: instance is nil")
 	}
 
 	b.State.RunningInstance = newInstance
@@ -450,7 +435,6 @@ func (b *BaseRunner) decide(
 	span.AddEvent("register timeout handler")
 	b.registerTimeoutHandler(ctx, logger, newInstance, b.QBFTController.Height)
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

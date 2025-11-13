@@ -220,10 +220,11 @@ func TestConsumeQueueBasic(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		logger:        logger,
-		networkConfig: networkconfig.TestNetwork,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		logger:          logger,
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -305,9 +306,10 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig: networkconfig.TestNetwork,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -424,9 +426,10 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig: networkconfig.TestNetwork,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -503,9 +506,10 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig: networkconfig.TestNetwork,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -627,7 +631,8 @@ func TestChangingFilterState(t *testing.T) {
 		q.Q.TryPush(prepareMsg)
 
 		c := &Committee{
-			networkConfig: networkconfig.TestNetwork,
+			networkConfig:   networkconfig.TestNetwork,
+			CommitteeMember: &spectypes.CommitteeMember{},
 		}
 		c.ConsumeQueue(ctx, logger, q, handler, rnr)
 		return seen
@@ -734,9 +739,10 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				networkConfig: networkconfig.TestNetwork,
-				Queues:        make(map[phase0.Slot]queueContainer),
-				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+				networkConfig:   networkconfig.TestNetwork,
+				Queues:          make(map[phase0.Slot]queueContainer),
+				Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+				CommitteeMember: &spectypes.CommitteeMember{},
 			}
 
 			slot := phase0.Slot(123)
@@ -895,9 +901,10 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				networkConfig: networkconfig.TestNetwork,
-				Queues:        make(map[phase0.Slot]queueContainer),
-				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+				networkConfig:   networkconfig.TestNetwork,
+				Queues:          make(map[phase0.Slot]queueContainer),
+				Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+				CommitteeMember: &spectypes.CommitteeMember{},
 			}
 
 			slot := phase0.Slot(123)
@@ -981,9 +988,10 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig: networkconfig.TestNetwork,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -1207,7 +1215,8 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig: networkconfig.TestNetwork,
+		networkConfig:   networkconfig.TestNetwork,
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -1273,9 +1282,10 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	// --- Setup a single-slot committee and its queue ---
 	slot := phase0.Slot(42)
 	committee := &Committee{
-		networkConfig: networkconfig.TestNetwork,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 	qc := queueContainer{
 		Q: queue.New(logger, 1000),
@@ -1656,9 +1666,10 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		logger := logger.Named("PrioritizationWhenSaturated")
 
 		committee := &Committee{
-			networkConfig: networkconfig.TestNetwork,
-			Queues:        make(map[phase0.Slot]queueContainer),
-			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+			networkConfig:   networkconfig.TestNetwork,
+			Queues:          make(map[phase0.Slot]queueContainer),
+			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+			CommitteeMember: &spectypes.CommitteeMember{},
 		}
 
 		queueCapacity := 5

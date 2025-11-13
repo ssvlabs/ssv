@@ -5,13 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -76,13 +76,8 @@ func (r *VoluntaryExitRunner) HasRunningDuty() bool {
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,
 // if has quorum, constructs SignedVoluntaryExit and submits to BeaconNode
 func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "process_pre_consensus"),
-		trace.WithAttributes(
-			observability.BeaconSlotAttribute(signedMsg.Slot),
-			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	var validatorIndex phase0.ValidatorIndex
 	if r.voluntaryExit != nil {
@@ -97,13 +92,11 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		err = NewRetryableError(err)
 	}
 	if err != nil {
-		return tracedErrorf(span, "failed processing voluntary exit message: %w", err)
+		return fmt.Errorf("failed processing voluntary exit message: %w", err)
 	}
 
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {
-		span.AddEvent("no quorum")
-		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -114,7 +107,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		return tracedErrorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
+		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
@@ -127,7 +120,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 
 	span.AddEvent("submitting voluntary exit")
 	if err := r.beacon.SubmitVoluntaryExit(ctx, signedVoluntaryExit); err != nil {
-		return tracedErrorf(span, "could not submit voluntary exit: %w", err)
+		return fmt.Errorf("could not submit voluntary exit: %w", err)
 	}
 
 	const eventMsg = "✅ successfully submitted voluntary exit"
@@ -143,7 +136,6 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -173,16 +165,12 @@ func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Contex
 }
 
 func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "execute_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	voluntaryExit, err := r.calculateVoluntaryExit()
 	if err != nil {
-		return tracedErrorf(span, "could not calculate voluntary exit: %w", err)
+		return fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
@@ -196,7 +184,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		spectypes.DomainVoluntaryExit,
 	)
 	if err != nil {
-		return tracedErrorf(span, "could not sign VoluntaryExit object: %w", err)
+		return fmt.Errorf("could not sign VoluntaryExit object: %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
@@ -208,7 +196,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return tracedErrorf(span, "could not encode PartialSignatureMessages: %w", err)
+		return fmt.Errorf("could not encode PartialSignatureMessages: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -220,7 +208,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return tracedErrorf(span, "could not sign SSVMessage: %w", err)
+		return fmt.Errorf("could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -231,13 +219,12 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return tracedErrorf(span, "can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
+		return fmt.Errorf("can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
 	}
 
 	// stores value for later using in ProcessPreConsensus
 	r.voluntaryExit = voluntaryExit
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

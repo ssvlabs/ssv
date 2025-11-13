@@ -3,10 +3,6 @@ package runner
 import (
 	"errors"
 	"fmt"
-
-	"go.opentelemetry.io/otel/trace"
-
-	"github.com/ssvlabs/ssv/observability/traces"
 )
 
 var (
@@ -53,20 +49,4 @@ func (e RetryableError) Unwrap() error {
 func IsRetryable(err error) bool {
 	var retryableErr *RetryableError
 	return errors.As(err, &retryableErr)
-}
-
-// Errorf sets the status of the span to error and returns an error with the formatted message.
-func tracedErrorf(span trace.Span, f string, args ...any) error {
-	err := fmt.Errorf(f, args...)
-	return tracedError(span, err)
-}
-
-func tracedError(span trace.Span, err error) error {
-	// In case of retryable error, mark this span as "droppable" since we don't necessarily want to
-	// keep track of those retried spans (these generate lots of useless data).
-	if IsRetryable(err) {
-		span.SetAttributes(traces.DroppableSpan())
-	}
-
-	return traces.Error(span, err)
 }

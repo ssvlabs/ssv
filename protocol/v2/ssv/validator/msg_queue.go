@@ -7,6 +7,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -18,11 +19,22 @@ import (
 // non-retryable error (can be checked via `runner.IsRetryable(err)`).
 type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
-type msgIDType string
+// messageProcessingState tracks retries and span context for a specific message.
+type messageProcessingState struct {
+	// attempts is how many attempts have already been tried for this message.
+	attempts int64
 
-// messageID returns an ID that represents a potentially retryable message (msg.ID is the same for messages
+	// ctx is stored here so we can use it to derive child-spans for span.
+	ctx context.Context
+	// span related to this p2p message, it tracks accumulates the message-related events.
+	span trace.Span
+}
+
+type messageKey string
+
+// mKey returns an ID that represents a potentially retryable message (msg.ID is the same for messages
 // with different signers, slots, types, rounds, etc. - so we can't use just msg.ID as a unique identifier)
-func messageID(msg *queue.SSVMessage, logger *zap.Logger) msgIDType {
+func mKey(msg *queue.SSVMessage, logger *zap.Logger) messageKey {
 	const idUndefined = "undefined"
 	msgSlot, err := msg.Slot()
 	if err != nil {
@@ -32,12 +44,12 @@ func messageID(msg *queue.SSVMessage, logger *zap.Logger) msgIDType {
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		sm := msg.Body.(*specqbft.Message)
 		signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
-		return msgIDType(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
+		return messageKey(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
 	}
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		signer := fmt.Sprintf("%d", ssvtypes.PartialSigMsgSigner(psm))
-		return msgIDType(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
+		signer := fmt.Sprintf("%d", ssvtypes.PartialSigMsgSigner(psm)) // same signer for all messages
+		return messageKey(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
 	}
 	return idUndefined
 }
