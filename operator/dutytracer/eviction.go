@@ -18,15 +18,13 @@ import (
 func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) {
 	var links = make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 
-	// Delete from map FIRST while collecting data to prevent race condition
-	// where new links are added between reading and deletion
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
 		committeeID, found := slotToCommittee.Get(slot)
 		if !found {
 			return true
 		}
 
-		// Remove from map immediately
+		// Remove from map to prevent new links from being added for this slot.
 		slotToCommittee.Delete(slot)
 
 		links[index] = committeeID
@@ -47,15 +45,14 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
 	var duties []*exporter.CommitteeDutyTrace
 
-	// Delete from map FIRST while collecting data to prevent race condition
-	// where new messages arrive between reading and deletion
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
 		if !found {
 			return true
 		}
 
-		// Remove from map immediately to prevent new messages from modifying this trace
+		// Remove from map to prevent new messages from finding this trace.
+		// Note: Concurrent operations that already hold a reference are protected by trace's lock below.
 		slotToTraceMap.Delete(slot)
 
 		// Now safely read the trace data while locked
@@ -98,15 +95,13 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
 	var duties []*exporter.ValidatorDutyTrace
 
-	// Delete from map FIRST while collecting data to prevent race condition
-	// where new messages arrive between reading and deletion
 	c.validatorTraces.Range(func(idx phase0.ValidatorIndex, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
 		if !found {
 			return true
 		}
 
-		// Remove from map immediately to prevent new messages from modifying this trace
+		// Remove from map to prevent new messages from finding this trace.
 		slotToTraceMap.Delete(slot)
 
 		// Now safely read the trace data
