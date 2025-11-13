@@ -246,21 +246,17 @@ func (n *p2pNetwork) handlePubsubMessages() func(ctx context.Context, topic stri
 	}
 }
 
-// subscribeToFixedSubnets subscribes to all the node's subnets
-func (n *p2pNetwork) subscribeToFixedSubnets() error {
+// subscribeToFixedSubnets subscribes to all the node's persistent subnets.
+func (n *p2pNetwork) subscribeToFixedSubnets() {
 	if !n.persistentSubnets.HasActive() {
-		return nil
+		return
 	}
 
-	n.logger.Debug("subscribing to fixed subnets", fields.Subnets(n.persistentSubnets))
+	n.logger.Debug("subscribing to fixed subnets", zap.String("persistent_subnets", n.persistentSubnets.StringHumanReadable()))
 
-	subnetList := n.persistentSubnets.SubnetList()
-	for _, subnet := range subnetList {
+	for _, subnet := range n.persistentSubnets.SubnetList() {
 		if err := n.topicsCtrl.Subscribe(strconv.FormatUint(subnet, 10)); err != nil {
-			n.logger.Warn("could not subscribe to subnet",
-				zap.Uint64("subnet", subnet), zap.Error(err))
-			// TODO: handle error
+			n.logger.Error("could not subscribe to subnet", zap.Uint64("subnet", subnet), zap.Error(err))
 		}
 	}
-	return nil
 }

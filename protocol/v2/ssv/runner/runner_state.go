@@ -21,7 +21,7 @@ type State struct {
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different
 	// from the actual duty operators will have decided upon.
 	CurrentDuty spectypes.Duty `json:"CurrentDuty,omitempty"`
-	// Finished marked true when the full successful cycle (pre, consensus and post) got quorum.
+	// Finished is true when the runner has executed duty to a 100% completion successfully.
 	Finished bool
 }
 

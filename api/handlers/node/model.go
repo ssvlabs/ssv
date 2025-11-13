@@ -36,7 +36,7 @@ type peerJSON struct {
 	Addresses     []string         `json:"addresses"`
 	Connections   []connectionJSON `json:"connections"`
 	Connectedness string           `json:"connectedness"`
-	Subnets       string           `json:"subnets"`
+	SubnetsHex    string           `json:"subnets"`
 	Version       string           `json:"version"`
 }
 
