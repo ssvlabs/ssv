@@ -61,7 +61,6 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		// Now safely read the trace data while locked
 		trace.Lock()
 
-		// Warn loudly if we are about to drop pending buffered entries due to roots not being resolved.
 		pendingCount := 0
 		for _, perSigner := range trace.pendingByRoot {
 			for _, byTs := range perSigner {
@@ -71,7 +70,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 			}
 		}
 		if pendingCount > 0 {
-			c.logger.Error("discarding pending committee signer entries (roots unresolved)",
+			c.logger.Error("dropping buffered pending signatures during eviction (proposal never arrived or failed to establish role roots)",
 				fields.Slot(slot), fields.CommitteeID(key),
 				zap.Int("pending_entries", pendingCount),
 				pendingDetails(trace.pendingByRoot))

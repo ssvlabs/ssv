@@ -606,7 +606,6 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				} else {
 					// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
 					pendingCount := 0
-					pendingRoots := len(trace.pendingByRoot)
 					for _, perSigner := range trace.pendingByRoot {
 						for _, byTs := range perSigner {
 							for _, idxs := range byTs {
@@ -619,7 +618,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						fields.Slot(slot),
 						fields.CommitteeID(committeeID),
 						zap.Int("pending_signature_count", pendingCount),
-						zap.Int("pending_roots_count", pendingRoots))
+						pendingDetails(trace.pendingByRoot))
 				}
 			}
 
