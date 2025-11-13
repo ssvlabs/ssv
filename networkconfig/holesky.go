@@ -20,7 +20,8 @@ var HoleskySSV = &SSV{
 	},
 	TotalEthereumValidators: 1757795, // active_validators from https://holesky.beaconcha.in/index/data on Nov 20, 2024
 	Forks: SSVForks{
-		Alan:       0,
-		GasLimit36: 0,
+		Alan:            0,
+		GasLimit36:      0,
+		NetworkTopology: 0,
 	},
 }

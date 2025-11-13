@@ -42,7 +42,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv-spec v1.2.0
-	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20251027161822-0b67ab2cd4f3
+	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20251110161756-cd931098ea44
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.10.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1

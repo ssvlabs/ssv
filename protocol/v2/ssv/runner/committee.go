@@ -294,7 +294,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	version, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
+	version, _ := cr.BaseRunner.NetworkConfig.BeaconForkAtEpoch(epoch)
 
 	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
@@ -985,7 +985,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 
 	slot := duty.DutySlot()
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
-	dataVersion, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
+	dataVersion, _ := cr.BaseRunner.NetworkConfig.BeaconForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {

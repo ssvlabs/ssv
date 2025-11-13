@@ -317,7 +317,7 @@ func committeeTopic(cidHex string) string {
 		return "invalid"
 	}
 
-	return commons.CommitteeTopicID(spectypes.CommitteeID(cid))[0]
+	return commons.CommitteeTopicIDAlan(spectypes.CommitteeID(cid))[0]
 }
 
 type P struct {

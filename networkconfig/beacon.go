@@ -135,7 +135,7 @@ func (b *Beacon) EpochDuration() time.Duration {
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
 }
 
-func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+func (b *Beacon) BeaconForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,
 		spec.DataVersionAltair,

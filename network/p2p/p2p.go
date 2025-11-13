@@ -70,6 +70,12 @@ type HostProvider interface {
 	Host() host.Host
 }
 
+type statusWithSubnet struct {
+	status     committeeSubscriptionStatus
+	subnet     uint64
+	subnetAlan uint64
+}
+
 // p2pNetwork implements network.P2PNetwork
 type p2pNetwork struct {
 	parentCtx context.Context
@@ -95,7 +101,7 @@ type p2pNetwork struct {
 	state int32
 
 	// subscribedCommittees tracks committee subscription statuses for committees we've subscribed to.
-	subscribedCommittees *hashmap.Map[string, committeeSubscriptionStatus]
+	subscribedCommittees *hashmap.Map[string, statusWithSubnet]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
@@ -137,7 +143,7 @@ func New(
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
-		subscribedCommittees:    hashmap.New[string, committeeSubscriptionStatus](),
+		subscribedCommittees:    hashmap.New[string, statusWithSubnet](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,

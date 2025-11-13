@@ -221,7 +221,15 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	}
 
 	// Rule: Check if message was sent in the correct topic
-	messageTopics := commons.CommitteeTopicID(committeeInfo.committeeID)
+	var messageTopics []string
+
+	// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
+	// we don't expect post-fork messages to be received before the fork.
+	if mv.netCfg.NetworkTopologyFork() {
+		messageTopics = []string{commons.SubnetTopicID(committeeInfo.subnet)}
+	} else {
+		messageTopics = []string{commons.SubnetTopicID(committeeInfo.subnetAlan)}
+	}
 	topicBaseName := commons.GetTopicBaseName(topic)
 	if !slices.Contains(messageTopics, topicBaseName) {
 		e := ErrIncorrectTopic
@@ -274,7 +282,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
+		return committeeInfoFromCommittee(committee), nil
 	}
 
 	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
@@ -300,13 +308,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeInfo{}, e
 	}
 
-	operators := make([]spectypes.OperatorID, 0, len(share.Committee))
-	for _, c := range share.Committee {
-		operators = append(operators, c.Signer)
-	}
-
 	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
-	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
+	return committeeInfoFromShare(share, indices), nil
 }
 
 func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {

@@ -58,7 +58,7 @@ func (s *E2ETestSuite) GetContext() context.Context {
 
 // CalculateDomain computes the signing domain for a given domain type and epoch
 func (s *E2ETestSuite) CalculateDomain(domainType phase0.DomainType, epoch phase0.Epoch) (phase0.Domain, error) {
-	_, fork := s.env.GetBeaconConfig().ForkAtEpoch(epoch)
+	_, fork := s.env.GetBeaconConfig().BeaconForkAtEpoch(epoch)
 
 	forkData := &phase0.ForkData{
 		CurrentVersion:        fork.CurrentVersion,
@@ -111,7 +111,7 @@ func (s *E2ETestSuite) SignWeb3Signer(
 		req.Attestation = data
 
 	case spectypes.DomainProposer:
-		version, _ := s.env.GetBeaconConfig().ForkAtEpoch(epoch)
+		version, _ := s.env.GetBeaconConfig().BeaconForkAtEpoch(epoch)
 		beaconBlockData, err := web3signer.ConvertBlockToBeaconBlockData(obj, version)
 		if err != nil {
 			return nil, phase0.Root{}, err

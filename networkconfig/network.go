@@ -30,3 +30,7 @@ func (n Network) StorageName() string {
 func (n Network) GasLimit36Fork() bool {
 	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.GasLimit36
 }
+
+func (n Network) NetworkTopologyFork() bool {
+	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.NetworkTopology
+}

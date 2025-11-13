@@ -430,7 +430,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	sharePubkey phase0.BLSPubKey,
 ) (*web3signer.BeaconBlockData, error) {
 	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
-	version, _ := km.beaconConfig.ForkAtEpoch(epoch)
+	version, _ := km.beaconConfig.BeaconForkAtEpoch(epoch)
 	ret, err := web3signer.ConvertBlockToBeaconBlockData(obj, version)
 	if err != nil {
 		return nil, err
@@ -454,7 +454,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 }
 
 func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
-	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
+	_, currentFork := km.beaconConfig.BeaconForkAtEpoch(epoch)
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
