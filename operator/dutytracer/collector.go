@@ -869,7 +869,9 @@ type committeeDutyTrace struct {
 	pendingByRoot map[phase0.Root]map[spectypes.OperatorID]map[uint64][]phase0.ValidatorIndex
 }
 
-func (dt *committeeDutyTrace) trace() *exporter.CommitteeDutyTrace {
+// safeDeepCopy returns a deep copy of the trace data with internal locking.
+// Use this when you don't already hold the lock. For manual locking, call DeepCopy() directly while holding the lock.
+func (dt *committeeDutyTrace) safeDeepCopy() *exporter.CommitteeDutyTrace {
 	dt.Lock()
 	defer dt.Unlock()
 	return dt.DeepCopy()

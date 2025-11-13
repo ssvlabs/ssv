@@ -161,6 +161,8 @@ type CommitteeDutyTrace struct {
 }
 
 // DeepCopy returns a deep copy of the CommitteeDutyTrace.
+// IMPORTANT: Caller must hold appropriate locks when copying shared/mutable data structures
+// to prevent concurrent modifications during the copy operation.
 func (trace *CommitteeDutyTrace) DeepCopy() *CommitteeDutyTrace {
 	if trace == nil {
 		return nil
@@ -223,6 +225,8 @@ type DiskMsg struct {
 }
 
 // DeepCopy returns a deep copy of the ValidatorDutyTrace.
+// IMPORTANT: Caller must hold appropriate locks when copying shared/mutable data structures
+// to prevent concurrent modifications during the copy operation.
 func (trace *ValidatorDutyTrace) DeepCopy() *ValidatorDutyTrace {
 	if trace == nil {
 		return nil

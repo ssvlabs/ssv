@@ -135,7 +135,7 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		dt, found := committeeSlots.Get(wantSlot)
 		if found {
-			duties = append(duties, dt.trace())
+			duties = append(duties, dt.safeDeepCopy())
 		}
 		return true // keep iterating
 	})
@@ -183,7 +183,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 		return nil, ErrNotFound
 	}
 
-	clone := trace.trace()
+	clone := trace.safeDeepCopy()
 
 	if !hasSignersForRoles(clone, roles...) {
 		return nil, ErrNotFound
