@@ -24,8 +24,8 @@ import (
 const (
 	certValidityHours = 24
 	testPassword      = "test123"
-	fileMode          = 0600
-	dirMode           = 0750
+	fileMode          = 0644
+	dirMode           = 0755
 	rsaKeyBits        = 2048
 )
 
