@@ -205,7 +205,6 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
-		span.AddEvent("instance is not decided")
 		return nil
 	}
 
