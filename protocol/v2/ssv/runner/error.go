@@ -13,18 +13,21 @@ var (
 	// ErrNoValidDutiesToExecute means committee runner has no duties to execute (even though the committee runner
 	// had to do some work to arrive at that conclusion)
 	ErrNoValidDutiesToExecute = fmt.Errorf("committee has no valid duties to execute")
-	// ErrNoRunningDuty means we might not have started the duty yet, while another operator already did + sent this
-	// message to us.
-	ErrNoRunningDuty = fmt.Errorf("no running duty")
+	// ErrNoDutyAssigned means we haven't started the duty yet, while another operator already has + sent
+	// this message to us.
+	ErrNoDutyAssigned = fmt.Errorf("no duty assigned")
+	// ErrRunningDutyFinished means we have finished the duty already, while another operator hasn't finished it
+	// yet + sent this message to us.
+	ErrRunningDutyFinished = fmt.Errorf("running duty finished")
 	// ErrFuturePartialSigMsg means the message we've got is "from the future"; it can happen if we haven't advanced
-	// the runner to the slot the message is targeting yet, while another operator already did + sent this message
+	// the runner to the slot the message is targeting yet, while another operator already has + sent this message
 	// to us.
 	ErrFuturePartialSigMsg = fmt.Errorf("future partial sig msg")
-	// ErrInstanceNotFound means we might not have started the QBFT instance yet, while another operator already did
+	// ErrInstanceNotFound means we might not have started the QBFT instance yet, while another operator already has
 	// + sent this message to us.
 	ErrInstanceNotFound = fmt.Errorf("instance not found")
 	// ErrNoDecidedValue means we might not have finished the QBFT consensus phase yet, while another operator
-	// already did + sent this message to us.
+	// already has + sent this message to us.
 	ErrNoDecidedValue = fmt.Errorf("no decided value")
 )
 

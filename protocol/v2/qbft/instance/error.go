@@ -7,7 +7,7 @@ import (
 
 var (
 	// ErrWrongMsgRound means we might not have changed the round to the next one yet, while another operator
-	// already did + sent this message to us.
+	// already has + sent this message to us.
 	ErrWrongMsgRound = fmt.Errorf("wrong msg round")
 	// ErrNoProposalForCurrentRound means we might not have received a proposal-message yet, while another operator already
 	// did and started preparing it.

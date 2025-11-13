@@ -561,6 +561,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	span.AddEvent("base post consensus message processing")
 	hasQuorum, quorumRoots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, cr, signedMsg)
+	if errors.Is(err, ErrNoDutyAssigned) {
+		err = NewRetryableError(err)
+	}
 	if err != nil {
 		return tracedErrorf(span, "failed processing post consensus message: %w", err)
 	}
