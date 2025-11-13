@@ -90,6 +90,11 @@ func generatePKCS12FromPEM(certPath, keyPath, outputPath, password string) error
 		return fmt.Errorf("failed to create PKCS12 keystore: %w, output: %s", err, string(output))
 	}
 
+	// Ensure PKCS12 file has correct permissions for container access
+	if err := os.Chmod(outputPath, fileMode); err != nil {
+		return fmt.Errorf("failed to set permissions on PKCS12 keystore: %w", err)
+	}
+
 	return nil
 }
 
