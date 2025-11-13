@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // MessageHandler process the provided message. Message processing can fail with retryable or
@@ -47,7 +48,7 @@ func mKey(msg *queue.SSVMessage, logger *zap.Logger) messageKey {
 	}
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		signer := fmt.Sprintf("%d", psm.Messages[0].Signer) // same signer for all messages
+		signer := fmt.Sprintf("%d", ssvtypes.PartialSigMsgSigner(psm)) // same signer for all messages
 		return messageKey(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
 	}
 	return idUndefined
@@ -66,11 +67,9 @@ func logWithMessageMetadata(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logg
 
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		// signer must be the same for all messages, at least 1 message must be present (this is validated prior)
-		signer := psm.Messages[0].Signer
 		logger = logger.With(
 			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
-			zap.Uint64("signer", signer),
+			zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(psm)),
 		)
 	}
 

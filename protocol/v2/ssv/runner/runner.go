@@ -61,7 +61,7 @@ type Runner interface {
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error
 	// OnTimeoutQBFT processes timeout event that can arrive during QBFT consensus phase
-	OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error
+	OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error
 
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
@@ -226,21 +226,34 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(
-	ctx context.Context,
-	runner Runner,
-	signedMsg *spectypes.PartialSignatureMessages,
-) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
+
 	if err := b.ValidatePreConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
+	const gotPreConsensusMsgEvent = "📬 got pre-consensus message"
+	logger.Debug(gotPreConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
+	span.AddEvent(gotPreConsensusMsgEvent)
+
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+
+	if hasQuorum {
+		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
+		logger.Debug(gotPreConsensusQuorumEvent)
+		span.AddEvent(gotPreConsensusQuorumEvent)
+	}
+
 	return hasQuorum, roots, nil
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, valueCheckFn specqbft.ProposedValueCheckF, msg *spectypes.SignedSSVMessage, decidedValue spectypes.Encoder) (bool, spectypes.Encoder, error) {
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
+
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
@@ -284,6 +297,10 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, errors.Wrap(err, "could not encode decided value")
 	}
 
+	const qbftInstanceIsDecidedEvent = "QBFT instance is decided"
+	logger.Debug(qbftInstanceIsDecidedEvent)
+	span.AddEvent(qbftInstanceIsDecidedEvent)
+
 	// update the decided and the highest decided slot
 	b.State.DecidedValue = decidedValueEncoded
 	b.highestDecidedSlot = b.State.CurrentDuty.DutySlot()
@@ -292,12 +309,26 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
+
 	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
+	const gotPostConsensusMsgEvent = "📬 got post-consensus message"
+	logger.Debug(gotPostConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
+	span.AddEvent(gotPostConsensusMsgEvent)
+
 	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+
+	if hasQuorum {
+		const gotPostConsensusQuorumEvent = "🎯 got post-consensus quorum"
+		logger.Debug(gotPostConsensusQuorumEvent)
+		span.AddEvent(gotPostConsensusQuorumEvent)
+	}
+
 	return hasQuorum, roots, nil
 }
 
@@ -369,7 +400,6 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 func (b *BaseRunner) decide(
 	ctx context.Context,
 	logger *zap.Logger,
-	runner Runner,
 	slot phase0.Slot,
 	input spectypes.Encoder,
 	valueChecker ssv.ValueChecker,
@@ -386,19 +416,18 @@ func (b *BaseRunner) decide(
 		return fmt.Errorf("input data invalid: %w", err)
 	}
 
-	span.AddEvent("start new instance")
-	if err := b.QBFTController.StartNewInstance(
+	newInstance, err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
 		specqbft.Height(slot),
 		byts,
 		valueChecker,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("could not start new QBFT instance: %w", err)
 	}
-	newInstance := b.QBFTController.StoredInstances.FindInstance(b.QBFTController.Height)
 	if newInstance == nil {
-		return fmt.Errorf("could not find newly created QBFT instance")
+		return fmt.Errorf("could not start new QBFT instance: instance is nil")
 	}
 
 	b.State.RunningInstance = newInstance
@@ -441,6 +470,6 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	return nil
 }
 
-func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
-	return b.QBFTController.OnTimeout(ctx, logger, msg)
+func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+	return b.QBFTController.OnTimeout(ctx, logger, timeoutData)
 }

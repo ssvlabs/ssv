@@ -8,11 +8,10 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func signBeaconObject(
@@ -90,8 +89,7 @@ func (b *BaseRunner) validatePartialSigMsg(
 		)))
 	}
 
-	// Get signer, it is the same in all psigMsgs.Messages and len(psigMsgs.Messages) > 0 (guaranteed by psigMsgs.Validate()).
-	msgSigner := psigMsgs.Messages[0].Signer
+	msgSigner := ssvtypes.PartialSigMsgSigner(psigMsgs)
 
 	// Get committee (unique for runner)
 	var shareSample *spectypes.Share
@@ -137,7 +135,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 	committee []*spectypes.ShareMember) error {
 	for _, n := range committee {
 		if n.Signer == signer {
-			pk, err := types.DeserializeBLSPublicKey(n.SharePubKey)
+			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}

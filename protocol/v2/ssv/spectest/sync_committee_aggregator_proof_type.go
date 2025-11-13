@@ -13,6 +13,7 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -59,7 +60,7 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 	testType = strings.Replace(testType, "spectest.", "synccommitteeaggregator.", 1)
 
 	runnerState := &runner.State{}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	runnerState, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, runnerState)
 	require.NoError(t, err)

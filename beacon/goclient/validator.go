@@ -48,7 +48,7 @@ func (gc *GoClient) SubmitValidatorRegistrations(ctx context.Context, registrati
 		if err != nil {
 			return errMultiClient(fmt.Errorf("submit validator registrations (chunk size = %d): %w", len(chunk), err), "SubmitValidatorRegistrations")
 		}
-		gc.log.Info("submitted validator registrations", fields.Count(len(chunk)), fields.Duration(reqStart))
+		gc.log.Info("submitted validator registrations", fields.Count(len(chunk)), fields.Took(time.Since(reqStart)))
 	}
 
 	return nil

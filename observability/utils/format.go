@@ -2,9 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
-	"time"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -19,8 +17,4 @@ func FormatCommittee(operators []spectypes.OperatorID) string {
 		opids = append(opids, fmt.Sprint(op))
 	}
 	return strings.Join(opids, "_")
-}
-
-func FormatDuration(val time.Duration) string {
-	return strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
 }

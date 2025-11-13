@@ -78,3 +78,10 @@ func (m *EventMsg) Encode() ([]byte, error) {
 func (m *EventMsg) Decode(data []byte) error {
 	return json.Unmarshal(data, &m)
 }
+
+// PartialSigMsgSigner returns the signer for the provided partial-sig message. The signer must be the same for
+// all messages, and at least 1 message must be present (this is assumed to have been validated before calling
+// this func).
+func PartialSigMsgSigner(msg *spectypes.PartialSignatureMessages) spectypes.OperatorID {
+	return msg.Messages[0].Signer
+}
