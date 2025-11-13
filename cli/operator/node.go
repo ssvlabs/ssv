@@ -34,6 +34,7 @@ import (
 
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
+	pinned_peers "github.com/ssvlabs/ssv/api/handlers/pinned_peers"
 	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -658,7 +659,10 @@ var StartNodeCmd = &cobra.Command{
 					elNodeName,
 					eventSyncerNodeName,
 				),
-				&hvalidators.Validators{
+				pinned_peers.New(
+					p2pNetwork.Pinned(),
+					pinned_peers.NewLibp2pConnChecker(p2pNetwork.(p2pv1.HostProvider).Host().Network()),
+				), &hvalidators.Validators{
 					Shares: nodeStorage.Shares(),
 				},
 				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),

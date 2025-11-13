@@ -37,7 +37,11 @@ type Config struct {
 	Ctx          context.Context
 	Bootnodes    string   `yaml:"Bootnodes" env:"BOOTNODES" env-default:"" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
 	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-default:"discv5" env-description:"Discovery protocol to use (discv5, mdns)" `
-	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-default:"" env-description:"List of peer IDs to always connect to"`
+	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-default:"" env-description:"List of peer multiaddrs or peer IDs to prefer connecting to early (comma-separated or YAML list)"`
+	// PinnedPeers are peers that must stay connected at all times. The node will
+	// protect these peers from pruning, persist their addresses in the peerstore
+	// with a permanent TTL, and attempt to reconnect on disconnect.
+	PinnedPeers []string `yaml:"PinnedPeers" env:"PINNED_PEERS" env-default:"" env-description:"List of peer multiaddrs (or comma-separated groups) to keep always-connected; each can include /p2p/<peerID>"`
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for P2P transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
