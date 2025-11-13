@@ -163,23 +163,16 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	logger.Debug(waitedOutProposerDelayEvent)
 	span.AddEvent(waitedOutProposerDelayEvent)
 
+	duty = r.state().CurrentDuty.(*spectypes.ValidatorDuty)
+
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
-	duty = r.state().CurrentDuty.(*spectypes.ValidatorDuty)
-
 	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
-		const errMsg = "failed to get beacon block"
-
-		logger.Error(errMsg,
-			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-			fields.BlockTime(time.Since(start)),
-			zap.Error(err))
-		return fmt.Errorf("%s: %w", errMsg, err)
+		return fmt.Errorf("get beacon block: %w", err)
 	}
-
 	// Log essentials about the retrieved block.
 	logFields := []zap.Field{
 		zap.String("version", vBlk.Version.String()),
@@ -187,21 +180,18 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		zap.Duration("proposer_delay", r.proposerDelay),
 		fields.Took(time.Since(start)),
 	}
-
 	blockHash, err := extractBlockHash(vBlk)
 	if err != nil {
 		logFields = append(logFields, zap.NamedError("blockHash_err", err))
 	} else {
 		logFields = append(logFields, fields.BlockHash(blockHash))
 	}
-
 	feeRecipient, err := vBlk.FeeRecipient()
 	if err != nil {
 		logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
 	} else {
 		logFields = append(logFields, fields.FeeRecipient(feeRecipient[:]))
 	}
-
 	const eventMsg = "🧊 got beacon block proposal"
 	logger.Info(eventMsg, logFields...)
 	span.AddEvent(eventMsg, trace.WithAttributes(
@@ -239,7 +229,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	r.measurements.StartConsensus()
 	if err := r.BaseRunner.decide(ctx, logger, duty.Slot, input, r.ValCheck); err != nil {
-		return fmt.Errorf("can't start new duty runner instance for duty: %w", err)
+		return fmt.Errorf("qbft-decide: %w", err)
 	}
 
 	return nil
@@ -431,9 +421,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	start := time.Now()
 	if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-		const errMsg = "could not submit beacon block"
-		logger.Error(errMsg, fields.Took(time.Since(start)), zap.Error(err))
-		return fmt.Errorf("%s: %w", errMsg, err)
+		return fmt.Errorf("submit beacon block: %w", err)
 	}
 	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()), spectypes.BNRoleProposer)
 	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"

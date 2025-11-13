@@ -182,7 +182,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	r.measurements.StartConsensus()
 	if err := r.BaseRunner.decide(ctx, logger, duty.Slot, input, r.ValCheck); err != nil {
-		return fmt.Errorf("can't start new duty runner instance for duty: %w", err)
+		return fmt.Errorf("qbft-decide: %w", err)
 	}
 
 	return nil

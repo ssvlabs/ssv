@@ -102,7 +102,7 @@ func TestAll(t *testing.T) {
 	}
 
 	if err := r.BaseRunner.decide(r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+		return errors.Wrap(err, "qbft-decide")
 	}
 
 	return nil
@@ -146,7 +146,7 @@ func TestAll(t *testing.T) {
 		DataSSZ: byts,
 	}
 	if err := r.BaseRunner.decide(r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+		return errors.Wrap(err, "qbft-decide")
 	}
 	return nil
 }`

@@ -1062,7 +1062,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 		vote,
 	)
 	if err := r.BaseRunner.decide(ctx, logger, duty.DutySlot(), vote, r.ValCheck); err != nil {
-		return fmt.Errorf("failed to start new duty runner instance: %w", err)
+		return fmt.Errorf("qbft-decide: %w", err)
 	}
 
 	return nil
