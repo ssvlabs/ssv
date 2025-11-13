@@ -19,7 +19,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/observability/log/fields/stringer"
 	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -72,7 +71,6 @@ const (
 	FieldSlot                  = "slot"
 	FieldTotalConsensusTime    = "total_consensus_time"
 	FieldTotalDutyTime         = "total_duty_time"
-	FieldSubnets               = "subnets"
 	FieldTargetNodeENR         = "target_node_enr"
 	FieldToBlock               = "to_block"
 	FieldTook                  = "took"
@@ -136,10 +134,6 @@ func ENRLocalNode(val *enode.LocalNode) zapcore.Field {
 
 func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
 	return zap.Stringer(FieldUpdatedENRLocalNode, val.Node())
-}
-
-func Subnets(val commons.Subnets) zapcore.Field {
-	return zap.Stringer(FieldSubnets, &val)
 }
 
 func PeerID(val peer.ID) zapcore.Field {
