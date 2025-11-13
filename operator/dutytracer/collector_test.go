@@ -994,7 +994,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 			trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
 			require.NoError(t, err)
 			trace.OperatorIDs = []uint64{1, 2, 3}
-			collector.store.SaveCommitteeDuties(slot, []*exporter.CommitteeDutyTrace{trace.trace()})
+			collector.store.SaveCommitteeDuties(slot, []*exporter.CommitteeDutyTrace{trace.safeDeepCopy()})
 			collector.lastEvictedSlot.Store(uint64(slot))
 			// Test: Create a new collector to ensure cache is empty and get the trace.
 			diskTrace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)

@@ -16,7 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
@@ -105,14 +104,14 @@ var ConstructBaseRunner = func(
 		valCheck = nil
 	}
 
-	config := testing.TestingConfig(logger, keySet)
+	config := protocoltesting.TestingConfig(logger, keySet)
 	config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return 1
 	}
 	config.Network = net
 	config.BeaconSigner = km
 
-	contr := testing.NewTestingQBFTController(
+	contr := protocoltesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
 		identifier[:],
 		operator,
@@ -371,13 +370,13 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck = nil
 		}
 
-		config := testing.TestingConfig(logger, keySetInstance)
+		config := protocoltesting.TestingConfig(logger, keySetInstance)
 		config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 1
 		}
 		config.Network = net
 
-		contr = testing.NewTestingQBFTController(
+		contr = protocoltesting.NewTestingQBFTController(
 			spectestingutils.Testing4SharesSet(),
 			identifier[:],
 			committeeMember,
