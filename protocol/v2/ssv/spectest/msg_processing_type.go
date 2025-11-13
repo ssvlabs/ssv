@@ -22,7 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -79,25 +78,25 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	case *runner.CommitteeRunner:
 		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+				inst.ValueChecker = protocoltesting.TestingValueChecker{}
 			}
 		}
 	case *runner.AggregatorRunner:
 		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+				inst.ValueChecker = protocoltesting.TestingValueChecker{}
 			}
 		}
 	case *runner.ProposerRunner:
 		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+				inst.ValueChecker = protocoltesting.TestingValueChecker{}
 			}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
 		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = qbfttesting.TestingValueChecker{}
+				inst.ValueChecker = protocoltesting.TestingValueChecker{}
 			}
 		}
 	}

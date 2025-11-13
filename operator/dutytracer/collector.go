@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -395,7 +396,7 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 		trace.OperatorIDs = cmt.Operators
 	}
 
-	signer := msg.Messages[0].Signer
+	signer := ssvtypes.PartialSigMsgSigner(msg)
 	var attIdxs []phase0.ValidatorIndex
 	var scIdxs []phase0.ValidatorIndex
 
@@ -777,7 +778,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		tr := &exporter.PartialSigTrace{
 			Type:         pSigMessages.Type,
 			BeaconRoot:   pSigMessages.Messages[0].SigningRoot,
-			Signer:       pSigMessages.Messages[0].Signer,
+			Signer:       ssvtypes.PartialSigMsgSigner(pSigMessages),
 			ReceivedTime: startTime,
 		}
 
