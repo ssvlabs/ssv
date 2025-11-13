@@ -86,6 +86,11 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	}
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+		// also needs to be retried.
+		err = NewRetryableError(err)
+	}
 	if err != nil {
 		return fmt.Errorf("failed processing voluntary exit message: %w", err)
 	}

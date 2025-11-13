@@ -109,6 +109,11 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+		// also needs to be retried.
+		err = NewRetryableError(err)
+	}
 	if err != nil {
 		return fmt.Errorf("failed processing selection proof message: %w", err)
 	}
@@ -280,6 +285,11 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
+		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
+		// also needs to be retried.
+		err = NewRetryableError(err)
+	}
 	if err != nil {
 		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
