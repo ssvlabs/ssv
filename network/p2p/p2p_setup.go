@@ -11,6 +11,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	libp2p_event "github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -145,12 +146,92 @@ func (n *p2pNetwork) SetupHost() error {
 	n.host = host
 	n.libConnManager = host.ConnManager()
 
+	// TODO
+	err = logLocalAddressUpdates(n.logger, host)
+	if err != nil {
+		panic(err)
+	}
+	err = logPeerIdentify(n.logger, host)
+	if err != nil {
+		panic(err)
+	}
+
 	backoffFactory := libp2pdiscbackoff.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
 	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
 		return errors.Wrap(err, "could not create backoff connector")
 	}
 	n.backoffConnector = backoffConnector
+
+	return nil
+}
+
+func logPeerIdentify(logger *zap.Logger, h host.Host) error {
+	bus := h.EventBus()
+	sub, err := bus.Subscribe(new(libp2p_event.EvtPeerIdentificationCompleted))
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		defer sub.Close()
+		for e := range sub.Out() {
+			ev := e.(libp2p_event.EvtPeerIdentificationCompleted)
+
+			var evAddrs []string
+			for _, addr := range ev.ListenAddrs {
+				evAddrs = append(evAddrs, addr.String())
+			}
+
+			logger.Debug("IDENT event",
+				zap.String("host_id?", ev.Peer.String()),
+				zap.Strings("host_addrs?", evAddrs),
+			)
+		}
+	}()
+	return nil
+}
+
+func logLocalAddressUpdates(logger *zap.Logger, h host.Host) error {
+	bus := h.EventBus()
+	sub, err := bus.Subscribe(new(libp2p_event.EvtLocalAddressesUpdated))
+	if err != nil {
+		return err
+	}
+
+	var hostAddrs []string
+	for _, addr := range h.Addrs() {
+		hostAddrs = append(hostAddrs, addr.String())
+	}
+
+	go func() {
+		defer sub.Close()
+		for e := range sub.Out() {
+			ev := e.(libp2p_event.EvtLocalAddressesUpdated)
+
+			var added, maintained, removed []string
+			for _, u := range ev.Current {
+				switch u.Action {
+				case libp2p_event.Unknown:
+					panic("unknown event")
+				case libp2p_event.Added:
+					added = append(added, u.Address.String())
+				case libp2p_event.Maintained:
+					maintained = append(maintained, u.Address.String())
+				case libp2p_event.Removed:
+					removed = append(removed, u.Address.String())
+				}
+			}
+
+			logger.Debug("ADDR event",
+				zap.String("host_id", h.ID().String()),
+				zap.Strings("host_addrs", hostAddrs),
+				zap.Strings("added", added),
+				zap.Strings("maintained", maintained),
+				zap.Strings("removed", removed),
+			)
+		}
+	}()
 
 	return nil
 }
