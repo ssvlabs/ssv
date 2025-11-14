@@ -33,7 +33,6 @@ type CommitteeRunnerFunc func(
 
 type AggregatorCommitteeRunnerFunc func(
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
-	attestingValidators []phase0.BLSPubKey,
 ) (*runner.AggregatorCommitteeRunner, error)
 
 type Committee struct {
@@ -129,12 +128,12 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	}
 
 	span.SetStatus(codes.Ok, "")
-	return r, q, nil
+	return commRunner, q, nil
 }
 
 // StartAggregatorDuty starts a new aggregator duty for the given slot.
-func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
-	*runner.CommitteeRunner,
+func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.AggregatorCommitteeDuty) (
+	*runner.AggregatorCommitteeRunner,
 	queueContainer,
 	error,
 ) {
@@ -159,7 +158,7 @@ func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger,
 	}
 
 	span.SetStatus(codes.Ok, "")
-	return r, q, nil
+	return aggCommRunner, q, nil
 }
 
 func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
@@ -203,7 +202,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	c.unsafePruneExpiredRunners(logger, duty.Slot)
 
 	span.SetStatus(codes.Ok, "")
-	return commRunner, runnableDuty, nil
+	return commRunner, q, runnableDuty, nil
 }
 
 func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.AggregatorCommitteeDuty) (
@@ -227,15 +226,15 @@ func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *
 		return nil, queueContainer{}, nil, traces.Errorf(span, "AggregatorCommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
-	shares, attesters, runnableDuty, err := c.prepareAggregatorDuty(logger, duty)
+	shares, runnableDuty, err := c.prepareAggregatorDuty(logger, duty)
 	if err != nil {
 		return nil, queueContainer{}, nil, traces.Error(span, err)
 	}
 
 	// Create the corresponding runner.
-	aggCommRunner, err = c.CreateAggregatorRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
+	aggCommRunner, err = c.CreateAggregatorRunnerFn(shares)
 	if err != nil {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
+		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create AggregatorCommitteeRunner: %w", err)
 	}
 	aggCommRunner.SetTimeoutFunc(c.onTimeout)
 	c.AggregatorRunners[duty.Slot] = aggCommRunner
@@ -247,7 +246,7 @@ func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *
 	c.unsafePruneExpiredRunners(logger, duty.Slot)
 
 	span.SetStatus(codes.Ok, "")
-	return aggCommRunner, runnableDuty, nil
+	return aggCommRunner, q, runnableDuty, nil
 }
 
 // getQueue returns queue for the provided slot, lazily initializing it if it didn't exist previously.
@@ -319,14 +318,14 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 	return shares, attesters, runnableDuty, nil
 }
 
-// prepareAggregatorDuty filters out unrunnable validator duties and returns the shares and attesters.
+// prepareAggregatorDuty filters out unrunnable validator aggregator duties and returns the shares and attesters.
 func (c *Committee) prepareAggregatorDuty(logger *zap.Logger, duty *spectypes.AggregatorCommitteeDuty) (
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	runnableDuty *spectypes.AggregatorCommitteeDuty,
 	err error,
 ) {
 	if len(duty.ValidatorDuties) == 0 {
-		return nil, nil, spectypes.NewError("no beacon duties")
+		return nil, nil, spectypes.NewError(spectypes.NoBeaconDutiesErrorCode, "no beacon duties")
 	}
 
 	runnableDuty = &spectypes.AggregatorCommitteeDuty{
@@ -348,7 +347,7 @@ func (c *Committee) prepareAggregatorDuty(logger *zap.Logger, duty *spectypes.Ag
 	}
 
 	if len(shares) == 0 {
-		return nil, nil, spectypes.NewError("no shares for duty's validators")
+		return nil, nil, spectypes.NewError(spectypes.NoValidatorSharesErrorCode, "no shares for duty's validators")
 	}
 
 	return shares, runnableDuty, nil

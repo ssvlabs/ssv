@@ -93,6 +93,14 @@ type validatorConsensusDataChecker struct {
 	beaconConfig *networkconfig.Beacon
 }
 
+func NewValidatorConsensusDataChecker(
+	beaconConfig *networkconfig.Beacon,
+) ValueChecker {
+	return &validatorConsensusDataChecker{
+		beaconConfig: beaconConfig,
+	}
+}
+
 func (v *validatorConsensusDataChecker) CheckValue(value []byte) error {
 	cd := &spectypes.ValidatorConsensusData{}
 	if err := cd.Decode(value); err != nil {

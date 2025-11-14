@@ -695,7 +695,7 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *Controller) ExecuteAggregatorCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty) {
+func (c *Controller) ExecuteAggregatorCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty) {
 	cm, ok := c.validatorsMap.GetCommittee(committeeID)
 	if !ok {
 		const eventMsg = "could not find committee"
@@ -722,19 +722,15 @@ func (c *Controller) ExecuteAggregatorCommitteeDuty(ctx context.Context, committ
 		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
-	logger := c.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.Epoch(dutyEpoch)).
-		With(fields.Slot(duty.Slot)).
-		With(fields.CommitteeID(committeeID)).
-		With(fields.DutyID(dutyID))
-
-	span.AddEvent("executing committee duty")
-	if err := cm.ExecuteAggregatorDuty(ctx, duty); err != nil {
-		logger.Error("could not execute committee duty", zap.Error(err))
+	span.AddEvent("starting aggregator committee duty")
+	r, q, err := cm.StartAggregatorDuty(ctx, logger, duty)
+	if err != nil {
+		logger.Error("could not start aggregator committee duty", zap.Error(err))
 		span.SetStatus(codes.Error, err.Error())
 		return
 	}
+
+	cm.ConsumeQueue(ctx, logger, q, cm.ProcessMessage, r)
 
 	span.SetStatus(codes.Ok, "")
 }
@@ -817,7 +813,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 	if !found {
 		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
 		committeeRunnerFunc := SetupCommitteeRunners(c.ctx, opts)
-		aggregatorCommitteeRunnerFunc := SetupAggregatorCommitteeRunners(committeeCtx, opts)
+		aggregatorCommitteeRunnerFunc := SetupAggregatorCommitteeRunners(c.ctx, opts)
 
 		vc = validator.NewCommittee(
 			c.logger,
@@ -1142,12 +1138,10 @@ func SetupAggregatorCommitteeRunners(
 
 	return func(
 		shares map[phase0.ValidatorIndex]*spectypes.Share,
-		attestingValidators []phase0.BLSPubKey,
 	) (*runner.AggregatorCommitteeRunner, error) {
 		aggCommRunner, err := runner.NewAggregatorCommitteeRunner(
 			options.NetworkConfig,
 			shares,
-			attestingValidators,
 			buildController(spectypes.RoleAggregatorCommittee),
 			options.Beacon,
 			options.Network,

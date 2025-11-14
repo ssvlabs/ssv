@@ -49,7 +49,7 @@ type DutiesExecutor interface {
 type DutyExecutor interface {
 	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
 	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
-	ExecuteAggregatorCommitteeDuty(ctx context.Context, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty)
+	ExecuteAggregatorCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty)
 }
 
 type BeaconNode interface {
@@ -550,14 +550,14 @@ func (s *Scheduler) ExecuteAggregatorCommitteeDuties(ctx context.Context, duties
 		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := ctxWithParentDeadline(ctx)
+			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
 			defer cancel()
 			if !withDeadline {
 				logger.Warn("parent-context has no deadline set")
 			}
 
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			s.dutyExecutor.ExecuteAggregatorCommitteeDuty(dutyCtx, committee.id, duty)
+			s.dutyExecutor.ExecuteAggregatorCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
 	}
 
