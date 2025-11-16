@@ -230,12 +230,12 @@ func (v *Validator) StartQueueConsumer(
 				case runner.IsRetryable(err) && msgState.attempts <= retryCount:
 					msgState.attempts++
 					msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
-					var retryingMsgDueToErrorEvent = fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying message in ~%dms", retryDelay.Milliseconds())
-					msgLogger.Debug(retryingMsgDueToErrorEvent, zap.Error(err))
-					msgState.span.AddEvent(retryingMsgDueToErrorEvent, trace.WithAttributes(
-						attribute.String("retry_reason", err.Error()),
-						attribute.Int64("attempt", currentAttempt),
-					))
+					msgState.span.AddEvent(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying in ~%dms", retryDelay.Milliseconds()),
+						trace.WithAttributes(
+							attribute.String("retry_reason", err.Error()),
+							attribute.Int64("attempt", currentAttempt),
+						),
+					)
 					go func(msg *queue.SSVMessage, msgState *messageProcessingState, attempt int64) {
 						select {
 						case <-time.After(retryDelay):
