@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -41,9 +42,7 @@ func (g *gossipScoreIndex) SetScores(peerScores map[peer.ID]float64) {
 
 	g.clear()
 	// Copy the map
-	for peerID, score := range peerScores {
-		g.score[peerID] = score
-	}
+	maps.Copy(g.score, peerScores)
 }
 
 func (g *gossipScoreIndex) clear() {
