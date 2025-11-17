@@ -19,11 +19,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -49,17 +49,13 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		height++
 	}
-	if test.ExpectedError != "" {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
-	}
+	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 }
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := spectestingutils.TestingIdentifier
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
-	return qbfttesting.NewTestingQBFTController(
+	config := protocoltesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
+	return protocoltesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
 		identifier[:],
 		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
@@ -91,14 +87,14 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(context.TODO(), logger, msg)
+		decidedMsg, err := contr.ProcessMsg(context.TODO(), logger, msg)
 		if err != nil {
 			lastErr = err
 		}
-		if decided != nil {
+		if decidedMsg != nil {
 			decidedCnt++
 
-			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decided.FullData)
+			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decidedMsg.FullData)
 		}
 	}
 	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt, lastErr)
@@ -145,9 +141,15 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue)
+func runInstanceWithData(
+	t *testing.T,
+	logger *zap.Logger,
+	height specqbft.Height,
+	contr *controller.Controller,
+	runData *spectests.RunInstanceData,
+) error {
 	var lastErr error
+	_, err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, protocoltesting.TestingValueChecker{})
 	if err != nil {
 		lastErr = err
 	}
@@ -169,7 +171,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 }
 
 func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
+	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	specDir = filepath.Join(specDir, "generate")
 	dir := typescomparable.GetSCDir(specDir, reflect.TypeOf(test).String())

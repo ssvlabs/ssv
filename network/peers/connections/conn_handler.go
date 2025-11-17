@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -113,9 +114,8 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		}
 		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
 
-		// Connection is inbound -> Wait for successful handshake request.
 		if conn.Stat().Direction == libp2pnetwork.DirInbound {
-			// Wait for peer to initiate handshake.
+			// Connection is inbound -> wait for peer to initiate a successful handshake request.
 			logger.Debug("waiting for peer to initiate handshake")
 			start := time.Now()
 			deadline := time.NewTimer(20 * time.Second)
@@ -132,7 +132,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 					if pi := ch.peerInfos.PeerInfo(pid); pi != nil && pi.LastHandshake.After(start) {
 						if pi.LastHandshakeError != nil {
 							// Handshake failed.
-							return errors.Wrap(pi.LastHandshakeError, "peer failed handshake")
+							return fmt.Errorf("peer handshake request failed: %w", pi.LastHandshakeError)
 						}
 
 						// Handshake succeeded.
@@ -152,12 +152,16 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			return nil
 		}
 
-		// Connection is outbound -> Initiate handshake.
+		// Connection is outbound -> initiate handshake ourselves.
 		logger.Debug("initiating handshake")
+
 		ch.peerInfos.SetState(pid, peers.StateConnecting)
 		if err := ch.handshaker.Handshake(logger, conn); err != nil {
-			return errors.Wrap(err, "could not handshake")
+			return fmt.Errorf("could not handshake: %w", err)
 		}
+
+		logger.Debug("handshake completed successfully")
+
 		return nil
 	}
 
@@ -230,20 +234,22 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 
 func (ch *connHandler) sharesEnoughSubnets(conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
-	subnets, ok := ch.subnetsIndex.GetPeerSubnets(pid)
+
+	peerSubnets, ok := ch.subnetsIndex.GetPeerSubnets(pid)
 	if !ok {
-		// no subnets for this peer
-		return false
+		return false // this peer has no subnets
 	}
 
 	mySubnets := ch.subnetsProvider()
-	logger := ch.logger.With(fields.Subnets(subnets), zap.String("my_subnets", mySubnets.String()))
-
-	if mySubnets == commons.ZeroSubnets { // this node has no subnets
-		return true
+	if mySubnets == commons.ZeroSubnets {
+		return true // this node has no subnets
 	}
-	shared := mySubnets.SharedSubnetsN(subnets, 1)
-	logger.Debug("checking subnets", zap.Uint64s("shared", shared))
 
-	return len(shared) == 1
+	ch.logger.Debug("checking if peer shares at least 1 subnet with us",
+		fields.PeerID(pid),
+		zap.String("my_subnets", mySubnets.StringHumanReadable()),
+		zap.String("peer_subnets", peerSubnets.StringHumanReadable()),
+	)
+
+	return len(mySubnets.SharedSubnetsN(peerSubnets, 1)) == 1
 }

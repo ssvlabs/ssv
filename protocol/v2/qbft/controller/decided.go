@@ -62,11 +62,7 @@ func (c *Controller) UponDecided(msg *specqbft.ProcessingMessage) (*spectypes.Si
 }
 
 func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
-	isDecided, err := c.IsDecidedMsg(msg)
-	if err != nil {
-		return err
-	}
-	if !isDecided {
+	if !c.isDecidedMsg(msg) {
 		return errors.New("not a decided msg")
 	}
 
@@ -79,13 +75,13 @@ func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
 		return errors.Wrap(err, "could not hash input data")
 	}
 	if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
-		return errors.New("H(data) != root")
+		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 	}
 
 	return nil
 }
 
-// IsDecidedMsg returns true if signed commit has all quorum sigs
-func (c *Controller) IsDecidedMsg(msg *specqbft.ProcessingMessage) (bool, error) {
-	return c.CommitteeMember.HasQuorum(len(msg.SignedMessage.OperatorIDs)) && msg.QBFTMessage.MsgType == specqbft.CommitMsgType, nil
+// isDecidedMsg returns true if signed commit has all quorum sigs
+func (c *Controller) isDecidedMsg(msg *specqbft.ProcessingMessage) bool {
+	return c.CommitteeMember.HasQuorum(len(msg.SignedMessage.OperatorIDs)) && msg.QBFTMessage.MsgType == specqbft.CommitMsgType
 }

@@ -3,8 +3,8 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type EventType int
@@ -33,16 +33,16 @@ type EventMsg struct {
 }
 
 type TimeoutData struct {
-	Height qbft.Height
-	Round  qbft.Round
+	Height specqbft.Height
+	Round  specqbft.Round
 }
 
 type ExecuteDutyData struct {
-	Duty *types.ValidatorDuty
+	Duty *spectypes.ValidatorDuty
 }
 
 type ExecuteCommitteeDutyData struct {
-	Duty *types.CommitteeDuty
+	Duty *spectypes.CommitteeDuty
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {
@@ -77,4 +77,11 @@ func (m *EventMsg) Encode() ([]byte, error) {
 // Decode returns error if decoding failed
 func (m *EventMsg) Decode(data []byte) error {
 	return json.Unmarshal(data, &m)
+}
+
+// PartialSigMsgSigner returns the signer for the provided partial-sig message. The signer must be the same for
+// all messages, and at least 1 message must be present (this is assumed to have been validated before calling
+// this func).
+func PartialSigMsgSigner(msg *spectypes.PartialSignatureMessages) spectypes.OperatorID {
+	return msg.Messages[0].Signer
 }

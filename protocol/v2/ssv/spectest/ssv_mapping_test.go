@@ -1,7 +1,6 @@
 package spectest
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,11 +23,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -38,7 +37,7 @@ import (
 func TestSSVMapping(t *testing.T) {
 	path, err := os.Getwd()
 	require.NoError(t, err)
-	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "ssv")
+	jsonTests, err := storage.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
 	logger := log.TestLogger(t)
@@ -272,7 +271,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 		Runner:                  r,
 		Threshold:               ks.Threshold,
 		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
-		ExpectedError:           m["ExpectedError"].(string),
+		ExpectedErrorCode:       int(m["ExpectedErrorCode"].(float64)),
 		OutputMessages:          outputMsgs,
 	}
 }
@@ -361,7 +360,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 		DecidedSlashable:        m["DecidedSlashable"].(bool),
 		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
 		DontStartDuty:           m["DontStartDuty"].(bool),
-		ExpectedError:           m["ExpectedError"].(string),
+		ExpectedErrorCode:       int(m["ExpectedErrorCode"].(float64)),
 		OutputMessages:          outputMsgs,
 		BeaconBroadcastedRoots:  beaconBroadcastedRoots,
 	}
@@ -394,8 +393,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 }
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
-	config := qbfttesting.TestingConfig(logger, ks)
-	config.ValueCheckF = runner.GetValCheckF()
+	config := protocoltesting.TestingConfig(logger, ks)
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.CommitteeMember,
@@ -537,8 +535,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		}
 	}
 
-	ctx := t.Context() // TODO refactor this
-	c := fixCommitteeForRun(t, ctx, logger, committeeMap)
+	c := fixCommitteeForRun(t, logger, committeeMap)
 
 	return &CommitteeSpecTest{
 		Name:                   m["Name"].(string),
@@ -547,21 +544,17 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		PostDutyCommitteeRoot:  m["PostDutyCommitteeRoot"].(string),
 		OutputMessages:         outputMsgs,
 		BeaconBroadcastedRoots: beaconBroadcastedRoots,
-		ExpectedError:          m["ExpectedError"].(string),
+		ExpectedErrorCode:      int(m["ExpectedErrorCode"].(float64)),
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
+func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
 	byts, err := json.Marshal(committeeMap)
 	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
-	ctx, cancel := context.WithCancel(ctx)
-
 	c := validator.NewCommittee(
-		ctx,
-		cancel,
 		logger,
 		networkconfig.TestNetwork,
 		&specCommittee.CommitteeMember,

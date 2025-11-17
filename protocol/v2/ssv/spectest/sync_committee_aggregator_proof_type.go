@@ -1,7 +1,6 @@
 package spectest
 
 import (
-	"context"
 	"encoding/hex"
 	"path/filepath"
 	"reflect"
@@ -14,6 +13,7 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -31,14 +31,14 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
-	lastErr := v.StartDuty(context.TODO(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
+	lastErr := v.StartDuty(t.Context(), logger, &testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSignedSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		err = v.ProcessMessage(context.TODO(), dmsg)
+		err = v.ProcessMessage(t.Context(), logger, dmsg)
 		if err != nil {
 			lastErr = err
 		}
@@ -60,7 +60,7 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 	testType = strings.Replace(testType, "spectest.", "synccommitteeaggregator.", 1)
 
 	runnerState := &runner.State{}
-	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	specDir, err := storage.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	runnerState, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, runnerState)
 	require.NoError(t, err)

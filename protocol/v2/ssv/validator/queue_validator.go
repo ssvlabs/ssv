@@ -3,10 +3,13 @@ package validator
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -16,11 +19,9 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
-
-// MessageHandler process the msg. return error if exist
-type MessageHandler func(ctx context.Context, msg *queue.SSVMessage) error
 
 // EnqueueMessage enqueues a spectypes.SSVMessage for processing.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
@@ -44,7 +45,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		With(fields.Slot(slot)).
 		With(fields.DutyID(dutyID))
 
-	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
+	_, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "enqueue_validator_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgTypeAttribute(msgType),
@@ -53,8 +54,6 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 			observability.BeaconSlotAttribute(slot),
 			observability.DutyIDAttribute(dutyID)))
 	defer span.End()
-
-	msg.TraceContext = ctx
 
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
@@ -77,131 +76,257 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	span.SetStatus(codes.Error, errMsg)
 }
 
-// StartQueueConsumer start ConsumeQueue with handler
-func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
-	for ctx.Err() == nil {
-		err := v.ConsumeQueue(msgID, handler)
+// StartQueueConsumer start consuming p2p message queue with the supplied handler
+func (v *Validator) StartQueueConsumer(
+	msgID spectypes.MessageID,
+	handler MessageHandler, // should be v.ProcessMessage, it is a param so can be mocked out for testing
+) {
+	consumeQueue := func(ctx context.Context) error {
+		var q queue.Queue
+		err := func() error {
+			v.mtx.RLock() // read v.Queues
+			defer v.mtx.RUnlock()
+			var ok bool
+			q, ok = v.Queues[msgID.GetRoleType()]
+			if !ok {
+				return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
+			}
+			return nil
+		}()
 		if err != nil {
-			v.logger.Debug("❗ failed consuming queue", zap.Error(err))
+			return err
 		}
-	}
-}
 
-// ConsumeQueue consumes messages from the queue.Queue of the controller
-// it checks for current state
-func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
+		v.logger.Debug("📬 queue consumer is running")
+		defer v.logger.Debug("📪 queue consumer is closed")
 
-	var q queue.Queue
-	err := func() error {
-		v.mtx.RLock() // read v.Queues
-		defer v.mtx.RUnlock()
-		var ok bool
-		q, ok = v.Queues[msgID.GetRoleType()]
-		if !ok {
-			return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
+		// msgStates keeps track of in-flight processing state (retry count + span context) per message.
+		// Since this map grows over time, we need to clean it up automatically. There is no specific TTL value
+		// to use for its entries - it just needs to be large enough to prevent unnecessary (but non-harmful)
+		// retries from happening.
+		msgStates := ttlcache.New(
+			ttlcache.WithTTL[messageKey, *messageProcessingState](10 * time.Minute),
+		)
+		go msgStates.Start()
+		defer msgStates.Stop()
+
+		for ctx.Err() == nil {
+			// Construct a representation of the current state.
+			state := queue.State{}
+			r := v.DutyRunners.DutyRunnerForMsgID(msgID)
+			if r == nil {
+				return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
+			}
+			state.HasRunningInstance = r.HasRunningQBFTInstance()
+			state.Height = r.GetLastHeight()
+			state.Round = r.GetLastRound()
+			state.Quorum = v.Operator.GetQuorum()
+
+			filter := queue.FilterAny
+			if !r.HasRunningDuty() {
+				// If no duty is running, pop only ExecuteDuty messages.
+				filter = func(m *queue.SSVMessage) bool {
+					e, ok := m.Body.(*types.EventMsg)
+					if !ok {
+						return false
+					}
+					return e.Type == types.ExecuteDuty
+				}
+			} else if state.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
+				// If no proposal was accepted for the current round, skip prepare & commit messages
+				// for the current height and round.
+				filter = func(m *queue.SSVMessage) bool {
+					qbftMsg, ok := m.Body.(*specqbft.Message)
+					if !ok {
+						return true
+					}
+
+					if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
+						return true
+					}
+					return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
+				}
+			}
+
+			// Pop the highest priority message for the current state.
+			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+			if ctx.Err() != nil {
+				// Optimization: terminate fast if we can.
+				return nil
+			}
+			if msg == nil {
+				v.logger.Error("❗ got nil message from queue, but context is not done!")
+				return nil
+			}
+
+			msgLogger, err := v.logWithMessageFields(v.logger, msg)
+			if err != nil {
+				v.logger.Error("couldn't build message-logger, dropping message", zap.Error(err))
+				continue
+			}
+
+			msgKey := v.mKey(msg)
+
+			var msgState *messageProcessingState
+			msgStateItem := msgStates.Get(msgKey)
+			if msgStateItem != nil {
+				msgState = msgStateItem.Value()
+			}
+			if msgState == nil {
+				msgCtx := ctx
+
+				spanOpts := []trace.SpanStartOption{trace.WithAttributes(
+					observability.ValidatorMsgTypeAttribute(msg.GetType()),
+					observability.ValidatorMsgIDAttribute(msg.GetID()),
+					observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+				)}
+
+				slot, slotErr := msg.Slot()
+				if slotErr == nil {
+					dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
+					spanOpts = append(spanOpts, trace.WithAttributes(
+						observability.BeaconSlotAttribute(slot),
+						observability.DutyIDAttribute(dutyID),
+					))
+					msgCtx = traces.Context(msgCtx, dutyID)
+				} else {
+					msgLogger.Warn("couldn't get message slot for tracing metadata", zap.Error(slotErr))
+				}
+
+				msgCtx, msgSpan := tracer.Start(msgCtx,
+					observability.InstrumentName(observabilityNamespace, "process_validator_message"),
+					spanOpts...,
+				)
+				msgState = &messageProcessingState{
+					attempts: 0,
+					ctx:      msgCtx,
+					span:     msgSpan,
+				}
+				msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
+			}
+
+			currentAttempt := msgState.attempts + 1
+			msgState.span.AddEvent("dequeued message for processing", trace.WithAttributes(
+				attribute.Int64("attempt", currentAttempt),
+			))
+
+			// Handle the message, potentially scheduling a message-replay for later.
+			err = handler(msgState.ctx, msgLogger, msg)
+			if err != nil {
+				// We'll re-queue the message to be replayed later in case the error we got is retryable.
+				// We are aiming to cover most of the slot time (~10s), but we don't need to cover the
+				// full slot (all 12s) since most duties must finish well before that anyway, and will
+				// take additional time to execute as well.
+				// Retry delay should be small so we can proceed with the corresponding duty execution asap.
+				const retryDelay = 25 * time.Millisecond
+				retryCount := int64(v.NetworkConfig.SlotDuration / retryDelay)
+
+				msgLogger = logWithMessageMetadata(msgLogger, msg).
+					With(zap.String("message_key", string(msgKey))).
+					With(zap.Int64("attempt", currentAttempt))
+
+				const couldNotHandleMsgLogPrefix = "could not handle message, "
+				switch {
+				case runner.IsRetryable(err) && msgState.attempts <= retryCount:
+					msgState.attempts++
+					msgStates.Set(msgKey, msgState, ttlcache.DefaultTTL)
+					msgState.span.AddEvent(fmt.Sprintf(couldNotHandleMsgLogPrefix+"retrying in ~%dms", retryDelay.Milliseconds()),
+						trace.WithAttributes(
+							attribute.String("retry_reason", err.Error()),
+							attribute.Int64("attempt", currentAttempt),
+						),
+					)
+					go func(msg *queue.SSVMessage, msgState *messageProcessingState, attempt int64) {
+						select {
+						case <-time.After(retryDelay):
+						case <-msgState.ctx.Done():
+							return
+						}
+						if pushed := q.TryPush(msg); !pushed {
+							const droppingMsgDueToQueueIsFullEvent = "❗ not gonna replay message because the queue is full"
+							msgLogger.Error(droppingMsgDueToQueueIsFullEvent)
+							msgState.span.AddEvent(droppingMsgDueToQueueIsFullEvent, trace.WithAttributes(
+								attribute.Int64("attempt", attempt),
+							))
+							msgState.span.SetStatus(codes.Error, droppingMsgDueToQueueIsFullEvent)
+							msgState.span.End()
+							msgStates.Delete(msgKey)
+						}
+					}(msg, msgState, currentAttempt)
+				default:
+					var droppingMsgDueToErrorEvent = couldNotHandleMsgLogPrefix + "dropping message"
+					msgLogger.Debug(droppingMsgDueToErrorEvent, zap.Error(err))
+					msgState.span.AddEvent(droppingMsgDueToErrorEvent, trace.WithAttributes(
+						attribute.String("drop_reason", err.Error()),
+						attribute.Int64("attempt", currentAttempt),
+					))
+					msgState.span.SetStatus(codes.Error, droppingMsgDueToErrorEvent)
+					msgState.span.End()
+					msgStates.Delete(msgKey)
+				}
+			} else {
+				msgState.span.AddEvent("message processed successfully", trace.WithAttributes(
+					attribute.Int64("attempt", currentAttempt),
+				))
+				msgState.span.SetStatus(codes.Ok, "")
+				msgState.span.End()
+				msgStates.Delete(msgKey)
+			}
 		}
+
 		return nil
+	}
+
+	go func() {
+		for v.ctx.Err() == nil {
+			err := consumeQueue(v.ctx)
+			if err != nil {
+				v.logger.Debug("❗ failed consuming queue", zap.Error(err))
+			}
+		}
 	}()
-	if err != nil {
-		return err
-	}
-
-	v.logger.Debug("📬 queue consumer is running")
-
-	lens := make([]int, 0, 10)
-
-	for ctx.Err() == nil {
-		// Construct a representation of the current state.
-		state := queue.State{}
-		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-		if runner == nil {
-			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
-		}
-		state.HasRunningInstance = runner.HasRunningQBFTInstance()
-		state.Height = runner.GetLastHeight()
-		state.Round = runner.GetLastRound()
-		state.Quorum = v.Operator.GetQuorum()
-
-		filter := queue.FilterAny
-		if !runner.HasRunningDuty() {
-			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.SSVMessage) bool {
-				e, ok := m.Body.(*types.EventMsg)
-				if !ok {
-					return false
-				}
-				return e.Type == types.ExecuteDuty
-			}
-		} else if state.HasRunningInstance && !runner.HasAcceptedProposalForCurrentRound() {
-			// If no proposal was accepted for the current round, skip prepare & commit messages
-			// for the current height and round.
-			filter = func(m *queue.SSVMessage) bool {
-				qbftMsg, ok := m.Body.(*specqbft.Message)
-				if !ok {
-					return true
-				}
-
-				if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
-					return true
-				}
-				return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
-			}
-		}
-
-		// Pop the highest priority message for the current state.
-		msg := q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
-		if msg == nil {
-			v.logger.Error("❗ got nil message from queue, but context is not done!")
-			break
-		}
-		lens = append(lens, q.Len())
-		if len(lens) >= 10 {
-			v.logger.Debug("📬 [TEMPORARY] queue statistics",
-				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-				zap.Ints("past_10_lengths", lens))
-			lens = lens[:0]
-		}
-
-		// Handle the message, but only if ctx hasn't been canceled (so we can exit fast)
-		if ctx.Err() != nil {
-			break
-		}
-		// Handle the message.
-		if err := handler(ctx, msg); err != nil {
-			v.logMsg(msg, "❗ could not handle message",
-				fields.MessageType(msg.MsgType),
-				zap.Error(err))
-		}
-	}
-
-	v.logger.Debug("📪 queue consumer is closed")
-	return nil
 }
 
-func (v *Validator) logMsg(msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
-	baseFields := []zap.Field{}
+func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessage) (*zap.Logger, error) {
+	msgType := msg.GetType()
+	msgID := msg.GetID()
+
+	slot, err := msg.Slot()
+	if err != nil {
+		return nil, fmt.Errorf("couldn't get message slot: %w", err)
+	}
+	dutyID := fields.BuildDutyID(v.NetworkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType(), v.Share.ValidatorIndex)
+
+	logger = logger.
+		With(fields.MessageType(msgType)).
+		With(fields.RunnerRole(msgID.GetRoleType())).
+		With(fields.Slot(slot)).
+		With(fields.DutyID(dutyID)).
+		With(fields.EstimatedCurrentEpoch(v.NetworkConfig.EstimatedCurrentEpoch())).
+		With(fields.EstimatedCurrentSlot(v.NetworkConfig.EstimatedCurrentSlot()))
+
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		qbftMsg := msg.Body.(*specqbft.Message)
-		baseFields = []zap.Field{
-			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
-			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
-			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
-			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
+		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
+	}
+	if msg.MsgType == message.SSVEventMsgType {
+		eventMsg, ok := msg.Body.(*types.EventMsg)
+		if !ok {
+			return nil, fmt.Errorf("could not decode event message")
+		}
+		if eventMsg.Type == types.Timeout {
+			timeoutData, err := eventMsg.GetTimeoutData()
+			if err != nil {
+				return nil, fmt.Errorf("get timeout data: %w", err)
+			}
+			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
 		}
 	}
-	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		psm := msg.Body.(*spectypes.PartialSignatureMessages)
-		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
-		signer := psm.Messages[0].Signer
-		baseFields = []zap.Field{
-			zap.Uint64("signer", signer),
-			fields.Slot(psm.Slot),
-		}
-	}
-	v.logger.Debug(logMsg, append(baseFields, withFields...)...)
+
+	return logger, nil
+}
+
+// mKey is a wrapper that provides a logger to report errors (if any).
+func (v *Validator) mKey(msg *queue.SSVMessage) messageKey {
+	return mKey(msg, v.logger)
 }

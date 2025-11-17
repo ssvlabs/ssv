@@ -18,10 +18,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-const (
-	DefaultQueueSize = 32
-)
-
 // Options represents validator-specific options.
 type Options struct {
 	CommonOptions
@@ -78,7 +74,7 @@ func NewCommonOptions(
 		NewDecidedHandler:   newDecidedHandler,
 		FullNode:            fullNode,
 		ExporterOptions:     exporterOptions,
-		QueueSize:           DefaultQueueSize,
+		QueueSize:           1000,
 		GasLimit:            gasLimit,
 		MessageValidator:    messageValidator,
 		Graffiti:            graffiti,

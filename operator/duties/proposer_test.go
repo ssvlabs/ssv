@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"testing"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -70,10 +71,12 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -104,10 +107,12 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -148,10 +153,12 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -212,10 +219,12 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -294,10 +303,12 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+2)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+2)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
@@ -372,10 +383,12 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	t.Parallel()
 
 	var (
-		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
+		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	ctx, cancel := context.WithCancel(t.Context())
+	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+2)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+2)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)

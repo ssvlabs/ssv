@@ -3,6 +3,8 @@ package instance
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"fmt"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -35,14 +37,14 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger = logger.With(
-		fields.QBFTRound(i.State.Round),
-		fields.QBFTHeight(i.State.Height),
-		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
+		zap.Uint64("qbft_instance_round", uint64(i.State.Round)),
+		zap.Uint64("qbft_instance_height", uint64(i.State.Height)),
 	)
 
 	logger.Debug("🔄 got round change",
 		fields.Root(msg.QBFTMessage.Root),
-		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs))
+		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs),
+	)
 
 	justifiedRoundChangeMsg, valueToPropose, err := i.hasReceivedProposalJustificationForLeadingRound(msg)
 	if err != nil {
@@ -70,14 +72,17 @@ func (i *Instance) uponRoundChange(
 			return errors.Wrap(err, "failed to create proposal")
 		}
 
-		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happens in createproposal
+		valueToProposeRoot, err := specqbft.HashDataRoot(valueToPropose)
+		if err != nil {
+			return errors.Wrap(err, "failed to hash value-to-propose")
+		}
+		logger = logger.With(zap.String("qbft_value_to_propose_root", hex.EncodeToString(valueToProposeRoot[:])))
 
 		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonJustified)
 
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
-			fields.QBFTRound(i.State.Round),
 			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(i.State.Round))),
-			fields.Root(r))
+		)
 
 		if err := i.Broadcast(proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
@@ -109,17 +114,16 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 		return errors.Wrap(err, "failed to create round change message")
 	}
 
-	root, err := specqbft.HashDataRoot(i.StartValue)
+	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
 		return errors.Wrap(err, "failed to hash instance start value")
 	}
+	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
-	logger.Debug("📢 got partial quorum, broadcasting round change message",
-		fields.QBFTRound(i.State.Round),
-		fields.Root(root),
+	logger.Debug("📢 broadcasting round change message (got partial quorum)",
+		zap.Uint64("qbft_new_round", uint64(newRound)),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.QBFTHeight(i.State.Height),
-		zap.String("reason", "partial-quorum"))
+	)
 
 	if err := i.Broadcast(roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
@@ -210,7 +214,7 @@ func (i *Instance) isProposalJustificationForLeadingRound(
 		return err
 	}
 
-	if i.proposer(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
+	if i.ProposerForRound(roundChangeMsg.QBFTMessage.Round) != i.State.CommitteeMember.OperatorID {
 		return errors.New("not proposer")
 	}
 
@@ -250,13 +254,13 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		return errors.New("round change msg type is wrong")
 	}
 	if msg.QBFTMessage.Height != i.State.Height {
-		return errors.New("wrong msg height")
+		return spectypes.WrapError(spectypes.WrongMessageHeightErrorCode, ErrWrongMsgHeight)
 	}
 	if msg.QBFTMessage.Round != round {
-		return errors.New("wrong msg round")
+		return NewRetryableError(spectypes.WrapError(spectypes.WrongMessageRoundErrorCode, ErrWrongMsgRound))
 	}
 	if len(msg.SignedMessage.OperatorIDs) != 1 {
-		return errors.New("msg allows 1 signer")
+		return spectypes.NewError(spectypes.MessageAllowsOneSignerOnlyErrorCode, "msg allows 1 signer")
 	}
 
 	if err := msg.Validate(); err != nil {
@@ -264,7 +268,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
-		return errors.New("signer not in committee")
+		return spectypes.NewError(spectypes.SignerIsNotInCommitteeErrorCode, "signer not in committee")
 	}
 
 	// Addition to formal spec
@@ -298,11 +302,11 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		}
 
 		if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
-			return errors.New("H(data) != root")
+			return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
 		}
 
 		if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgs) {
-			return errors.New("no justifications quorum")
+			return spectypes.NewError(spectypes.JustificationsNoQuorumInvalidErrorCode, "no justifications quorum")
 		}
 
 		if msg.QBFTMessage.DataRound > round {
@@ -326,7 +330,7 @@ func (i *Instance) validRoundChangeForDataVerifySignature(
 
 	// Verify signature
 	if err := spectypes.Verify(msg.SignedMessage, i.State.CommitteeMember.Committee); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
+		return spectypes.WrapError(spectypes.MessageSignatureInvalidErrorCode, fmt.Errorf("msg signature invalid: %w", err))
 	}
 
 	return nil

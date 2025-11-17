@@ -4,11 +4,10 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-)
 
-var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+)
 
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
@@ -19,8 +18,6 @@ type signing interface {
 
 type IConfig interface {
 	signing
-	// GetValueCheckF returns value check function
-	GetValueCheckF() specqbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
@@ -34,7 +31,6 @@ type IConfig interface {
 type Config struct {
 	BeaconSigner ekm.BeaconSigner
 	Domain       spectypes.DomainType
-	ValueCheckF  specqbft.ProposedValueCheckF
 	ProposerF    specqbft.ProposerF
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
@@ -49,11 +45,6 @@ func (c *Config) GetShareSigner() ekm.BeaconSigner {
 // GetSignatureDomainType returns the Domain type used for signatures
 func (c *Config) GetSignatureDomainType() spectypes.DomainType {
 	return c.Domain
-}
-
-// GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() specqbft.ProposedValueCheckF {
-	return c.ValueCheckF
 }
 
 // GetProposerF returns func used to calculate proposer
