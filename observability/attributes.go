@@ -11,8 +11,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -23,7 +23,7 @@ const (
 	RunnerRoleAttrKey = "ssv.runner.role"
 )
 
-func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
+func BeaconRoleAttribute(role spectypes.BeaconRole) attribute.KeyValue {
 	return attribute.String("ssv.beacon.role", role.String())
 }
 
@@ -38,7 +38,7 @@ func BeaconVersionAttribute(version spec.DataVersion) attribute.KeyValue {
 	return attribute.String("ssv.beacon.version", version.String())
 }
 
-func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
+func RunnerRoleAttribute(role spectypes.RunnerRole) attribute.KeyValue {
 	return attribute.String(RunnerRoleAttrKey, utils.FormatRunnerRole(role))
 }
 
@@ -49,7 +49,7 @@ func BeaconSlotAttribute(slot phase0.Slot) attribute.KeyValue {
 	}
 }
 
-func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
+func DutyRoundAttribute(round specqbft.Round) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.duty.round",
 		Value: Uint64AttributeValue(uint64(round)),
@@ -78,7 +78,7 @@ func CommitteeIndexAttribute(index phase0.CommitteeIndex) attribute.KeyValue {
 	}
 }
 
-func CommitteeIDAttribute(id types.CommitteeID) attribute.KeyValue {
+func CommitteeIDAttribute(id spectypes.CommitteeID) attribute.KeyValue {
 	return attribute.String("ssv.validator.duty.committee.id", hex.EncodeToString(id[:]))
 }
 
@@ -106,12 +106,12 @@ func ValidatorHasQuorumAttribute(hasQuorum bool) attribute.KeyValue {
 	return attribute.Bool("ssv.validator.has_quorum", hasQuorum)
 }
 
-func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
+func ValidatorMsgTypeAttribute(msgType spectypes.MsgType) attribute.KeyValue {
 	const attrKey = "ssv.validator.msg.type"
 	switch msgType {
-	case types.SSVConsensusMsgType:
+	case spectypes.SSVConsensusMsgType:
 		return attribute.String(attrKey, "SSVConsensusMsgType")
-	case types.SSVPartialSignatureMsgType:
+	case spectypes.SSVPartialSignatureMsgType:
 		return attribute.String(attrKey, "SSVPartialSignatureMsgType")
 	case message.SSVEventMsgType:
 		return attribute.String(attrKey, "SSVEventMsgType")
@@ -120,28 +120,8 @@ func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
 	}
 }
 
-func ValidatorMsgIDAttribute(msgID types.MessageID) attribute.KeyValue {
+func ValidatorMsgIDAttribute(msgID spectypes.MessageID) attribute.KeyValue {
 	return attribute.String("ssv.validator.msg.id", msgID.String())
-}
-
-func ValidatorPartialSigMsgTypeAttribute(msgType types.PartialSigMsgType) attribute.KeyValue {
-	const attrKey = "ssv.validator.partial_signature_msg.type"
-	switch msgType {
-	case types.ContributionProofs:
-		return attribute.String(attrKey, "ContributionProofs")
-	case types.PostConsensusPartialSig:
-		return attribute.String(attrKey, "PostConsensusPartialSig")
-	case types.RandaoPartialSig:
-		return attribute.String(attrKey, "RandaoPartialSig")
-	case types.SelectionProofPartialSig:
-		return attribute.String(attrKey, "SelectionProofPartialSig")
-	case types.ValidatorRegistrationPartialSig:
-		return attribute.String(attrKey, "ValidatorRegistrationPartialSig")
-	case types.VoluntaryExitPartialSig:
-		return attribute.String(attrKey, "VoluntaryExitPartialSig")
-	default:
-		return attribute.String(attrKey, "UnknownPartialSigMsgType")
-	}
 }
 
 func ValidatorIndexAttribute(index phase0.ValidatorIndex) attribute.KeyValue {
@@ -151,14 +131,14 @@ func ValidatorIndexAttribute(index phase0.ValidatorIndex) attribute.KeyValue {
 	}
 }
 
-func ValidatorSignerAttribute(signer types.OperatorID) attribute.KeyValue {
+func ValidatorSignerAttribute(signer spectypes.OperatorID) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.signer",
 		Value: Uint64AttributeValue(signer),
 	}
 }
 
-func ValidatorProposerAttribute(proposer types.OperatorID) attribute.KeyValue {
+func ValidatorProposerAttribute(proposer spectypes.OperatorID) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.proposer",
 		Value: Uint64AttributeValue(proposer),

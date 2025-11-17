@@ -15,32 +15,31 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hashicorp/go-multierror"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/rolemask"
 	estore "github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
-// mockParticipantStore is a basic mock for qbftstorage.ParticipantStore.
+// mockParticipantStore is a basic mock for ibftstorage.ParticipantStore.
 type mockParticipantStore struct {
-	participantsRangeEntries map[string][]qbftstorage.ParticipantsRangeEntry
+	participantsRangeEntries map[string][]ibftstorage.ParticipantsRangeEntry
 }
 
 // newMockParticipantStore creates a new instance of mockParticipantStore.
 func newMockParticipantStore() *mockParticipantStore {
 	return &mockParticipantStore{
-		participantsRangeEntries: make(map[string][]qbftstorage.ParticipantsRangeEntry),
+		participantsRangeEntries: make(map[string][]ibftstorage.ParticipantsRangeEntry),
 	}
 }
 
@@ -53,8 +52,8 @@ func (m *mockParticipantStore) SaveParticipants(spectypes.ValidatorPK, phase0.Sl
 }
 
 // GetAllParticipantsInRange returns all participant entries within the given slot range.
-func (m *mockParticipantStore) GetAllParticipantsInRange(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
-	var result []qbftstorage.ParticipantsRangeEntry
+func (m *mockParticipantStore) GetAllParticipantsInRange(from, to phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
+	var result []ibftstorage.ParticipantsRangeEntry
 	for _, entries := range m.participantsRangeEntries {
 		for _, entry := range entries {
 			if entry.Slot >= from && entry.Slot <= to {
@@ -66,9 +65,9 @@ func (m *mockParticipantStore) GetAllParticipantsInRange(from, to phase0.Slot) (
 }
 
 // GetParticipantsInRange returns participant entries for a given public key and slot range.
-func (m *mockParticipantStore) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *mockParticipantStore) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
 	key := hex.EncodeToString(pk[:])
-	var result []qbftstorage.ParticipantsRangeEntry
+	var result []ibftstorage.ParticipantsRangeEntry
 	entries, ok := m.participantsRangeEntries[key]
 	if !ok {
 		return result, nil
@@ -89,14 +88,14 @@ func (m *mockParticipantStore) Prune(context.Context, phase0.Slot) {
 	// no-op.
 }
 
-func (m *mockParticipantStore) PruneContinously(context.Context, slotticker.Provider, phase0.Slot) {
+func (m *mockParticipantStore) PruneContinuously(context.Context, slotticker.Provider, phase0.Slot) {
 	// no-op.
 }
 
 // AddEntry adds an entry to the mock store.
 func (m *mockParticipantStore) AddEntry(pk spectypes.ValidatorPK, slot phase0.Slot, signers []uint64) {
 	key := hex.EncodeToString(pk[:])
-	entry := qbftstorage.ParticipantsRangeEntry{
+	entry := ibftstorage.ParticipantsRangeEntry{
 		Slot:    slot,
 		PubKey:  pk,
 		Signers: signers,
@@ -109,7 +108,7 @@ type errorAllRangeMockStore struct {
 	*mockParticipantStore
 }
 
-func (m *errorAllRangeMockStore) GetAllParticipantsInRange(phase0.Slot, phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *errorAllRangeMockStore) GetAllParticipantsInRange(phase0.Slot, phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
 	return nil, fmt.Errorf("forced error on GetAllParticipantsInRange")
 }
 
@@ -118,7 +117,7 @@ type errorByPKMockStore struct {
 	*mockParticipantStore
 }
 
-func (m *errorByPKMockStore) GetParticipantsInRange(spectypes.ValidatorPK, phase0.Slot, phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *errorByPKMockStore) GetParticipantsInRange(spectypes.ValidatorPK, phase0.Slot, phase0.Slot) ([]ibftstorage.ParticipantsRangeEntry, error) {
 	return nil, fmt.Errorf("forced error on GetParticipantsInRange")
 }
 
@@ -132,7 +131,7 @@ func TestTransformToParticipantResponse(t *testing.T) {
 	var pk spectypes.ValidatorPK
 	copy(pk[:], pkBytes)
 
-	entry := qbftstorage.ParticipantsRangeEntry{
+	entry := ibftstorage.ParticipantsRangeEntry{
 		Slot:    phase0.Slot(123),
 		PubKey:  pk,
 		Signers: []uint64{1, 2, 3, 4},
@@ -499,6 +498,9 @@ type mockTraceStore struct {
 	GetCommitteeDecidedsFunc    func(slot phase0.Slot, index phase0.ValidatorIndex, _ ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	// added to satisfy dutyTraceStore interface for schedule and committee links
+	GetCommitteeDutyLinksFunc func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
+	GetScheduledFunc          func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
 }
 
 func newMockTraceStore() *mockTraceStore {
@@ -577,6 +579,20 @@ func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spec
 	key := fmt.Sprintf("%d", slot)
 	src := m.committeeDecideds[key]
 	return append([]dutytracer.ParticipantsRangeIndexEntry(nil), src...), nil
+}
+
+func (m *mockTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+	if m.GetCommitteeDutyLinksFunc != nil {
+		return m.GetCommitteeDutyLinksFunc(slot)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	if m.GetScheduledFunc != nil {
+		return m.GetScheduledFunc(slot)
+	}
+	return map[phase0.ValidatorIndex]rolemask.Mask{}, nil
 }
 
 func (m *mockTraceStore) AddValidatorDecided(role spectypes.BeaconRole, slot phase0.Slot, signers []uint64) {
@@ -734,7 +750,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				entry := qbftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
+				entry := ibftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
 				store.AddValidatorDecided(spectypes.BNRoleProposer, phase0.Slot(150), entry.Signers)
 			},
 			expectedStatus: http.StatusOK,
@@ -754,7 +770,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
 			setupMock: func(store *mockTraceStore) {
-				entry := qbftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
+				entry := ibftstorage.ParticipantsRangeEntry{Signers: []uint64{}}
 				store.AddCommitteeDecided(phase0.Slot(150), entry.Signers)
 			},
 			expectedStatus: http.StatusOK,
@@ -1283,11 +1299,37 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"to":   100,
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				var committeeID spectypes.CommitteeID
+				committeeID[0] = 1
 				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (traces []*exporter.CommitteeDutyTrace, err error) {
 					traces = []*exporter.CommitteeDutyTrace{
 						makeCommitteeDutyTrace(slot),
 					}
 					return traces, nil
+				}
+				store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+					if slot != 100 {
+						return nil, nil
+					}
+					return map[phase0.ValidatorIndex]rolemask.Mask{
+						phase0.ValidatorIndex(1): rolemask.BitAttester | rolemask.BitAggregator,
+						phase0.ValidatorIndex(2): rolemask.BitAggregator,
+					}, nil
+				}
+				store.GetCommitteeDutyLinksFunc = func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+					if slot != 100 {
+						return nil, nil
+					}
+					return []*exporter.CommitteeDutyLink{
+						{
+							ValidatorIndex: phase0.ValidatorIndex(1),
+							CommitteeID:    committeeID,
+						},
+						{
+							ValidatorIndex: phase0.ValidatorIndex(2),
+							CommitteeID:    committeeID,
+						},
+					}, nil
 				}
 			},
 			expectedStatus: http.StatusOK,
@@ -1301,6 +1343,16 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
 				assert.NotEmpty(t, resp.Data[0].Proposal)
+				require.Len(t, resp.Schedule, 1)
+				sched := resp.Schedule[0]
+				assert.Equal(t, uint64(100), sched.Slot)
+				var expectedID spectypes.CommitteeID
+				expectedID[0] = 1
+				assert.Equal(t, hex.EncodeToString(expectedID[:]), sched.CommitteeID)
+				require.Contains(t, sched.Roles, "ATTESTER")
+				require.Contains(t, sched.Roles, "AGGREGATOR")
+				assert.ElementsMatch(t, []uint64{1}, sched.Roles["ATTESTER"])
+				assert.ElementsMatch(t, []uint64{1, 2}, sched.Roles["AGGREGATOR"])
 			},
 		},
 		{
@@ -1475,6 +1527,120 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			tt.validateResp(t, rec)
 		})
 	}
+}
+
+func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
+	store := newMockTraceStore()
+	exporter := &Exporter{traceStore: store}
+
+	req := ValidatorTracesRequest{
+		From:  10,
+		To:    11,
+		Roles: api.RoleSlice{api.Role(spectypes.BNRoleAttester), api.Role(spectypes.BNRoleProposer)},
+	}
+
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+		switch slot {
+		case 10:
+			return map[phase0.ValidatorIndex]rolemask.Mask{
+				1: rolemask.BitAttester | rolemask.BitProposer,
+				2: rolemask.BitProposer,
+			}, nil
+		case 11:
+			return map[phase0.ValidatorIndex]rolemask.Mask{
+				1: rolemask.BitProposer,
+			}, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	schedule := exporter.buildValidatorSchedule(&req, nil)
+	require.Len(t, schedule, 3)
+	rolesByKey := make(map[string][]string)
+	for _, entry := range schedule {
+		key := fmt.Sprintf("%d-%d", entry.Slot, entry.Validator)
+		rolesByKey[key] = entry.Roles
+	}
+	assert.ElementsMatch(t, []string{"ATTESTER", "PROPOSER"}, rolesByKey["10-1"])
+	assert.ElementsMatch(t, []string{"PROPOSER"}, rolesByKey["10-2"])
+	assert.ElementsMatch(t, []string{"PROPOSER"}, rolesByKey["11-1"])
+}
+
+func TestExporterBuildValidatorSchedule_Filtered(t *testing.T) {
+	store := newMockTraceStore()
+	exporter := &Exporter{traceStore: store}
+
+	req := ValidatorTracesRequest{
+		From:    10,
+		To:      10,
+		Roles:   api.RoleSlice{api.Role(spectypes.BNRoleAttester), api.Role(spectypes.BNRoleAggregator)},
+		Indices: api.Uint64Slice{1},
+	}
+
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+		if slot != 10 {
+			return nil, nil
+		}
+		return map[phase0.ValidatorIndex]rolemask.Mask{
+			1: rolemask.BitAttester | rolemask.BitAggregator,
+			2: rolemask.BitAttester,
+		}, nil
+	}
+
+	indices := []phase0.ValidatorIndex{1}
+	schedule := exporter.buildValidatorSchedule(&req, indices)
+	require.Len(t, schedule, 1)
+	entry := schedule[0]
+	assert.Equal(t, uint64(10), entry.Slot)
+	assert.Equal(t, uint64(1), entry.Validator)
+	assert.ElementsMatch(t, []string{"ATTESTER", "AGGREGATOR"}, entry.Roles)
+}
+
+func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *testing.T) {
+	store := newMockTraceStore()
+	exp := &Exporter{traceStore: store, logger: zap.NewNop()}
+
+	slot := phase0.Slot(42)
+	idx := phase0.ValidatorIndex(10)
+	var cmt spectypes.CommitteeID
+	cmt[0] = 1
+
+	// Resolve CommitteeID for the validator
+	store.GetCommitteeIDFunc = func(s phase0.Slot, i phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+		assert.Equal(t, slot, s)
+		assert.Equal(t, idx, i)
+		return cmt, nil
+	}
+
+	// Case 1: Attester signer data does NOT include the requested index -> filtered out
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+		assert.Equal(t, slot, s)
+		assert.Equal(t, cmt, id)
+		return &exporter.CommitteeDutyTrace{
+			Slot:        s,
+			CommitteeID: id,
+			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{55}}},
+		}, nil
+	}
+	duties, err := exp.getValidatorCommitteeDutiesForRoleAndSlot(spectypes.BNRoleAttester, slot, []phase0.ValidatorIndex{idx})
+	require.NoError(t, err)
+	assert.Len(t, duties, 0)
+
+	// Case 2: Attester signer data includes the requested index -> returned
+	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
+		return &exporter.CommitteeDutyTrace{
+			Slot:        s,
+			CommitteeID: id,
+			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
+		}, nil
+	}
+	duties, err = exp.getValidatorCommitteeDutiesForRoleAndSlot(spectypes.BNRoleAttester, slot, []phase0.ValidatorIndex{idx})
+	require.NoError(t, err)
+	require.Len(t, duties, 1)
+	assert.Equal(t, spectypes.BNRoleAttester, duties[0].Role)
+	require.NotNil(t, duties[0].CommitteeID)
+	assert.Equal(t, cmt, *duties[0].CommitteeID)
 }
 
 func TestExporterCommitteeTraces_InvalidJSON(t *testing.T) {

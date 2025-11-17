@@ -10,13 +10,11 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -26,9 +24,9 @@ const (
 	participantsKey    = "pt"
 )
 
-// participantStorage struct
+// ParticipantStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
-type participantStorage struct {
+type ParticipantStorage struct {
 	logger         *zap.Logger
 	prefix         []byte
 	oldPrefix      string // kept back for cleanup
@@ -37,9 +35,9 @@ type participantStorage struct {
 }
 
 // New create new participant store
-func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.ParticipantStore {
+func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole) *ParticipantStorage {
 	role := byte(prefix & 0xff)
-	return &participantStorage{
+	return &ParticipantStorage{
 		logger:    logger,
 		prefix:    []byte{role},
 		oldPrefix: prefix.String(),
@@ -48,7 +46,7 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole) qb
 }
 
 // Prune waits for the initial tick and then removes all slots below the tickSlot - retain
-func (i *participantStorage) Prune(ctx context.Context, threshold phase0.Slot) {
+func (i *ParticipantStorage) Prune(ctx context.Context, threshold phase0.Slot) {
 	i.logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threshold))
 
 	// remove ALL slots below the threshold
@@ -58,8 +56,8 @@ func (i *participantStorage) Prune(ctx context.Context, threshold phase0.Slot) {
 	i.logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 }
 
-// PruneContinuously on every tick looks up and removes the slots that fall below the retain threshold
-func (i *participantStorage) PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
+// PruneContinuously on every tick looks up and removes the slots that fall below the retain-threshold
+func (i *ParticipantStorage) PruneContinuously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
 	ticker := slotTickerProvider()
 	i.logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
 	for {
@@ -79,7 +77,7 @@ func (i *participantStorage) PruneContinously(ctx context.Context, slotTickerPro
 }
 
 // removes ALL entries that have given slot in their prefix
-func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
+func (i *ParticipantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 	var keySet [][]byte
 
 	prefix := i.makePrefix(slotToByteSlice(slot))
@@ -117,7 +115,7 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 var dropPrefixMu sync.Mutex
 
 // removes ALL entries for any slots older or equal to given slot
-func (i *participantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
+func (i *ParticipantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 	var total int
 	for {
 		slot-- // slots are incremental
@@ -157,7 +155,7 @@ func (i *participantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 }
 
 // CleanAllInstances removes all records in old format.
-func (i *participantStorage) CleanAllInstances() error {
+func (i *ParticipantStorage) CleanAllInstances() error {
 	if err := i.db.DropPrefix([]byte(i.oldPrefix)); err != nil {
 		return errors.Wrap(err, "failed to drop all records")
 	}
@@ -165,7 +163,7 @@ func (i *participantStorage) CleanAllInstances() error {
 	return nil
 }
 
-func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+func (i *ParticipantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
 	start := time.Now()
 	defer func() {
 		dur := time.Since(start)
@@ -199,13 +197,13 @@ func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot pha
 	return true, nil
 }
 
-func (i *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
-	var ee []qbftstorage.ParticipantsRangeEntry
+func (i *ParticipantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]ParticipantsRangeEntry, error) {
+	var ee []ParticipantsRangeEntry
 	for slot := from; slot <= to; slot++ {
 		slotBytes := slotToByteSlice(slot)
 		prefix := i.makePrefix(slotBytes)
 		err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
-			re := qbftstorage.ParticipantsRangeEntry{
+			re := ParticipantsRangeEntry{
 				Slot:    slot,
 				PubKey:  spectypes.ValidatorPK(o.Key),
 				Signers: decodeOperators(o.Value),
@@ -222,8 +220,8 @@ func (i *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]
 	return ee, nil
 }
 
-func (i *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
-	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
+func (i *ParticipantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]ParticipantsRangeEntry, error) {
+	participantsRange := make([]ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
 		participants, err := i.GetParticipants(pk, slot)
@@ -235,7 +233,7 @@ func (i *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, fr
 			continue
 		}
 
-		participantsRange = append(participantsRange, qbftstorage.ParticipantsRangeEntry{
+		participantsRange = append(participantsRange, ParticipantsRangeEntry{
 			Slot:    slot,
 			PubKey:  pk,
 			Signers: participants,
@@ -245,11 +243,11 @@ func (i *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, fr
 	return participantsRange, nil
 }
 
-func (i *participantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+func (i *ParticipantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 	return i.getParticipants(nil, pk, slot)
 }
 
-func (i *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+func (i *ParticipantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 	val, found, err := i.get(txn, pk[:], slotToByteSlice(slot))
 	if err != nil {
 		return nil, err
@@ -262,7 +260,7 @@ func (i *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes
 	return operators, nil
 }
 
-func (i *participantStorage) saveParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
+func (i *ParticipantStorage) saveParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
 	bytes, err := encodeOperators(operators)
 	if err != nil {
 		return fmt.Errorf("encode operators: %w", err)
@@ -280,12 +278,12 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 	return slices.Compact(allParticipants)
 }
 
-func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, slot []byte) error {
+func (i *ParticipantStorage) save(txn basedb.ReadWriter, value []byte, pk, slot []byte) error {
 	prefix := i.makePrefix(slot)
 	return i.db.Using(txn).Set(prefix, pk, value)
 }
 
-func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte, bool, error) {
+func (i *ParticipantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte, bool, error) {
 	prefix := i.makePrefix(slot)
 	obj, found, err := i.db.Using(txn).Get(prefix, pk)
 	if err != nil {
@@ -297,12 +295,12 @@ func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte
 	return obj.Value, found, nil
 }
 
-func (i *participantStorage) ID() string {
+func (i *ParticipantStorage) ID() string {
 	bnr := spectypes.BeaconRole(uint64(i.prefix[0]))
 	return bnr.String()
 }
 
-func (i *participantStorage) makePrefix(slot []byte) []byte {
+func (i *ParticipantStorage) makePrefix(slot []byte) []byte {
 	prefix := make([]byte, 0, len(participantsKey)+1+len(slot))
 	prefix = append(prefix, participantsKey...)
 	prefix = append(prefix, i.prefix...)

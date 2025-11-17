@@ -25,6 +25,12 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
+// setCommitteeLink is a test helper that directly sets validator-to-committee links in the collector's in-memory map
+func setCommitteeLink(c *Collector, slot phase0.Slot, validatorIndex phase0.ValidatorIndex, committeeID spectypes.CommitteeID) {
+	slotToCommittee, _ := c.validatorIndexToCommitteeLinks.GetOrSet(validatorIndex, hashmap.New[phase0.Slot, spectypes.CommitteeID]())
+	slotToCommittee.Set(slot, committeeID)
+}
+
 func TestValidatorCommitteeMapping(t *testing.T) {
 	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
@@ -34,7 +40,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	dutyStore := store.New(db)
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -43,20 +49,12 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	committeeID2[0] = 2
 
 	slot4 := phase0.Slot(4)
-	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 2}},
-	}, committeeID1)
-	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 1}},
-	}, committeeID2)
+	setCommitteeLink(collector, slot4, 2, committeeID1)
+	setCommitteeLink(collector, slot4, 1, committeeID2)
 
 	slot5 := phase0.Slot(5)
-	collector.saveValidatorToCommitteeLink(slot5, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 1}},
-	}, committeeID1)
-	collector.saveValidatorToCommitteeLink(slot5, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 2}},
-	}, committeeID2)
+	setCommitteeLink(collector, slot5, 1, committeeID1)
+	setCommitteeLink(collector, slot5, 2, committeeID2)
 
 	// assert that validator committee mapping is available (in memory)
 	cmt1, err := collector.getCommitteeIDBySlotAndIndex(slot4, 1)
@@ -134,7 +132,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// setup validator index mapping
 	index1 := setupValidatorStoreMock(vstore, 1)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -192,9 +190,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 		// assert that decideds are available (in memory)
 		for _, slot := range []phase0.Slot{slot4, slot7} {
-			collector.saveValidatorToCommitteeLink(slot, &spectypes.PartialSignatureMessages{
-				Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index1}},
-			}, committeeID1)
+			setCommitteeLink(collector, slot, index1, committeeID1)
 			dd, err := collector.GetCommitteeDecideds(slot, index1)
 			require.NoError(t, err)
 			require.NotNil(t, dd)
@@ -319,7 +315,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 			ValidatorPubKey: validatorPK7,
 		},
 	})
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	// Create a new trace
 	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
@@ -328,9 +324,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace)
-	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index1}},
-	}, committeeID1)
+	setCommitteeLink(collector, slot4, index1, committeeID1)
 
 	// Fetch trace from memory cache and check
 	{
@@ -384,7 +378,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	index1 := setupValidatorStoreMock(vstore, 1)
 	index2 := setupValidatorStoreMock(vstore, 2)
 
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon, nil, nil)
 
 	slot4 := phase0.Slot(4)
 

@@ -18,9 +18,9 @@ func (c *requestClusters) Bind(value string) error {
 	if value == "" {
 		return nil
 	}
-	for _, s := range strings.Split(value, " ") {
+	for s := range strings.SplitSeq(value, " ") {
 		var cluster []uint64
-		for _, s := range strings.Split(s, ",") {
+		for s := range strings.SplitSeq(s, ",") {
 			n, err := strconv.ParseUint(s, 10, 64)
 			if err != nil {
 				return err

@@ -12,8 +12,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // TraceDecideds godoc
@@ -74,7 +74,10 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				// duty syncer fails to parse messages with no signers so instead
 				// we skip adding the message to the response altogether
 				if len(idxEntry.Signers) == 0 {
-					errs = multierror.Append(errs, fmt.Errorf("omitting entry with no signers (index=%x, slot=%d, role=%s)", idxEntry.Index, slot, role.String()))
+					// we don't append an error here to prevent duty-syncer from getting stuck on error-500.
+					// still we should investigate how it is possible that we have an entry with no signers,
+					// we log it here for further investigation.
+					e.logger.Error("omitting entry with no signers", zap.String("index", fmt.Sprintf("%x", idxEntry.Index)), zap.Uint64("slot", uint64(slot)), zap.String("role", role.String()))
 					continue
 				}
 
@@ -129,7 +132,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		role := spectypes.BeaconRole(r)
 		store := e.participantStores.Get(role)
 
-		var participantsRange []qbftstorage.ParticipantsRangeEntry
+		var participantsRange []storage.ParticipantsRangeEntry
 
 		if len(pubkeys) == 0 {
 			var err error
@@ -213,12 +216,12 @@ func (e *Exporter) getValidatorDecidedsForRole(slot phase0.Slot, indices []phase
 
 // toParticipantsRangeEntry converts an index-based entry into a ParticipantsRangeEntry
 // by resolving the validator's pubkey from the registry store.
-func (e *Exporter) toParticipantsRangeEntry(ent dutytracer.ParticipantsRangeIndexEntry) (qbftstorage.ParticipantsRangeEntry, error) {
+func (e *Exporter) toParticipantsRangeEntry(ent dutytracer.ParticipantsRangeIndexEntry) (storage.ParticipantsRangeEntry, error) {
 	pk, found := e.validators.ValidatorPubkey(ent.Index)
 	if !found {
-		return qbftstorage.ParticipantsRangeEntry{}, fmt.Errorf("validator not found by index: %d", ent.Index)
+		return storage.ParticipantsRangeEntry{}, fmt.Errorf("validator not found by index: %d", ent.Index)
 	}
-	return qbftstorage.ParticipantsRangeEntry{
+	return storage.ParticipantsRangeEntry{
 		Slot:    ent.Slot,
 		PubKey:  pk,
 		Signers: ent.Signers,

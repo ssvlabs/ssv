@@ -18,10 +18,10 @@ type State struct {
 	PostConsensusContainer *ssv.PartialSigContainer
 	RunningInstance        *instance.Instance
 	DecidedValue           []byte //spectypes.Encoder
-	// StartingDuty is the duty the node pulled locally from the beacon node, might be different
+	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different
 	// from the actual duty operators will have decided upon.
-	StartingDuty spectypes.Duty `json:"StartingDuty,omitempty"`
-	// Finished marked true when the full successful cycle (pre, consensus and post) got quorum.
+	CurrentDuty spectypes.Duty `json:"CurrentDuty,omitempty"`
+	// Finished is true when the runner has executed duty to a 100% completion successfully.
 	Finished bool
 }
 
@@ -29,7 +29,7 @@ func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 	return &State{
 		PreConsensusContainer:  ssv.NewPartialSigContainer(quorum),
 		PostConsensusContainer: ssv.NewPartialSigContainer(quorum),
-		StartingDuty:           duty,
+		CurrentDuty:            duty,
 		Finished:               false,
 	}
 }
@@ -83,13 +83,13 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 		Finished:               pcs.Finished,
 	}
 
-	if pcs.StartingDuty != nil {
-		if ValidatorDuty, ok := pcs.StartingDuty.(*spectypes.ValidatorDuty); ok {
+	if pcs.CurrentDuty != nil {
+		if ValidatorDuty, ok := pcs.CurrentDuty.(*spectypes.ValidatorDuty); ok {
 			alias.ValidatorDuty = ValidatorDuty
-		} else if committeeDuty, ok := pcs.StartingDuty.(*spectypes.CommitteeDuty); ok {
+		} else if committeeDuty, ok := pcs.CurrentDuty.(*spectypes.CommitteeDuty); ok {
 			alias.CommitteeDuty = committeeDuty
 		} else {
-			return nil, errors.New("can't marshal because BaseRunner.State.StartingDuty isn't ValidatorDuty or CommitteeDuty")
+			return nil, errors.New("can't marshal because BaseRunner.State.CurrentDuty isn't ValidatorDuty or CommitteeDuty")
 		}
 	}
 	byts, err := json.Marshal(alias)
@@ -124,9 +124,9 @@ func (pcs *State) UnmarshalJSON(data []byte) error {
 
 	// Determine which type of duty was marshaled
 	if aux.ValidatorDuty != nil {
-		pcs.StartingDuty = aux.ValidatorDuty
+		pcs.CurrentDuty = aux.ValidatorDuty
 	} else if aux.CommitteeDuty != nil {
-		pcs.StartingDuty = aux.CommitteeDuty
+		pcs.CurrentDuty = aux.CommitteeDuty
 	} else {
 		panic("no starting duty")
 	}

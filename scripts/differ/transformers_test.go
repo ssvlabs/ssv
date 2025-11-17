@@ -72,7 +72,7 @@ func TestAll(t *testing.T) {
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
-	duty := r.GetState().StartingDuty
+	duty := r.GetState().CurrentDuty
 
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
@@ -102,7 +102,7 @@ func TestAll(t *testing.T) {
 	}
 
 	if err := r.BaseRunner.decide(r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+		return errors.Wrap(err, "qbft-decide")
 	}
 
 	return nil
@@ -122,7 +122,7 @@ func TestAll(t *testing.T) {
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
-	duty := r.GetState().StartingDuty
+	duty := r.GetState().CurrentDuty
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
 	if r.ProducesBlindedBlocks {
@@ -146,7 +146,7 @@ func TestAll(t *testing.T) {
 		DataSSZ: byts,
 	}
 	if err := r.BaseRunner.decide(r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+		return errors.Wrap(err, "qbft-decide")
 	}
 	return nil
 }`

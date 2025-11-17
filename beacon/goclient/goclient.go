@@ -102,6 +102,7 @@ type MultiClient interface {
 	eth2client.SyncCommitteeContributionsSubmitter
 	eth2client.BeaconBlockHeadersProvider
 	eth2client.ValidatorsProvider
+	eth2client.BeaconCommitteesProvider
 	eth2client.ProposalPreparationsSubmitter
 	eth2client.EventsProvider
 	eth2client.ValidatorRegistrationsSubmitter
@@ -138,6 +139,9 @@ type GoClient struct {
 	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
 	// intended for cases where some objects within the application may need to fetch attestation data for more than one slot.
 	blockRootToSlotCache *ttlcache.Cache[phase0.Root, phase0.Slot]
+
+	// committeesCache caches Beacon committees by epoch to avoid repeated fetching
+	committeesCache *ttlcache.Cache[phase0.Epoch, []*eth2apiv1.BeaconCommittee]
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
@@ -233,6 +237,11 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
+
+	// Initialize committees cache with TTL of ~2 epochs
+	committeeTTL := config.SlotDuration * time.Duration(config.SlotsPerEpoch) * 2 //nolint:gosec
+	client.committeesCache = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, []*eth2apiv1.BeaconCommittee](committeeTTL))
+	go client.committeesCache.Start()
 
 	client.log.Debug("starting event listener")
 
