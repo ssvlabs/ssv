@@ -57,7 +57,7 @@ func (c *SeenMsgTypes) String() string {
 
 // ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
-func (c *SeenMsgTypes) ValidateConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
+func (c *SeenMsgTypes) ValidateConsensusMessage(msg *specqbft.Message) error {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		if c.reachedProposalLimit() {
@@ -72,18 +72,15 @@ func (c *SeenMsgTypes) ValidateConsensusMessage(signedSSVMessage *spectypes.Sign
 			return err
 		}
 	case specqbft.CommitMsgType:
-		if len(signedSSVMessage.OperatorIDs) == 1 {
-			if c.reachedCommitLimit() {
-				err := ErrDuplicatedMessage
-				err.got = fmt.Sprintf("commit, having %v", c.String())
-				return err
-			}
+		if c.reachedCommitLimit() {
+			err := ErrDuplicatedMessage
+			err.got = fmt.Sprintf("commit, having %v", c.String())
+			return err
 		}
 	case specqbft.RoundChangeMsgType:
 		if c.reachedRoundChangeLimit() {
 			err := ErrDuplicatedMessage
-
-			err.got = fmt.Sprintf("round change, having %v", c.String())
+			err.got = fmt.Sprintf("round change with %d RCJ, having %v", len(msg.RoundChangeJustification), c.String())
 			return err
 		}
 	default:
