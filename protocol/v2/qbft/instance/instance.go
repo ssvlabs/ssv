@@ -161,7 +161,7 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
 
-	res := i.processMsgF.Run(func() interface{} {
+	res := i.processMsgF.Run(func() any {
 		switch msg.QBFTMessage.MsgType {
 		case specqbft.ProposalMsgType:
 			return i.uponProposal(ctx, logger, msg)

@@ -100,8 +100,8 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 
 	// Compare the original and remarshaled YAML bytes
 	// YAML doesn't preserve order by default, so we need to compare the unmarshaled content
-	var originalYAMLMap map[string]interface{}
-	var remarshaledYAMLMap map[string]interface{}
+	var originalYAMLMap map[string]any
+	var remarshaledYAMLMap map[string]any
 
 	err = yaml.Unmarshal(yamlBytes, &originalYAMLMap)
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 }
 
 // hashStructJSON creates a deterministic hash of a struct by marshaling to sorted JSON
-func hashStructJSON(v interface{}) (string, error) {
+func hashStructJSON(v any) (string, error) {
 	// Create a JSON encoder that sorts map keys
 	buffer := &bytes.Buffer{}
 	encoder := json.NewEncoder(buffer)

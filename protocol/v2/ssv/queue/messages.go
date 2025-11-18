@@ -22,7 +22,7 @@ type SSVMessage struct {
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
+	Body any // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
 }
 
 func (d *SSVMessage) DecodedSSVMessage() {}
@@ -78,8 +78,8 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*SSVMessage, error) {
 	}, nil
 }
 
-func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
-	var body interface{}
+func ExtractMsgBody(m *spectypes.SSVMessage) (any, error) {
+	var body any
 	switch m.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := &specqbft.Message{}

@@ -140,7 +140,7 @@ func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.Executi
 		block.Body.ExecutionPayloadHeader.FeeRecipient = feeRecipient
 
 		// Wrap in response structure
-		response := map[string]interface{}{
+		response := map[string]any{
 			"data": block,
 		}
 		data, _ := json.Marshal(response)
@@ -156,7 +156,7 @@ func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.Executi
 	blockContents.Block.Body.ExecutionPayload.FeeRecipient = feeRecipient
 
 	// Wrap in response structure
-	response := map[string]interface{}{
+	response := map[string]any{
 		"data": blockContents,
 	}
 	data, _ := json.Marshal(response)

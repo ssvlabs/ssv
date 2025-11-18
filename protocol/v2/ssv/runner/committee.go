@@ -936,11 +936,11 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) (
 func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, err error,
+	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]any, err error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
-	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
+	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]any)
 	duty := r.BaseRunner.State.CurrentDuty
 	beaconVoteData := r.BaseRunner.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
@@ -989,7 +989,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			// Add to map
 			attestationMap[validatorDuty.ValidatorIndex] = root
 			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
+				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]any)
 			}
 			beaconObjects[validatorDuty.ValidatorIndex][root] = attestationResponse
 		case spectypes.BNRoleSyncCommittee:
@@ -1017,7 +1017,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			// Set root and beacon object
 			syncCommitteeMap[validatorDuty.ValidatorIndex] = root
 			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
+				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]any)
 			}
 			beaconObjects[validatorDuty.ValidatorIndex][root] = syncMsg
 		default:

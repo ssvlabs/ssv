@@ -95,7 +95,7 @@ func (gc *GoClient) DomainData(
 //	       object_root=hash_tree_root(ssz_object),
 //	       domain=domain,
 //	   ))
-func (gc *GoClient) ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error) {
+func (gc *GoClient) ComputeSigningRoot(object any, domain phase0.Domain) ([32]byte, error) {
 	if object == nil {
 		return [32]byte{}, errors.New("cannot compute signing root of nil")
 	}

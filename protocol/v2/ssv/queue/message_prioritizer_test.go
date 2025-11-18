@@ -355,8 +355,8 @@ func (m messageSlice) dump(s *State) string {
 	for i, msg := range m {
 		var (
 			kind         string
-			typ          interface{}
-			heightOrSlot interface{}
+			typ          any
+			heightOrSlot any
 			relation     string
 		)
 

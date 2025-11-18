@@ -41,6 +41,6 @@ func (test *RunnerConstructionSpecTest) Run(t *testing.T) {
 	}
 }
 
-func (test *RunnerConstructionSpecTest) GetPostState() (interface{}, error) {
+func (test *RunnerConstructionSpecTest) GetPostState() (any, error) {
 	return nil, nil
 }

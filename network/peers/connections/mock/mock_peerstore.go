@@ -94,7 +94,7 @@ func (p Peerstore) PeersWithKeys() peer.IDSlice {
 	panic("implement me")
 }
 
-func (p Peerstore) Get(pid peer.ID, key string) (interface{}, error) {
+func (p Peerstore) Get(pid peer.ID, key string) (any, error) {
 	for _, epid := range p.ExistingPIDs {
 		if epid == pid {
 			return epid, nil
@@ -103,7 +103,7 @@ func (p Peerstore) Get(pid peer.ID, key string) (interface{}, error) {
 	return nil, errors.New("error")
 }
 
-func (p Peerstore) Put(pid peer.ID, key string, val interface{}) error {
+func (p Peerstore) Put(pid peer.ID, key string, val any) error {
 	//TODO implement me
 	panic("implement me")
 }
