@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -758,9 +759,9 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 
 	// Start a committee validator.
 	vc, found := c.validatorsMap.GetCommittee(committeeMember.CommitteeID)
-	c.logger.Info("setting up committee for validator", fields.CommitteeID(committeeMember.CommitteeID))
+	c.logger.Info("setting up committee for validator" + hex.EncodeToString(committeeMember.CommitteeID[:]))
 	if !found {
-		c.logger.Info("setting up new committee", fields.CommitteeID(committeeMember.CommitteeID))
+		c.logger.Info("setting up new committee" + hex.EncodeToString(committeeMember.CommitteeID[:]))
 		// Create dedicated context to use for both the committee and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		committeeCtx, committeeCancel := context.WithCancel(c.ctx)
@@ -784,7 +785,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 
 		c.printShare(share, "set up new committee")
 	} else {
-		c.logger.Info("adding share to existing committee", fields.CommitteeID(committeeMember.CommitteeID))
+		c.logger.Info("adding share to existing committee" + hex.EncodeToString(committeeMember.CommitteeID[:]))
 		vc.AddShare(&share.Share)
 		c.printShare(share, "added share to existing committee")
 	}
