@@ -143,6 +143,7 @@ func (n *Node) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("init validators: %w", err)
 	}
+	fmt.Println("shota - validators initialized:", len(validatorsInitialized))
 
 	// For regular SSV node, starting a validator will also connect us to subnets that correspond
 	// to that validator. But if we don't have validators to start (if none were initialized) -
