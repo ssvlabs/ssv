@@ -78,6 +78,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
+			h.logger.Info("shota here")
 			fmt.Println("shota - AttesterHandler HandleDuties ticker event")
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
