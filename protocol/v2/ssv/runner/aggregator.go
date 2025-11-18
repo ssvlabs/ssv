@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"hash"
 	"sync"
 	"time"
@@ -399,6 +400,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	fmt.Println("shota - aggregator executeDuty called")
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
 		trace.WithAttributes(
