@@ -195,6 +195,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 }
 
 func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+	fmt.Println("shota - aggregator ProcessConsensus called")
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
 		trace.WithAttributes(

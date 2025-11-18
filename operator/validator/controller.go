@@ -305,6 +305,7 @@ func (c *Controller) handleRouterMessages() {
 		case msg := <-ch:
 			switch m := msg.(type) {
 			case *queue.SSVMessage:
+				fmt.Println("shota - controller handleRouterMessages received SSVMessage")
 				if m.MsgType == message.SSVEventMsgType {
 					continue
 				}

@@ -78,6 +78,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
+			fmt.Println("shota - AttesterHandler HandleDuties ticker event")
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)

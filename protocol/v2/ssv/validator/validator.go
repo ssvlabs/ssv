@@ -177,6 +177,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 	}
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
+		fmt.Println("shota - processing SSVConsensusMsgType")
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return traces.Errorf(span, "could not decode consensus message from network message")
@@ -194,6 +195,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case spectypes.SSVPartialSignatureMsgType:
+		fmt.Println("shota - processing SSVPartialSignatureMsgType")
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			return traces.Errorf(span, "could not decode post consensus message from network message")
@@ -224,6 +226,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, msg *queue.SSVMessage) e
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case message.SSVEventMsgType:
+		fmt.Println("shota - processing SSVEventMsgType")
 		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
 			return traces.Errorf(span, "could not handle event message: %w", err)
 		}
