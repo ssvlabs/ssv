@@ -14,7 +14,7 @@ type RegexpPool struct {
 // NewRegexpPool creates a new instance of RegexpPool
 func NewRegexpPool(pattern string) *RegexpPool {
 	return &RegexpPool{
-		pool: sync.Pool{New: func() interface{} {
+		pool: sync.Pool{New: func() any {
 			return regexp.MustCompile(pattern)
 		}},
 		pattern: pattern,

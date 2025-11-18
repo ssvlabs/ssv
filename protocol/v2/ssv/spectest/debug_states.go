@@ -30,7 +30,7 @@ func dumpState(t *testing.T,
 	diff := cmp.Diff(a, b,
 		cmp.FilterValues(func(x, y []byte) bool {
 			return json.Valid(x) && json.Valid(y)
-		}, cmp.Transformer("ParseJSON", func(in []byte) (out interface{}) {
+		}, cmp.Transformer("ParseJSON", func(in []byte) (out any) {
 			if err := json.Unmarshal(in, &out); err != nil {
 				panic(err) // should never occur given previous filter to ensure valid JSON
 			}
@@ -46,7 +46,7 @@ func dumpState(t *testing.T,
 	return diff
 }
 
-func logJSON(t *testing.T, name string, value interface{}) {
+func logJSON(t *testing.T, name string, value any) {
 	bytes, err := json.Marshal(value)
 	require.NoError(t, err)
 	err = os.WriteFile(fmt.Sprintf("%s/%s_test_serialized.json", dumpDir, name), bytes, 0600)

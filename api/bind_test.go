@@ -38,7 +38,7 @@ type TestStructPointer struct {
 }
 
 // runTestBindForm is a helper that binds form data to dest and then runs the provided validation.
-func runTestBindForm(t *testing.T, dest interface{}, validate func(*testing.T, interface{})) {
+func runTestBindForm(t *testing.T, dest any, validate func(*testing.T, any)) {
 	form := url.Values{
 		"name":  []string{"John Doe"},
 		"age":   []string{"30"},
@@ -61,7 +61,7 @@ func TestBindFormNonPointer(t *testing.T) {
 	t.Parallel()
 
 	dest := &TestStructNonPointer{}
-	validate := func(t *testing.T, dest interface{}) {
+	validate := func(t *testing.T, dest any) {
 		s, ok := dest.(*TestStructNonPointer)
 
 		require.True(t, ok)
@@ -80,7 +80,7 @@ func TestBindFormPointer(t *testing.T) {
 	t.Parallel()
 
 	dest := &TestStructPointer{}
-	validate := func(t *testing.T, dest interface{}) {
+	validate := func(t *testing.T, dest any) {
 		s, ok := dest.(*TestStructPointer)
 
 		require.True(t, ok)
@@ -296,7 +296,7 @@ func TestInvalidDestinationType(t *testing.T) {
 
 	testCases := []struct {
 		name string
-		dest interface{}
+		dest any
 	}{
 		{"non-pointer", TestStructNonPointer{}},
 		{"pointer to non-struct", new(string)},

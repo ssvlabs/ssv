@@ -56,7 +56,7 @@ func TestRender(t *testing.T) {
 		{
 			name:              "fallthrough json when no fmt.stringer with text/plain",
 			acceptHeader:      "text/plain",
-			response:          map[string]interface{}{"key": "value"},
+			response:          map[string]any{"key": "value"},
 			wantContentType:   "application/json",
 			wantBodySubstring: `"key":"value"`,
 		},
@@ -70,14 +70,14 @@ func TestRender(t *testing.T) {
 		{
 			name:              "explicit json rendering",
 			acceptHeader:      "application/json",
-			response:          map[string]interface{}{"foo": "bar", "baz": 123},
+			response:          map[string]any{"foo": "bar", "baz": 123},
 			wantContentType:   "application/json",
 			wantBodySubstring: `"foo":"bar"`,
 		},
 		{
 			name:              "default json when no accept header",
 			acceptHeader:      "",
-			response:          map[string]interface{}{"key": "value"},
+			response:          map[string]any{"key": "value"},
 			wantContentType:   "application/json",
 			wantBodySubstring: `"key":"value"`,
 		},

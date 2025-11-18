@@ -346,7 +346,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 
 			wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, _ := io.ReadAll(r.Body)
-				var req map[string]interface{}
+				var req map[string]any
 				_ = json.Unmarshal(raw, &req)
 
 				if req["method"] == "eth_getLogs" {
@@ -357,15 +357,15 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 						return
 					}
 
-					flt := req["params"].([]interface{})[0].(map[string]interface{})
+					flt := req["params"].([]any)[0].(map[string]any)
 					from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
 					to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
 					if uint64(to-from) > tc.threshold {
 						w.Header().Set("Content-Type", "application/json")
-						_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						_ = json.NewEncoder(w).Encode(map[string]any{
 							"jsonrpc": "2.0",
 							"id":      req["id"],
-							"error": map[string]interface{}{
+							"error": map[string]any{
 								"code":    -32005,
 								"message": "query limit exceeded",
 							},

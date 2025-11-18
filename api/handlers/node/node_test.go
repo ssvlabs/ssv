@@ -253,7 +253,7 @@ func TestHealthCheckJSONString(t *testing.T) {
 	hc.Advanced.ListenAddresses = []string{"127.0.0.1:8000"}
 
 	s := hc.String()
-	var result map[string]interface{}
+	var result map[string]any
 
 	require.NoError(t, json.Unmarshal([]byte(s), &result))
 	require.Equal(t, "bad: not enough connected peers", result["p2p"])
@@ -261,11 +261,11 @@ func TestHealthCheckJSONString(t *testing.T) {
 	require.Equal(t, "good", result["execution_node"])
 	require.Equal(t, "good", result["event_syncer"])
 
-	advanced, ok := result["advanced"].(map[string]interface{})
+	advanced, ok := result["advanced"].(map[string]any)
 
 	require.True(t, ok)
 	require.Equal(t, float64(3), advanced["peers"])
 	require.Equal(t, float64(3), advanced["inbound_conns"])
 	require.Equal(t, float64(0), advanced["outbound_conns"])
-	require.Equal(t, []interface{}{"127.0.0.1:8000"}, advanced["p2p_listen_addresses"])
+	require.Equal(t, []any{"127.0.0.1:8000"}, advanced["p2p_listen_addresses"])
 }

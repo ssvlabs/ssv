@@ -27,7 +27,7 @@ type Global struct {
 }
 
 // ProcessArgs processes and handles CLI arguments
-func ProcessArgs(cfg interface{}, a *Args, cmd *cobra.Command) {
+func ProcessArgs(cfg any, a *Args, cmd *cobra.Command) {
 	configFlag := "config"
 	cmd.PersistentFlags().StringVarP(&a.ConfigPath, configFlag, "c", "./config/config.yaml", "Path to configuration file")
 	_ = cmd.MarkFlagRequired(configFlag)
@@ -40,7 +40,7 @@ func ProcessArgs(cfg interface{}, a *Args, cmd *cobra.Command) {
 	cmd.SetUsageTemplate(envHelp + "\n" + cmd.UsageTemplate())
 }
 
-func Prepare(cfg interface{}, a *Args) error {
+func Prepare(cfg any, a *Args) error {
 	if a.ConfigPath != "" {
 		err := cleanenv.ReadConfig(a.ConfigPath, cfg)
 		if err != nil {

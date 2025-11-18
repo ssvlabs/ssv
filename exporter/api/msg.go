@@ -19,7 +19,7 @@ type Message struct {
 	// Filter
 	Filter MessageFilter `json:"filter"`
 	// Values holds the results, optional as it's relevant for response
-	Data interface{} `json:"data,omitempty"`
+	Data any `json:"data,omitempty"`
 }
 
 type ParticipantsAPI struct {
@@ -55,7 +55,7 @@ func NewParticipantsAPIMsg(domainType spectypes.DomainType, msg qbftstorage.Part
 }
 
 // ParticipantsAPIData creates a new message from the given message in a new format.
-func ParticipantsAPIData(domainType spectypes.DomainType, msgs ...qbftstorage.Participation) (interface{}, error) {
+func ParticipantsAPIData(domainType spectypes.DomainType, msgs ...qbftstorage.Participation) (any, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}

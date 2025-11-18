@@ -36,7 +36,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	router.Use(middlewareNodeVersion)
 
 	nodeIdentityHandler := func(w http.ResponseWriter, r *http.Request) {
-		err := api.Render(w, r, map[string]interface{}{
+		err := api.Render(w, r, map[string]any{
 			"peer_id":   "test-node-id",
 			"addresses": []string{"test-address"},
 			"subnets":   "test-subnets",
@@ -48,7 +48,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 
 	nodePeersHandler := func(w http.ResponseWriter, r *http.Request) {
-		err := api.Render(w, r, []map[string]interface{}{
+		err := api.Render(w, r, []map[string]any{
 			{"id": "peer1", "addresses": []string{"addr1"}},
 		})
 		if err != nil {
@@ -57,9 +57,9 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 
 	nodeTopicsHandler := func(w http.ResponseWriter, r *http.Request) {
-		err := api.Render(w, r, map[string]interface{}{
+		err := api.Render(w, r, map[string]any{
 			"all_peers": []string{"peer1", "peer2"},
-			"peers_by_topic": []map[string]interface{}{
+			"peers_by_topic": []map[string]any{
 				{
 					"topic": "topic1",
 					"peers": []string{"peer1"},
@@ -72,12 +72,12 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 
 	nodeHealthHandler := func(w http.ResponseWriter, r *http.Request) {
-		err := api.Render(w, r, map[string]interface{}{
+		err := api.Render(w, r, map[string]any{
 			"p2p":            "good",
 			"beacon_node":    "good",
 			"execution_node": "good",
 			"event_syncer":   "good",
-			"advanced": map[string]interface{}{
+			"advanced": map[string]any{
 				"peers":                2,
 				"inbound_conns":        1,
 				"outbound_conns":       1,
@@ -90,8 +90,8 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 
 	validatorsListHandler := func(w http.ResponseWriter, r *http.Request) {
-		err := api.Render(w, r, map[string]interface{}{
-			"data": []map[string]interface{}{
+		err := api.Render(w, r, map[string]any{
+			"data": []map[string]any{
 				{"validator": "1", "pubkey": "0x123"},
 			},
 		})
@@ -101,8 +101,8 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 
 	exporterDecidedsHandler := func(w http.ResponseWriter, r *http.Request) {
-		err := api.Render(w, r, map[string]interface{}{
-			"data": []map[string]interface{}{
+		err := api.Render(w, r, map[string]any{
+			"data": []map[string]any{
 				{"slot": 1, "role": "attester"},
 			},
 		})
