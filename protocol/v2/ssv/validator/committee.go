@@ -117,6 +117,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		return traces.Error(span, err)
 	}
 
+	fmt.Println("shota is here")
 	logger.Info("ℹ️ starting duty processing")
 	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
