@@ -3,9 +3,9 @@ package validator
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -759,9 +759,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 
 	// Start a committee validator.
 	vc, found := c.validatorsMap.GetCommittee(committeeMember.CommitteeID)
-	c.logger.Info("setting up committee for validator" + hex.EncodeToString(committeeMember.CommitteeID[:]))
 	if !found {
-		c.logger.Info("setting up new committee" + hex.EncodeToString(committeeMember.CommitteeID[:]))
 		// Create dedicated context to use for both the committee and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		committeeCtx, committeeCancel := context.WithCancel(c.ctx)
@@ -785,7 +783,6 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 
 		c.printShare(share, "set up new committee")
 	} else {
-		c.logger.Info("adding share to existing committee" + hex.EncodeToString(committeeMember.CommitteeID[:]))
 		vc.AddShare(&share.Share)
 		c.printShare(share, "added share to existing committee")
 	}
@@ -1082,6 +1079,8 @@ func SetupCommitteeRunners(
 	}
 }
 
+var x int64
+
 // SetupRunners initializes duty runners for the given validator
 func SetupRunners(
 	ctx context.Context,
@@ -1092,6 +1091,7 @@ func SetupRunners(
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
+	fmt.Println("shota - SetupRunners called", atomic.AddInt64(&x, 1))
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
 		spectypes.RoleAggregator,
