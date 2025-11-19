@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -1723,9 +1724,7 @@ func (m *mockDutyTraceStore) SaveScheduled(slot phase0.Slot, schedule map[phase0
 		m.scheduled = make(map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask)
 	}
 	copied := make(map[phase0.ValidatorIndex]rolemask.Mask, len(schedule))
-	for k, v := range schedule {
-		copied[k] = v
-	}
+	maps.Copy(copied, schedule)
 	m.scheduled[slot] = copied
 	return m.err
 }
@@ -1739,8 +1738,6 @@ func (m *mockDutyTraceStore) GetScheduled(slot phase0.Slot) (map[phase0.Validato
 		return nil, m.err
 	}
 	copyMap := make(map[phase0.ValidatorIndex]rolemask.Mask, len(sched))
-	for k, v := range sched {
-		copyMap[k] = v
-	}
+	maps.Copy(copyMap, sched)
 	return copyMap, m.err
 }
