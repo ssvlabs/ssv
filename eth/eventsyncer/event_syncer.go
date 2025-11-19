@@ -124,7 +124,7 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 	// Process all the logs fetched until there are no more.
 	lastProcessedBlock, progressed, err = es.eventHandler.HandleBlockEventsStream(ctx, fetchLogsCh, false)
 	if err != nil {
-		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), true
+		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream [1] (last processed block = %d): %w", lastProcessedBlock, err), true
 	}
 
 	// Check there were no fetch-related errors.
@@ -133,7 +133,7 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 		errs = errors.Join(errs, err)
 	}
 	if errs != nil {
-		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), true
+		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream [2] (last processed block = %d): %w", lastProcessedBlock, err), true
 	}
 
 	// Sanity-check we are not replaying events - this should never happen!
@@ -185,7 +185,7 @@ func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error 
 	lastProcessedBlock, progressed, err := es.eventHandler.HandleBlockEventsStream(ctx, logStreamCh, true)
 	if err != nil {
 		if progressed {
-			return fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err)
+			return fmt.Errorf("handle block events stream [3] (last processed block = %d): %w", lastProcessedBlock, err)
 		}
 		return fmt.Errorf("handle block events stream, couldn't progress at all: %w", err)
 	}
