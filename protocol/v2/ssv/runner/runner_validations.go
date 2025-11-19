@@ -25,16 +25,27 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoRunningDuty))
 	}
 
-	if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
-		return err
+	// Validate the post-consensus message differently depending on a message type.
+	validateMsg := func() error {
+		if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
+			return err
+		}
+
+		roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
+		if err != nil {
+			return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
+		}
+
+		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
 	}
 
-	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
-	if err != nil {
-		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
+	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
+		validateMsg = func() error {
+			return b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot())
+		}
 	}
 
-	return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+	return validateMsg()
 }
 
 // Verify each signature in container removing the invalid ones

@@ -42,40 +42,52 @@ func (v *Validator) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 	}
 }
 
-func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "handle_committee_event_message"))
-	defer span.End()
+func (c *Committee) getEventMessageHandler(aggComm bool) func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	return func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+		ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "handle_committee_event_message"))
+		defer span.End()
 
-	eventMsg, ok := msg.Body.(*types.EventMsg)
-	if !ok {
-		return traces.Errorf(span, "could not decode event message")
-	}
-
-	span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
-
-	switch eventMsg.Type {
-	case types.Timeout:
-		slot, err := msg.Slot()
-		if err != nil {
-			return traces.Errorf(span, "could not get slot from message: %w", err)
+		eventMsg, ok := msg.Body.(*types.EventMsg)
+		if !ok {
+			return traces.Errorf(span, "could not decode event message")
 		}
-		c.mtx.RLock()
-		dutyRunner, found := c.Runners[slot]
-		c.mtx.RUnlock()
 
-		if !found {
-			const errMsg = "no committee runner or queue found for slot"
-			logger.Error(errMsg)
-			span.SetStatus(codes.Error, errMsg)
+		span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
+
+		switch eventMsg.Type {
+		case types.Timeout:
+			slot, err := msg.Slot()
+			if err != nil {
+				return traces.Errorf(span, "could not get slot from message: %w", err)
+			}
+
+			var dutyRunner interface {
+				OnTimeoutQBFT(context.Context, *zap.Logger, types.EventMsg) error
+			}
+			var found bool
+
+			c.mtx.RLock()
+			if aggComm {
+				dutyRunner, found = c.AggregatorRunners[slot]
+			} else {
+				dutyRunner, found = c.Runners[slot]
+			}
+			c.mtx.RUnlock()
+
+			if !found {
+				const errMsg = "no committee runner or queue found for slot"
+				logger.Error(errMsg)
+				span.SetStatus(codes.Error, errMsg)
+				return nil
+			}
+
+			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, *eventMsg); err != nil {
+				return traces.Errorf(span, "timeout event: %w", err)
+			}
+			span.SetStatus(codes.Ok, "")
 			return nil
+		default:
+			return traces.Errorf(span, "unknown event msg - %s", eventMsg.Type.String())
 		}
-
-		if err := dutyRunner.OnTimeoutQBFT(ctx, logger, *eventMsg); err != nil {
-			return traces.Errorf(span, "timeout event: %w", err)
-		}
-		span.SetStatus(codes.Ok, "")
-		return nil
-	default:
-		return traces.Errorf(span, "unknown event msg - %s", eventMsg.Type.String())
 	}
 }

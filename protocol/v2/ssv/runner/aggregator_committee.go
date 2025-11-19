@@ -76,6 +76,7 @@ func NewAggregatorCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
+		ValCheck:        ssv.NewValidatorConsensusDataChecker(networkConfig.Beacon),
 		beacon:          beacon,
 		network:         network,
 		signer:          signer,
@@ -501,8 +502,6 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 	if err := aggregatorData.Validate(); err != nil {
 		return traces.Errorf(span, "invalid aggregator consensus data: %w", err)
 	}
-
-	r.ValCheck = ssv.NewValidatorConsensusDataChecker(r.GetNetworkConfig().Beacon)
 
 	if err := r.BaseRunner.decide(ctx, logger, r, r.BaseRunner.State.CurrentDuty.DutySlot(), aggregatorData, r.ValCheck); err != nil {
 		return traces.Errorf(span, "failed to start consensus")
@@ -1101,9 +1100,10 @@ func (r *AggregatorCommitteeRunner) HasSubmitted(role spectypes.BeaconRole, valI
 	return ok
 }
 
-// Unneeded since no preconsensus phase
+// This function signature returns only one domain type... but we can have mixed domains
+// instead we rely on expectedPreConsensusRoots that is called later
 func (r *AggregatorCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("no pre consensus root for committee runner")
+	return nil, spectypes.DomainError, fmt.Errorf("unexpected expectedPreConsensusRootsAndDomain func call, runner role %v", r.GetRole())
 }
 
 // This function signature returns only one domain type... but we can have mixed domains
