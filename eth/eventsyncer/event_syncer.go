@@ -133,7 +133,7 @@ func (es *EventSyncer) syncHistory(ctx context.Context, fromBlock uint64) (
 		errs = errors.Join(errs, err)
 	}
 	if errs != nil {
-		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, err), true
+		return lastProcessedBlock, progressed, fmt.Errorf("handle block events stream (last processed block = %d): %w", lastProcessedBlock, errs), true
 	}
 
 	// Sanity-check we are not replaying events - this should never happen!
