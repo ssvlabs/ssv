@@ -123,6 +123,45 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 	}
 }
 
+// onTimeoutAggregator is identical to onTimeout but targets AggregatorCommittee runners and queues.
+func (c *Committee) onTimeoutAggregator(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
+	return func(round specqbft.Round) {
+		c.mtx.RLock() // read-lock for c.Queues, c.AggregatorRunners
+		defer c.mtx.RUnlock()
+
+		// only run if the validator is started
+		//if v.state != uint32(Started) {
+		//	return
+		//}
+		dr := c.AggregatorRunners[phase0.Slot(height)]
+		if dr == nil { // only happens when we prune expired runners
+			logger.Debug("❗no aggregator committee runner found for slot", fields.Slot(phase0.Slot(height)))
+			return
+		}
+
+		hasDuty := dr.HasRunningDuty()
+		if !hasDuty {
+			return
+		}
+
+		msg, err := c.createTimerMessage(identifier, height, round)
+		if err != nil {
+			logger.Debug("❗ failed to create aggregator timer msg", zap.Error(err))
+			return
+		}
+		dec, err := queue.DecodeSSVMessage(msg)
+		if err != nil {
+			logger.Debug("❌ failed to decode aggregator timer msg", zap.Error(err))
+			return
+		}
+
+		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
+			logger.Warn("❗️ dropping aggregator timeout message because the queue is full",
+				fields.RunnerRole(identifier.GetRoleType()))
+		}
+	}
+}
+
 func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
 		Height: height,

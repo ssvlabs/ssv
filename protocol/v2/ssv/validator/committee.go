@@ -236,7 +236,7 @@ func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *
 	if err != nil {
 		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create AggregatorCommitteeRunner: %w", err)
 	}
-	aggCommRunner.SetTimeoutFunc(c.onTimeout)
+	aggCommRunner.SetTimeoutFunc(c.onTimeoutAggregator)
 	c.AggregatorRunners[duty.Slot] = aggCommRunner
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
