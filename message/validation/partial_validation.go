@@ -294,7 +294,7 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	case spectypes.RoleVoluntaryExit:
 		return msgType == spectypes.VoluntaryExitPartialSig
 	case spectypes.RoleAggregatorCommittee:
-		return msgType == spectypes.AggregatorCommitteePartialSig
+		return msgType == spectypes.AggregatorCommitteePartialSig || msgType == spectypes.PostConsensusPartialSig
 	default:
 		return false
 	}
