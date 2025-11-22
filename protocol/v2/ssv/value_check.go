@@ -89,43 +89,28 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
-type validatorConsensusDataChecker struct {
-	beaconConfig *networkconfig.Beacon
-}
+type validatorConsensusDataChecker struct{}
 
-func NewValidatorConsensusDataChecker(
-	beaconConfig *networkconfig.Beacon,
-) ValueChecker {
-	return &validatorConsensusDataChecker{
-		beaconConfig: beaconConfig,
-	}
+func NewValidatorConsensusDataChecker() ValueChecker {
+	return &validatorConsensusDataChecker{}
 }
 
 func (v *validatorConsensusDataChecker) CheckValue(value []byte) error {
-	cd := &spectypes.ValidatorConsensusData{}
+	cd := &spectypes.AggregatorCommitteeConsensusData{}
 	if err := cd.Decode(value); err != nil {
-		return fmt.Errorf("failed decoding consensus data: %w", err)
+		return fmt.Errorf("failed decoding aggregator committee consensus data: %w", err)
 	}
 	if err := cd.Validate(); err != nil {
 		return fmt.Errorf("invalid value: %w", err)
 	}
 
-	if v.beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > v.beaconConfig.EstimatedCurrentEpoch()+1 {
-		return errors.New("duty epoch is into far future")
-	}
+	// Basic validation - consensus data should have either aggregator or sync committee data
+	hasAggregators := len(cd.Aggregators) > 0
+	hasContributors := len(cd.Contributors) > 0
 
-	if spectypes.BNRoleAggregatorCommittee != cd.Duty.Type {
-		return errors.New("wrong beacon role type")
+	if !hasAggregators && !hasContributors {
+		return errors.New("no aggregators or sync committee contributors in consensus data")
 	}
-
-	// TODO: should it be checked?
-	//if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
-	//	return errors.New("wrong validator pk")
-	//}
-	//
-	//if validatorIndex != cd.Duty.ValidatorIndex {
-	//	return errors.New("wrong validator index")
-	//}
 
 	return nil
 }

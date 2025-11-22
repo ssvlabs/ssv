@@ -76,7 +76,7 @@ func NewAggregatorCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		ValCheck:        ssv.NewValidatorConsensusDataChecker(networkConfig.Beacon),
+		ValCheck:        ssv.NewValidatorConsensusDataChecker(),
 		beacon:          beacon,
 		network:         network,
 		signer:          signer,
