@@ -504,7 +504,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 	}
 
 	if err := r.BaseRunner.decide(ctx, logger, r, r.BaseRunner.State.CurrentDuty.DutySlot(), aggregatorData, r.ValCheck); err != nil {
-		return traces.Errorf(span, "failed to start consensus")
+		return traces.Errorf(span, "failed to start consensus: %w", err)
 	}
 
 	if anyErr != nil {
