@@ -102,11 +102,19 @@ func (c *Committee) ConsumeQueue(
 	for ctx.Err() == nil {
 		state.HasRunningInstance = rnr.HasRunningQBFTInstance()
 
-		filter := queue.FilterAny
+		expectedRole := rnr.GetRole()
+
+		// Base filter: only accept messages matching this consumer's runner role.
+		roleFilter := func(m *queue.SSVMessage) bool { return m.MsgID.GetRoleType() == expectedRole }
+
+		filter := func(m *queue.SSVMessage) bool { return roleFilter(m) }
 		if state.HasRunningInstance && !rnr.HasAcceptedProposalForCurrentRound() {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
-			// for the current round.
+			// for the current round. Always enforce role match.
 			filter = func(m *queue.SSVMessage) bool {
+				if !roleFilter(m) {
+					return false
+				}
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
@@ -119,9 +127,12 @@ func (c *Committee) ConsumeQueue(
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
 		} else if state.HasRunningInstance {
-			filter = func(ssvMessage *queue.SSVMessage) bool {
+			filter = func(m *queue.SSVMessage) bool {
+				if !roleFilter(m) {
+					return false
+				}
 				// don't read post consensus until decided
-				return ssvMessage.MsgType != spectypes.SSVPartialSignatureMsgType
+				return m.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
