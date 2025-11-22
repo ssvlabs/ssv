@@ -554,9 +554,9 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 	version, _ := r.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
 
-	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
+	committeeDuty, ok := duty.(*spectypes.AggregatorCommitteeDuty)
 	if !ok {
-		return traces.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
+		return traces.Errorf(span, "duty is not an AggregatorCommitteeDuty: %T", duty)
 	}
 
 	span.SetAttributes(
