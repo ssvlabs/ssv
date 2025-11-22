@@ -143,6 +143,19 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
+	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
+		validateMsg = func() error {
+			decidedValue := &spectypes.AggregatorCommitteeConsensusData{}
+			if err := decidedValue.Decode(decidedValueBytes); err != nil {
+				return errors.Wrap(err, "failed to parse decided value to AggregatorCommitteeConsensusData")
+			}
+
+			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for AggregatorCommitteeRunner
+			// by design, hence there is no need to store slot number on decidedValue for AggregatorCommitteeRunner.
+			expectedSlot := b.State.CurrentDuty.DutySlot()
+			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
+		}
+	}
 
 	return validateMsg()
 }
