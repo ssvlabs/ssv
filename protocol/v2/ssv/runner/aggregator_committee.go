@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -526,7 +525,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 	defer span.End()
 
 	span.AddEvent("checking if instance is decided")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, &spectypes.BeaconVote{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, &spectypes.AggregatorCommitteeConsensusData{})
 	if err != nil {
 		return traces.Errorf(span, "failed processing consensus message: %w", err)
 	}
@@ -545,156 +544,95 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 	r.measurements.StartPostConsensus()
 
 	duty := r.BaseRunner.State.CurrentDuty
-	postConsensusMsg := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     duty.DutySlot(),
-		Messages: []*spectypes.PartialSignatureMessage{},
-	}
-
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	version, _ := r.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
-
-	committeeDuty, ok := duty.(*spectypes.AggregatorCommitteeDuty)
+	aggCommDuty, ok := duty.(*spectypes.AggregatorCommitteeDuty)
 	if !ok {
 		return traces.Errorf(span, "duty is not an AggregatorCommitteeDuty: %T", duty)
 	}
 
-	span.SetAttributes(
-		observability.BeaconSlotAttribute(duty.DutySlot()),
-		observability.BeaconEpochAttribute(epoch),
-		observability.BeaconVersionAttribute(version),
-		observability.DutyCountAttribute(len(committeeDuty.ValidatorDuties)),
-	)
+	consensusData := decidedValue.(*spectypes.AggregatorCommitteeConsensusData)
 
-	span.AddEvent("signing validator duties")
+	var messages []*spectypes.PartialSignatureMessage
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	var (
-		wg sync.WaitGroup
-		// errCh is buffered because the receiver is only interested in the very 1st error sent to this channel
-		// and will not read any subsequent errors. Buffering ensures that senders can send their errors and terminate without being blocked,
-		// regardless of whether the receiver is still actively reading from the channel.
-		errCh        = make(chan error, len(committeeDuty.ValidatorDuties))
-		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
-		dutiesCh     = make(chan *spectypes.ValidatorDuty)
+	_, hashRoots, err := consensusData.GetAggregateAndProofs()
+	if err != nil {
+		return traces.Errorf(span, "failed to get aggregate and proofs: %w", err)
+	}
 
-		beaconVote = decidedValue.(*spectypes.BeaconVote)
-		totalAttesterDuties,
-		totalSyncCommitteeDuties,
-		blockedAttesterDuties atomic.Uint32
-	)
+	for i, hashRoot := range hashRoots {
+		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 
-	// The worker pool will throttle the parallel processing of validator duties.
-	// This is mainly needed because the processing involves several outgoing HTTP calls to the Consensus Client.
-	// These calls should be limited to a certain degree to reduce the pressure on the Consensus Node.
-	const workerCount = 30
-
-	go func() {
-		defer close(dutiesCh)
-		for _, duty := range committeeDuty.ValidatorDuties {
-			if ctx.Err() != nil {
-				break
-			}
-			dutiesCh <- duty
+		_, exists := r.BaseRunner.Share[validatorIndex]
+		if !exists {
+			continue
 		}
-	}()
 
-	for range workerCount {
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-
-			for validatorDuty := range dutiesCh {
-				if ctx.Err() != nil {
-					return
-				}
-
-				switch validatorDuty.Type {
-				case spectypes.BNRoleAttester:
-					totalAttesterDuties.Add(1)
-					isAttesterDutyBlocked, partialSigMsg, err := r.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
-					if err != nil {
-						errCh <- fmt.Errorf("failed signing attestation data: %w", err)
-						return
-					}
-					if isAttesterDutyBlocked {
-						blockedAttesterDuties.Add(1)
-						continue
-					}
-
-					signaturesCh <- partialSigMsg
-				case spectypes.BNRoleSyncCommittee:
-					totalSyncCommitteeDuties.Add(1)
-
-					partialSigMsg, err := signBeaconObject(
-						ctx,
-						r,
-						validatorDuty,
-						spectypes.SSZBytes(beaconVote.BlockRoot[:]),
-						validatorDuty.DutySlot(),
-						spectypes.DomainSyncCommittee,
-					)
-					if err != nil {
-						errCh <- fmt.Errorf("failed signing sync committee message: %w", err)
-						return
-					}
-
-					signaturesCh <- partialSigMsg
-				default:
-					errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
-					return
-				}
-			}
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(signaturesCh)
-	}()
-
-listener:
-	for {
-		select {
-		case err := <-errCh:
-			cancel()
-			return traces.Error(span, err)
-		case signature, ok := <-signaturesCh:
-			if !ok {
-				break listener
-			}
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, signature)
+		vDuty := r.findValidatorDuty(aggCommDuty, validatorIndex, spectypes.BNRoleAggregator)
+		if vDuty == nil {
+			continue
 		}
+
+		// Sign the aggregate and proof
+		msg, err := signBeaconObject(
+			ctx,
+			r, vDuty, hashRoot,
+			aggCommDuty.DutySlot(),
+			spectypes.DomainAggregateAndProof,
+		)
+		if err != nil {
+			return traces.Errorf(span, "failed to sign aggregate and proof: %w", err)
+		}
+
+		messages = append(messages, msg)
 	}
 
-	var (
-		totalAttestations   = totalAttesterDuties.Load()
-		totalSyncCommittee  = totalSyncCommitteeDuties.Load()
-		blockedAttestations = blockedAttesterDuties.Load()
-	)
-
-	if totalAttestations == 0 && totalSyncCommittee == 0 {
-		r.BaseRunner.State.Finished = true
-		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
-		return ErrNoValidDutiesToExecute
+	contributions, err := consensusData.GetSyncCommitteeContributions()
+	if err != nil {
+		return traces.Errorf(span, "failed to get sync committee contributions: %w", err)
 	}
 
-	// Avoid sending an empty message if all attester duties were blocked due to Doppelganger protection
-	// and no sync committee duties exist.
-	//
-	// We do not mark the state as finished here because post-consensus messages must still be processed,
-	// allowing validators to be marked as safe once sufficient consensus is reached.
-	if totalAttestations == blockedAttestations && totalSyncCommittee == 0 {
-		const eventMsg = "Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties."
-		span.AddEvent(eventMsg)
-		logger.Debug(eventMsg,
-			zap.Uint32("attester_duties", totalAttestations),
-			zap.Uint32("blocked_attesters", blockedAttestations))
+	for i, contribution := range contributions {
+		validatorIndex := consensusData.Contributors[i].ValidatorIndex
 
+		_, exists := r.BaseRunner.Share[validatorIndex]
+		if !exists {
+			continue
+		}
+
+		vDuty := r.findValidatorDuty(aggCommDuty, validatorIndex, spectypes.BNRoleSyncCommitteeContribution)
+		if vDuty == nil {
+			continue
+		}
+
+		contribAndProof := &altair.ContributionAndProof{
+			AggregatorIndex: validatorIndex,
+			Contribution:    &contribution.Contribution,
+			SelectionProof:  consensusData.Contributors[i].SelectionProof,
+		}
+
+		// Sign the contribution and proof
+		msg, err := signBeaconObject(
+			ctx,
+			r, vDuty, contribAndProof,
+			aggCommDuty.DutySlot(),
+			spectypes.DomainContributionAndProof,
+		)
+		if err != nil {
+			return traces.Errorf(span, "failed to sign contribution and proof: %w", err)
+		}
+
+		messages = append(messages, msg)
+	}
+
+	if len(messages) == 0 {
+		// Nothing to broadcast for this operator
 		span.SetStatus(codes.Ok, "")
 		return nil
+	}
+
+	postConsensusMsg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     duty.DutySlot(),
+		Messages: messages,
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -826,7 +764,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 
 	span.AddEvent("getting aggregations, sync committee contributions and root beacon objects")
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
-	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
+	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
 	if err != nil {
 		return traces.Errorf(span, "could not get expected post consensus roots and beacon objects: %w", err)
 	}
@@ -1194,7 +1132,7 @@ func (r *AggregatorCommitteeRunner) expectedSyncCommitteeSelectionRoot(
 	return spectypes.ComputeETHSigningRoot(data, domain)
 }
 
-func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
+func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context) (
 	aggregatorMap map[phase0.ValidatorIndex][32]byte,
 	contributionMap map[phase0.ValidatorIndex][][32]byte,
 	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, err error,
