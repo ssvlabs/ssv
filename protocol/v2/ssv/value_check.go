@@ -69,6 +69,7 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	}
 
 	// Implemented according to https://github.com/ssvlabs/SIPs/pull/69
+	// Not checking target root due to possible orphaned blocks.
 	if bv.Source.Epoch != v.expectedVote.Source.Epoch {
 		return fmt.Errorf("unexpected source epoch %v, expected %v", bv.Source.Epoch, v.expectedVote.Source.Epoch)
 	}
