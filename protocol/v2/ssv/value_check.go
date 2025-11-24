@@ -81,10 +81,6 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		return fmt.Errorf("unexpected source root %x, expected %x", bv.Source.Root, v.expectedVote.Source.Root)
 	}
 
-	if bv.Target.Root != v.expectedVote.Target.Root {
-		return fmt.Errorf("unexpected target root %x, expected %x", bv.Target.Root, v.expectedVote.Target.Root)
-	}
-
 	return nil
 }
 
