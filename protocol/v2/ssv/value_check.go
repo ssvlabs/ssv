@@ -68,8 +68,8 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		}
 	}
 
-	// Implemented according to https://github.com/ssvlabs/SIPs/pull/69
-	// Not checking target root due to possible orphaned blocks.
+	// Implemented according to https://github.com/ssvlabs/SIPs/pull/69, except the target root check is deleted
+	// because reorgs/orphaned blocks will trigger the protection and cause performance drops.
 	if bv.Source.Epoch != v.expectedVote.Source.Epoch {
 		return fmt.Errorf("unexpected source epoch %v, expected %v", bv.Source.Epoch, v.expectedVote.Source.Epoch)
 	}
