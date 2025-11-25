@@ -171,7 +171,8 @@ type Controller struct {
 
 // NewController creates a new validator controller instance.
 func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.Options) *Controller {
-	logger.Debug("setting up validator controller")
+	logger.Debug("setting up validator controller",
+		zap.Bool("mfp_strict", options.MajorityForkProtectionStrict))
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
