@@ -89,9 +89,10 @@ type ControllerOptions struct {
 	ProposerDelay                  time.Duration
 
 	// worker flags
-	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
-	QueueBufferSize int    `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
-	GasLimit        uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
+	WorkersCount                 int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
+	QueueBufferSize              int    `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
+	GasLimit                     uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
+	MajorityForkProtectionStrict bool   `yaml:"MajorityForkProtectionStrict" env:"MAJORITY_FORK_PROTECTION_STRICT" env-description:"Check if the attestation target root matches the proposed one. It should improve Ethereum network split detection in case of global network incidents. However, it can worsen the performance on reorgs."`
 }
 
 type Nonce uint16
@@ -197,6 +198,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		options.MessageValidator,
 		options.Graffiti,
 		options.ProposerDelay,
+		options.MajorityForkProtectionStrict,
 	)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
@@ -1050,6 +1052,7 @@ func SetupCommitteeRunners(
 			options.OperatorSigner,
 			dutyGuard,
 			options.DoppelgangerHandler,
+			options.MajorityForkProtectionStrict,
 		)
 		if err != nil {
 			return nil, err

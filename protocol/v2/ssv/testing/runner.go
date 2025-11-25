@@ -89,7 +89,7 @@ var ConstructBaseRunner = func(
 	switch role {
 	case spectypes.RoleCommittee:
 		valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch, vote)
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch, vote, false)
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
@@ -138,6 +138,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
+			false,
 		)
 	case spectypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(
@@ -221,6 +222,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
+			false,
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
@@ -356,7 +358,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		switch role {
 		case spectypes.RoleCommittee:
 			valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-				sharePubKeys, spectestingutils.TestingDutyEpoch, vote)
+				sharePubKeys, spectestingutils.TestingDutyEpoch, vote, false)
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
@@ -400,6 +402,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
+			false,
 		)
 	case spectypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(
@@ -483,6 +486,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
+			false,
 		)
 		if r != nil {
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType

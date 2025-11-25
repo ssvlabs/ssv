@@ -23,6 +23,7 @@ type voteChecker struct {
 	sharePublicKeys       []phase0.BLSPubKey
 	estimatedCurrentEpoch phase0.Epoch
 	expectedVote          *spectypes.BeaconVote
+	mfpStrict             bool
 }
 
 func NewVoteChecker(
@@ -31,6 +32,7 @@ func NewVoteChecker(
 	sharePublicKeys []phase0.BLSPubKey,
 	estimatedCurrentEpoch phase0.Epoch,
 	expectedVote *spectypes.BeaconVote,
+	mfpStrict bool,
 ) ValueChecker {
 	return &voteChecker{
 		signer:                signer,
@@ -38,6 +40,7 @@ func NewVoteChecker(
 		sharePublicKeys:       sharePublicKeys,
 		estimatedCurrentEpoch: estimatedCurrentEpoch,
 		expectedVote:          expectedVote,
+		mfpStrict:             mfpStrict,
 	}
 }
 
@@ -80,6 +83,12 @@ func (v *voteChecker) CheckValue(value []byte) error {
 
 	if bv.Source.Root != v.expectedVote.Source.Root {
 		return fmt.Errorf("unexpected source root %x, expected %x", bv.Source.Root, v.expectedVote.Source.Root)
+	}
+
+	if v.mfpStrict {
+		if bv.Target.Root != v.expectedVote.Target.Root {
+			return fmt.Errorf("unexpected target root %x, expected %x", bv.Target.Root, v.expectedVote.Target.Root)
+		}
 	}
 
 	return nil
