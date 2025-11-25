@@ -13,12 +13,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 // errPeerWasFiltered is thrown when a peer is filtered during handshake
@@ -205,8 +206,10 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 		if err == nil {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {
-				logger.Debug("[handshake] peer subnets were updated", fields.PeerID(pid),
-					zap.String("subnets", subnets.String()))
+				logger.Debug("[handshake] peer subnets were updated",
+					fields.PeerID(pid),
+					zap.String("subnets", subnets.StringHumanReadable()),
+				)
 			}
 		}
 	}

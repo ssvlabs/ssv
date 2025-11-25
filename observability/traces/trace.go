@@ -41,8 +41,7 @@ func Context(ctx context.Context, str string) context.Context {
 // Errorf sets the status of the span to error and returns an error with the formatted message.
 func Errorf(span trace.Span, f string, args ...any) error {
 	err := fmt.Errorf(f, args...)
-	span.SetStatus(codes.Error, err.Error())
-	return err
+	return Error(span, err)
 }
 
 func Error(span trace.Span, err error) error {

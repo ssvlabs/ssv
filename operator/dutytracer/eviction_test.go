@@ -129,14 +129,15 @@ func TestEviction(t *testing.T) {
 	}
 
 	{
-		// links
+		// links - committee links are now populated during schedule computation, not message collection
+		// This test only collects messages without running schedule worker, so no links are expected
 		links, err := dutyStore.GetCommitteeDutyLinks(3707881)
 		require.NoError(t, err)
-		require.Len(t, links, 787)
+		require.Len(t, links, 0)
 
 		links, err = dutyStore.GetCommitteeDutyLinks(3707882)
 		require.NoError(t, err)
-		require.Len(t, links, 799)
+		require.Len(t, links, 0)
 	}
 }
 

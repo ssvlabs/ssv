@@ -4,6 +4,7 @@ const (
 	NameBootNode               = "BootNode"
 	NameController             = "Controller"
 	NameDiscoveryService       = "DiscoveryService"
+	NameConnectionGater        = "ConnectionGater"
 	NameDutyScheduler          = "DutyScheduler"
 	NameExecutionClient        = "ExecutionClient"
 	NameExecutionClientMulti   = "ExecutionClientMulti"

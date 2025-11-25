@@ -29,17 +29,16 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 const (
 	// defaultReqTimeout is the default timeout used for stream requests
 	defaultReqTimeout = 10 * time.Second
-	// backoffLow is when we start the backoff exponent interval
+	// backoffLow is the min value backoff strategy will use for its delay
 	backoffLow = 10 * time.Second
-	// backoffLow is when we stop the backoff exponent interval
-	backoffHigh = 30 * time.Minute
+	// backoffHigh is the max value backoff strategy will use for its delay
+	backoffHigh = 5 * time.Minute
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
 	// backoffConnectorCacheSize is the cache size of the backoff connector
@@ -195,7 +194,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     n.persistentSubnets.String(),
+		Subnets:     n.persistentSubnets.StringHex(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
@@ -280,11 +279,12 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 		if n.persistentSubnets.HasActive() {
 			discV5Opts.Subnets = n.persistentSubnets
-			logger = logger.With(fields.Subnets(n.persistentSubnets))
+			logger = logger.With(zap.String("persistent_subnets", n.persistentSubnets.StringHumanReadable()))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
-			zap.String("ip", discV5Opts.IP))
+			zap.String("ip", discV5Opts.IP),
+		)
 	} else {
 		logger.Info("discovery: using mdns (local)")
 	}

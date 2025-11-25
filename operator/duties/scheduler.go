@@ -414,7 +414,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 	}
 }
 
-// ExecuteDuties tries to execute the given duties
+// ExecuteDuties tries to execute the provided validator duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
@@ -431,6 +431,10 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 	for _, duty := range duties {
 		logger := s.loggerWithDutyContext(duty)
+
+		const eventMsg = "🔧 executing validator duty"
+		logger.Debug(eventMsg)
+		span.AddEvent(eventMsg)
 
 		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
@@ -460,7 +464,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	span.SetStatus(codes.Ok, "")
 }
 
-// ExecuteCommitteeDuties tries to execute the given committee duties
+// ExecuteCommitteeDuties tries to execute the provided committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
@@ -474,6 +478,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 	for _, committee := range duties {
 		duty := committee.duty
+
 		logger := s.loggerWithCommitteeDutyContext(committee)
 
 		const eventMsg = "🔧 executing committee duty"
@@ -504,7 +509,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 				logger.Warn("parent-context has no deadline set")
 			}
 
-			s.waitOneThirdOrValidBlock(duty.Slot)
+			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
 	}
@@ -613,19 +618,33 @@ func (s *Scheduler) loggerWithAggregatorCommitteeDutyContext(aggregatorCommittee
 // advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,
 // meaning s.headSlot value can never decrease) and notify the go-routines waiting for it to happen.
 func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
+	s.logger.Debug("advancing head slot (maybe)")
+	defer s.logger.Debug("advancing head slot (done)")
+
 	s.waitCond.L.Lock()
 	if slot > s.headSlot {
+		s.logger.Debug("advancing head slot",
+			zap.Uint64("prev_head_slot", uint64(s.headSlot)),
+			zap.Uint64("slot", uint64(slot)),
+		)
 		s.headSlot = slot
 		s.waitCond.Broadcast()
 	}
 	s.waitCond.L.Unlock()
 }
 
-// waitOneThirdOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
-// slot start time), or for head block event that might come in even sooner than one-third of the slot passes.
-func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
+// waitOneThirdIntoSlotOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
+// slot start time), or for a head block event that might come in even sooner than one-third of the slot passes.
+func (s *Scheduler) waitOneThirdIntoSlotOrValidBlock(slot phase0.Slot) {
+	s.logger.Debug("waiting 1/3 into slot (maybe)")
+	defer s.logger.Debug("waiting 1/3 into slot (done)")
+
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
+		s.logger.Debug("waiting 1/3 into slot",
+			zap.Uint64("current_head_slot", uint64(s.headSlot)),
+			zap.Uint64("slot", uint64(slot)),
+		)
 		s.waitCond.Wait()
 	}
 	s.waitCond.L.Unlock()

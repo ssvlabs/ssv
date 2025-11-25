@@ -137,26 +137,39 @@ func (s *Subnets) Clear(i uint64) {
 	s.v[byteIndex] &^= 1 << bitIndex
 }
 
-func (s *Subnets) String() string {
+// StringHumanReadable returns human-readable subnets representation.
+func (s *Subnets) StringHumanReadable() string {
+	return fmt.Sprint(s.SubnetList())
+}
+
+// StringHex returns subnets as a hex-encoded string.
+func (s *Subnets) StringHex() string {
 	return hex.EncodeToString(s.v[:])
 }
 
+// String returns subnets as a hex-encoded string.
+// DEPRECATED, use StringHex or StringHumanReadable instead, this method is preserved for
+// backward-compatibility since it's used for some p2p-message encoding/decoding.
+func (s *Subnets) String() string {
+	return s.StringHex()
+}
+
+// SubnetList returns a list of subnets; Each subnet in that list is a number in the range [0, SubnetsCount).
 func (s *Subnets) SubnetList() []uint64 {
-	indices := make([]uint64, 0)
+	subnetNumbers := make([]uint64, 0)
 	for byteIdx, b := range s.v {
 		if byteIdx >= SubnetsCount {
 			break
 		}
 		for bitIdx := uint64(0); bitIdx < 8; bitIdx++ {
-			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of 128
+			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of SubnetsCount
 			if b&bit == bit {
 				subnet := uint64(byteIdx)*8 + bitIdx
-				indices = append(indices, subnet)
+				subnetNumbers = append(subnetNumbers, subnet)
 			}
 		}
 	}
-
-	return indices
+	return subnetNumbers
 }
 
 func (s *Subnets) ActiveCount() int {

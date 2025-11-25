@@ -35,11 +35,11 @@ func TestEpochMetricRecorder(t *testing.T) {
 		sut.Record(t.Context(), 40, epoch, types.BNRoleAttester)
 
 		aggregatorCounter := sut.data[types.BNRoleAggregator]
-		assert.Equal(t, uint32(30), aggregatorCounter.count)
+		assert.Equal(t, int64(30), aggregatorCounter.count)
 		assert.Equal(t, epoch, aggregatorCounter.epoch)
 
 		attesterCounter := sut.data[types.BNRoleAttester]
-		assert.Equal(t, uint32(60), attesterCounter.count)
+		assert.Equal(t, int64(60), attesterCounter.count)
 		assert.Equal(t, epoch, attesterCounter.epoch)
 
 		nextEpoch := phase0.Epoch(2)

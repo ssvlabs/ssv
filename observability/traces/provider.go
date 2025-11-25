@@ -13,7 +13,9 @@ import (
 
 func InitializeProvider(ctx context.Context, resources *resource.Resource, isEnabled bool) (trace.TracerProvider, func(context.Context) error, error) {
 	if !isEnabled {
-		noopShutdown := func(ctx context.Context) error { return nil }
+		noopShutdown := func(ctx context.Context) error {
+			return nil
+		}
 		return noop.NewTracerProvider(), noopShutdown, nil
 	}
 

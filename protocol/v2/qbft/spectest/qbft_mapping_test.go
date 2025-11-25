@@ -12,15 +12,15 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func TestQBFTMapping(t *testing.T) {
 	path, _ := os.Getwd()
-	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "qbft")
+	jsonTests, err := storage.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
 
 	untypedTests := map[string]interface{}{}
@@ -99,7 +99,7 @@ func TestQBFTMapping(t *testing.T) {
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember)),
+				protocoltesting.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember)),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

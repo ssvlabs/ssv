@@ -52,7 +52,7 @@ func (hs *HexSlice) Bind(value string) error {
 	if value == "" {
 		return nil
 	}
-	for _, s := range strings.Split(value, ",") {
+	for s := range strings.SplitSeq(value, ",") {
 		var h Hex
 		err := h.Bind(s)
 		if err != nil {
@@ -69,7 +69,7 @@ func (us *Uint64Slice) Bind(value string) error {
 	if value == "" {
 		return nil
 	}
-	for _, s := range strings.Split(value, ",") {
+	for s := range strings.SplitSeq(value, ",") {
 		n, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
 			return err
@@ -109,7 +109,7 @@ func (rs *RoleSlice) Bind(value string) error {
 	if value == "" {
 		return nil
 	}
-	for _, s := range strings.Split(value, ",") {
+	for s := range strings.SplitSeq(value, ",") {
 		var r Role
 		err := r.Bind(s)
 		if err != nil {

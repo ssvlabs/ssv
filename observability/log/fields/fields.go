@@ -19,7 +19,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/observability/log/fields/stringer"
 	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
@@ -39,12 +38,11 @@ const (
 	FieldPreConsensusTime      = "pre_consensus_time"
 	FieldPostConsensusTime     = "post_consensus_time"
 	FieldConsensusTime         = "consensus_time"
-	FieldBlockTime             = "block_time"
+	FieldConsensusRounds       = "consensus_rounds"
 	FieldCount                 = "count"
 	FieldEstimatedCurrentEpoch = "estimated_current_epoch"
 	FieldEstimatedCurrentSlot  = "estimated_current_slot"
 	FieldDomain                = "domain"
-	FieldDuration              = "duration"
 	FieldDuties                = "duties"
 	FieldDutyExecutorID        = "duty_executor_id"
 	FieldDutyID                = "duty_id"
@@ -71,11 +69,8 @@ const (
 	FieldBeaconRole            = "beacon_role"
 	FieldRunnerRole            = "runner_role"
 	FieldSlot                  = "slot"
-	FieldSlotStartTime         = "slot_start_time"
-	FieldSubmissionTime        = "submission_time"
 	FieldTotalConsensusTime    = "total_consensus_time"
 	FieldTotalDutyTime         = "total_duty_time"
-	FieldSubnets               = "subnets"
 	FieldTargetNodeENR         = "target_node_enr"
 	FieldToBlock               = "to_block"
 	FieldTook                  = "took"
@@ -141,10 +136,6 @@ func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
 	return zap.Stringer(FieldUpdatedENRLocalNode, val.Node())
 }
 
-func Subnets(val commons.Subnets) zapcore.Field {
-	return zap.Stringer(FieldSubnets, &val)
-}
-
 func PeerID(val peer.ID) zapcore.Field {
 	return zap.Stringer(FieldPeerID, val)
 }
@@ -155,10 +146,6 @@ func PeerScore(val float64) zapcore.Field {
 
 func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
-}
-
-func Duration(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
 }
 
 func BlockCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
@@ -234,31 +221,27 @@ func Topic(val string) zap.Field {
 }
 
 func PreConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldPreConsensusTime, utils.FormatDuration(val))
+	return zap.String(FieldPreConsensusTime, durationToSecondsStr(val))
 }
 
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldConsensusTime, durationToSecondsStr(val))
+}
+
+func ConsensusRounds(val uint64) zap.Field {
+	return zap.Uint64(FieldConsensusRounds, val)
 }
 
 func PostConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldPostConsensusTime, utils.FormatDuration(val))
-}
-
-func BlockTime(val time.Duration) zap.Field {
-	return zap.String(FieldBlockTime, utils.FormatDuration(val))
-}
-
-func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, utils.FormatDuration(val))
+	return zap.String(FieldPostConsensusTime, durationToSecondsStr(val))
 }
 
 func TotalConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldTotalConsensusTime, utils.FormatDuration(val))
+	return zap.String(FieldTotalConsensusTime, durationToSecondsStr(val))
 }
 
 func TotalDutyTime(val time.Duration) zap.Field {
-	return zap.String(FieldTotalDutyTime, utils.FormatDuration(val))
+	return zap.String(FieldTotalDutyTime, durationToSecondsStr(val))
 }
 
 func DutyID(val string) zap.Field {
@@ -317,6 +300,7 @@ func Duties(epoch phase0.Epoch, duties []*spectypes.ValidatorDuty, truncateAfter
 func Root(r [32]byte) zap.Field {
 	return zap.String("root", hex.EncodeToString(r[:]))
 }
+
 func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
 }
@@ -335,4 +319,9 @@ func Owner(addr common.Address) zap.Field {
 
 func Type(v any) zapcore.Field {
 	return zap.String(FieldType, fmt.Sprintf("%T", v))
+}
+
+func durationToSecondsStr(val time.Duration) string {
+	valStr := strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
+	return valStr + "s"
 }

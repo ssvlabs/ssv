@@ -8,18 +8,17 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -59,41 +58,41 @@ func NewController(
 	}
 }
 
-// StartNewInstance will start a new QBFT instance, if can't will return error
+// StartNewInstance will attempt to start a new QBFT instance.
 func (c *Controller) StartNewInstance(
 	ctx context.Context,
 	logger *zap.Logger,
 	height specqbft.Height,
 	value []byte,
 	valueChecker ssv.ValueChecker,
-) error {
+) (*instance.Instance, error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
 	if err := valueChecker.CheckValue(value); err != nil {
-		return traces.Errorf(span, "value invalid: %w", err)
+		return nil, traces.Errorf(span, "value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		return spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(span, "attempting to start an instance with a past height"))
+		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(span, "attempting to start an instance with a past height"))
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(span, "instance already running"))
+		return nil, spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(span, "instance already running"))
 	}
 
 	c.Height = height
 
-	newInstance := c.addAndStoreNewInstance()
-
-	span.AddEvent("start new instance")
+	newInstance := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	c.StoredInstances.addNewInstance(newInstance)
 	newInstance.Start(ctx, logger, value, height, valueChecker)
 	c.forceStopAllInstanceExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")
-	return nil
+
+	return newInstance, nil
 }
 
 func (c *Controller) forceStopAllInstanceExceptCurrent() {
@@ -193,13 +192,6 @@ func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
 		return true
 	}
 	return false
-}
-
-// addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
-func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
-	c.StoredInstances.addNewInstance(i)
-	return i
 }
 
 // GetRoot returns the state's deterministic root
