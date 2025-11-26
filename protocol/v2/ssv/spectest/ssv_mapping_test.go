@@ -380,11 +380,11 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	ret := createRunnerWithBaseRunner(logger, baseRunner.RunnerRoleType, baseRunner, ks)
 
 	if baseRunner.QBFTController != nil {
-		baseRunner.QBFTController = fixControllerForRun(t, logger, ret, baseRunner.QBFTController, ks)
+		baseRunner.QBFTController = fixControllerForRun(logger, baseRunner.QBFTController, ks)
 		if baseRunner.State != nil {
 			if baseRunner.State.RunningInstance != nil {
 				operator := spectestingutils.TestingCommitteeMember(ks)
-				baseRunner.State.RunningInstance = fixInstanceForRun(t, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
+				baseRunner.State.RunningInstance = fixInstanceForRun(logger, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
 			}
 		}
 	}
@@ -392,7 +392,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	return ret
 }
 
-func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
+func fixControllerForRun(logger *zap.Logger, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
 	config := protocoltesting.TestingConfig(logger, ks)
 	newContr := controller.NewController(
 		contr.Identifier,
@@ -409,14 +409,21 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 			continue
 		}
 		operator := spectestingutils.TestingCommitteeMember(ks)
-		newContr.StoredInstances[i] = fixInstanceForRun(t, ks, inst, newContr, operator)
+		newContr.StoredInstances[i] = fixInstanceForRun(logger, ks, inst, newContr, operator)
 	}
 	return newContr
 }
 
-func fixInstanceForRun(t *testing.T, ks *spectestingutils.TestKeySet, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
+func fixInstanceForRun(
+	logger *zap.Logger,
+	ks *spectestingutils.TestKeySet,
+	inst *instance.Instance,
+	contr *controller.Controller,
+	share *spectypes.CommitteeMember,
+) *instance.Instance {
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	newInst := instance.NewInstance(
+		logger,
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
