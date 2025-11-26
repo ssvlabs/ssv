@@ -104,33 +104,34 @@ func (c *Controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 		}
 		return true
 	})
-
 	sort.Slice(ownerShares, func(i, j int) bool {
 		return ownerShares[i].ValidatorIndex < ownerShares[j].ValidatorIndex
 	})
+
+	scheduledValidatorReg := func(logger *zap.Logger, r duties.RegistrationDescriptor) {
+		select {
+		case <-c.ctx.Done():
+			logger.Debug("context is done - not gonna schedule validator registration")
+		case c.validatorRegistrationCh <- r:
+			logger.Debug("added validator registration task to pipeline")
+		case <-time.After(2 * c.networkConfig.SlotDuration):
+			logger.Error("failed to schedule validator registration duty!")
+		}
+	}
 
 	for _, s := range ownerShares[:min(scheduledValidatorRegsLimit, len(ownerShares))] {
 		pk := phase0.BLSPubKey(s.ValidatorPubKey)
 
 		vLogger := logger.With(zap.String("validator_pubkey", pk.String()))
 
-		regDesc := duties.RegistrationDescriptor{
+		r := duties.RegistrationDescriptor{
 			ValidatorIndex:  s.ValidatorIndex,
 			ValidatorPubkey: pk,
 			FeeRecipient:    recipient[:],
 			BlockNumber:     blockNumber,
 		}
 
-		go func() {
-			select {
-			case <-c.ctx.Done():
-				vLogger.Debug("context is done - not gonna schedule validator registration")
-			case c.validatorRegistrationCh <- regDesc:
-				vLogger.Debug("added validator registration task to pipeline")
-			case <-time.After(2 * c.networkConfig.SlotDuration):
-				vLogger.Error("failed to schedule validator registration duty!")
-			}
-		}()
+		go scheduledValidatorReg(vLogger, r)
 	}
 
 	// Notify (without blocking) the fee recipient controller about the fee recipient address change
