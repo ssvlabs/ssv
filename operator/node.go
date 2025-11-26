@@ -2,9 +2,15 @@ package operator
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter"
@@ -16,11 +22,13 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/fee_recipient"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	storage2 "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -44,6 +52,13 @@ type Options struct {
 	WsAPIPort           int
 }
 
+// dutyTraceDecidedsProvider is the minimal interface used from the duty trace collector
+// to serve websocket /query decided lookups.
+type dutyTraceDecidedsProvider interface {
+	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+	GetCommitteeDecideds(slot phase0.Slot, index phase0.ValidatorIndex, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
+}
+
 type Node struct {
 	logger *zap.Logger
 
@@ -61,6 +76,8 @@ type Node struct {
 
 	ws        api.WebSocketServer
 	wsAPIPort int
+
+	traceCollector dutyTraceDecidedsProvider
 }
 
 // New is the constructor of Node
@@ -117,8 +134,9 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		}),
 		feeRecipientCtrl: feeRecipientCtrl,
 
-		ws:        opts.WS,
-		wsAPIPort: opts.WsAPIPort,
+		ws:             opts.WS,
+		wsAPIPort:      opts.WsAPIPort,
+		traceCollector: opts.ValidatorOptions.DutyTraceCollector,
 	}
 
 	// Wire the beacon client to the fee recipient controller
@@ -243,12 +261,98 @@ func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
 
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
+		// In exporter v2 (archive) mode we collect decided data via the duty trace collector
+		// instead of the legacy qbft storage. When the collector is available, serve queries
+		// from it to avoid empty responses while no validators are running locally.
+		// The check for `nil` allows backward compatibility when running without exporter v2.
+		if n.traceCollector != nil {
+			n.handleDecidedFromTraceCollector(nm)
+		} else {
+			h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
+		}
 	case api.TypeError:
 		h.HandleErrorQuery(nm)
 	default:
 		h.HandleUnknownQuery(nm)
 	}
+}
+
+// handleDecidedFromTraceCollector responds to /query requests using duty trace data when available.
+func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
+	res := api.Message{Type: nm.Msg.Type, Filter: nm.Msg.Filter}
+
+	pkBytes, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
+	if err != nil {
+		n.logger.Warn("failed to decode validator public key", zap.Error(err))
+		res.Type = api.TypeError
+		res.Data = []string{"invalid publicKey"}
+		nm.Msg = res
+		return
+	}
+
+	var pk spectypes.ValidatorPK
+	copy(pk[:], pkBytes)
+
+	idx, ok := n.validatorOptions.ValidatorStore.ValidatorIndex(pk)
+	if !ok {
+		n.logger.Warn("validator not found for public key", zap.String("validator_pubkey", hex.EncodeToString(pk[:])))
+		res.Type = api.TypeError
+		res.Data = []string{"validator not found"}
+		nm.Msg = res
+		return
+	}
+
+	role, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
+	if err != nil {
+		n.logger.Warn("failed to parse role", zap.Error(err))
+		res.Type = api.TypeError
+		res.Data = []string{"role doesn't exist"}
+		nm.Msg = res
+		return
+	}
+
+	participations := make([]qbftstorage.Participation, 0)
+
+	for slot := phase0.Slot(nm.Msg.Filter.From); slot <= phase0.Slot(nm.Msg.Filter.To); slot++ {
+		var entries []dutytracer.ParticipantsRangeIndexEntry
+		if role == spectypes.BNRoleAttester || role == spectypes.BNRoleSyncCommittee {
+			entries, err = n.traceCollector.GetCommitteeDecideds(slot, idx, role)
+		} else {
+			entries, err = n.traceCollector.GetValidatorDecideds(role, slot, []phase0.ValidatorIndex{idx})
+		}
+
+		if err != nil {
+			// not-found is expected; only log unexpected errors
+			if !errors.Is(err, dutytracer.ErrNotFound) {
+				n.logger.Warn("failed to get decided entries from collector", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
+			}
+			continue
+		}
+
+		for _, e := range entries {
+			participations = append(participations, qbftstorage.Participation{
+				ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
+					Slot:    e.Slot,
+					PubKey:  pk,
+					Signers: e.Signers,
+				},
+				Role:   role,
+				PubKey: pk,
+			})
+		}
+	}
+
+	data, err := api.ParticipantsAPIData(n.network.DomainType, participations...)
+	if err != nil {
+		n.logger.Warn("failed to build participants api data", zap.Error(err))
+		res.Type = api.TypeError
+		res.Data = []string{"internal error - could not build response"}
+		nm.Msg = res
+		return
+	}
+
+	res.Data = data
+	nm.Msg = res
 }
 
 func (n *Node) startWSServer() error {
