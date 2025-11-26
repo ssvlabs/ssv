@@ -37,7 +37,6 @@ func (m *metricsRecorder) EndStage(ctx context.Context, round specqbft.Round, s 
 	took := time.Since(m.stageStart)
 
 	m.logger.Debug("stage finished",
-		fields.RunnerRole(m.runnerRole),
 		fields.QBFTRound(round),
 		zap.String("stage", string(s)),
 		fields.Took(took),
