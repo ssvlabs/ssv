@@ -74,29 +74,30 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		keySetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
+	valCheck := createValueChecker(test.Runner)
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
 		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = protocoltesting.TestingValueChecker{}
+				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.AggregatorRunner:
 		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = protocoltesting.TestingValueChecker{}
+				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.ProposerRunner:
 		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = protocoltesting.TestingValueChecker{}
+				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
 		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
-				inst.ValueChecker = protocoltesting.TestingValueChecker{}
+				inst.ValueChecker = valCheck
 			}
 		}
 	}
