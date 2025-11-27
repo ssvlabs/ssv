@@ -107,8 +107,8 @@ func (i *Instance) Start(
 	i.bumpToRound(specqbft.FirstRound)
 	i.State.Height = height
 	i.ValueChecker = valueChecker
-	i.metrics.Start()
 	i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
+	i.metrics.StartStage(stageProposal)
 
 	// propose if this node is the proposer
 	if proposerID == i.State.CommitteeMember.OperatorID {

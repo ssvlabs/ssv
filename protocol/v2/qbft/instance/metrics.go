@@ -16,41 +16,48 @@ import (
 type metricsRecorder struct {
 	logger *zap.Logger
 
+	runnerRole spectypes.RunnerRole
+
+	// stage is the current stage of some QBFT instance.
+	stage stage
+
 	// stageStart records the start of some QBFT stage.
 	stageStart time.Time
-	runnerRole spectypes.RunnerRole
 }
 
 func newMetrics(logger *zap.Logger, runnerRole spectypes.RunnerRole) *metricsRecorder {
 	return &metricsRecorder{
 		logger:     logger,
 		runnerRole: runnerRole,
+		stage:      stageUndefined,
 	}
 }
 
-// Start records the start of stage(phase) 1 for QBFT instance (it's either a proposal or prepare).
-func (m *metricsRecorder) Start() {
+// StartStage records the start of a stage(phase) for QBFT instance.
+func (m *metricsRecorder) StartStage(s stage) {
+	m.stage = s
 	m.stageStart = time.Now()
 }
 
-func (m *metricsRecorder) EndStage(ctx context.Context, round specqbft.Round, s stage) {
+func (m *metricsRecorder) EndStage(ctx context.Context, round specqbft.Round) {
 	took := time.Since(m.stageStart)
 
 	m.logger.Debug("stage finished",
 		fields.QBFTRound(round),
-		zap.String("stage", string(s)),
+		zap.String("stage", string(m.stage)),
 		fields.Took(took),
 	)
+
 	validatorStageDurationHistogram.Record(
 		ctx,
 		took.Seconds(),
 		metric.WithAttributes(
-			stageAttribute(s),
+			stageAttribute(m.stage),
 			observability.RunnerRoleAttribute(m.runnerRole),
 			observability.DutyRoundAttribute(round)),
 	)
 
-	m.stageStart = time.Now()
+	m.stage = stageUndefined
 }
 
 // RecordRoundChange records a round change event with the specified reason.
