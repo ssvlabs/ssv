@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 	"sync"
 	"time"
 
@@ -182,6 +183,10 @@ type ReorgEvent struct {
 func (s *Scheduler) Start(ctx context.Context) error {
 	s.logger.Info("duty scheduler started")
 
+	// Test-only startup delay knobs (opt-in via env). Useful for deliberately
+	// aligning node start with risky boundaries to validate boundary handling.
+	s.maybeDelayForTesting(ctx)
+
 	s.logger.Info("subscribing to head events")
 	if err := s.listenToHeadEvents(ctx); err != nil {
 		return fmt.Errorf("failed to listen to head events: %w", err)
@@ -226,6 +231,47 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	go reorgFeed.FanOut(ctx, s.reorg)
 
 	return nil
+}
+
+// maybeDelayForTesting optionally delays scheduler startup to align with
+// boundary conditions for testing. Controlled via env vars:
+//   - SSV_TEST_STARTUP_SLEEP: time.ParseDuration value (e.g., "45s").
+//   - SSV_TEST_START_AT_RISKY_BOUNDARY: if set, waits until the last slot
+//     of the current epoch (or near it) before proceeding.
+func (s *Scheduler) maybeDelayForTesting(ctx context.Context) {
+	if v := os.Getenv("SSV_TEST_STARTUP_SLEEP"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			s.logger.Warn("test knob: delaying scheduler startup", zap.Duration("sleep", d))
+			select {
+			case <-time.After(d):
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	if os.Getenv("SSV_TEST_START_AT_RISKY_BOUNDARY") != "" {
+		slotsPerEpoch := s.beaconConfig.SlotsPerEpoch
+		now := s.beaconConfig.EstimatedCurrentSlot()
+		pos := uint64(now) % slotsPerEpoch
+		// Aim for the last slot of this epoch; if we're already in the last two
+		// slots, don't wait.
+		if pos < slotsPerEpoch-2 {
+			target := now - phase0.Slot(pos) + phase0.Slot(slotsPerEpoch-1)
+			sleep := time.Until(s.beaconConfig.SlotStartTime(target))
+			if sleep > 0 {
+				s.logger.Warn("test knob: waiting for risky boundary before start", zap.Uint64("target_slot", uint64(target)), zap.Duration("sleep", sleep))
+				select {
+				case <-time.After(sleep):
+				case <-ctx.Done():
+					return
+				}
+			}
+		} else {
+			s.logger.Warn("test knob: already within risky boundary window; starting immediately",
+				zap.Uint64("slot_pos_in_epoch", pos))
+		}
+	}
 }
 
 func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {

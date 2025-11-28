@@ -3,6 +3,8 @@ package duties
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -86,7 +88,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			// If we don't yet have duties recorded for the current epoch (e.g., restart right
 			// before/after an epoch boundary), force a fetch of current-epoch duties.
-			if !h.duties.IsEpochSet(currentEpoch) {
+			if !attesterBoundaryGuardsDisabled() && !h.duties.IsEpochSet(currentEpoch) {
 				h.fetchCurrentEpoch = true
 			}
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
@@ -168,12 +170,40 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 	slot := h.beaconConfig.EstimatedCurrentSlot()
 	epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 	// If starting near an epoch boundary, prefetch next-epoch duties so they're
-	// available immediately after rollover.
+	// available immediately after rollover (unless disabled via test env).
 	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
-	if uint64(slot)%slotsPerEpoch >= slotsPerEpoch-2 {
+	if !attesterBoundaryGuardsDisabled() && shouldPrefetchNextEpoch(uint64(slot)%slotsPerEpoch, slotsPerEpoch) {
 		h.fetchNextEpoch = true
 	}
 	h.processFetching(ctx, epoch, slot)
+}
+
+// attesterBoundaryGuardsDisabled returns true when test env toggles request disabling
+// the boundary-guard logic for Attester handler.
+func attesterBoundaryGuardsDisabled() bool {
+	if os.Getenv("SSV_TEST_DISABLE_BOUNDARY_GUARDS") != "" {
+		return true
+	}
+	if os.Getenv("SSV_TEST_DISABLE_ATTESTER_BOUNDARY_GUARDS") != "" {
+		return true
+	}
+	return false
+}
+
+// shouldPrefetchNextEpoch decides if we are within the last N slots of the epoch.
+// N defaults to 2 and can be overridden via SSV_TEST_ATTESTER_PREFETCH_LOOKAHEAD_SLOTS (>=1).
+func shouldPrefetchNextEpoch(posInEpoch, slotsPerEpoch uint64) bool {
+	lookahead := uint64(2)
+	if v := os.Getenv("SSV_TEST_ATTESTER_PREFETCH_LOOKAHEAD_SLOTS"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 64); err == nil && n >= 1 {
+			lookahead = n
+		}
+	}
+	if lookahead >= slotsPerEpoch {
+		lookahead = slotsPerEpoch - 1 // keep boundary within epoch range
+	}
+	boundary := slotsPerEpoch - lookahead
+	return posInEpoch >= boundary
 }
 
 func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {

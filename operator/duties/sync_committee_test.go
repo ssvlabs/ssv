@@ -174,6 +174,36 @@ func TestSyncCommittee_Tick_ForceFetch_WhenPeriodMissing(t *testing.T) {
 	require.NoError(t, schedulerPool.Wait())
 }
 
+// When boundary guards are disabled via env, the tick-forced fetch should not occur.
+func TestSyncCommittee_Tick_ForceFetch_DisabledEnv_NoFetch(t *testing.T) {
+	t.Setenv("SSV_TEST_DISABLE_SC_BOUNDARY_GUARDS", "1")
+
+	handler := NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+	dutiesMap := hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+	waitForDuties := &SafeValue[bool]{}
+	activeShares := eligibleShares()
+
+	startSlot := phase0.Slot(1)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+	waitForSlotN(scheduler.beaconConfig, startSlot)
+
+	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	waitForDuties.Set(false)
+	startScheduler(ctx, t, scheduler, schedulerPool)
+
+	// Reset any period that might have been set, then tick; no fetch should occur.
+	period := scheduler.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(scheduler.beaconConfig.EstimatedCurrentEpoch())
+	handler.duties.Reset(period)
+
+	waitForDuties.Set(true)
+	ticker.Send(startSlot + 1)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}
+
 func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	t.Parallel()
 

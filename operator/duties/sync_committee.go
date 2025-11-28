@@ -3,6 +3,8 @@ package duties
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,7 +102,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 				// If we don't yet have duties recorded for the current period (e.g., restart right
 				// before/after a period boundary), force a fetch of current-period duties.
-				if !h.duties.IsPeriodSet(period) {
+				if !scBoundaryGuardsDisabled() && !h.duties.IsPeriodSet(period) {
 					h.fetchCurrentPeriod = true
 				}
 
@@ -158,10 +160,45 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	// available immediately after rollover.
 	slot := h.beaconConfig.EstimatedCurrentSlot()
 	lastSlot := h.beaconConfig.LastSlotOfSyncPeriod(period)
-	if slot >= lastSlot-1 {
+	if !scBoundaryGuardsDisabled() && withinLastNSlotsOfPeriod(h, slot, lastSlot) {
 		h.fetchNextPeriod = true
 	}
 	h.processFetching(ctx, epoch, period, false)
+}
+
+// scBoundaryGuardsDisabled returns true when test env toggles request disabling
+// the boundary-guard logic for SyncCommittee handler.
+func scBoundaryGuardsDisabled() bool {
+	if os.Getenv("SSV_TEST_DISABLE_BOUNDARY_GUARDS") != "" {
+		return true
+	}
+	if os.Getenv("SSV_TEST_DISABLE_SC_BOUNDARY_GUARDS") != "" {
+		return true
+	}
+	return false
+}
+
+// withinLastNSlotsOfPeriod returns true when the current slot is within the
+// last N slots of the sync-committee period. N defaults to 2 and can be
+// overridden with SSV_TEST_SC_PREFETCH_LOOKAHEAD_SLOTS (>=1).
+func withinLastNSlotsOfPeriod(h *SyncCommitteeHandler, slot, lastSlot phase0.Slot) bool {
+	lookahead := uint64(2)
+	if v := os.Getenv("SSV_TEST_SC_PREFETCH_LOOKAHEAD_SLOTS"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 64); err == nil && n >= 1 {
+			lookahead = n
+		}
+	}
+	// Translate lookahead in slots; lastSlot-(lookahead-1) is the first slot in the window.
+	if lookahead == 0 {
+		lookahead = 1
+	}
+	// Guard against extreme values; keep window within the period.
+	slotsPerPeriod := h.slotsPerPeriod()
+	if lookahead >= slotsPerPeriod {
+		lookahead = slotsPerPeriod - 1
+	}
+	windowStart := lastSlot - phase0.Slot(lookahead-1)
+	return slot >= windowStart
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {

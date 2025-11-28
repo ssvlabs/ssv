@@ -227,6 +227,36 @@ func TestAttester_Tick_ForceFetch_WhenEpochMissing(t *testing.T) {
 	require.NoError(t, schedulerPool.Wait())
 }
 
+// When boundary guards are disabled via env, the tick-forced fetch should not occur.
+func TestAttester_Tick_ForceFetch_DisabledEnv_NoFetch(t *testing.T) {
+	// Do not run in parallel to avoid env bleed across tests.
+	t.Setenv("SSV_TEST_DISABLE_ATTESTER_BOUNDARY_GUARDS", "1")
+
+	handler := NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+	dutiesMap := hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+	waitForDuties := &SafeValue[bool]{}
+
+	startSlot := phase0.Slot(1)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+	waitForSlotN(scheduler.beaconConfig, startSlot)
+
+	// No duties seeded for epoch 1; with guards disabled, no fetch should be triggered on tick.
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+	waitForDuties.Set(false)
+	startScheduler(ctx, t, scheduler, schedulerPool)
+
+	newEpochFirstSlot := phase0.Slot(testSlotsPerEpoch)
+	waitForSlotN(scheduler.beaconConfig, newEpochFirstSlot)
+	waitForDuties.Set(true)
+	mockTicker.Send(newEpochFirstSlot)
+	// Expect no fetch to happen.
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}
+
 func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	t.Parallel()
 
