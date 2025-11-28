@@ -78,3 +78,11 @@ func (d *SyncCommitteeDuties) Reset(period uint64) {
 
 	delete(d.m, period)
 }
+
+// IsPeriodSet returns true if there are stored duties for the given period.
+func (d *SyncCommitteeDuties) IsPeriodSet(period uint64) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	_, ok := d.m[period]
+	return ok
+}

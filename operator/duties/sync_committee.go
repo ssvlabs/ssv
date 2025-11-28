@@ -98,6 +98,12 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
 				defer cancel()
 
+				// If we don't yet have duties recorded for the current period (e.g., restart right
+				// before/after a period boundary), force a fetch of current-period duties.
+				if !h.duties.IsPeriodSet(period) {
+					h.fetchCurrentPeriod = true
+				}
+
 				h.processExecution(tickCtx, period, slot)
 				h.processFetching(tickCtx, epoch, period, true)
 			}()
@@ -148,6 +154,13 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 
 	epoch := h.beaconConfig.EstimatedCurrentEpoch()
 	period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+	// If starting very close to a period boundary, prefetch next-period duties so they're
+	// available immediately after rollover.
+	slot := h.beaconConfig.EstimatedCurrentSlot()
+	lastSlot := h.beaconConfig.LastSlotOfSyncPeriod(period)
+	if slot >= lastSlot-1 {
+		h.fetchNextPeriod = true
+	}
 	h.processFetching(ctx, epoch, period, false)
 }
 

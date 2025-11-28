@@ -24,7 +24,9 @@ func setupSyncCommitteeDutiesMock(
 	dutiesMap *hashmap.Map[uint64, []*v1.SyncCommitteeDuty],
 	waitForDuties *SafeValue[bool],
 ) (chan struct{}, chan []*spectypes.ValidatorDuty) {
-	fetchDutiesCall := make(chan struct{})
+	// Buffered to avoid deadlocks during HandleInitialDuties (which runs synchronously
+	// inside Scheduler.Start) when the test hasn't started receiving yet.
+	fetchDutiesCall := make(chan struct{}, 8)
 	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -91,6 +93,85 @@ func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties [
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 	}
 	return expectedDuties
+}
+
+// Prefetch next period during HandleInitialDuties when starting near the period boundary.
+func TestSyncCommittee_HandleInitialDuties_PrefetchNextPeriod_NearBoundary(t *testing.T) {
+	t.Parallel()
+
+	handler := NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+	dutiesMap := hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+	waitForDuties := &SafeValue[bool]{}
+	activeShares := eligibleShares()
+
+	// Start at the last slot of period 0 to be "near boundary".
+	startSlot := phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	scheduler, _, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+	waitForSlotN(scheduler.beaconConfig, startSlot)
+
+	// Seed one duty for current period (0) and one for next period (1).
+	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{{
+		PubKey:         phase0.BLSPubKey{0xaa},
+		ValidatorIndex: 1,
+	}})
+	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{{
+		PubKey:         phase0.BLSPubKey{0xbb},
+		ValidatorIndex: 2,
+	}})
+
+	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	waitForDuties.Set(true)
+
+	startScheduler(ctx, t, scheduler, schedulerPool)
+
+	// Expect two fetches during initial handling: current and next period.
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}
+
+// Force fetch on tick if current period is missing in the store.
+func TestSyncCommittee_Tick_ForceFetch_WhenPeriodMissing(t *testing.T) {
+	t.Parallel()
+
+	handler := NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+	dutiesMap := hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+	waitForDuties := &SafeValue[bool]{}
+	activeShares := eligibleShares()
+
+	// Start early in period 0; we'll remove stored duties then tick to force fetch.
+	startSlot := phase0.Slot(1)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+	waitForSlotN(scheduler.beaconConfig, startSlot)
+
+	// Seed duties for period 0 so a fetch would have content.
+	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{{
+		PubKey:         phase0.BLSPubKey{0xcc},
+		ValidatorIndex: 7,
+	}})
+
+	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+	// Let initial duties run (it will fetch current period), then clear the store to mimic "missing".
+	waitForDuties.Set(false)
+	startScheduler(ctx, t, scheduler, schedulerPool)
+
+	// Clear current period from handler store to simulate the gap.
+	period := scheduler.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(scheduler.beaconConfig.EstimatedCurrentEpoch())
+	handler.duties.Reset(period)
+
+	// Now observe fetch on tick due to missing period.
+	waitForDuties.Set(true)
+	ticker.Send(startSlot + 1)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
 }
 
 func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
