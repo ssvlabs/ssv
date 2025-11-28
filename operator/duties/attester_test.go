@@ -23,7 +23,9 @@ func setupAttesterDutiesMock(
 	dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty],
 	waitForDuties *SafeValue[bool],
 ) (chan struct{}, chan []*spectypes.ValidatorDuty) {
-	fetchDutiesCall := make(chan struct{})
+	// Buffered to avoid deadlocks during HandleInitialDuties (which runs synchronously
+	// inside Scheduler.Start) when the test hasn't started receiving yet.
+	fetchDutiesCall := make(chan struct{}, 8)
 	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -104,6 +106,125 @@ func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleAggregator))
 	}
 	return expectedDuties
+}
+
+// waitForFetchCount waits for exactly n fetch calls to occur (signaled on fetchDutiesCall)
+// within the given timeout. It fails the test if fewer than n occur before timeout
+// or if any executeDutiesCall arrives unexpectedly.
+func waitForFetchCount(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan []*spectypes.ValidatorDuty,
+	n int,
+	timeout time.Duration,
+) {
+	deadline := time.After(timeout)
+	got := 0
+	for got < n {
+		select {
+		case <-fetchDutiesCall:
+			got++
+		case <-executeDutiesCall:
+			require.FailNow(t, "unexpected execute duty call")
+		case <-deadline:
+			require.FailNowf(t, "timed out waiting for fetch calls", "wanted=%d got=%d", n, got)
+		}
+	}
+}
+
+// Regression: when starting near an epoch boundary, HandleInitialDuties should also
+// prefetch next-epoch duties so the new epoch does not start empty.
+func TestAttester_HandleInitialDuties_PrefetchNextEpoch_NearBoundary(t *testing.T) {
+	t.Parallel()
+
+	handler := NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+	dutiesMap := hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+	waitForDuties := &SafeValue[bool]{}
+
+	// Start at the last slot of epoch 0 so initial run is "near boundary".
+	startSlot := phase0.Slot(testSlotsPerEpoch - 1)
+
+	// Duty executor expects a deadline on the parent context.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	scheduler, _, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+	// Ensure wall-clock aligns with the start slot time.
+	waitForSlotN(scheduler.beaconConfig, startSlot)
+
+	// Provide at least one eligible validator so fetches actually occur.
+	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{{
+		PubKey:         phase0.BLSPubKey{0xaa},
+		Slot:           startSlot, // any slot in epoch 0
+		ValidatorIndex: phase0.ValidatorIndex(1),
+	}})
+	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{{
+		PubKey:         phase0.BLSPubKey{0xbb},
+		Slot:           startSlot + 1, // any slot in epoch 1
+		ValidatorIndex: phase0.ValidatorIndex(2),
+	}})
+
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+
+	// We want to observe both current-epoch and next-epoch fetches during HandleInitialDuties.
+	waitForDuties.Set(true)
+
+	// Start scheduler (synchronously calls HandleInitialDuties for handlers).
+	startScheduler(ctx, t, scheduler, schedulerPool)
+
+	// Expect 2 fetches: one for current epoch (0) and one prefetch for next epoch (1).
+	waitForFetchCount(t, fetchDutiesCall, executeDutiesCall, 2, timeout)
+
+	// No slot tick needed for this test; ensure no spurious executions happen immediately.
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+	// Cleanup.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
+}
+
+// Regression: when entering a new epoch with an empty duty store (e.g., restart right
+// before epoch rollover), the first tick in the new epoch should force a fetch for
+// the current epoch.
+func TestAttester_Tick_ForceFetch_WhenEpochMissing(t *testing.T) {
+	t.Parallel()
+
+	handler := NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+	dutiesMap := hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+	waitForDuties := &SafeValue[bool]{}
+
+	// Start early in the epoch (not near boundary) to avoid the startup prefetch path.
+	// This ensures epoch 1 remains missing in the store until the first tick of epoch 1.
+	startSlot := phase0.Slot(1)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+	waitForSlotN(scheduler.beaconConfig, startSlot)
+
+	// Prepare shares that will be eligible in epoch 1 so the tick-forced fetch will occur.
+	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{{
+		PubKey:         phase0.BLSPubKey{0xcc},
+		Slot:           phase0.Slot(testSlotsPerEpoch + 1),
+		ValidatorIndex: phase0.ValidatorIndex(7),
+	}})
+
+	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+
+	// Do not listen to initial fetches.
+	waitForDuties.Set(false)
+	startScheduler(ctx, t, scheduler, schedulerPool)
+
+	// Advance into the first slot of the new epoch.
+	newEpochFirstSlot := phase0.Slot(testSlotsPerEpoch)
+	waitForSlotN(scheduler.beaconConfig, newEpochFirstSlot)
+
+	// Now we want to observe a fetch triggered by the tick due to missing epoch in store.
+	waitForDuties.Set(true)
+	mockTicker.Send(newEpochFirstSlot)
+
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// Cleanup.
+	cancel()
+	require.NoError(t, schedulerPool.Wait())
 }
 
 func TestScheduler_Attester_Same_Slot(t *testing.T) {

@@ -84,6 +84,11 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			// If we don't yet have duties recorded for the current epoch (e.g., restart right
+			// before/after an epoch boundary), force a fetch of current-epoch duties.
+			if !h.duties.IsEpochSet(currentEpoch) {
+				h.fetchCurrentEpoch = true
+			}
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
@@ -162,6 +167,12 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 
 	slot := h.beaconConfig.EstimatedCurrentSlot()
 	epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+	// If starting near an epoch boundary, prefetch next-epoch duties so they're
+	// available immediately after rollover.
+	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	if uint64(slot)%slotsPerEpoch >= slotsPerEpoch-2 {
+		h.fetchNextEpoch = true
+	}
 	h.processFetching(ctx, epoch, slot)
 }
 
