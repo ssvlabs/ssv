@@ -35,7 +35,6 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], export
 		duties:       duties,
 		exporterMode: exporterMode,
 	}
-	h.fetchCurrentEpoch = true
 	return h
 }
 
@@ -91,7 +90,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// Aggregates submissions are rewarded as long as they are finished within 2 slots after the target slot
 				// (the target slot itself, plus the next slot after that), hence we are setting the deadline here to
 				// target slot + 2.
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+1)
 				defer cancel()
 
 				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
@@ -156,9 +155,15 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+// HandleInitialDuties fetches duties for the current and next epochs.
+// Fetching duties for the next epoch is necessary if we are starting close to epoch-boundary because
+// our ticker might "miss" that rollover otherwise.
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
 	defer cancel()
+
+	h.fetchCurrentEpoch = true
+	h.fetchNextEpoch = true
 
 	slot := h.beaconConfig.EstimatedCurrentSlot()
 	epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)

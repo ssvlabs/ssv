@@ -142,9 +142,15 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+// HandleInitialDuties fetches duties for the current and next epochs.
+// Fetching duties for the next epoch is necessary if we are starting close to epoch-boundary because
+// our ticker might "miss" that rollover otherwise.
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
 	defer cancel()
+
+	h.fetchCurrentPeriod = true
+	h.fetchNextPeriod = true
 
 	epoch := h.beaconConfig.EstimatedCurrentEpoch()
 	period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
@@ -164,7 +170,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 	if h.fetchCurrentPeriod {
 		span.AddEvent("fetching current period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
-			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
+			h.logger.Error("failed to fetch duties for current period", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
@@ -174,7 +180,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 	if h.fetchNextPeriod {
 		span.AddEvent("fetching next period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period+1, waitForInitial); err != nil {
-			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
+			h.logger.Error("failed to fetch duties for next period", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
