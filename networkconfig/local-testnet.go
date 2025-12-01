@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -18,8 +19,9 @@ var LocalTestnetSSV = &SSV{
 	}, DiscoveryProtocolID: [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	TotalEthereumValidators: TestNetwork.TotalEthereumValidators,
 	Forks: SSVForks{
-		Alan:            0,
-		GasLimit36:      0,
-		NetworkTopology: 0,
+		Alan:                0,
+		GasLimit36:          0,
+		NetworkTopology:     0,
+		AggregatorCommittee: math.MaxUint64,
 	},
 }

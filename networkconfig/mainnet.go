@@ -30,8 +30,9 @@ var MainnetSSV = &SSV{
 	},
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
 	Forks: SSVForks{
-		Alan:            0,      // We don't need to set the real Alan fork epoch because pre-Alan ssv-nodes aren't supported anymore.
-		GasLimit36:      385150, // Aug-09-2025 06:40:23 AM UTC
-		NetworkTopology: math.MaxUint64,
+		Alan:                0,      // We don't need to set the real Alan fork epoch because pre-Alan ssv-nodes aren't supported anymore.
+		GasLimit36:          385150, // Aug-09-2025 06:40:23 AM UTC
+		NetworkTopology:     math.MaxUint64,
+		AggregatorCommittee: math.MaxUint64,
 	},
 }
