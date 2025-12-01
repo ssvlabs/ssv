@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 	"time"
 
@@ -76,7 +75,7 @@ var TestNetwork = &Network{
 		Forks: SSVForks{
 			Alan:                0,
 			GasLimit36:          0,
-			AggregatorCommittee: math.MaxUint64,
+			AggregatorCommittee: 0,
 		},
 	},
 }
