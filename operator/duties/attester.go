@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -35,6 +36,11 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], export
 		duties:       duties,
 		exporterMode: exporterMode,
 	}
+
+	if ssvTestUseOldBehavior() {
+		h.fetchCurrentEpoch = true
+	}
+
 	return h
 }
 
@@ -162,12 +168,18 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
 	defer cancel()
 
-	h.fetchCurrentEpoch = true
-	h.fetchNextEpoch = true
+	if !ssvTestUseOldBehavior() {
+		h.fetchCurrentEpoch = true
+		h.fetchNextEpoch = true
+	}
 
 	slot := h.beaconConfig.EstimatedCurrentSlot()
 	epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 	h.processFetching(ctx, epoch, slot)
+}
+
+func ssvTestUseOldBehavior() bool {
+	return os.Getenv("SSV_TEST_USE_OLD_BEHAVIOR") != ""
 }
 
 func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {

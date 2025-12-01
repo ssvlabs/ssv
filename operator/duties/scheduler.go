@@ -182,6 +182,8 @@ type ReorgEvent struct {
 func (s *Scheduler) Start(ctx context.Context) error {
 	s.logger.Info("duty scheduler started")
 
+	s.waitLastSlotOfCurrentEpoch()
+
 	s.logger.Info("subscribing to head events")
 	if err := s.listenToHeadEvents(ctx); err != nil {
 		return fmt.Errorf("failed to listen to head events: %w", err)
@@ -227,6 +229,14 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	go reorgFeed.FanOut(ctx, s.reorg)
 
 	return nil
+}
+
+func (s *Scheduler) waitLastSlotOfCurrentEpoch() {
+	nextEpoch := s.beaconConfig.EstimatedCurrentEpoch() + 1
+	nextEpochStartTime := s.beaconConfig.EpochStartTime(nextEpoch)
+	target := nextEpochStartTime.Add(-s.beaconConfig.SlotDuration + 100*time.Millisecond)
+	waitTime := max(time.Until(target), 0)
+	time.Sleep(waitTime)
 }
 
 func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
