@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -22,6 +21,6 @@ var LocalTestnetSSV = &SSV{
 		Alan:                0,
 		GasLimit36:          0,
 		NetworkTopology:     0,
-		AggregatorCommittee: math.MaxUint64,
+		AggregatorCommittee: 0,
 	},
 }
