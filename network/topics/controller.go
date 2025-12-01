@@ -206,7 +206,7 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 			return
 		}
 
-		outboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(messageTopicAttribute(topicName)))
+		outboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(messageTopicAttribute(topicNameFull)))
 	}()
 
 	return nil
@@ -258,9 +258,9 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	ctx, cancel := context.WithCancel(ctrl.ctx)
 	defer cancel()
 
-	topicName := sub.Topic()
+	topicNameFull := sub.Topic()
 
-	logger := ctrl.logger.With(zap.String("topic", topicName))
+	logger := ctrl.logger.With(zap.String("topic", topicNameFull))
 	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
 		msg, err := sub.Next(ctx)
@@ -283,14 +283,14 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
 			inboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(
-				messageTopicAttribute(topicName),
+				messageTopicAttribute(topicNameFull),
 				messageTypeAttribute(uint64(m.MsgType)),
 			))
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}
 
-		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
+		if err := ctrl.msgHandler(ctx, topicNameFull, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
 	}
