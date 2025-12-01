@@ -445,30 +445,37 @@ func (c *Committee) GetProcessMessageF(aggComm bool) func(ctx context.Context, l
 				return fmt.Errorf("PartialSignatureMessages signer is invalid: %w", err)
 			}
 
+			// Locate the runner for this slot once and route by message subtype.
+			var r interface {
+				ProcessPreConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
+				ProcessPostConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
+			}
+			var exists bool
+			c.mtx.RLock()
+			if aggComm {
+				r, exists = c.AggregatorRunners[pSigMessages.Slot]
+			} else {
+				r, exists = c.Runners[pSigMessages.Slot]
+			}
+			c.mtx.RUnlock()
+			if !exists {
+				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
+			}
+
 			if pSigMessages.Type == spectypes.PostConsensusPartialSig {
 				span.AddEvent("process committee message = post-consensus message")
-
-				var r interface {
-					ProcessPreConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
-					ProcessPostConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
-				}
-				var exists bool
-
-				c.mtx.RLock()
-				if aggComm {
-					r, exists = c.AggregatorRunners[pSigMessages.Slot]
-				} else {
-					r, exists = c.Runners[pSigMessages.Slot]
-				}
-				c.mtx.RUnlock()
-				if !exists {
-					return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
-				}
 				if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
 					return fmt.Errorf("process post-consensus message: %w", err)
 				}
+				return nil
 			}
 
+			// Handle all non-post consensus partial signatures via pre-consensus path
+			// (e.g., aggregator selection proofs and sync committee selection proofs).
+			span.AddEvent("process committee message = pre-consensus message")
+			if err := r.ProcessPreConsensus(ctx, logger, pSigMessages); err != nil {
+				return fmt.Errorf("process pre-consensus message: %w", err)
+			}
 			return nil
 		case message.SSVEventMsgType:
 			eventMsg, ok := msg.Body.(*types.EventMsg)
