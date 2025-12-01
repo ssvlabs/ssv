@@ -179,6 +179,7 @@ func (c *Committee) ConsumeQueue(
 					types.OperatorIDsFromOperators(c.CommitteeMember.Committee),
 					c.networkConfig.EstimatedEpochAtSlot(slot),
 					slot,
+					msg.GetID().GetRoleType(),
 				)
 				spanOpts = append(spanOpts, trace.WithAttributes(
 					observability.BeaconSlotAttribute(slot),

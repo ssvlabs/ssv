@@ -19,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -48,7 +47,7 @@ type AggregatorCommitteeRunner struct {
 
 	//TODO(Aleg) not sure we need it
 	//DutyGuard           CommitteeDutyGuard
-	measurements measurementsStore
+	measurements *dutyMeasurements
 
 	// For aggregator role: tracks by validator index only (one submission per validator)
 	// For sync committee contribution role: tracks by validator index and root (multiple submissions per validator)
@@ -81,7 +80,7 @@ func NewAggregatorCommitteeRunner(
 		signer:          signer,
 		operatorSigner:  operatorSigner,
 		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]map[[32]byte]struct{}),
-		measurements:    NewMeasurementsStore(),
+		measurements:    newMeasurementsStore(),
 	}, nil
 }
 
@@ -348,15 +347,10 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 }
 
 func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
-		trace.WithAttributes(
-			observability.BeaconSlotAttribute(signedMsg.Slot),
-			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing selection proof message: %w", err)
 	}
@@ -502,7 +496,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 		return traces.Errorf(span, "invalid aggregator consensus data: %w", err)
 	}
 
-	if err := r.BaseRunner.decide(ctx, logger, r, r.BaseRunner.State.CurrentDuty.DutySlot(), aggregatorData, r.ValCheck); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r.BaseRunner.State.CurrentDuty.DutySlot(), aggregatorData, r.ValCheck); err != nil {
 		return traces.Errorf(span, "failed to start consensus: %w", err)
 	}
 
@@ -551,13 +545,12 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 
 	consensusData := decidedValue.(*spectypes.AggregatorCommitteeConsensusData)
 
-	var messages []*spectypes.PartialSignatureMessage
-
 	_, hashRoots, err := consensusData.GetAggregateAndProofs()
 	if err != nil {
 		return traces.Errorf(span, "failed to get aggregate and proofs: %w", err)
 	}
 
+	messages := make([]*spectypes.PartialSignatureMessage, 0)
 	for i, hashRoot := range hashRoots {
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 
@@ -669,72 +662,13 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 	return nil
 }
 
-func (r *AggregatorCommitteeRunner) signAttesterDuty(
-	ctx context.Context,
-	validatorDuty *spectypes.ValidatorDuty,
-	beaconVote *spectypes.BeaconVote,
-	version spec.DataVersion,
-	logger *zap.Logger) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.sign_attester_duty"),
-		trace.WithAttributes(
-			observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
-			observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
-			observability.BeaconRoleAttribute(validatorDuty.Type),
-		))
-	defer span.End()
-
-	span.AddEvent("doppelganger: checking if signing is allowed")
-
-	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
-
-	span.AddEvent("signing beacon object")
-	partialMsg, err := signBeaconObject(
-		ctx,
-		r,
-		validatorDuty,
-		attestationData,
-		validatorDuty.DutySlot(),
-		spectypes.DomainAttester,
-	)
-	if err != nil {
-		return false, partialMsg, traces.Errorf(span, "failed signing attestation data: %w", err)
-	}
-
-	attDataRoot, err := attestationData.HashTreeRoot()
-	if err != nil {
-		return false, partialMsg, traces.Errorf(span, "failed to hash attestation data: %w", err)
-	}
-
-	const eventMsg = "signed attestation data"
-	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(attDataRoot)))
-	logger.Debug(eventMsg,
-		zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
-		zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
-		zap.Any("attestation_data", attestationData),
-		zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
-		zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
-		zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
-	)
-
-	span.SetStatus(codes.Ok, "")
-
-	return false, partialMsg, nil
-}
-
 // TODO finish edge case where some roots may be missing
 func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_committee_post_consensus"),
-		trace.WithAttributes(
-			observability.BeaconSlotAttribute(signedMsg.Slot),
-			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-			attribute.Int("ssv.validator.partial_signature_msg.count", len(signedMsg.Messages)),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("base post consensus message processing")
-	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
 		return traces.Errorf(span, "failed processing post consensus message: %w", err)
 	}
@@ -917,7 +851,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 					span.AddEvent(eventMsg)
 					logger.Debug(
 						eventMsg,
-						fields.SubmissionTime(time.Since(start)),
+						fields.Took(time.Since(start)),
 						fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 					)
@@ -942,7 +876,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 					span.AddEvent(eventMsg)
 					logger.Debug(
 						eventMsg,
-						fields.SubmissionTime(time.Since(start)),
+						fields.Took(time.Since(start)),
 						fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 					)
@@ -982,8 +916,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 	return nil
 }
 
-func (r *AggregatorCommitteeRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
-	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
+func (r *AggregatorCommitteeRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, timeoutData)
 }
 
 // HasSubmittedForValidator checks if a validator has submitted any duty for a given role

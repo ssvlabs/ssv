@@ -87,14 +87,14 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	})
 
 	t.Run("slot = 1, block = 1 - no execution", func(t *testing.T) {
-		waitForSlotN(scheduler.netCfg, phase0.Slot(normalExit.BlockNumber))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(normalExit.BlockNumber))
 		ticker.Send(phase0.Slot(normalExit.BlockNumber))
 		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	t.Run("slot = 4, block = 1 - no execution", func(t *testing.T) {
-		waitForSlotN(scheduler.netCfg, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone-1)
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone-1)
 		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone - 1)
 		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
@@ -123,7 +123,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh <- newBlockExit
 
 	t.Run("slot = 5, block = 2 - no execution", func(t *testing.T) {
-		waitForSlotN(scheduler.netCfg, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone)
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone)
 		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 3, blockByNumberCalls.Load())

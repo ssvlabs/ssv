@@ -356,116 +356,146 @@ func (c *Committee) prepareAggregatorDuty(logger *zap.Logger, duty *spectypes.Ag
 }
 
 // ProcessMessage processes p2p message of all types
-func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
-	span := trace.SpanFromContext(ctx)
+func (c *Committee) GetProcessMessageF(aggComm bool) func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	return func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+		// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+		span := trace.SpanFromContext(ctx)
 
-	span.AddEvent("got committee message to process")
+		span.AddEvent("got committee message to process")
 
-	msgType := msg.GetType()
+		msgType := msg.GetType()
 
-	// Validate message (+ verify SignedSSVMessage's signature)
-	if msgType != message.SSVEventMsgType {
-		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return fmt.Errorf("validate SignedSSVMessage: %w", err)
-		}
-		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return spectypes.WrapError(spectypes.SSVMessageHasInvalidSignatureErrorCode, fmt.Errorf("verify SignedSSVMessage signatures: %w", err))
-		}
-		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return fmt.Errorf("validate SignedSSVMessage.SSVMessage: %w", err)
-		}
-	}
-
-	slot, err := msg.Slot()
-	if err != nil {
-		return fmt.Errorf("couldn't get message slot: %w", err)
-	}
-
-	switch msgType {
-	case spectypes.SSVConsensusMsgType:
-		span.AddEvent("process committee message = consensus message")
-
-		qbftMsg := &specqbft.Message{}
-		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return fmt.Errorf("could not decode consensus Message: %w", err)
-		}
-		if err := qbftMsg.Validate(); err != nil {
-			return fmt.Errorf("validate QBFT message: %w", err)
+		// Validate message (+ verify SignedSSVMessage's signature)
+		if msgType != message.SSVEventMsgType {
+			if err := msg.SignedSSVMessage.Validate(); err != nil {
+				return fmt.Errorf("validate SignedSSVMessage: %w", err)
+			}
+			if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
+				return spectypes.WrapError(spectypes.SSVMessageHasInvalidSignatureErrorCode, fmt.Errorf("verify SignedSSVMessage signatures: %w", err))
+			}
+			if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
+				return fmt.Errorf("validate SignedSSVMessage.SSVMessage: %w", err)
+			}
 		}
 
-		c.mtx.RLock()
-		r, exists := c.Runners[slot]
-		c.mtx.RUnlock()
-		if !exists {
-			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
+		slot, err := msg.Slot()
+		if err != nil {
+			return fmt.Errorf("couldn't get message slot: %w", err)
 		}
 
-		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
-	case spectypes.SSVPartialSignatureMsgType:
-		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return fmt.Errorf("could not decode PartialSignatureMessages: %w", err)
-		}
+		switch msgType {
+		case spectypes.SSVConsensusMsgType:
+			span.AddEvent("process committee message = consensus message")
 
-		// Validate
-		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return fmt.Errorf("PartialSignatureMessage has %d signers (must be 1 signer)", len(msg.SignedSSVMessage.OperatorIDs))
-		}
+			qbftMsg := &specqbft.Message{}
+			if err := qbftMsg.Decode(msg.GetData()); err != nil {
+				return fmt.Errorf("could not decode consensus Message: %w", err)
+			}
+			if err := qbftMsg.Validate(); err != nil {
+				return fmt.Errorf("validate QBFT message: %w", err)
+			}
 
-		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return fmt.Errorf("PartialSignatureMessages signer is invalid: %w", err)
-		}
-
-		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			span.AddEvent("process committee message = post-consensus message")
+			var r interface {
+				ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error
+			}
+			var exists bool
 
 			c.mtx.RLock()
-			r, exists := c.Runners[pSigMessages.Slot]
+			if aggComm {
+				r, exists = c.AggregatorRunners[slot]
+			} else {
+				r, exists = c.Runners[slot]
+			}
 			c.mtx.RUnlock()
 			if !exists {
-				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
-			}
-			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
-				return fmt.Errorf("process post-consensus message: %w", err)
-			}
-		}
-
-		return nil
-	case message.SSVEventMsgType:
-		eventMsg, ok := msg.Body.(*types.EventMsg)
-		if !ok {
-			return fmt.Errorf("could not decode event message (slot=%d)", slot)
-		}
-
-		span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
-
-		switch eventMsg.Type {
-		case types.Timeout:
-			span.AddEvent("process committee message = event(timeout)")
-
-			c.mtx.RLock()
-			dutyRunner, found := c.Runners[slot]
-			c.mtx.RUnlock()
-			if !found {
-				return fmt.Errorf("no committee runner found for slot %d", slot)
+				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
 			}
 
-			timeoutData, err := eventMsg.GetTimeoutData()
-			if err != nil {
-				return fmt.Errorf("get timeout data: %w", err)
+			return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
+		case spectypes.SSVPartialSignatureMsgType:
+			pSigMessages := &spectypes.PartialSignatureMessages{}
+			if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+				return fmt.Errorf("could not decode PartialSignatureMessages: %w", err)
 			}
 
-			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
-				return fmt.Errorf("timeout event: %w", err)
+			// Validate
+			if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
+				return fmt.Errorf("PartialSignatureMessage has %d signers (must be 1 signer)", len(msg.SignedSSVMessage.OperatorIDs))
+			}
+
+			if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
+				return fmt.Errorf("PartialSignatureMessages signer is invalid: %w", err)
+			}
+
+			if pSigMessages.Type == spectypes.PostConsensusPartialSig {
+				span.AddEvent("process committee message = post-consensus message")
+
+				var r interface {
+					ProcessPreConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
+					ProcessPostConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
+				}
+				var exists bool
+
+				c.mtx.RLock()
+				if aggComm {
+					r, exists = c.AggregatorRunners[pSigMessages.Slot]
+				} else {
+					r, exists = c.Runners[pSigMessages.Slot]
+				}
+				c.mtx.RUnlock()
+				if !exists {
+					return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
+				}
+				if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
+					return fmt.Errorf("process post-consensus message: %w", err)
+				}
 			}
 
 			return nil
+		case message.SSVEventMsgType:
+			eventMsg, ok := msg.Body.(*types.EventMsg)
+			if !ok {
+				return fmt.Errorf("could not decode event message (slot=%d)", slot)
+			}
+
+			span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
+
+			switch eventMsg.Type {
+			case types.Timeout:
+				span.AddEvent("process committee message = event(timeout)")
+
+				var dutyRunner interface {
+					OnTimeoutQBFT(context.Context, *zap.Logger, *types.TimeoutData) error
+				}
+				var found bool
+
+				c.mtx.RLock()
+				if aggComm {
+					dutyRunner, found = c.AggregatorRunners[slot]
+				} else {
+					dutyRunner, found = c.Runners[slot]
+				}
+				c.mtx.RUnlock()
+				if !found {
+					return fmt.Errorf("no committee runner found for slot %d", slot)
+				}
+
+				timeoutData, err := eventMsg.GetTimeoutData()
+				if err != nil {
+					return fmt.Errorf("get timeout data: %w", err)
+				}
+
+				if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
+					return fmt.Errorf("timeout event: %w", err)
+				}
+
+				return nil
+			default:
+				return fmt.Errorf("unknown event msg - %s", eventMsg.Type.String())
+			}
 		default:
-			return fmt.Errorf("unknown event msg - %s", eventMsg.Type.String())
+			return fmt.Errorf("unknown message type: %d", msgType)
 		}
-	default:
-		return fmt.Errorf("unknown message type: %d", msgType)
 	}
 }
 

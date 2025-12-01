@@ -142,7 +142,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.ProcessMessage(ctx, logger, dmsg)
+			err = c.GetProcessMessageF(test.Duty.RunnerRole() == spectypes.RoleAggregatorCommittee)(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -286,12 +286,10 @@ var baseCommitteeWithRunnerSample = func(
 
 	createAggregatorRunnerF := func(
 		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
-		attestingValidators []phase0.BLSPubKey,
 	) (*runner.AggregatorCommitteeRunner, error) {
 		r, err := runner.NewAggregatorCommitteeRunner(
 			networkconfig.TestNetwork,
 			shareMap,
-			attestingValidators,
 			controller.NewController(
 				runnerSample.BaseRunner.QBFTController.Identifier,
 				runnerSample.BaseRunner.QBFTController.CommitteeMember,

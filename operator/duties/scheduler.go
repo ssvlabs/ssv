@@ -561,7 +561,7 @@ func (s *Scheduler) ExecuteAggregatorCommitteeDuties(ctx context.Context, duties
 				logger.Warn("parent-context has no deadline set")
 			}
 
-			s.waitOneThirdOrValidBlock(duty.Slot)
+			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteAggregatorCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
 	}

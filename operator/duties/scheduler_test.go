@@ -147,11 +147,14 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
+	netCfg := networkconfig.TestNetwork
+	netCfg.Beacon = &beaconCfg
+
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		NetworkConfig:       &beaconCfg,
+		NetworkConfig:       netCfg,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
@@ -422,7 +425,7 @@ func TestScheduler_Run(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		NetworkConfig:     networkconfig.TestNetwork.Beacon,
+		NetworkConfig:     networkconfig.TestNetwork,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
@@ -472,7 +475,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		NetworkConfig:     networkconfig.TestNetwork.Beacon,
+		NetworkConfig:     networkconfig.TestNetwork,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker

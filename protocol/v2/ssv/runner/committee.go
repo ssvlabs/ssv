@@ -583,7 +583,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
 	for root := range deduplicatedRoots {
 		// Get validators related to the given root
-		role, validators, found := cr.findValidators(root, attestationMap, committeeMap)
+		role, validators, found := r.findValidators(root, attestationMap, committeeMap)
 		if !found {
 			// Edge case: since operators may have divergent sets of validators,
 			// it's possible that an operator doesn't have the validator associated to a root.
