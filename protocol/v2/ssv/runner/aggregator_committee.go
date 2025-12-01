@@ -847,7 +847,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 						continue
 					}
 
-					const eventMsg = "✅ successful submitted aggregate"
+					const eventMsg = "✅ successfully submitted signed aggregate and proof"
 					span.AddEvent(eventMsg)
 					logger.Debug(
 						eventMsg,
@@ -879,7 +879,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 						continue
 					}
 
-					const eventMsg = "✅ successfully submitted sync committee aggregator"
+					const eventMsg = "✅ successfully submitted sync committee contributions"
 					span.AddEvent(eventMsg)
 					logger.Debug(
 						eventMsg,
