@@ -34,3 +34,7 @@ func (n Network) GasLimit36Fork() bool {
 func (n Network) NetworkTopologyFork() bool {
 	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.NetworkTopology
 }
+
+func (n Network) AggregatorCommitteeFork() bool {
+	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.AggregatorCommittee
+}

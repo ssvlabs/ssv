@@ -140,6 +140,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 	switch roleType {
 	case spectypes.RoleCommittee,
+		spectypes.RoleAggregatorCommittee,
 		spectypes.RoleAggregator,
 		spectypes.RoleProposer,
 		spectypes.RoleSyncCommitteeContribution,

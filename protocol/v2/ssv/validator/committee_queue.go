@@ -45,7 +45,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		logger.Error("❌ couldn't get message slot", zap.Error(err))
 		return
 	}
-	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot)
+	dutyID := fields.BuildCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.networkConfig.EstimatedEpochAtSlot(slot), slot, msgID.GetRoleType())
 
 	logger = logger.
 		With(fields.Slot(slot)).
@@ -63,7 +63,9 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	defer span.End()
 
 	c.mtx.Lock()
-	q := c.getQueue(logger, slot)
+	// Route to role-specific queue to avoid concurrent Pop calls on same queue
+	// when both committee and aggregator consumers are running for the slot.
+	q := c.getQueueForRole(logger, slot, msgID.GetRoleType())
 	c.mtx.Unlock()
 
 	span.AddEvent("pushing message to the queue")
@@ -84,11 +86,10 @@ func (c *Committee) ConsumeQueue(
 	logger *zap.Logger,
 	q queueContainer,
 	handler MessageHandler, // should be c.ProcessMessage, it is a param so can be mocked out for testing
-	rnr *runner.CommitteeRunner,
+	rnr runner.Runner,
 ) {
 	logger.Debug("📬 queue consumer is running")
 	defer logger.Debug("📪 queue consumer is closed")
-
 	// Construct a representation of the current state.
 	state := *q.queueState
 
@@ -105,11 +106,19 @@ func (c *Committee) ConsumeQueue(
 	for ctx.Err() == nil {
 		state.HasRunningInstance = rnr.HasRunningQBFTInstance()
 
-		filter := queue.FilterAny
+		expectedRole := rnr.GetRole()
+
+		// Base filter: only accept messages matching this consumer's runner role.
+		roleFilter := func(m *queue.SSVMessage) bool { return m.MsgID.GetRoleType() == expectedRole }
+
+		filter := func(m *queue.SSVMessage) bool { return roleFilter(m) }
 		if state.HasRunningInstance && !rnr.HasAcceptedProposalForCurrentRound() {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
-			// for the current round.
+			// for the current round. Always enforce role match.
 			filter = func(m *queue.SSVMessage) bool {
+				if !roleFilter(m) {
+					return false
+				}
 				sm, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
@@ -122,9 +131,12 @@ func (c *Committee) ConsumeQueue(
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
 		} else if state.HasRunningInstance {
-			filter = func(ssvMessage *queue.SSVMessage) bool {
+			filter = func(m *queue.SSVMessage) bool {
+				if !roleFilter(m) {
+					return false
+				}
 				// don't read post consensus until decided
-				return ssvMessage.MsgType != spectypes.SSVPartialSignatureMsgType
+				return m.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
@@ -169,6 +181,7 @@ func (c *Committee) ConsumeQueue(
 					types.OperatorIDsFromOperators(c.CommitteeMember.Committee),
 					c.networkConfig.EstimatedEpochAtSlot(slot),
 					slot,
+					msg.GetID().GetRoleType(),
 				)
 				spanOpts = append(spanOpts, trace.WithAttributes(
 					observability.BeaconSlotAttribute(slot),

@@ -62,7 +62,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
@@ -117,7 +117,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
+	registrationSlots := h.netCfg.SlotsPerEpoch * frequencyEpochs
 
 	shares := h.validatorProvider.SelfValidators()
 	duties := make([]*spectypes.ValidatorDuty, 0, len(shares))
@@ -162,7 +162,7 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
+	blockSlot = h.netCfg.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 

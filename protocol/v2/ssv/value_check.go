@@ -2,6 +2,7 @@ package ssv
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 
@@ -89,6 +90,32 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		if bv.Target.Root != v.expectedVote.Target.Root {
 			return fmt.Errorf("unexpected target root %x, expected %x", bv.Target.Root, v.expectedVote.Target.Root)
 		}
+	}
+
+	return nil
+}
+
+type validatorConsensusDataChecker struct{}
+
+func NewValidatorConsensusDataChecker() ValueChecker {
+	return &validatorConsensusDataChecker{}
+}
+
+func (v *validatorConsensusDataChecker) CheckValue(value []byte) error {
+	cd := &spectypes.AggregatorCommitteeConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return fmt.Errorf("failed decoding aggregator committee consensus data: %w", err)
+	}
+	if err := cd.Validate(); err != nil {
+		return fmt.Errorf("invalid value: %w", err)
+	}
+
+	// Basic validation - consensus data should have either aggregator or sync committee data
+	hasAggregators := len(cd.Aggregators) > 0
+	hasContributors := len(cd.Contributors) > 0
+
+	if !hasAggregators && !hasContributors {
+		return errors.New("no aggregators or sync committee contributors in consensus data")
 	}
 
 	return nil

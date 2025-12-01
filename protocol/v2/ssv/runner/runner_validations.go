@@ -28,16 +28,27 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
 	}
 
-	if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
-		return err
+	// Validate the post-consensus message differently depending on a message type.
+	validateMsg := func() error {
+		if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
+			return err
+		}
+
+		roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
+		if err != nil {
+			return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
+		}
+
+		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
 	}
 
-	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
-	if err != nil {
-		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
+	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
+		validateMsg = func() error {
+			return b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot())
+		}
 	}
 
-	return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+	return validateMsg()
 }
 
 // Verify each signature in container removing the invalid ones
@@ -134,6 +145,19 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 
 			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
 			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
+			expectedSlot := b.State.CurrentDuty.DutySlot()
+			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
+		}
+	}
+	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
+		validateMsg = func() error {
+			decidedValue := &spectypes.AggregatorCommitteeConsensusData{}
+			if err := decidedValue.Decode(decidedValueBytes); err != nil {
+				return errors.Wrap(err, "failed to parse decided value to AggregatorCommitteeConsensusData")
+			}
+
+			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for AggregatorCommitteeRunner
+			// by design, hence there is no need to store slot number on decidedValue for AggregatorCommitteeRunner.
 			expectedSlot := b.State.CurrentDuty.DutySlot()
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}

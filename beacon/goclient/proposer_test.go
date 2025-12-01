@@ -133,11 +133,11 @@ func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.Executi
 	if blinded {
 		// Get a blinded block from ssv-spec testing utilities
 		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
-		block := versionedBlinded.ElectraBlinded
+		block := versionedBlinded.Electra
 
 		// Modify the fields we need for our test
-		block.Slot = slot
-		block.Body.ExecutionPayloadHeader.FeeRecipient = feeRecipient
+		block.Block.Slot = slot
+		block.Block.Body.ExecutionPayload.FeeRecipient = feeRecipient
 
 		// Wrap in response structure
 		response := map[string]interface{}{

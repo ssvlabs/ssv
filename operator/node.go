@@ -103,7 +103,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			Ctx:                     opts.Context,
 			BeaconNode:              schedulerBeacon,
 			ExecutionClient:         opts.ExecutionClient,
-			BeaconConfig:            opts.NetworkConfig.Beacon,
+			NetworkConfig:           opts.NetworkConfig, // if eventually beacon config is enough, passing whole network config will reduce work on future SSV forks
 			ValidatorProvider:       validatorProvider,
 			ValidatorController:     opts.ValidatorController,
 			DutyExecutor:            dutyExecutor,

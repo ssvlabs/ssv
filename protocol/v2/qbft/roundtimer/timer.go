@@ -104,7 +104,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	case spectypes.RoleCommittee:
 		// third of the slot time
 		baseDuration = t.beaconConfig.SlotDuration / 3
-	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution, spectypes.RoleAggregatorCommittee:
 		// two-third of the slot time
 		baseDuration = t.beaconConfig.SlotDuration / 3 * 2
 	default:

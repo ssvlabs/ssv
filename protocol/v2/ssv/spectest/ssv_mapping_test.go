@@ -562,6 +562,10 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
 			return r.(*runner.CommitteeRunner), nil
 		},
+		func(shareMap map[phase0.ValidatorIndex]*spectypes.Share) (*runner.AggregatorCommitteeRunner, error) {
+			r := ssvtesting.AggregatorCommitteeRunnerWithShareMap(logger, shareMap)
+			return r.(*runner.AggregatorCommitteeRunner), nil
+		},
 		specCommittee.Share,
 		validator.NewCommitteeDutyGuard(),
 	)

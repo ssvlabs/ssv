@@ -67,6 +67,8 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 	switch r {
 	case spectypes.RoleCommittee:
 		return "COMMITTEE"
+	case spectypes.RoleAggregatorCommittee:
+		return "AGGREGATOR_COMMITTEE"
 	case spectypes.RoleAggregator:
 		return "AGGREGATOR"
 	case spectypes.RoleProposer:

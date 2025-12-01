@@ -54,7 +54,8 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	var topics []string
 
-	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+	role := msg.SSVMessage.MsgID.GetRoleType()
+	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
 		// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
 		// we don't expect post-fork messages to be sent before the fork.
 		if n.cfg.NetworkConfig.NetworkTopologyFork() {
