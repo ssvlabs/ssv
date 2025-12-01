@@ -57,12 +57,11 @@ func (h *AggregatorCommitteeHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
+			slot := h.ticker.Slot()
+			next = h.ticker.Next()
 			if !h.netCfg.AggregatorCommitteeFork() {
 				continue
 			}
-
-			slot := h.ticker.Slot()
-			next = h.ticker.Next()
 			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
 			period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
