@@ -99,12 +99,12 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				defer cancel()
 
 				if h.netCfg.AggregatorCommitteeFork() {
-					// After fork: keep fetching (to feed AggregatorCommittee) but skip legacy execution.
+					// After fork: keep fetching duties (to feed AggregatorCommittee handler) but skip legacy execution.
 					h.processFetching(tickCtx, epoch, period, true)
 					return
 				}
 
-				// Pre-fork: execute legacy sync-committee contribution + fetch.
+				// Pre-fork: execute legacy sync-committee contribution flow and fetch duties.
 				h.processExecution(tickCtx, period, slot)
 				h.processFetching(tickCtx, epoch, period, true)
 			}()
