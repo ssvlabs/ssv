@@ -87,10 +87,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			if h.netCfg.AggregatorCommitteeFork() {
-				return
-			}
-
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
@@ -102,6 +98,13 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
 				defer cancel()
 
+				if h.netCfg.AggregatorCommitteeFork() {
+					// After fork: keep fetching duties (to feed AggregatorCommittee handler) but skip legacy execution.
+					h.processFetching(tickCtx, epoch, period, true)
+					return
+				}
+
+				// Pre-fork: execute legacy sync-committee contribution flow and fetch duties.
 				h.processExecution(tickCtx, period, slot)
 				h.processFetching(tickCtx, epoch, period, true)
 			}()

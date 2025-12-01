@@ -81,10 +81,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			if h.netCfg.AggregatorCommitteeFork() {
-				return
-			}
-
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			currentEpoch := h.netCfg.EstimatedEpochAtSlot(slot)
@@ -98,6 +94,13 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
 				defer cancel()
 
+				if h.netCfg.AggregatorCommitteeFork() {
+					// After fork: keep fetching duties (to feed AggregatorCommittee handler) but skip legacy execution.
+					h.processFetching(tickCtx, currentEpoch, slot)
+					return
+				}
+
+				// Pre-fork: execute legacy aggregator (attestation) flow and fetch duties.
 				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
 				h.processFetching(tickCtx, currentEpoch, slot)
 			}()
