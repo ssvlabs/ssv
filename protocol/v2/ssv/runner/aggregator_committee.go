@@ -856,6 +856,13 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 					)
 
+					recordSuccessfulSubmission(
+						ctx,
+						1,
+						r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.CurrentDuty.DutySlot()),
+						spectypes.BNRoleAggregator,
+					)
+
 					r.RecordSubmission(spectypes.BNRoleAggregator, signatureResult.validatorIndex, root)
 
 				case spectypes.BNRoleSyncCommitteeContribution:
@@ -879,6 +886,13 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 						fields.Took(time.Since(start)),
 						fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+					)
+
+					recordSuccessfulSubmission(
+						ctx,
+						1,
+						r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.CurrentDuty.DutySlot()),
+						spectypes.BNRoleSyncCommitteeContribution,
 					)
 
 					r.RecordSubmission(spectypes.BNRoleSyncCommitteeContribution, signatureResult.validatorIndex, root)

@@ -34,8 +34,9 @@ var (
 )
 
 const (
-	ValidatorQueueMetricType = "validator"
-	CommitteeQueueMetricType = "committee"
+	ValidatorQueueMetricType           = "validator"
+	CommitteeQueueMetricType           = "committee"
+	AggregatorCommitteeQueueMetricType = "aggregator_committee"
 )
 
 // ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).

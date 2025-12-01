@@ -275,13 +275,17 @@ func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role s
 
 	q, exists := m[slot]
 	if !exists {
+		qType := queue.CommitteeQueueMetricType
+		if role == spectypes.RoleAggregatorCommittee {
+			qType = queue.AggregatorCommitteeQueueMetricType
+		}
 		q = queueContainer{
 			Q: queue.New(
 				logger,
 				1000,
 				queue.WithInboxSizeMetric(
 					queue.InboxSizeMetric,
-					queue.CommitteeQueueMetricType,
+					qType,
 					queue.CommitteeMetricID(slot),
 				),
 			),
