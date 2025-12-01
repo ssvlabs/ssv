@@ -188,26 +188,28 @@ func (ctrl *topicsCtrl) Subscribe(name string) error {
 	return nil
 }
 
-// Broadcast publishes the message on the given topic
-func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duration) error {
-	name = commons.GetTopicFullName(name)
-
-	topic, err := ctrl.container.Join(name)
+// Broadcast publishes the message on the given topic in a non-blocking manner.
+func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
+	topicNameFull := commons.GetTopicFullName(topicName)
+	topic, err := ctrl.container.Join(topicNameFull)
 	if err != nil {
 		return err
 	}
 
 	go func() {
-		ctx, done := context.WithTimeout(ctrl.ctx, timeout)
-		defer done()
+		ctx, cancel := context.WithTimeout(ctrl.ctx, timeout)
+		defer cancel()
 
 		err := topic.Publish(ctx, data)
-		if err == nil {
-			outboundMessageCounter.Add(ctrl.ctx, 1)
+		if err != nil {
+			ctrl.logger.Error("could not publish p2p message", zap.String("topic", topicName), zap.Error(err))
+			return
 		}
+
+		outboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(messageTopicAttribute(topicName)))
 	}()
 
-	return err
+	return nil
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
@@ -280,8 +282,10 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
-			inboundMessageCounter.Add(ctrl.ctx, 1,
-				metric.WithAttributes(messageTypeAttribute(uint64(m.MsgType))))
+			inboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(
+				messageTopicAttribute(topicName),
+				messageTypeAttribute(uint64(m.MsgType)),
+			))
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}

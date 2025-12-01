@@ -30,6 +30,10 @@ var (
 			metric.WithDescription("total number of outbound(broadcasted) messages")))
 )
 
+func messageTopicAttribute(value string) attribute.KeyValue {
+	return attribute.String("ssv.p2p.message.topic", value)
+}
+
 func messageTypeAttribute(value uint64) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.p2p.message.type",
