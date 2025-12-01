@@ -58,6 +58,14 @@ func (h *AggregatorCommitteeHandler) HandleDuties(ctx context.Context) {
 
 		case <-next:
 			if !h.netCfg.AggregatorCommitteeFork() {
+				curr := h.netCfg.EstimatedCurrentEpoch()
+				fork := h.netCfg.SSV.Forks.AggregatorCommittee
+				if curr >= fork {
+					h.logger.Info("aggregator-committee fork gate is false despite epoch >= fork",
+						fields.EstimatedCurrentEpoch(curr),
+						zap.Uint64("fork_epoch", uint64(fork)),
+					)
+				}
 				continue
 			}
 

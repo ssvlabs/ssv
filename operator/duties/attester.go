@@ -88,19 +88,17 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			func() {
-				// Aggregates submissions are rewarded as long as they are finished within 2 slots after the target slot
-				// (the target slot itself, plus the next slot after that), hence we are setting the deadline here to
-				// target slot + 2.
+				// Set deadline to target slot + 1 (safety margin inside ctx helper).
 				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
 				defer cancel()
 
 				if h.netCfg.AggregatorCommitteeFork() {
-					// After fork: keep fetching duties (to feed AggregatorCommittee handler) but skip legacy execution.
+					// After fork: keep fetching (to feed AggregatorCommittee) but skip legacy execution.
 					h.processFetching(tickCtx, currentEpoch, slot)
 					return
 				}
 
-				// Pre-fork: execute legacy aggregator (attestation) flow and fetch duties.
+				// Pre-fork: execute legacy aggregator + fetch.
 				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
 				h.processFetching(tickCtx, currentEpoch, slot)
 			}()
