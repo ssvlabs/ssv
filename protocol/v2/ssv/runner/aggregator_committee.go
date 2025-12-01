@@ -1278,6 +1278,14 @@ func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
 			Message:   aggregateAndProof.Electra,
 			Signature: signature,
 		}
+	case spec.DataVersionFulu:
+		if aggregateAndProof.Fulu == nil {
+			return nil, errors.New("nil Fulu aggregate and proof")
+		}
+		ret.Electra = &electra.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Electra,
+			Signature: signature,
+		}
 	default:
 		return nil, errors.Errorf("unknown version %s", ret.Version.String())
 	}
