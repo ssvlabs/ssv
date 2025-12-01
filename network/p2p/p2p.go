@@ -164,7 +164,7 @@ func (n *p2pNetwork) parseTrustedPeers() error {
 	// Group addresses by peer ID.
 	trustedPeers := map[peer.ID][]ma.Multiaddr{}
 	for _, mas := range n.cfg.TrustedPeers {
-		for _, ma := range strings.Split(mas, ",") {
+		for ma := range strings.SplitSeq(mas, ",") {
 			addrInfo, err := peer.AddrInfoFromString(ma)
 			if err != nil {
 				return fmt.Errorf("could not parse trusted peer: %w", err)
@@ -294,11 +294,9 @@ func (n *p2pNetwork) Start() error {
 
 	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
 
-	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.logger, n.topicsCtrl, 2))
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.logger, n.topicsCtrl))
 
-	if err := n.subscribeToFixedSubnets(); err != nil {
-		return err
-	}
+	n.subscribeToFixedSubnets()
 
 	return nil
 }
@@ -487,8 +485,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]uint64, 0)
-		subnetList := updatedSubnets.SubnetList()
-		for _, subnet := range subnetList {
+		for _, subnet := range updatedSubnets.SubnetList() {
 			if !registeredSubnets.IsSet(subnet) {
 				addedSubnets = append(addedSubnets, subnet)
 			}
@@ -496,8 +493,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]uint64, 0)
-		subnetList = registeredSubnets.SubnetList()
-		for _, subnet := range subnetList {
+		for _, subnet := range registeredSubnets.SubnetList() {
 			if !updatedSubnets.IsSet(subnet) {
 				removedSubnets = append(removedSubnets, subnet)
 			}
@@ -510,7 +506,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = n.currentSubnets.String()
+			self.Metadata.Subnets = n.currentSubnets.StringHex()
 			return self
 		})
 
@@ -604,7 +600,7 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 // have him, but then connected with.
 func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 	// Compute number of peers we're connected to for each subnet excluding peer with peerID.
-	subnetPeersExcluding := SubnetPeers{}
+	subnetPeersExcluding := newSubnetPeers()
 	for topic, peers := range n.PeersByTopic() {
 		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
 		if err != nil {
@@ -632,6 +628,18 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 
 // SubnetPeers contains the number of peers we are connected to for each subnet.
 type SubnetPeers [commons.SubnetsCount]uint16
+
+func newSubnetPeers() SubnetPeers {
+	return SubnetPeers{}
+}
+
+func newSubnetPeersFromSubnets(s commons.Subnets) SubnetPeers {
+	var result SubnetPeers
+	for _, subnet := range s.SubnetList() {
+		result[subnet] = 1
+	}
+	return result
+}
 
 func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 	var sum SubnetPeers
@@ -669,11 +677,11 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 }
 
 func (a SubnetPeers) String() string {
-	var b strings.Builder
+	var result strings.Builder
 	for i, v := range a {
 		if v > 0 {
-			_, _ = fmt.Fprintf(&b, "%d:%d ", i, v)
+			_, _ = fmt.Fprintf(&result, "%d:%d ", i, v)
 		}
 	}
-	return b.String()
+	return strings.TrimSuffix(result.String(), " ")
 }

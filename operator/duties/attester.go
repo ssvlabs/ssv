@@ -298,7 +298,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
 		fields.Duties(epoch, specDuties, truncate),
-		fields.Duration(start))
+		fields.Took(time.Since(start)),
+	)
 
 	// Further processing is not needed in exporter mode, terminate early
 	// avoiding CL subscriptions saves some CPU & Network resources

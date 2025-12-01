@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"encoding/hex"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
@@ -9,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 )
 
@@ -21,10 +21,16 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		return types.WrapError(types.TimeoutInstanceErrorCode, traces.Errorf(span, "instance stopped processing timeouts"))
 	}
 
+	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
+	if err != nil {
+		return traces.Errorf(span, "failed to hash instance start value: %w", err)
+	}
+	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
+
+	logger.Debug("⌛ round timed out")
+
 	prevRound := i.State.Round
 	newRound := prevRound + 1
-
-	logger.Debug("⌛ round timed out", fields.QBFTRound(prevRound))
 
 	// TODO: previously this was done outside of a defer, which caused the
 	// round to be bumped before the round change message was created & broadcasted.
@@ -32,7 +38,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer func() {
 		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
-		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
+		i.config.GetTimer().TimeoutForRound(i.State.Height, newRound)
 	}()
 
 	roundChange, err := i.CreateRoundChange(newRound)
@@ -40,26 +46,15 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		return traces.Errorf(span, "could not generate round change msg: %w", err)
 	}
 
-	root, err := specqbft.HashDataRoot(i.StartValue)
-	if err != nil {
-		return traces.Errorf(span, "could not calculate root for round change: %w", err)
-	}
-
 	i.metrics.RecordRoundChange(ctx, prevRound, reasonTimeout)
 
-	const eventMsg = "📢 broadcasting round change message"
-	span.AddEvent(eventMsg,
-		trace.WithAttributes(
-			observability.BeaconBlockRootAttribute(root),
-			observability.DutyRoundAttribute(i.State.Round),
-		))
-
-	logger.Debug(eventMsg,
-		fields.QBFTRound(i.State.Round),
-		fields.Root(root),
+	const eventMsg = "📢 broadcasting round change message (this round timed out)"
+	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(startValueRoot), observability.DutyRoundAttribute(prevRound)))
+	logger.Debug(
+		eventMsg,
+		zap.Uint64("qbft_new_round", uint64(newRound)),
 		zap.Any("round_change_signers", roundChange.OperatorIDs),
-		fields.QBFTHeight(i.State.Height),
-		zap.String("reason", "timeout"))
+	)
 
 	if err := i.Broadcast(roundChange); err != nil {
 		return traces.Errorf(span, "failed to broadcast round change message: %w", err)

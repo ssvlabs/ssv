@@ -39,19 +39,19 @@ func TestSubnetPeers_Add(t *testing.T) {
 	}{
 		{
 			name:     "empty subnets",
-			a:        SubnetPeers{},
-			b:        SubnetPeers{},
-			expected: SubnetPeers{},
+			a:        newSubnetPeers(),
+			b:        newSubnetPeers(),
+			expected: newSubnetPeers(),
 		},
 		{
 			name:     "one subnet in a",
 			a:        createSubnetPeers(map[int]uint16{5: 3}),
-			b:        SubnetPeers{},
+			b:        newSubnetPeers(),
 			expected: createSubnetPeers(map[int]uint16{5: 3}),
 		},
 		{
 			name:     "one subnet in b",
-			a:        SubnetPeers{},
+			a:        newSubnetPeers(),
 			b:        createSubnetPeers(map[int]uint16{10: 2}),
 			expected: createSubnetPeers(map[int]uint16{10: 2}),
 		},
@@ -283,23 +283,23 @@ func TestSubnetPeers_String(t *testing.T) {
 	}{
 		{
 			name:     "empty peers",
-			peers:    SubnetPeers{},
+			peers:    newSubnetPeers(),
 			expected: "",
 		},
 		{
 			name:     "single subnet",
 			peers:    createSubnetPeers(map[int]uint16{5: 3}),
-			expected: "5:3 ",
+			expected: "5:3",
 		},
 		{
 			name:     "multiple subnets",
 			peers:    createSubnetPeers(map[int]uint16{1: 1, 5: 3, 10: 2}),
-			expected: "1:1 5:3 10:2 ",
+			expected: "1:1 5:3 10:2",
 		},
 		{
 			name:     "zero value subnets are not included",
 			peers:    createSubnetPeers(map[int]uint16{1: 0, 5: 3, 10: 0}),
-			expected: "5:3 ",
+			expected: "5:3",
 		},
 	}
 

@@ -23,7 +23,7 @@ This flag is required for the SSV node to detect validator liveness via the Beac
 
  - The node will **wait ~3 epochs** to ensure each validator is not already active on the Ethereum network.
  - If **no activity is detected**, the validator is marked **safe to sign**.
- - Validators can also be marked safe **immediately** if a **post-consensus quorum** is reached by the validator's operator committee.
+ - Validators will also be marked **safe to sign** right after a **post-consensus quorum** is reached by the validator's operator committee (typically takes ~1 epoch to detect such a quorum).
 
 🔁 On **node restart**, Doppelganger protection is **reset**, and the safety check process starts again.
 
@@ -46,19 +46,19 @@ As a result, traditional Doppelganger detection methods used by solo staking cli
 A validator is **considered safe to sign** when:
 
 1. **It has not been active on the Ethereum network for a predefined number of epochs**. If no recent attestations/proposals are found, the validator is **safe to sign**.
-2. **Post-consensus quorum confirms validator safety**. If a validator participates in consensus and reaches the post-consensus step (i.e., a majority of operators in the validator’s committee agree via post-consensus partial messages quorum aka "decided"), then the validator can be marked as **safe** and start signing duties.
+2. **Post-consensus quorum confirms validator safety**. If a validator participates in consensus and reaches the post-consensus step (i.e., a majority of operators in the validator’s committee agree via post-consensus partial messages quorum aka "decided"), then the validator can be marked as **safe to sign** and start signing duties.
     - **Rationale**: This guarantees that the validator is **already actively running inside its `ssv.network` committee**, ensuring that the liveness status reported by the Beacon Node is likely due to its participation in `ssv.network` rather than another client.
 
 ## 3. Pros & Cons of `ssv.network` Doppelganger Protection
 
 ### 🏆 **How ssv.network Doppelganger Protection Differs from Solo Staking Clients**
 
-| 🟢 **Pros (ssv.network DG)** | 🔴 **Cons (ssv.network DG)** | 🏛️ **Solo Staking Clients (Lighthouse, Prysm, Teku, etc.)** |
-|-----------------------------|-----------------------------|------------------------------------------------|
-| ✅ **Prevents slashing** by ensuring validators do not sign while potentially active elsewhere. | ⚠️ **Operators running beacon nodes must enable liveness tracking** for Doppelganger protection to function properly. Example: Teku requires `--beacon-liveness-tracking-enabled=true`. | ❌ **Terminates the entire validator client process** upon detecting a Doppelganger, preventing further duties for all validators on that node. |
-| ⚡ **Minimizes validator downtime** by allowing a **post-consensus quorum** to determine safety, instead of waiting blindly for inactivity epochs. | 🏗️ **Higher state-tracking complexity** due to integration with post-consensus logic. | ⏳ **Disables signing for all validators** and waits for a predefined inactivity period. |
+| 🟢 **Pros (ssv.network DG)**                                                                                                                                                                                                                                 | 🔴 **Cons (ssv.network DG)** | 🏛️ **Solo Staking Clients (Lighthouse, Prysm, Teku, etc.)** |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------|------------------------------------------------|
+| ✅ **Prevents slashing** by ensuring validators do not sign while potentially active elsewhere.                                                                                                                                                               | ⚠️ **Operators running beacon nodes must enable liveness tracking** for Doppelganger protection to function properly. Example: Teku requires `--beacon-liveness-tracking-enabled=true`. | ❌ **Terminates the entire validator client process** upon detecting a Doppelganger, preventing further duties for all validators on that node. |
+| ⚡ **Minimizes validator downtime** by allowing a **post-consensus quorum** to determine safety (typically takes ~1 epoch), instead of waiting blindly for a multiple number of inactivity epochs.                                                            | 🏗️ **Higher state-tracking complexity** due to integration with post-consensus logic. | ⏳ **Disables signing for all validators** and waits for a predefined inactivity period. |
 | 🤝 **Works in distributed staking setups** where multiple operators sign jointly. **Each validator is evaluated separately.** If the BN fails to report accurate liveness, the validator can still be marked safe via **post-consensus operator agreement.** | ⏳ **Potential delays** if the post-consensus quorum does not finalize in time. ⚙️ **Extra computational overhead**, as each validator's state must be tracked independently. | 📡 **Solo staking clients fully depend on BN-reported liveness**, which can be inaccurate due to network issues. A single **faulty BN report** can cause unnecessary downtime. |
-| 🎯 **Granular control**: Instead of disabling all validators at once, **validators can be marked safe individually** when meeting safety criteria. | 🔍 **One or more operators failing to enable BN liveness tracking could affect accurate Doppelganger detection.** | ⚡ **One faulty BN report can lead to unnecessary downtime for all validators on the client.** |
+| 🎯 **Granular control**: Instead of disabling all validators at once, **validators can be marked safe individually** when meeting safety criteria.                                                                                                           | 🔍 **One or more operators failing to enable BN liveness tracking could affect accurate Doppelganger detection.** | ⚡ **One faulty BN report can lead to unnecessary downtime for all validators on the client.** |
 
 # 4. Additional considerations
 ### 💰 Cost of Protection

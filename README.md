@@ -9,7 +9,7 @@
 ![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml/badge.svg?branch=main)
 ![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml/badge.svg?branch=main)
 [![Coverage Status](https://codecov.io/gh/ssvlabs/ssv/branch/main/graph/badge.svg)](https://codecov.io/gh/ssvlabs/ssv/tree/main)
-[![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/ssvnetworkofficial)
+[![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/5vT22pRBrf)
 
 [comment]: <> ([![Go Report Card]&#40;https://goreportcard.com/badge/github.com/ssvlabs/ssv&#41;]&#40;https://goreportcard.com/report/github.com/ssvlabs/ssv&#41;)
 
@@ -56,7 +56,7 @@ Thank you for considering a contribution to the source code.
 
 In order to contribute to `ssv`, please fork, add your code, commit and send a pull request
 for the maintainers to review and merge into the main code base.\
-If you wish to submit more complex changes though, please check up with the core devs first on [our discord](https://discord.gg/ssvnetworkofficial)
+If you wish to submit more complex changes though, please check up with the core devs first on [our discord](https://discord.gg/5vT22pRBrf)
 to ensure those changes are in line with the general philosophy of the project and/or get
 some early feedback which can make both your efforts much lighter as well as our review
 and merge procedures quick and simple.
@@ -83,7 +83,7 @@ For detailed roadmap please check out [ROADMAP.md](./ROADMAP.md)
 
 ### 📌 Join the growing SSV community
 
- <a href="https://discord.gg/ssvnetworkofficial" target="_blank">
+ <a href="https://discord.gg/5vT22pRBrf" target="_blank">
 <img src="https://user-images.githubusercontent.com/74038190/221352968-ac6f7b24-ed9a-4d00-a045-710caa6fc834.gif" width="100">
  </a>
 <br><br>

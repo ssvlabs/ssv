@@ -236,7 +236,7 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 	s.Require().Equal(numGoroutines, web3SignerSuccessCount)
 }
 
-// TestBlockRestart validates slashing protection persistence across restarts.
+// TestWeb3SignerRestart validates slashing protection persistence across restarts.
 func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	s.T().Logf("🔄 Testing block restart persistence")
 	testCurrentEpoch := s.GetEnv().GetBeaconConfig().Forks[spec.DataVersionFulu].Epoch

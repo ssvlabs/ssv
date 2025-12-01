@@ -21,8 +21,11 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 	runner Runner,
 	psigMsgs *spectypes.PartialSignatureMessages,
 ) error {
-	if !b.hasRunningDuty() {
-		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoRunningDuty))
+	if !b.hasDutyAssigned() {
+		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
+	}
+	if b.hasDutyFinished() {
+		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
 	}
 
 	if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
@@ -50,8 +53,11 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 }
 
 func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
-	if !b.hasRunningDuty() {
-		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoRunningDuty))
+	if !b.hasDutyAssigned() {
+		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
+	}
+	if b.hasDutyFinished() {
+		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
 	}
 
 	// slotIsRelevant ensures the post-consensus message is even remotely relevant (eg. we might have already

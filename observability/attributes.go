@@ -124,26 +124,6 @@ func ValidatorMsgIDAttribute(msgID spectypes.MessageID) attribute.KeyValue {
 	return attribute.String("ssv.validator.msg.id", msgID.String())
 }
 
-func ValidatorPartialSigMsgTypeAttribute(msgType spectypes.PartialSigMsgType) attribute.KeyValue {
-	const attrKey = "ssv.validator.partial_signature_msg.type"
-	switch msgType {
-	case spectypes.ContributionProofs:
-		return attribute.String(attrKey, "ContributionProofs")
-	case spectypes.PostConsensusPartialSig:
-		return attribute.String(attrKey, "PostConsensusPartialSig")
-	case spectypes.RandaoPartialSig:
-		return attribute.String(attrKey, "RandaoPartialSig")
-	case spectypes.SelectionProofPartialSig:
-		return attribute.String(attrKey, "SelectionProofPartialSig")
-	case spectypes.ValidatorRegistrationPartialSig:
-		return attribute.String(attrKey, "ValidatorRegistrationPartialSig")
-	case spectypes.VoluntaryExitPartialSig:
-		return attribute.String(attrKey, "VoluntaryExitPartialSig")
-	default:
-		return attribute.String(attrKey, "UnknownPartialSigMsgType")
-	}
-}
-
 func ValidatorIndexAttribute(index phase0.ValidatorIndex) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.index",

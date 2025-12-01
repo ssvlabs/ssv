@@ -22,7 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -177,8 +176,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			)
 
 			if ncv.newDecidedHandler != nil {
-				p := qbftstorage.Participation{
-					ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
+				p := storage.Participation{
+					ParticipantsRangeEntry: storage.ParticipantsRangeEntry{
 						Slot:    slot,
 						Signers: quorum,
 					},

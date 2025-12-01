@@ -24,9 +24,16 @@ import (
 const (
 	certValidityHours = 24
 	testPassword      = "test123"
-	fileMode          = 0600
-	dirMode           = 0750
-	rsaKeyBits        = 2048
+
+	// fileMode and dirMode are set to 0644/0755 (world-readable/accessible) to ensure
+	// Web3Signer container (UID 999) can read test certificates. These are ephemeral
+	// test certificates generated per-run in .tmp/e2e-certs-*, never production keys.
+	// On Linux CI, Docker bind mounts preserve exact host permissions, requiring
+	// world-readable permissions for container access.
+	fileMode = 0644
+	dirMode  = 0755
+
+	rsaKeyBits = 2048
 )
 
 func generateSelfSignedCert(commonName string, dnsNames []string) ([]byte, []byte, error) {
@@ -88,6 +95,13 @@ func generatePKCS12FromPEM(certPath, keyPath, outputPath, password string) error
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create PKCS12 keystore: %w, output: %s", err, string(output))
+	}
+
+	// Explicitly set permissions on PKCS12 file created by OpenSSL.
+	// OpenSSL creates files with system umask, not fileMode, so this chmod
+	// is required to ensure consistent 0644 permissions for container access.
+	if err := os.Chmod(outputPath, fileMode); err != nil {
+		return fmt.Errorf("failed to set permissions on PKCS12 keystore: %w", err)
 	}
 
 	return nil

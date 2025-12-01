@@ -23,6 +23,19 @@ const (
 	proberRetryDelay         = 10 * time.Second
 )
 
+const ethereumNodesUnhealthyFatalErrorMsg = "ethereum node(s) are not healthy"
+
+func ensureEthereumNodesHealthy(ctx context.Context, logger *zap.Logger, p *nodeprobe.Prober) {
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := p.ProbeAll(probeCtx); err != nil {
+		logger.Fatal(ethereumNodesUnhealthyFatalErrorMsg, zap.Error(err))
+	}
+
+	logger.Info("ethereum node(s) are healthy")
+}
+
 func startNodeProber(ctx context.Context, logger *zap.Logger, p *nodeprobe.Prober) {
 	const probeFrequency = 60 * time.Second
 
@@ -38,7 +51,7 @@ func startNodeProber(ctx context.Context, logger *zap.Logger, p *nodeprobe.Probe
 			defer cancel()
 
 			if err := p.ProbeAll(probeCtx); err != nil {
-				logger.Fatal("Ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.", zap.Error(err))
+				logger.Fatal(ethereumNodesUnhealthyFatalErrorMsg, zap.Error(err))
 			}
 		}()
 

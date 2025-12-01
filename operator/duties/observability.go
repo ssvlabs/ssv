@@ -28,15 +28,15 @@ var (
 			metric.WithDescription("delay of the slot ticker in seconds"),
 			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	dutiesExecutedCounter = metrics.New(
+	dutiesScheduledCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "scheduler.executions"),
 			metric.WithUnit("{duty}"),
-			metric.WithDescription("total number of duties executed by scheduler")))
+			metric.WithDescription("total number of duties scheduled for execution")))
 )
 
 func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay time.Duration) {
 	runnerRoleAttr := metric.WithAttributes(observability.RunnerRoleAttribute(role))
-	dutiesExecutedCounter.Add(ctx, 1, runnerRoleAttr)
+	dutiesScheduledCounter.Add(ctx, 1, runnerRoleAttr)
 	slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
 }

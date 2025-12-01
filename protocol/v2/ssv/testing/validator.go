@@ -10,10 +10,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	testing2 "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -23,8 +22,8 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 	commonOpts := &validator.CommonOptions{
 		NetworkConfig: networkconfig.TestNetwork,
 		Network:       spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-		Beacon:        testing2.NewTestingBeaconNodeWrapped(),
-		Storage:       testing.TestingStores(logger),
+		Beacon:        testing.NewTestingBeaconNodeWrapped(),
+		Storage:       testingStores(logger),
 		Signer:        ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 	}
 

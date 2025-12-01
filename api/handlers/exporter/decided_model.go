@@ -6,7 +6,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/ibft/storage"
 )
 
 // DecidedParticipant describes a decided duty participant entry.
@@ -72,7 +72,7 @@ func (r *DecidedsRequest) hasFilters() bool {
 	return len(r.PubKeys) > 0 || len(r.Indices) > 0
 }
 
-func toParticipantResponse(role spectypes.BeaconRole, entry qbftstorage.ParticipantsRangeEntry) *DecidedParticipant {
+func toParticipantResponse(role spectypes.BeaconRole, entry storage.ParticipantsRangeEntry) *DecidedParticipant {
 	response := &DecidedParticipant{
 		Role:      role.String(),
 		Slot:      uint64(entry.Slot),

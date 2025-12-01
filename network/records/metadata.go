@@ -17,7 +17,7 @@ type NodeMetadata struct {
 	ExecutionNode string
 	// ConsensusNode is the "name/version" of the beacon node
 	ConsensusNode string
-	// Subnets represents the subnets that our node is subscribed to
+	// Subnets is a hex-encoded representation for the subnets that our node is subscribed to
 	Subnets string
 }
 

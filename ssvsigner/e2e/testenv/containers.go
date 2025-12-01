@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
@@ -140,8 +139,7 @@ func (env *TestEnvironment) startWeb3Signer() error {
 
 	web3SignerReq := testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			// TODO(fulu): Update Web3Signer to version that includes Fulu mainnet epoch (likely > 25.9.0)
-			Image:        "consensys/web3signer:25.9.0",
+			Image:        "consensys/web3signer:25.11.0",
 			ExposedPorts: []string{"9000/tcp"},
 			Networks:     []string{env.networkName},
 			NetworkAliases: map[string][]string{
@@ -163,9 +161,6 @@ func (env *TestEnvironment) startWeb3Signer() error {
 				"--tls-known-clients-file=/certs/web3signer_known_clients.txt",
 				"eth2",
 				"--network=mainnet",
-				// TODO(fulu): Remove --Xnetwork-fulu-fork-epoch once Fulu fork epoch is officially scheduled.
-				// Currently using experimental flag to override Fulu activation for testing purposes.
-				fmt.Sprintf("--Xnetwork-fulu-fork-epoch=%d", env.beaconConfig.Forks[spec.DataVersionFulu].Epoch),
 				"--slashing-protection-enabled=true",
 				fmt.Sprintf("--slashing-protection-db-url=jdbc:postgresql://postgres:5432/%s", postgresDB),
 				fmt.Sprintf("--slashing-protection-db-username=%s", postgresUser),

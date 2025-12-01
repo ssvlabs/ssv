@@ -13,6 +13,7 @@ import (
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
@@ -49,7 +50,7 @@ func NewConnectionGater(
 	trimmedRecently *ttl.Map[peer.ID, struct{}],
 ) connmgr.ConnectionGater {
 	return &connGater{
-		logger:          logger,
+		logger:          logger.Named(log.NameConnectionGater),
 		disable:         disable,
 		atMaxPeersLimit: atLimit,
 		ipLimiter:       leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
@@ -115,6 +116,7 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
+
 	return true
 }
 
