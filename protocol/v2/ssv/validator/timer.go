@@ -149,7 +149,7 @@ func (c *Committee) onTimeoutAggregator(ctx context.Context, logger *zap.Logger,
 			return
 		}
 
-		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
+		if pushed := c.AggregatorQueues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping aggregator timeout message because the queue is full",
 				fields.RunnerRole(identifier.GetRoleType()))
 		}

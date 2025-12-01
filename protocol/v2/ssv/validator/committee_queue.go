@@ -63,7 +63,9 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	defer span.End()
 
 	c.mtx.Lock()
-	q := c.getQueue(logger, slot)
+	// Route to role-specific queue to avoid concurrent Pop calls on same queue
+	// when both committee and aggregator consumers are running for the slot.
+	q := c.getQueueForRole(logger, slot, msgID.GetRoleType())
 	c.mtx.Unlock()
 
 	span.AddEvent("pushing message to the queue")

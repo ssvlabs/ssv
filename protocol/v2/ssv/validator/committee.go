@@ -43,8 +43,12 @@ type Committee struct {
 	networkConfig *networkconfig.Network
 
 	// mtx syncs access to Queues, Runners, Shares.
-	mtx               sync.RWMutex
-	Queues            map[phase0.Slot]queueContainer
+	mtx sync.RWMutex
+	// Queues is used for standard Committee duties.
+	Queues map[phase0.Slot]queueContainer
+	// AggregatorQueues isolates aggregator-committee traffic to avoid
+	// concurrent Pops on the same queue from two consumers.
+	AggregatorQueues  map[phase0.Slot]queueContainer
 	Runners           map[phase0.Slot]*runner.CommitteeRunner
 	AggregatorRunners map[phase0.Slot]*runner.AggregatorCommitteeRunner
 	Shares            map[phase0.ValidatorIndex]*spectypes.Share
@@ -78,6 +82,7 @@ func NewCommittee(
 		logger:                   logger,
 		networkConfig:            networkConfig,
 		Queues:                   make(map[phase0.Slot]queueContainer),
+		AggregatorQueues:         make(map[phase0.Slot]queueContainer),
 		Runners:                  make(map[phase0.Slot]*runner.CommitteeRunner),
 		AggregatorRunners:        make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
 		Shares:                   shares,
@@ -198,7 +203,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	c.Runners[duty.Slot] = commRunner
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
-	q = c.getQueue(logger, duty.Slot)
+	q = c.getQueueForRole(logger, duty.Slot, spectypes.RoleCommittee)
 
 	// Prunes all expired committee runners opportunistically (when a new runner is created).
 	c.unsafePruneExpiredRunners(logger, duty.Slot)
@@ -242,7 +247,7 @@ func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *
 	c.AggregatorRunners[duty.Slot] = aggCommRunner
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
-	q = c.getQueue(logger, duty.Slot)
+	q = c.getQueueForRole(logger, duty.Slot, spectypes.RoleAggregatorCommittee)
 
 	// Prunes all expired committee runners opportunistically (when a new runner is created).
 	c.unsafePruneExpiredRunners(logger, duty.Slot)
@@ -253,8 +258,22 @@ func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *
 
 // getQueue returns queue for the provided slot, lazily initializing it if it didn't exist previously.
 // MUST be called with c.mtx locked!
-func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queueContainer {
-	q, exists := c.Queues[slot]
+func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role spectypes.RunnerRole) queueContainer {
+	// Select backing map by role.
+	var (
+		m      map[phase0.Slot]queueContainer
+		assign = func(slot phase0.Slot, qc queueContainer) { /* replaced below */ }
+	)
+	switch role {
+	case spectypes.RoleAggregator, spectypes.RoleAggregatorCommittee:
+		m = c.AggregatorQueues
+		assign = func(slot phase0.Slot, qc queueContainer) { c.AggregatorQueues[slot] = qc }
+	default:
+		m = c.Queues
+		assign = func(slot phase0.Slot, qc queueContainer) { c.Queues[slot] = qc }
+	}
+
+	q, exists := m[slot]
 	if !exists {
 		q = queueContainer{
 			Q: queue.New(
@@ -273,9 +292,8 @@ func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queueContaine
 				Quorum:             c.CommitteeMember.GetQuorum(),
 			},
 		}
-		c.Queues[slot] = q
+		assign(slot, q)
 	}
-
 	return q
 }
 
@@ -528,8 +546,8 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 			committeeDutyID := fields.BuildCommitteeDutyID(opIds, epoch, slot, spectypes.RoleAggregatorCommittee)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired aggregator committee runner", zap.Uint64("slot", uint64(slot)))
-			delete(c.Runners, slot)
-			delete(c.Queues, slot)
+			delete(c.AggregatorRunners, slot)
+			delete(c.AggregatorQueues, slot)
 		}
 	}
 }
