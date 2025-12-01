@@ -14,7 +14,17 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 }
 
 func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	duties := state.CurrentDuty.(*spectypes.CommitteeDuty).ValidatorDuties
+	// Support both CommitteeDuty and AggregatorCommitteeDuty which share the
+	// ValidatorDuties shape. Fallback to proposer-style signers for other duties.
+	var duties []*spectypes.ValidatorDuty
+	switch d := state.CurrentDuty.(type) {
+	case *spectypes.CommitteeDuty:
+		duties = d.ValidatorDuties
+	case *spectypes.AggregatorCommitteeDuty:
+		duties = d.ValidatorDuties
+	default:
+		return getPostConsensusProposerSigners(state, root)
+	}
 
 	have := make(map[spectypes.OperatorID]struct{}, len(duties))
 	signersUnique := make([]spectypes.OperatorID, 0, len(duties))
