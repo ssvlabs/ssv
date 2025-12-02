@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jellydator/ttlcache/v3"
@@ -394,38 +395,55 @@ func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signat
 }
 
 func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessage) error {
-	beaconVote := &spectypes.BeaconVote{}
-	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
-		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
-		return err
-	}
-
 	qbftMsg, ok := msg.Body.(*specqbft.Message)
 	if !ok {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
-	bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
-
-	// if the roots for this beacon vote hash and height have already been computed, skip
-	if ncv.beaconVoteRoots.Has(bnCacheKey) {
-		return nil
-	}
-
 	epoch := ncv.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
-	if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
-		return err
+	switch msg.MsgID.GetRoleType() {
+	case spectypes.RoleCommittee:
+		beaconVote := &spectypes.BeaconVote{}
+		if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
+			ncv.logger.Debug("❗ failed to decode beacon vote from proposal", zap.Error(err))
+			return err
+		}
+
+		bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
+		// if the roots for this beacon vote hash and height have already been computed, skip
+		if ncv.beaconVoteRoots.Has(bnCacheKey) {
+			return nil
+		}
+
+		if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
+			return err
+		}
+		if err := ncv.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
+			return err
+		}
+
+		// cache the roots for this beacon vote hash and height
+		ncv.beaconVoteRoots.Set(bnCacheKey, struct{}{}, ttlcache.DefaultTTL)
+		return nil
+
+	case spectypes.RoleAggregatorCommittee:
+		consData := &spectypes.AggregatorCommitteeConsensusData{}
+		if err := consData.Decode(msg.SignedSSVMessage.FullData); err != nil {
+			ncv.logger.Debug("❗ failed to decode aggregator committee consensus data from proposal", zap.Error(err))
+			return err
+		}
+
+		if err := ncv.saveAggregatorRoots(ctx, epoch, consData); err != nil {
+			return err
+		}
+		if err := ncv.saveSyncCommContribRoots(ctx, epoch, consData); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return nil
 	}
-
-	if err := ncv.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
-		return err
-	}
-
-	// cache the roots for this beacon vote hash and height
-	ncv.beaconVoteRoots.Set(bnCacheKey, struct{}{}, ttlcache.DefaultTTL)
-
-	return nil
 }
 
 func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
@@ -465,6 +483,60 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 
 	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
 
+	return nil
+}
+
+func (ncv *CommitteeObserver) saveAggregatorRoots(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	data *spectypes.AggregatorCommitteeConsensusData,
+) error {
+	_, hashRoots, err := data.GetAggregateAndProofs()
+	if err != nil {
+		return err
+	}
+
+	dAgg, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAggregateAndProof)
+	if err != nil {
+		return err
+	}
+	for _, h := range hashRoots {
+		root, err := spectypes.ComputeETHSigningRoot(h, dAgg)
+		if err != nil {
+			return err
+		}
+		ncv.aggregatorRoots.Set(root, struct{}{}, ttlcache.DefaultTTL)
+	}
+	return nil
+}
+
+func (ncv *CommitteeObserver) saveSyncCommContribRoots(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	data *spectypes.AggregatorCommitteeConsensusData,
+) error {
+	contribs, err := data.GetSyncCommitteeContributions()
+	if err != nil {
+		return err
+	}
+
+	dContrib, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainContributionAndProof)
+	if err != nil {
+		return err
+	}
+
+	for i, c := range contribs {
+		cp := &altair.ContributionAndProof{
+			AggregatorIndex: data.Contributors[i].ValidatorIndex,
+			Contribution:    &c.Contribution,
+			SelectionProof:  data.Contributors[i].SelectionProof,
+		}
+		root, err := spectypes.ComputeETHSigningRoot(cp, dContrib)
+		if err != nil {
+			return err
+		}
+		ncv.syncCommContribRoots.Set(root, struct{}{}, ttlcache.DefaultTTL)
+	}
 	return nil
 }
 
