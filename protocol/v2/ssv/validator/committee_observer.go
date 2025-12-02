@@ -217,7 +217,7 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		}
 	case spectypes.RoleAggregatorCommittee:
 		aggregator := ncv.aggregatorRoots.Get(root)
-		syncCommitteeContrib := ncv.syncCommRoots.Get(root)
+		syncCommitteeContrib := ncv.syncCommContribRoots.Get(root)
 
 		switch {
 		case aggregator != nil && syncCommitteeContrib != nil:
