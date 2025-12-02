@@ -305,8 +305,8 @@ github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0b
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/ssvlabs/eth2-key-manager v1.5.6 h1:BMxVCsbcIlUiiO0hpePkHxzX0yhKgMkEzVSoNmSXySM=
 github.com/ssvlabs/eth2-key-manager v1.5.6/go.mod h1:tjzhmMzrc0Lzc/OMW1h9Mz8AhmKH7FQC/nFiMNJ0bd8=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20251202111142-64cafafe0f82 h1:QOOEw95+8+Vpnv7gzS916Kk1qNdMgfsUu+Xkv70S/d0=
-github.com/ssvlabs/ssv-spec v1.2.3-0.20251202111142-64cafafe0f82/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20251202112534-1eff3daf3776 h1:CLSe8cE5kjlEy6AySXUpTaenWaorF8nK6x0YedSfO0U=
+github.com/ssvlabs/ssv-spec v1.2.3-0.20251202112534-1eff3daf3776/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=

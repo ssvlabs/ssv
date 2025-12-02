@@ -31,7 +31,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv v1.2.1-0.20251201185247-97523ef6f791
-	github.com/ssvlabs/ssv-spec v1.2.3-0.20251202111142-64cafafe0f82
+	github.com/ssvlabs/ssv-spec v1.2.3-0.20251202112534-1eff3daf3776
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/valyala/fasthttp v1.58.0
