@@ -147,14 +147,14 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
-	netCfg := networkconfig.TestNetwork
+	netCfg := *networkconfig.TestNetwork
 	netCfg.Beacon = &beaconCfg
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		NetworkConfig:       netCfg,
+		NetworkConfig:       &netCfg,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
