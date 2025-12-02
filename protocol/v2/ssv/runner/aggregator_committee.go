@@ -1282,7 +1282,7 @@ func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
 		if aggregateAndProof.Fulu == nil {
 			return nil, errors.New("nil Fulu aggregate and proof")
 		}
-		ret.Electra = &electra.SignedAggregateAndProof{
+		ret.Fulu = &electra.SignedAggregateAndProof{
 			Message:   aggregateAndProof.Fulu,
 			Signature: signature,
 		}
