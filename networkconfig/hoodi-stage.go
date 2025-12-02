@@ -20,7 +20,7 @@ var HoodiStageSSV = &SSV{
 	Forks: SSVForks{
 		Alan:                0,
 		GasLimit36:          0,
-		NetworkTopology:     58377,
-		AggregatorCommittee: 58377,
+		NetworkTopology:     58505,
+		AggregatorCommittee: 58505,
 	},
 }
