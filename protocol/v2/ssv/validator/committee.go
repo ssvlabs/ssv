@@ -260,10 +260,9 @@ func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *
 // MUST be called with c.mtx locked!
 func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role spectypes.RunnerRole) queueContainer {
 	// Select backing map by role.
-	var (
-		m      map[phase0.Slot]queueContainer
-		assign = func(slot phase0.Slot, qc queueContainer) { /* replaced below */ }
-	)
+	var m map[phase0.Slot]queueContainer
+	var assign func(slot phase0.Slot, qc queueContainer)
+
 	switch role {
 	case spectypes.RoleAggregator, spectypes.RoleAggregatorCommittee:
 		m = c.AggregatorQueues
