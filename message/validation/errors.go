@@ -87,6 +87,9 @@ var (
 	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
 	ErrUnknownOperator                  = Error{text: "operator is unknown"}
 	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
+	ErrDuplicatedMessage                = Error{text: "message is duplicated"}
+	ErrInvalidPartialSignatureTypeCount = Error{text: "sent more partial signature messages of a certain type than allowed"}
+	ErrTooManyPartialSignatureMessages  = Error{text: "too many partial signature messages"}
 )
 
 // Rejected errors.
@@ -133,9 +136,6 @@ var (
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
-	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
-	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
-	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
