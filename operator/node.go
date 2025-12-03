@@ -254,7 +254,10 @@ func (n *Node) HealthCheck() error {
 // handleQueryRequests waits for incoming messages and
 func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
 	if nm.Err != nil {
-		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
+		nm.Msg = api.Message{
+			Type: api.TypeError,
+			Data: []string{fmt.Sprintf("could not parse network message: %v", nm.Err)},
+		}
 	}
 	n.logger.Debug("got incoming export request",
 		zap.String("type", string(nm.Msg.Type)))
@@ -287,7 +290,7 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 	if err != nil {
 		n.logger.Warn("failed to decode validator public key", zap.Error(err))
 		res.Type = api.TypeError
-		res.Data = []string{"invalid publicKey"}
+		res.Data = []string{fmt.Sprintf("invalid publicKey %q: %v", nm.Msg.Filter.PublicKey, err)}
 		nm.Msg = res
 		return
 	}
@@ -299,7 +302,7 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 	if !ok {
 		n.logger.Warn("validator not found for public key", zap.String("validator_pubkey", hex.EncodeToString(pk[:])))
 		res.Type = api.TypeError
-		res.Data = []string{"validator not found"}
+		res.Data = []string{fmt.Sprintf("validator not found for public key %s", nm.Msg.Filter.PublicKey)}
 		nm.Msg = res
 		return
 	}
@@ -308,7 +311,7 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 	if err != nil {
 		n.logger.Warn("failed to parse role", zap.Error(err))
 		res.Type = api.TypeError
-		res.Data = []string{"role doesn't exist"}
+		res.Data = []string{fmt.Sprintf("role doesn't exist: %q", nm.Msg.Filter.Role)}
 		nm.Msg = res
 		return
 	}
@@ -332,12 +335,12 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 				if merr != nil && merr.ErrorOrNil() != nil {
 					hasUnexpectedError = true
 					lastUnexpectedErr = merr
-					n.logger.Warn("failed to get decided entries from collector", zap.Error(merr), fields.Slot(slot), fields.ValidatorIndex(idx))
+					n.logger.Warn("failed to get decided entries from collector", zap.Error(merr), fields.Slot(slot), fields.ValidatorIndex(idx), fields.BeaconRole(role))
 				}
 			} else if !isNotFoundError(err) {
 				hasUnexpectedError = true
 				lastUnexpectedErr = err
-				n.logger.Warn("failed to get decided entries from collector", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
+				n.logger.Warn("failed to get decided entries from collector", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx), fields.BeaconRole(role))
 			}
 			continue
 		}
@@ -359,7 +362,7 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 		if hasUnexpectedError {
 			n.logger.Warn("failed to build participants api data due to collector errors", zap.Error(lastUnexpectedErr), fields.ValidatorIndex(idx))
 			res.Type = api.TypeError
-			res.Data = []string{"internal error - could not build response"}
+			res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", lastUnexpectedErr)}
 		} else {
 			// Mirror legacy exporter behavior: empty range returns "no messages" as a decided response.
 			res.Data = []string{"no messages"}
@@ -372,7 +375,7 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 	if err != nil {
 		n.logger.Warn("failed to build participants api data", zap.Error(err))
 		res.Type = api.TypeError
-		res.Data = []string{"internal error - could not build response"}
+		res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", err)}
 		nm.Msg = res
 		return
 	}
