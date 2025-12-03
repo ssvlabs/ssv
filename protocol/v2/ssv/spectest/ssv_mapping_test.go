@@ -573,6 +573,7 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
 
 	c.Runners = tmpSsvCommittee.Runners
+	c.AggregatorRunners = tmpSsvCommittee.AggregatorRunners
 
 	for slot := range c.Runners {
 		var shareInstance *spectypes.Share
@@ -583,6 +584,17 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 
 		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), spectestingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
+	}
+
+	for slot := range c.AggregatorRunners {
+		var shareInstance *spectypes.Share
+		for _, share := range c.AggregatorRunners[slot].BaseRunner.Share {
+			shareInstance = share
+			break
+		}
+
+		fixedRunner := fixRunnerForRun(t, committeeMap["AggregatorRunners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), spectestingutils.KeySetForShare(shareInstance))
+		c.AggregatorRunners[slot] = fixedRunner.(*runner.AggregatorCommitteeRunner)
 	}
 
 	return c

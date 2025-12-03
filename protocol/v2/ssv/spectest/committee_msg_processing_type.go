@@ -63,6 +63,13 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
 	}
 
+	for _, runner := range test.Committee.AggregatorRunners {
+		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
+		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
+	}
+
 	// test output message (in asynchronous order)
 	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
 
@@ -197,6 +204,14 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	}
 	for i := range test.Committee.Runners {
 		test.Committee.Runners[i].ValCheck = protocoltesting.TestingValueChecker{}
+	}
+
+	for i := range committee.AggregatorRunners {
+		committee.AggregatorRunners[i].BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		committee.AggregatorRunners[i].ValCheck = protocoltesting.TestingValueChecker{}
+	}
+	for i := range test.Committee.AggregatorRunners {
+		test.Committee.AggregatorRunners[i].ValCheck = protocoltesting.TestingValueChecker{}
 	}
 
 	root, err := committee.GetRoot()

@@ -106,32 +106,38 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	var lastErr error
 
 	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
+	case *runner.CommitteeRunner, *runner.AggregatorRunner:
 		guard := validator.NewCommitteeDutyGuard()
 		c = baseCommitteeWithRunnerSample(logger, keySetMap, test.Runner.(*runner.CommitteeRunner), guard)
 
 		if test.DontStartDuty {
-			r := test.Runner.(*runner.CommitteeRunner)
-			r.DutyGuard = guard
-			c.Runners[test.Duty.DutySlot()] = r
-
-			// Inform the duty guard of the running duty, if any, so that it won't reject it.
-			if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
-				duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
-				if !ok {
-					panic("starting duty not found")
-				}
-				for _, validatorDuty := range duty.ValidatorDuties {
-					err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
-					if err != nil {
-						panic(err)
+			switch test.Runner.(type) {
+			case *runner.CommitteeRunner:
+				r := test.Runner.(*runner.CommitteeRunner)
+				r.DutyGuard = guard
+				c.Runners[test.Duty.DutySlot()] = r
+				// Inform the duty guard of the running duty, if any, so that it won't reject it.
+				if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
+					duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
+					if !ok {
+						panic("starting duty not found")
 					}
-					err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
-					if err != nil {
-						panic(err)
+					for _, validatorDuty := range duty.ValidatorDuties {
+						err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+						if err != nil {
+							panic(err)
+						}
+						err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+						if err != nil {
+							panic(err)
+						}
 					}
 				}
+			case *runner.AggregatorRunner:
+				r := test.Runner.(*runner.AggregatorCommitteeRunner)
+				c.AggregatorRunners[test.Duty.DutySlot()] = r
 			}
+
 		} else {
 			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
@@ -189,6 +195,15 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	case *runner.CommitteeRunner:
 		var runnerInstance *runner.CommitteeRunner
 		for _, runner := range c.Runners {
+			runnerInstance = runner
+			break
+		}
+		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		committee = c.CommitteeMember.Committee
+	case *runner.AggregatorCommitteeRunner:
+		var runnerInstance *runner.AggregatorCommitteeRunner
+		for _, runner := range c.AggregatorRunners {
 			runnerInstance = runner
 			break
 		}
