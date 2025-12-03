@@ -33,6 +33,10 @@ var CommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.V
 	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, shareMap)
 }
 
+var AggregatorCommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	return baseRunner(logger, spectypes.RoleAggregatorCommittee, keySet)
+}
+
 var AggregatorCommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.ValidatorIndex]*spectypes.Share) runner.Runner {
 	return baseRunnerWithShareMap(logger, spectypes.RoleAggregatorCommittee, shareMap)
 }
