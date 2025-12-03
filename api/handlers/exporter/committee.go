@@ -35,11 +35,11 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	var request CommitteeTracesRequest
 
 	if err := api.Bind(r, &request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "committee_traces", http.StatusBadRequest, request, err)
 	}
 
 	if err := validateCommitteeRequest(&request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "committee_traces", http.StatusBadRequest, request, err)
 	}
 
 	var all []*exporter.CommitteeDutyTrace
@@ -57,8 +57,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 
 	// if we don't have a single valid result and we have at least one meaningful error, return an error
 	if len(all) == 0 && errs.ErrorOrNil() != nil {
-		e.logger.Error("error serving SSV API request", zap.Any("request", request), zap.Error(errs))
-		return toApiError(errs)
+		return toApiError(e.logger, r, "committee_traces", http.StatusInternalServerError, request, errs.ErrorOrNil())
 	}
 
 	// Attach read-only schedule unioned per committee for the requested slot range.
