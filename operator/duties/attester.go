@@ -29,7 +29,9 @@ type AttesterHandler struct {
 	// fetchCurrentEpoch stores the intent to fetch duties for the current epoch, while
 	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchCurrentEpoch bool
-	fetchNextEpoch    bool
+	// fetchNextEpoch stores the intent to fetch duties for the next epoch, while
+	// processFetching func uses this value to decide on whether the fetch is needed.
+	fetchNextEpoch bool
 
 	exporterMode bool
 }
