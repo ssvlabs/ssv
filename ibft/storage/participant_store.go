@@ -37,7 +37,7 @@ type ParticipantStore interface {
 	// SaveParticipants updates participants in quorum.
 	SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
 
-	// GetParticipantsInRange returns participants in quorum for the given slot range.
+	// GetAllParticipantsInRange returns participants in quorum for the given slot range.
 	GetAllParticipantsInRange(from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range and validator public key.
