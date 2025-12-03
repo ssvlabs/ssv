@@ -24,6 +24,7 @@ func (c *Controller) UponDecided(msg *specqbft.ProcessingMessage) (*spectypes.Si
 	isFutureDecided := msg.QBFTMessage.Height > c.Height
 
 	if inst == nil {
+		// Since we are going to get rid of "decided" messages anyway, use zap.NewNop() here for simplicity.
 		i := instance.NewInstance(zap.NewNop(), c.GetConfig(), c.CommitteeMember, c.Identifier, msg.QBFTMessage.Height, c.OperatorSigner)
 		i.State.Round = msg.QBFTMessage.Round
 		i.State.Decided = true
