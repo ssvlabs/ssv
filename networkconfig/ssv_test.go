@@ -28,8 +28,9 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:       0,
-			GasLimit36: 0,
+			Alan:                0,
+			GasLimit36:          0,
+			AggregatorCommittee: 0,
 		},
 	}
 
@@ -70,8 +71,9 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:       0,
-			GasLimit36: 0,
+			Alan:                0,
+			GasLimit36:          0,
+			AggregatorCommittee: 0,
 		},
 	}
 
@@ -166,8 +168,9 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:       0,
-				GasLimit36: 0,
+				Alan:                0,
+				GasLimit36:          0,
+				AggregatorCommittee: 0,
 			},
 		}
 
@@ -205,8 +208,9 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:       0,
-				GasLimit36: 0,
+				Alan:                0,
+				GasLimit36:          0,
+				AggregatorCommittee: 0,
 			},
 		}
 
