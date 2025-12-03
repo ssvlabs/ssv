@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -147,8 +148,12 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
+	ssvCfg := *networkconfig.TestNetwork.SSV
+	ssvCfg.Forks.AggregatorCommittee = math.MaxUint64
+
 	netCfg := *networkconfig.TestNetwork
 	netCfg.Beacon = &beaconCfg
+	netCfg.SSV = &ssvCfg
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
