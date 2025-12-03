@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/davecgh/go-spew/spew"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -23,17 +24,27 @@ const (
 // It stores them as a bitset. It is enough because limit of all messages is 1.
 type SeenMsgTypes struct {
 	v uint8 // wrapped into a struct to avoid incorrect usage
+
+	// these are used for debugging (for printing detailed error messages)
+	// ===================================================================
+	preConsensus  string
+	proposal      string
+	prepare       string
+	commit        string
+	roundChange   string
+	postConsensus string
+	// ===================================================================
 }
 
 // String provides a formatted representation of the SeenMsgTypes.
 func (c *SeenMsgTypes) String() string {
 	messageTypes := []string{
-		"pre-consensus",
-		"proposal",
-		"prepare",
-		"commit",
-		"round change",
-		"post-consensus",
+		fmt.Sprintf("pre-consensus: %s", c.preConsensus),
+		fmt.Sprintf("proposal: %s", c.proposal),
+		fmt.Sprintf("prepare: %s", c.prepare),
+		fmt.Sprintf("commit: %s", c.commit),
+		fmt.Sprintf("round change: %s", c.roundChange),
+		fmt.Sprintf("post-consensus: %s", c.postConsensus),
 	}
 
 	getters := map[string]func() bool{
@@ -62,28 +73,43 @@ func (c *SeenMsgTypes) ValidateConsensusMessage(signedSSVMessage *spectypes.Sign
 	case specqbft.ProposalMsgType:
 		if c.reachedProposalLimit() {
 			err := ErrDuplicatedMessage
-			err.got = fmt.Sprintf("proposal, having %v", c.String())
+			signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+			signedSSVMessageTrimmed.FullData = nil
+			signedSSVMessageTrimmed.SSVMessage.Data = nil
+			gotMsgStr := fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s }", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
+			err.got = fmt.Sprintf("proposal: %s, having %v", gotMsgStr, c.String())
 			return err
 		}
 	case specqbft.PrepareMsgType:
 		if c.reachedPrepareLimit() {
 			err := ErrDuplicatedMessage
-			err.got = fmt.Sprintf("prepare, having %v", c.String())
+			signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+			signedSSVMessageTrimmed.FullData = nil
+			signedSSVMessageTrimmed.SSVMessage.Data = nil
+			gotMsgStr := fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s }", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
+			err.got = fmt.Sprintf("prepare: %s, having %v", gotMsgStr, c.String())
 			return err
 		}
 	case specqbft.CommitMsgType:
 		if len(signedSSVMessage.OperatorIDs) == 1 {
 			if c.reachedCommitLimit() {
 				err := ErrDuplicatedMessage
-				err.got = fmt.Sprintf("commit, having %v", c.String())
+				signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+				signedSSVMessageTrimmed.FullData = nil
+				signedSSVMessageTrimmed.SSVMessage.Data = nil
+				gotMsgStr := fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s }", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
+				err.got = fmt.Sprintf("commit: %s, having %v", gotMsgStr, c.String())
 				return err
 			}
 		}
 	case specqbft.RoundChangeMsgType:
 		if c.reachedRoundChangeLimit() {
 			err := ErrDuplicatedMessage
-
-			err.got = fmt.Sprintf("round change, having %v", c.String())
+			signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+			signedSSVMessageTrimmed.FullData = nil
+			signedSSVMessageTrimmed.SSVMessage.Data = nil
+			gotMsgStr := fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s }", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
+			err.got = fmt.Sprintf("round change: %s, having %v", gotMsgStr, c.String())
 			return err
 		}
 	default:
@@ -100,13 +126,15 @@ func (c *SeenMsgTypes) ValidatePartialSignatureMessage(m *spectypes.PartialSigna
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		if c.reachedPreConsensusLimit() {
 			err := ErrInvalidPartialSignatureTypeCount
-			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
+			gotMsgStr := spew.Sdump(m)
+			err.got = fmt.Sprintf("pre-consensus: %s, having %v", gotMsgStr, c.String())
 			return err
 		}
 	case spectypes.PostConsensusPartialSig:
 		if c.reachedPostConsensusLimit() {
 			err := ErrInvalidPartialSignatureTypeCount
-			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
+			gotMsgStr := spew.Sdump(m)
+			err.got = fmt.Sprintf("post-consensus: %s, having %v", gotMsgStr, c.String())
 			return err
 		}
 	default:
@@ -121,13 +149,29 @@ func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.Signed
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		c.recordProposal()
+		signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+		signedSSVMessageTrimmed.FullData = nil
+		signedSSVMessageTrimmed.SSVMessage.Data = nil
+		c.proposal = fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s }", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
 	case specqbft.PrepareMsgType:
+		signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+		signedSSVMessageTrimmed.FullData = nil
+		signedSSVMessageTrimmed.SSVMessage.Data = nil
+		c.prepare = fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s } ", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
 		c.recordPrepare()
 	case specqbft.CommitMsgType:
 		if len(signedSSVMessage.OperatorIDs) == 1 {
+			signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+			signedSSVMessageTrimmed.FullData = nil
+			signedSSVMessageTrimmed.SSVMessage.Data = nil
+			c.commit = fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s }", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
 			c.recordCommit()
 		}
 	case specqbft.RoundChangeMsgType:
+		signedSSVMessageTrimmed := signedSSVMessage.DeepCopy()
+		signedSSVMessageTrimmed.FullData = nil
+		signedSSVMessageTrimmed.SSVMessage.Data = nil
+		c.roundChange = fmt.Sprintf("{ signed_msg: %s && qbft_msg: %s }", spew.Sdump(signedSSVMessageTrimmed), spew.Sdump(msg))
 		c.recordRoundChange()
 	default:
 		return fmt.Errorf("unexpected signed message type") // should be checked before
@@ -140,8 +184,10 @@ func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.Partial
 	switch messages.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		c.recordPreConsensus()
+		c.preConsensus = spew.Sdump(messages)
 	case spectypes.PostConsensusPartialSig:
 		c.recordPostConsensus()
+		c.postConsensus = spew.Sdump(messages)
 	default:
 		return fmt.Errorf("unexpected partial signature message type") // should be checked before
 	}
