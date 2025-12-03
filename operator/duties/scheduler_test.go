@@ -250,6 +250,8 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 			}
 		},
 	)
+
+	// TODO: mock for aggregator committee duties
 }
 
 func waitForDutiesFetch(
