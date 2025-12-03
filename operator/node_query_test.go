@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter/api"
+	exporterstore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -41,6 +42,26 @@ func (t *traceCollectorErrStub) GetValidatorDecideds(role spectypes.BeaconRole, 
 
 func (t *traceCollectorErrStub) GetCommitteeDecideds(slot phase0.Slot, index phase0.ValidatorIndex, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
 	return nil, t.err
+}
+
+type traceCollectorNotFoundStub struct{}
+
+func (t *traceCollectorNotFoundStub) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
+	return nil, dutytracer.ErrNotFound
+}
+
+func (t *traceCollectorNotFoundStub) GetCommitteeDecideds(slot phase0.Slot, index phase0.ValidatorIndex, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
+	return nil, dutytracer.ErrNotFound
+}
+
+type traceCollectorStoreNotFoundStub struct{}
+
+func (t *traceCollectorStoreNotFoundStub) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
+	return nil, exporterstore.ErrNotFound
+}
+
+func (t *traceCollectorStoreNotFoundStub) GetCommitteeDecideds(slot phase0.Slot, index phase0.ValidatorIndex, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error) {
+	return nil, exporterstore.ErrNotFound
 }
 
 func newNodeWithCollector(t *testing.T, collector dutyTraceDecidedsProvider, setupStore func(*registrystoragemocks.MockValidatorStore)) *Node {
@@ -158,4 +179,41 @@ func TestHandleDecidedFromTraceCollector_CollectorError(t *testing.T) {
 
 	require.Equal(t, api.TypeError, nm.Msg.Type)
 	require.Contains(t, nm.Msg.Data.([]string)[0], "internal error - could not build response")
+}
+
+func TestHandleDecidedFromTraceCollector_NoMessagesOnNotFound(t *testing.T) {
+	pk := makePK([]byte{1, 2, 3, 4})
+	idx := phase0.ValidatorIndex(10)
+
+	tests := []struct {
+		name      string
+		collector dutyTraceDecidedsProvider
+	}{
+		{
+			name:      "dutytracer not found",
+			collector: &traceCollectorNotFoundStub{},
+		},
+		{
+			name:      "store not found",
+			collector: &traceCollectorStoreNotFoundStub{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node := newNodeWithCollector(t, tt.collector, func(s *registrystoragemocks.MockValidatorStore) {
+				s.EXPECT().ValidatorIndex(pk).Return(idx, true).AnyTimes()
+			})
+
+			nm := decidedMessage(1, 1, hex.EncodeToString(pk[:]), spectypes.BNRoleProposer.String())
+
+			node.handleQueryRequests(nm)
+
+			require.Equal(t, api.TypeDecided, nm.Msg.Type)
+			errs, ok := nm.Msg.Data.([]string)
+			require.True(t, ok, "expected []string, got %#v", nm.Msg.Data)
+			require.Len(t, errs, 1)
+			require.Equal(t, "no messages", errs[0])
+		})
+	}
 }

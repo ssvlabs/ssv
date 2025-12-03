@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
+	exporterstore "github.com/ssvlabs/ssv/exporter/store"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -312,6 +314,8 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 	}
 
 	participations := make([]qbftstorage.Participation, 0)
+	var hasUnexpectedError bool
+	var lastUnexpectedErr error
 
 	for slot := phase0.Slot(nm.Msg.Filter.From); slot <= phase0.Slot(nm.Msg.Filter.To); slot++ {
 		var entries []dutytracer.ParticipantsRangeIndexEntry
@@ -322,8 +326,17 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 		}
 
 		if err != nil {
-			// not-found is expected; only log unexpected errors
-			if !errors.Is(err, dutytracer.ErrNotFound) {
+			var merr *multierror.Error
+			if errors.As(err, &merr) {
+				merr = filterOutDutyNotFoundErrors(merr)
+				if merr != nil && merr.ErrorOrNil() != nil {
+					hasUnexpectedError = true
+					lastUnexpectedErr = merr
+					n.logger.Warn("failed to get decided entries from collector", zap.Error(merr), fields.Slot(slot), fields.ValidatorIndex(idx))
+				}
+			} else if !isNotFoundError(err) {
+				hasUnexpectedError = true
+				lastUnexpectedErr = err
 				n.logger.Warn("failed to get decided entries from collector", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx))
 			}
 			continue
@@ -342,6 +355,19 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 		}
 	}
 
+	if len(participations) == 0 {
+		if hasUnexpectedError {
+			n.logger.Warn("failed to build participants api data due to collector errors", zap.Error(lastUnexpectedErr), fields.ValidatorIndex(idx))
+			res.Type = api.TypeError
+			res.Data = []string{"internal error - could not build response"}
+		} else {
+			// Mirror legacy exporter behavior: empty range returns "no messages" as a decided response.
+			res.Data = []string{"no messages"}
+		}
+		nm.Msg = res
+		return
+	}
+
 	data, err := api.ParticipantsAPIData(n.network.DomainType, participations...)
 	if err != nil {
 		n.logger.Warn("failed to build participants api data", zap.Error(err))
@@ -353,6 +379,29 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 
 	res.Data = data
 	nm.Msg = res
+}
+
+// isNotFoundError returns true if the error represents an expected "no duty"
+// condition, either from the duty tracer or the underlying exporter store.
+// It mirrors the semantics in exporter2 helpers to ease future refactoring.
+func isNotFoundError(err error) bool {
+	return errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, exporterstore.ErrNotFound)
+}
+
+// filterOutDutyNotFoundErrors removes not-found duty errors from a multierror,
+// returning nil if nothing remains. It mirrors exporter2.filterOutDutyNotFoundErrors
+// to make future WS refactoring simpler.
+func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
+	if e == nil || e.ErrorOrNil() == nil {
+		return nil
+	}
+	var filtered *multierror.Error
+	for _, err := range e.Errors {
+		if !isNotFoundError(err) {
+			filtered = multierror.Append(filtered, err)
+		}
+	}
+	return filtered
 }
 
 func (n *Node) startWSServer() error {
