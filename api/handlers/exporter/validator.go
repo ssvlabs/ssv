@@ -36,11 +36,11 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	var request ValidatorTracesRequest
 
 	if err := api.Bind(r, &request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, err)
 	}
 
 	if err := validateValidatorRequest(&request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, err)
 	}
 
 	var results []validatorDutyTraceWithCommitteeID
@@ -51,7 +51,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 
 	// if the request was for a specific set of participants and we couldn't resolve any, we're done
 	if request.hasFilters() && len(indices) == 0 {
-		return toApiError(errs)
+		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, errs.ErrorOrNil())
 	}
 
 	for s := request.From; s <= request.To; s++ {
@@ -75,8 +75,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 
 	// if we don't have a single valid result and we have at least one meaningful error, return an error
 	if len(results) == 0 && errs.ErrorOrNil() != nil {
-		e.logger.Error("error serving SSV API request", zap.Any("request", request), zap.Error(errs))
-		return toApiError(errs)
+		return toApiError(e.logger, r, "validator_traces", http.StatusInternalServerError, request, errs.ErrorOrNil())
 	}
 
 	// Build schedule from disk, read-only.
