@@ -43,7 +43,9 @@ func (gc *GoClient) GetValidatorData(
 func (gc *GoClient) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
 	for chunk := range slices.Chunk(registrations, 500) {
 		reqStart := time.Now()
-		err := gc.multiClient.SubmitValidatorRegistrations(ctx, chunk)
+		err := gc.multiClientSubmit(ctx, "SubmitValidatorRegistrations", func(ctx context.Context, client Client) error {
+			return client.SubmitValidatorRegistrations(ctx, chunk)
+		})
 		recordRequest(ctx, gc.log, "SubmitValidatorRegistrations", gc.multiClient, http.MethodPost, true, time.Since(reqStart), err)
 		if err != nil {
 			return errMultiClient(fmt.Errorf("submit validator registrations (chunk size = %d): %w", len(chunk), err), "SubmitValidatorRegistrations")
