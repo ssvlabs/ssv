@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
+	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -492,6 +493,29 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 			return decoder
 		}
 
+		// Try to decode as generic map first to check duty type
+		var dutyCheck map[string]interface{}
+		err = json.Unmarshal(byts, &dutyCheck)
+		if err == nil {
+			if validatorDuties, ok := dutyCheck["ValidatorDuties"].([]interface{}); ok && len(validatorDuties) > 0 {
+				// Check the type of the first validator duty
+				firstDuty := validatorDuties[0].(map[string]interface{})
+				if dutyType, ok := firstDuty["Type"].(float64); ok {
+					// Type 1 is BNRoleAggregator, Type 4 is BNRoleSyncCommitteeContribution
+					if int(dutyType) == 1 || int(dutyType) == 4 {
+						// This is an aggregator committee duty
+						aggregatorCommitteeDuty := &types.AggregatorCommitteeDuty{}
+						err = json.Unmarshal(byts, &aggregatorCommitteeDuty)
+						if err == nil {
+							t.Logf("Found AggregatorCommitteeDuty in input at index %d (duty type %v)", len(inputs), int(dutyType))
+							inputs = append(inputs, aggregatorCommitteeDuty)
+							continue
+						}
+					}
+				}
+			}
+		}
+
 		committeeDuty := &spectypes.CommitteeDuty{}
 		err = getDecoder().Decode(&committeeDuty)
 		if err == nil {
@@ -548,7 +572,50 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
+func fixCommitteeForRun(
+	t *testing.T,
+	logger *zap.Logger,
+	committeeMap map[string]interface{},
+) *validator.Committee {
+	// Normalize input JSON: move any aggregator-committee runners from Runners -> AggregatorRunners
+	if runnersAny, ok := committeeMap["Runners"]; ok && runnersAny != nil {
+		if runnersMap, ok := runnersAny.(map[string]interface{}); ok {
+			aggMap := make(map[string]interface{})
+			for slot, rAny := range runnersMap {
+				rMap, ok := rAny.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				// Inspect BaseRunner.RunnerRoleType; 6 corresponds to RoleAggregatorCommittee in spectypes
+				if brAny, ok := rMap["BaseRunner"]; ok {
+					if brMap, ok := brAny.(map[string]interface{}); ok {
+						if roleAny, ok := brMap["RunnerRoleType"]; ok {
+							// JSON numbers -> float64
+							if roleFloat, ok := roleAny.(float64); ok && int(roleFloat) == 6 {
+								aggMap[slot] = rMap
+								delete(runnersMap, slot)
+							}
+						}
+					}
+				}
+			}
+			if len(aggMap) > 0 {
+				// Initialize AggregatorRunners if missing and merge
+				if arAny, ok := committeeMap["AggregatorRunners"]; ok && arAny != nil {
+					if arMap, ok := arAny.(map[string]interface{}); ok {
+						for k, v := range aggMap {
+							arMap[k] = v
+						}
+					} else {
+						committeeMap["AggregatorRunners"] = aggMap
+					}
+				} else {
+					committeeMap["AggregatorRunners"] = aggMap
+				}
+			}
+		}
+	}
+
 	byts, err := json.Marshal(committeeMap)
 	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
@@ -594,7 +661,9 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 		}
 
 		fixedRunner := fixRunnerForRun(t, committeeMap["AggregatorRunners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), spectestingutils.KeySetForShare(shareInstance))
-		c.AggregatorRunners[slot] = fixedRunner.(*runner.AggregatorCommitteeRunner)
+		if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
+			c.AggregatorRunners[slot] = acr
+		}
 	}
 
 	return c

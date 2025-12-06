@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -98,6 +99,8 @@ var ConstructBaseRunner = func(
 	case spectypes.RoleCommittee:
 		valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
 			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch, vote, false)
+	case spectypes.RoleAggregatorCommittee:
+		valCheck = ssv.NewValidatorConsensusDataChecker()
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
@@ -148,6 +151,23 @@ var ConstructBaseRunner = func(
 			dgHandler,
 			false,
 		)
+	case spectypes.RoleAggregatorCommittee:
+		rnr, err := runner.NewAggregatorCommitteeRunner(
+			networkconfig.TestNetwork,
+			shareMap,
+			contr,
+			protocoltesting.NewTestingBeaconNodeWrapped(),
+			net,
+			km,
+			opSigner,
+		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.(*runner.AggregatorCommitteeRunner).IsAggregator = func(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork,
@@ -345,14 +365,17 @@ var ConstructBaseRunnerWithShareMap = func(
 
 		// Identifier
 		var ownerID []byte
-		if role == spectypes.RoleCommittee {
+		switch role {
+		case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
+			// Committee-scoped identifiers: use CommitteeID for both committee and aggregator-committee runners
 			committee := make([]uint64, 0)
 			for _, op := range keySetInstance.Committee() {
 				committee = append(committee, op.Signer)
 			}
 			committeeID := spectypes.GetCommitteeID(committee)
 			ownerID = bytes.Clone(committeeID[:])
-		} else {
+		default:
+			// Validator-scoped identifiers
 			ownerID = spectestingutils.TestingValidatorPubKey[:]
 		}
 		identifier = spectypes.NewMsgID(spectestingutils.TestingSSVDomainType, ownerID, role)
@@ -367,6 +390,8 @@ var ConstructBaseRunnerWithShareMap = func(
 		case spectypes.RoleCommittee:
 			valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
 				sharePubKeys, spectestingutils.TestingDutyEpoch, vote, false)
+		case spectypes.RoleAggregatorCommittee:
+			valCheck = ssv.NewValidatorConsensusDataChecker()
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
@@ -412,6 +437,23 @@ var ConstructBaseRunnerWithShareMap = func(
 			dgHandler,
 			false,
 		)
+	case spectypes.RoleAggregatorCommittee:
+		rnr, err := runner.NewAggregatorCommitteeRunner(
+			networkconfig.TestNetwork,
+			shareMap,
+			contr,
+			protocoltesting.NewTestingBeaconNodeWrapped(),
+			net,
+			km,
+			opSigner,
+		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.(*runner.AggregatorCommitteeRunner).IsAggregator = func(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork,

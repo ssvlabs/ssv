@@ -52,6 +52,9 @@ type AggregatorCommitteeRunner struct {
 	// For aggregator role: tracks by validator index only (one submission per validator)
 	// For sync committee contribution role: tracks by validator index and root (multiple submissions per validator)
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]map[[32]byte]struct{}
+
+	// IsAggregator is an exported struct field, so it can be mocked out for easy testing.
+	IsAggregator func(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool `json:"-"`
 }
 
 func NewAggregatorCommitteeRunner(
@@ -81,6 +84,8 @@ func NewAggregatorCommitteeRunner(
 		operatorSigner:  operatorSigner,
 		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]map[[32]byte]struct{}),
 		measurements:    newMeasurementsStore(),
+
+		IsAggregator: beacon.IsAggregator,
 	}, nil
 }
 
@@ -258,7 +263,7 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 		))
 	defer span.End()
 
-	isAggregator := r.beacon.IsAggregator(ctx, vDuty.Slot, vDuty.CommitteeIndex, vDuty.CommitteeLength, selectionProof[:])
+	isAggregator := r.IsAggregator(ctx, vDuty.Slot, vDuty.CommitteeIndex, vDuty.CommitteeLength, selectionProof[:])
 	if !isAggregator {
 		return false, nil
 	}

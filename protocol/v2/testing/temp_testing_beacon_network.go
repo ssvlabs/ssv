@@ -89,6 +89,19 @@ func (bn *BeaconNodeWrapped) SubmitBeaconBlock(ctx context.Context, block *api.V
 	return bn.Bn.SubmitBeaconBlock(block, sig)
 }
 
+func (bn *BeaconNodeWrapped) GetAggregateAttestation(
+	ctx context.Context,
+	slot phase0.Slot,
+	committeeIndex phase0.CommitteeIndex,
+) (ssz.Marshaler, spec.DataVersion, error) {
+	att, err := bn.Bn.GetAggregateAttestation(slot, committeeIndex)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return att, spectestingutils.VersionBySlot(slot), nil
+}
+
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {
 	bnw := &BeaconNodeWrapped{}
 	bnw.Bn = spectestingutils.NewTestingBeaconNode()
