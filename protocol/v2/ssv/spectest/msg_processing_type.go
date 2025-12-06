@@ -141,7 +141,6 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				r := test.Runner.(*runner.AggregatorCommitteeRunner)
 				c.AggregatorRunners[test.Duty.DutySlot()] = r
 			}
-
 		} else {
 			switch d := test.Duty.(type) {
 			case *spectypes.CommitteeDuty:

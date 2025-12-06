@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -504,7 +503,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 					// Type 1 is BNRoleAggregator, Type 4 is BNRoleSyncCommitteeContribution
 					if int(dutyType) == 1 || int(dutyType) == 4 {
 						// This is an aggregator committee duty
-						aggregatorCommitteeDuty := &types.AggregatorCommitteeDuty{}
+						aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{}
 						err = json.Unmarshal(byts, &aggregatorCommitteeDuty)
 						if err == nil {
 							t.Logf("Found AggregatorCommitteeDuty in input at index %d (duty type %v)", len(inputs), int(dutyType))
