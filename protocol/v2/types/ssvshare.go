@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"slices"
-	"sort"
 	"sync/atomic"
 	"time"
 
@@ -210,9 +209,7 @@ func (s *SSVShare) Quorum() uint64 {
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
 func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
-	sort.Slice(operatorIds, func(i, j int) bool {
-		return operatorIds[i] < operatorIds[j]
-	})
+	slices.Sort(operatorIds)
 
 	// Encode the address and operator IDs in the same way as Solidity's abi.encodePacked
 	var data []byte
@@ -245,9 +242,7 @@ func ValidCommitteeSize(committeeSize uint64) bool {
 // Return a 32 bytes ID for the committee of operators
 func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID {
 	// sort
-	sort.Slice(committee, func(i, j int) bool {
-		return committee[i] < committee[j]
-	})
+	slices.Sort(committee)
 	// Convert to bytes
 	bytes := make([]byte, len(committee)*4)
 	for i, v := range committee {
