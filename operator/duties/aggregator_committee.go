@@ -17,19 +17,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-type aggregatorCommitteeDutiesMap map[spectypes.CommitteeID]*aggregatorCommitteeDuty
-
 type AggregatorCommitteeHandler struct {
 	baseHandler
 
 	attDuties  *dutystore.Duties[eth2apiv1.AttesterDuty]
 	syncDuties *dutystore.SyncCommitteeDuties
-}
-
-type aggregatorCommitteeDuty struct {
-	duty        *spectypes.AggregatorCommitteeDuty
-	id          spectypes.CommitteeID
-	operatorIDs []spectypes.OperatorID
 }
 
 // TODO: consider merging with NewCommitteeHandler
@@ -112,7 +104,7 @@ func (h *AggregatorCommitteeHandler) processExecution(ctx context.Context, perio
 		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
 	}
 
-	h.dutiesExecutor.ExecuteAggregatorCommitteeDuties(ctx, committeeMap)
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
 
 	span.SetStatus(codes.Ok, "")
 }
@@ -122,7 +114,7 @@ func (h *AggregatorCommitteeHandler) buildCommitteeDuties(
 	syncDuties []*eth2apiv1.SyncCommitteeDuty,
 	epoch phase0.Epoch,
 	slot phase0.Slot,
-) aggregatorCommitteeDutiesMap {
+) committeeDutiesMap {
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	selfValidators := h.validatorProvider.SelfParticipatingValidators(epoch)
@@ -136,7 +128,7 @@ func (h *AggregatorCommitteeHandler) buildCommitteeDuties(
 		validatorCommittees[validatorShare.ValidatorIndex] = cd
 	}
 
-	resultCommitteeMap := make(aggregatorCommitteeDutiesMap)
+	resultCommitteeMap := make(committeeDutiesMap)
 	for _, duty := range attDuties {
 		if h.shouldExecuteAtt(duty, epoch) {
 			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, spectypes.BNRoleAggregator))
@@ -152,7 +144,7 @@ func (h *AggregatorCommitteeHandler) buildCommitteeDuties(
 }
 
 func (h *AggregatorCommitteeHandler) addToCommitteeMap(
-	committeeDutyMap aggregatorCommitteeDutiesMap,
+	committeeDutyMap committeeDutiesMap,
 	validatorCommittees map[phase0.ValidatorIndex]committeeDuty,
 	specDuty *spectypes.ValidatorDuty,
 ) {
@@ -164,10 +156,10 @@ func (h *AggregatorCommitteeHandler) addToCommitteeMap(
 
 	cd, exists := committeeDutyMap[committee.id]
 	if !exists {
-		cd = &aggregatorCommitteeDuty{
+		cd = &committeeDuty{
 			id:          committee.id,
 			operatorIDs: committee.operatorIDs,
-			duty: &spectypes.AggregatorCommitteeDuty{
+			duty: &spectypes.CommitteeDuty{
 				Slot:            specDuty.Slot,
 				ValidatorDuties: []*spectypes.ValidatorDuty{},
 			},

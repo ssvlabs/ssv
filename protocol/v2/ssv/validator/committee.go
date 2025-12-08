@@ -56,7 +56,8 @@ type Committee struct {
 
 	CommitteeMember *spectypes.CommitteeMember
 
-	dutyGuard                *CommitteeDutyGuard
+	dutyGuard *CommitteeDutyGuard
+	// TODO: consider joining, probably by passing duty and checking its type inside
 	CreateRunnerFn           CommitteeRunnerFunc
 	CreateAggregatorRunnerFn AggregatorCommitteeRunnerFunc
 }
@@ -110,7 +111,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 }
 
 // StartDuty starts a new duty for the given slot.
-func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) (
 	runner.Runner,
 	queueContainer,
 	error,
@@ -119,8 +120,8 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)))
+			observability.DutyCountAttribute(len(extractValidatorDuties(duty))),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
 	span.AddEvent("prepare duty and runner")
@@ -139,61 +140,13 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	return commRunner, q, nil
 }
 
-// StartAggregatorDuty starts a new aggregator duty for the given slot.
-func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.AggregatorCommitteeDuty) (
-	runner.Runner,
-	queueContainer,
-	error,
-) {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)))
-	defer span.End()
-
-	span.AddEvent("prepare duty and runner")
-	aggCommRunner, q, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
-	if err != nil {
-		return nil, queueContainer{}, traces.Errorf(span, "prepare duty and runner: %w", err)
-	}
-
-	logger.Info("ℹ️ starting duty processing")
-	err = aggCommRunner.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
-	if err != nil {
-		return nil, queueContainer{}, traces.Errorf(span, "runner failed to start duty: %w", err)
-	}
-
-	span.SetStatus(codes.Ok, "")
-	return aggCommRunner, q, nil
-}
-
 func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) (
 	commRunner runner.Runner,
 	q queueContainer,
 	runnableDuty spectypes.Duty,
 	err error,
 ) {
-	var validatorDuties []*spectypes.ValidatorDuty
-	var exists func(slot phase0.Slot) bool
-
-	switch duty := duty.(type) {
-	case *spectypes.CommitteeDuty:
-		validatorDuties = duty.ValidatorDuties
-		exists = func(slot phase0.Slot) bool {
-			_, ok := c.Runners[slot]
-			return ok
-		}
-	case *spectypes.AggregatorCommitteeDuty:
-		validatorDuties = duty.ValidatorDuties
-		exists = func(slot phase0.Slot) bool {
-			_, ok := c.AggregatorRunners[slot]
-			return ok
-		}
-	default:
-		return nil, queueContainer{}, nil, fmt.Errorf("unexpected duty type: %T", duty)
-	}
+	validatorDuties := extractValidatorDuties(duty)
 
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
@@ -206,8 +159,17 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	if exists(duty.DutySlot()) {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "committee runner for slot %d already exists", duty.DutySlot())
+	switch duty := duty.(type) {
+	case *spectypes.CommitteeDuty:
+		if _, exists := c.Runners[duty.DutySlot()]; exists {
+			return nil, queueContainer{}, nil, traces.Errorf(span, "committee runner for slot %d already exists", duty.DutySlot())
+		}
+	case *spectypes.AggregatorCommitteeDuty:
+		if _, exists := c.AggregatorRunners[duty.DutySlot()]; exists {
+			return nil, queueContainer{}, nil, traces.Errorf(span, "aggregator committee runner for slot %d already exists", duty.DutySlot())
+		}
+	default:
+		return nil, queueContainer{}, nil, fmt.Errorf("unexpected duty type: %T", duty)
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
@@ -293,14 +255,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty spectypes.Duty) (
 	runnableDuty spectypes.Duty,
 	err error,
 ) {
-	var validatorDuties []*spectypes.ValidatorDuty
-	switch duty := duty.(type) {
-	// TODO: try to simplify types
-	case *spectypes.CommitteeDuty:
-		validatorDuties = duty.ValidatorDuties
-	case *spectypes.AggregatorCommitteeDuty:
-		validatorDuties = duty.ValidatorDuties
-	}
+	validatorDuties := extractValidatorDuties(duty)
 	if len(validatorDuties) == 0 {
 		return nil, nil, nil,
 			spectypes.NewError(spectypes.NoBeaconDutiesErrorCode, "no beacon duties")
@@ -604,4 +559,15 @@ func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
 	}
 
 	return nil
+}
+
+func extractValidatorDuties(duty spectypes.Duty) []*spectypes.ValidatorDuty {
+	switch duty := duty.(type) {
+	case *spectypes.CommitteeDuty:
+		return duty.ValidatorDuties
+	case *spectypes.AggregatorCommitteeDuty:
+		return duty.ValidatorDuties
+	default:
+		return nil
+	}
 }

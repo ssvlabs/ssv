@@ -42,14 +42,12 @@ const (
 type DutiesExecutor interface {
 	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty)
 	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
-	ExecuteAggregatorCommitteeDuties(ctx context.Context, duties aggregatorCommitteeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
 	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
-	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
-	ExecuteAggregatorCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty)
+	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty spectypes.Duty)
 }
 
 type BeaconNode interface {
@@ -483,8 +481,12 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		const eventMsg = "🔧 executing committee duty"
 		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
+		logger.Debug(eventMsg,
+			fields.RunnerRole(duty.RunnerRole()),
+			fields.Duties(dutyEpoch, duty.ValidatorDuties, -1),
+		)
 		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.CommitteeIDAttribute(committee.id),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
 		))
@@ -511,58 +513,6 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
-		}()
-	}
-
-	span.SetStatus(codes.Ok, "")
-}
-
-// ExecuteAggregatorCommitteeDuties tries to execute the given aggregator committee duties
-func (s *Scheduler) ExecuteAggregatorCommitteeDuties(ctx context.Context, duties aggregatorCommitteeDutiesMap) {
-	if s.exporterMode {
-		// We never execute duties in exporter mode. The handler should skip calling this method.
-		// Keeping check here to detect programming mistakes.
-		s.logger.Error("ExecuteAggregatorCommitteeDuties should not be called in exporter mode. Possible code error in duty handlers?")
-		return // early return is fine, we don't need to return an error
-	}
-
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_aggregator_committee_duties"))
-	defer span.End()
-
-	for _, committee := range duties {
-		duty := committee.duty
-		logger := s.loggerWithAggregatorCommitteeDutyContext(committee)
-
-		const eventMsg = "🔧 executing aggregator committee duty"
-		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
-		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.CommitteeIDAttribute(committee.id),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-		))
-
-		slotDelay := time.Since(s.netCfg.SlotStartTime(duty.Slot))
-		if slotDelay >= 100*time.Millisecond {
-			const eventMsg = "⚠️ late duty execution"
-			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
-			span.AddEvent(eventMsg, trace.WithAttributes(
-				observability.CommitteeIDAttribute(committee.id),
-				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
-		}
-
-		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
-
-		go func() {
-			// Cannot use parent-context itself here, have to create independent instance
-			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
-			defer cancel()
-			if !withDeadline {
-				logger.Warn("parent-context has no deadline set")
-			}
-
-			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
-			s.dutyExecutor.ExecuteAggregatorCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
 	}
 
@@ -596,21 +546,6 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty)
 		With(fields.Slot(duty.Slot)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.CommitteeID(committeeDuty.id)).
-		With(fields.EstimatedCurrentEpoch(s.netCfg.EstimatedCurrentEpoch())).
-		With(fields.EstimatedCurrentSlot(s.netCfg.EstimatedCurrentSlot()))
-}
-
-// loggerWithAggregatorCommitteeDutyContext returns an instance of logger with the given aggregator committee duty's information
-func (s *Scheduler) loggerWithAggregatorCommitteeDutyContext(aggregatorCommitteeDuty *aggregatorCommitteeDuty) *zap.Logger {
-	duty := aggregatorCommitteeDuty.duty
-	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-	committeeDutyID := fields.BuildCommitteeDutyID(aggregatorCommitteeDuty.operatorIDs, dutyEpoch, duty.Slot, duty.RunnerRole())
-
-	return s.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
-		With(fields.Slot(duty.Slot)).
-		With(fields.DutyID(committeeDutyID)).
-		With(fields.CommitteeID(aggregatorCommitteeDuty.id)).
 		With(fields.EstimatedCurrentEpoch(s.netCfg.EstimatedCurrentEpoch())).
 		With(fields.EstimatedCurrentSlot(s.netCfg.EstimatedCurrentSlot()))
 }

@@ -658,7 +658,12 @@ func (c *Controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 	span.SetStatus(codes.Ok, "")
 }
 
-func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+func (c *Controller) ExecuteCommitteeDuty(
+	ctx context.Context,
+	logger *zap.Logger,
+	committeeID spectypes.CommitteeID,
+	duty spectypes.Duty,
+) {
 	cm, ok := c.validatorsMap.GetCommittee(committeeID)
 	if !ok {
 		const eventMsg = "could not find committee"
@@ -671,14 +676,14 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		committee = append(committee, operator.OperatorID)
 	}
 
-	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot, duty.RunnerRole())
+	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.DutySlot(), duty.RunnerRole())
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconEpochAttribute(dutyEpoch),
-			observability.BeaconSlotAttribute(duty.Slot),
+			observability.BeaconSlotAttribute(duty.DutySlot()),
 			observability.CommitteeIDAttribute(committeeID),
 			observability.DutyIDAttribute(dutyID),
 		),
@@ -689,46 +694,6 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	r, q, err := cm.StartDuty(ctx, logger, duty)
 	if err != nil {
 		logger.Error("could not start committee duty", zap.Error(err))
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-
-	cm.ConsumeQueue(ctx, logger, q, cm.ProcessMessage, r)
-
-	span.SetStatus(codes.Ok, "")
-}
-
-func (c *Controller) ExecuteAggregatorCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.AggregatorCommitteeDuty) {
-	cm, ok := c.validatorsMap.GetCommittee(committeeID)
-	if !ok {
-		const eventMsg = "could not find committee"
-		c.logger.Warn(eventMsg, fields.CommitteeID(committeeID))
-		return
-	}
-
-	committee := make([]spectypes.OperatorID, 0, len(cm.CommitteeMember.Committee))
-	for _, operator := range cm.CommitteeMember.Committee {
-		committee = append(committee, operator.OperatorID)
-	}
-
-	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.Slot, duty.RunnerRole())
-	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
-		observability.InstrumentName(observabilityNamespace, "execute_aggregator_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconEpochAttribute(dutyEpoch),
-			observability.BeaconSlotAttribute(duty.Slot),
-			observability.CommitteeIDAttribute(committeeID),
-			observability.DutyIDAttribute(dutyID),
-		),
-		trace.WithLinks(trace.LinkFromContext(ctx)))
-	defer span.End()
-
-	span.AddEvent("starting aggregator committee duty")
-	r, q, err := cm.StartAggregatorDuty(ctx, logger, duty)
-	if err != nil {
-		logger.Error("could not start aggregator committee duty", zap.Error(err))
 		span.SetStatus(codes.Error, err.Error())
 		return
 	}

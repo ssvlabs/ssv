@@ -142,12 +142,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				c.AggregatorRunners[test.Duty.DutySlot()] = r
 			}
 		} else {
-			switch d := test.Duty.(type) {
-			case *spectypes.CommitteeDuty:
-				_, _, lastErr = c.StartDuty(ctx, logger, d)
-			case *spectypes.AggregatorCommitteeDuty:
-				_, _, lastErr = c.StartAggregatorDuty(ctx, logger, d)
-			}
+			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty)
 		}
 
 		for _, msg := range test.Messages {

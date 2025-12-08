@@ -123,11 +123,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		var err error
 		switch input := input.(type) {
 		case spectypes.Duty:
-			if input.RunnerRole() == spectypes.RoleAggregatorCommittee {
-				_, _, err = test.Committee.StartAggregatorDuty(context.TODO(), logger, input.(*spectypes.AggregatorCommitteeDuty))
-			} else {
-				_, _, err = test.Committee.StartDuty(context.TODO(), logger, input.(*spectypes.CommitteeDuty))
-			}
+			_, _, err = test.Committee.StartDuty(context.TODO(), logger, input)
 			if err != nil {
 				lastErr = err
 			}
