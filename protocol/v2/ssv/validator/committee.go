@@ -48,7 +48,8 @@ type Committee struct {
 	Queues map[phase0.Slot]queueContainer
 	// AggregatorQueues isolates aggregator-committee traffic to avoid
 	// concurrent Pops on the same queue from two consumers.
-	AggregatorQueues  map[phase0.Slot]queueContainer
+	AggregatorQueues map[phase0.Slot]queueContainer
+	// TODO: consider joining
 	Runners           map[phase0.Slot]*runner.CommitteeRunner
 	AggregatorRunners map[phase0.Slot]*runner.AggregatorCommitteeRunner
 	Shares            map[phase0.ValidatorIndex]*spectypes.Share
@@ -110,7 +111,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
-	*runner.CommitteeRunner,
+	runner.Runner,
 	queueContainer,
 	error,
 ) {
@@ -140,7 +141,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 
 // StartAggregatorDuty starts a new aggregator duty for the given slot.
 func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.AggregatorCommitteeDuty) (
-	*runner.AggregatorCommitteeRunner,
+	runner.Runner,
 	queueContainer,
 	error,
 ) {
@@ -153,7 +154,7 @@ func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger,
 	defer span.End()
 
 	span.AddEvent("prepare duty and runner")
-	aggCommRunner, q, runnableDuty, err := c.prepareAggregatorDutyAndRunner(ctx, logger, duty)
+	aggCommRunner, q, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
 	if err != nil {
 		return nil, queueContainer{}, traces.Errorf(span, "prepare duty and runner: %w", err)
 	}
@@ -168,25 +169,45 @@ func (c *Committee) StartAggregatorDuty(ctx context.Context, logger *zap.Logger,
 	return aggCommRunner, q, nil
 }
 
-func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
-	commRunner *runner.CommitteeRunner,
+func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) (
+	commRunner runner.Runner,
 	q queueContainer,
-	runnableDuty *spectypes.CommitteeDuty,
+	runnableDuty spectypes.Duty,
 	err error,
 ) {
+	var validatorDuties []*spectypes.ValidatorDuty
+	var exists func(slot phase0.Slot) bool
+
+	switch duty := duty.(type) {
+	case *spectypes.CommitteeDuty:
+		validatorDuties = duty.ValidatorDuties
+		exists = func(slot phase0.Slot) bool {
+			_, ok := c.Runners[slot]
+			return ok
+		}
+	case *spectypes.AggregatorCommitteeDuty:
+		validatorDuties = duty.ValidatorDuties
+		exists = func(slot phase0.Slot) bool {
+			_, ok := c.AggregatorRunners[slot]
+			return ok
+		}
+	default:
+		return nil, queueContainer{}, nil, fmt.Errorf("unexpected duty type: %T", duty)
+	}
+
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)))
+			observability.DutyCountAttribute(len(validatorDuties)),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	if _, exists := c.Runners[duty.Slot]; exists {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
+	if exists(duty.DutySlot()) {
+		return nil, queueContainer{}, nil, traces.Errorf(span, "committee runner for slot %d already exists", duty.DutySlot())
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
@@ -194,66 +215,31 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 		return nil, queueContainer{}, nil, traces.Error(span, err)
 	}
 
-	// Create the corresponding runner.
-	commRunner, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
-	if err != nil {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
+	switch duty := duty.(type) {
+	case *spectypes.CommitteeDuty:
+		commRunner, err = c.CreateRunnerFn(duty.DutySlot(), shares, attesters, c.dutyGuard)
+		if err != nil {
+			return nil, queueContainer{}, nil, traces.Errorf(span, "could not create committee runner: %w", err)
+		}
+		commRunner.SetTimeoutFunc(c.onTimeout)
+		c.Runners[duty.DutySlot()] = commRunner.(*runner.CommitteeRunner) // TODO: make sure type assertion is safe
+	case *spectypes.AggregatorCommitteeDuty:
+		commRunner, err = c.CreateAggregatorRunnerFn(shares)
+		if err != nil {
+			return nil, queueContainer{}, nil, traces.Errorf(span, "could not create aggregator committee runner: %w", err)
+		}
+		commRunner.SetTimeoutFunc(c.onTimeout)
+		c.AggregatorRunners[duty.DutySlot()] = commRunner.(*runner.AggregatorCommitteeRunner) // TODO: make sure type assertion is safe
 	}
-	commRunner.SetTimeoutFunc(c.onTimeout)
-	c.Runners[duty.Slot] = commRunner
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
-	q = c.getQueueForRole(logger, duty.Slot, spectypes.RoleCommittee)
+	q = c.getQueueForRole(logger, duty.DutySlot(), duty.RunnerRole())
 
 	// Prunes all expired committee runners opportunistically (when a new runner is created).
-	c.unsafePruneExpiredRunners(logger, duty.Slot)
+	c.unsafePruneExpiredRunners(logger, duty.DutySlot())
 
 	span.SetStatus(codes.Ok, "")
 	return commRunner, q, runnableDuty, nil
-}
-
-func (c *Committee) prepareAggregatorDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.AggregatorCommitteeDuty) (
-	aggCommRunner *runner.AggregatorCommitteeRunner,
-	q queueContainer,
-	runnableDuty *spectypes.AggregatorCommitteeDuty,
-	err error,
-) {
-	_, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "prepare_aggregator_duty_runner"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)))
-	defer span.End()
-
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	if _, exists := c.AggregatorRunners[duty.Slot]; exists {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "AggregatorCommitteeRunner for slot %d already exists", duty.Slot)
-	}
-
-	shares, runnableDuty, err := c.prepareAggregatorDuty(logger, duty)
-	if err != nil {
-		return nil, queueContainer{}, nil, traces.Error(span, err)
-	}
-
-	// Create the corresponding runner.
-	aggCommRunner, err = c.CreateAggregatorRunnerFn(shares)
-	if err != nil {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create AggregatorCommitteeRunner: %w", err)
-	}
-	aggCommRunner.SetTimeoutFunc(c.onTimeoutAggregator)
-	c.AggregatorRunners[duty.Slot] = aggCommRunner
-
-	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
-	q = c.getQueueForRole(logger, duty.Slot, spectypes.RoleAggregatorCommittee)
-
-	// Prunes all expired committee runners opportunistically (when a new runner is created).
-	c.unsafePruneExpiredRunners(logger, duty.Slot)
-
-	span.SetStatus(codes.Ok, "")
-	return aggCommRunner, q, runnableDuty, nil
 }
 
 // getQueue returns queue for the provided slot, lazily initializing it if it didn't exist previously.
@@ -301,23 +287,30 @@ func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role s
 }
 
 // prepareDuty filters out unrunnable validator duties and returns the shares and attesters.
-func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+func (c *Committee) prepareDuty(logger *zap.Logger, duty spectypes.Duty) (
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	attesters []phase0.BLSPubKey,
-	runnableDuty *spectypes.CommitteeDuty,
+	runnableDuty spectypes.Duty,
 	err error,
 ) {
-	if len(duty.ValidatorDuties) == 0 {
-		return nil, nil, nil, spectypes.NewError(spectypes.NoBeaconDutiesErrorCode, "no beacon duties")
+	var validatorDuties []*spectypes.ValidatorDuty
+	switch duty := duty.(type) {
+	// TODO: try to simplify types
+	case *spectypes.CommitteeDuty:
+		validatorDuties = duty.ValidatorDuties
+	case *spectypes.AggregatorCommitteeDuty:
+		validatorDuties = duty.ValidatorDuties
+	}
+	if len(validatorDuties) == 0 {
+		return nil, nil, nil,
+			spectypes.NewError(spectypes.NoBeaconDutiesErrorCode, "no beacon duties")
 	}
 
-	runnableDuty = &spectypes.CommitteeDuty{
-		Slot:            duty.Slot,
-		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
-	}
-	shares = make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-	attesters = make([]phase0.BLSPubKey, 0, len(duty.ValidatorDuties))
-	for _, beaconDuty := range duty.ValidatorDuties {
+	runnableValidatorDuties := make([]*spectypes.ValidatorDuty, 0, len(validatorDuties))
+
+	shares = make(map[phase0.ValidatorIndex]*spectypes.Share, len(validatorDuties))
+	attesters = make([]phase0.BLSPubKey, 0, len(validatorDuties))
+	for _, beaconDuty := range validatorDuties {
 		share, exists := c.Shares[beaconDuty.ValidatorIndex]
 		if !exists {
 			// Filter out Beacon duties for which we don't have a share.
@@ -327,7 +320,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 			continue
 		}
 		shares[beaconDuty.ValidatorIndex] = share
-		runnableDuty.ValidatorDuties = append(runnableDuty.ValidatorDuties, beaconDuty)
+		runnableValidatorDuties = append(runnableValidatorDuties, beaconDuty)
 
 		if beaconDuty.Type == spectypes.BNRoleAttester {
 			attesters = append(attesters, phase0.BLSPubKey(share.SharePubKey))
@@ -335,45 +328,24 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 	}
 
 	if len(shares) == 0 {
-		return nil, nil, nil, spectypes.NewError(spectypes.NoValidatorSharesErrorCode, "no shares for duty's validators")
+		return nil, nil, nil,
+			spectypes.NewError(spectypes.NoValidatorSharesErrorCode, "no shares for duty's validators")
+	}
+
+	switch duty := duty.(type) {
+	case *spectypes.CommitteeDuty:
+		runnableDuty = &spectypes.CommitteeDuty{
+			Slot:            duty.Slot,
+			ValidatorDuties: runnableValidatorDuties,
+		}
+	case *spectypes.AggregatorCommitteeDuty:
+		runnableDuty = &spectypes.AggregatorCommitteeDuty{
+			Slot:            duty.Slot,
+			ValidatorDuties: runnableValidatorDuties,
+		}
 	}
 
 	return shares, attesters, runnableDuty, nil
-}
-
-// prepareAggregatorDuty filters out unrunnable validator aggregator duties and returns the shares and attesters.
-func (c *Committee) prepareAggregatorDuty(logger *zap.Logger, duty *spectypes.AggregatorCommitteeDuty) (
-	shares map[phase0.ValidatorIndex]*spectypes.Share,
-	runnableDuty *spectypes.AggregatorCommitteeDuty,
-	err error,
-) {
-	if len(duty.ValidatorDuties) == 0 {
-		return nil, nil, spectypes.NewError(spectypes.NoBeaconDutiesErrorCode, "no beacon duties")
-	}
-
-	runnableDuty = &spectypes.AggregatorCommitteeDuty{
-		Slot:            duty.Slot,
-		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
-	}
-	shares = make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-	for _, beaconDuty := range duty.ValidatorDuties {
-		share, exists := c.Shares[beaconDuty.ValidatorIndex]
-		if !exists {
-			// Filter out Beacon duties for which we don't have a share.
-			logger.Debug("committee has no share for validator duty",
-				fields.BeaconRole(beaconDuty.Type),
-				zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
-			continue
-		}
-		shares[beaconDuty.ValidatorIndex] = share
-		runnableDuty.ValidatorDuties = append(runnableDuty.ValidatorDuties, beaconDuty)
-	}
-
-	if len(shares) == 0 {
-		return nil, nil, spectypes.NewError(spectypes.NoValidatorSharesErrorCode, "no shares for duty's validators")
-	}
-
-	return shares, runnableDuty, nil
 }
 
 // ProcessMessage processes p2p message of all types

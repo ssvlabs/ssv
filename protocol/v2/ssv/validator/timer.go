@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -89,7 +90,13 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		c.mtx.RLock() // read-lock for c.Queues, c.Runners
 		defer c.mtx.RUnlock()
 
-		dr := c.Runners[phase0.Slot(height)]
+		var dr runner.Runner
+		if identifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
+			dr = c.AggregatorRunners[phase0.Slot(height)]
+		} else {
+			dr = c.Runners[phase0.Slot(height)]
+		}
+
 		if dr == nil { // only happens when we prune expired runners
 			logger.Debug("❗no committee runner found for slot")
 			return
@@ -111,47 +118,14 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 
-		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
+		var qc queueContainer
+		if identifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
+			qc = c.AggregatorQueues[phase0.Slot(height)]
+		} else {
+			qc = c.Queues[phase0.Slot(height)]
+		}
+		if pushed := qc.Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
-		}
-	}
-}
-
-// onTimeoutAggregator is identical to onTimeout but targets AggregatorCommittee runners and queues.
-func (c *Committee) onTimeoutAggregator(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
-	return func(round specqbft.Round) {
-		c.mtx.RLock() // read-lock for c.Queues, c.AggregatorRunners
-		defer c.mtx.RUnlock()
-
-		// only run if the validator is started
-		//if v.state != uint32(Started) {
-		//	return
-		//}
-		dr := c.AggregatorRunners[phase0.Slot(height)]
-		if dr == nil { // only happens when we prune expired runners
-			logger.Debug("❗no aggregator committee runner found for slot", fields.Slot(phase0.Slot(height)))
-			return
-		}
-
-		hasDuty := dr.HasRunningDuty()
-		if !hasDuty {
-			return
-		}
-
-		msg, err := c.createTimerMessage(identifier, height, round)
-		if err != nil {
-			logger.Debug("❗ failed to create aggregator timer msg", zap.Error(err))
-			return
-		}
-		dec, err := queue.DecodeSSVMessage(msg)
-		if err != nil {
-			logger.Debug("❌ failed to decode aggregator timer msg", zap.Error(err))
-			return
-		}
-
-		if pushed := c.AggregatorQueues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
-			logger.Warn("❗️ dropping aggregator timeout message because the queue is full",
-				fields.RunnerRole(identifier.GetRoleType()))
 		}
 	}
 }
