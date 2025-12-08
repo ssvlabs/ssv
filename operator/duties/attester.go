@@ -205,7 +205,6 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	span.SetStatus(codes.Ok, "")
 }
 
-// executeAggregatorDuties is only processing aggregator-duties after Alan fork.
 func (h *AttesterHandler) executeAggregatorDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	if h.exporterMode {
 		return
