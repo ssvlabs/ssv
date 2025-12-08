@@ -269,7 +269,7 @@ func versionedToAggregateAndProof(
 		if va.Fulu == nil {
 			return nil, DataVersionNil, errMultiClient(fmt.Errorf("aggregate attestation %s data is nil", va.Version.String()), "AggregateAttestation")
 		}
-		// Fulu AggregateAndProof usees electra.AggregateAndProof in go-eth2-client
+		// Fulu AggregateAndProof uses electra.AggregateAndProof in go-eth2-client
 		return &electra.AggregateAndProof{
 			AggregatorIndex: index,
 			Aggregate:       va.Fulu,

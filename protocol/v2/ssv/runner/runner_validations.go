@@ -28,7 +28,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
 	}
 
-	// Validate the post-consensus message differently depending on a message type.
+	// Validate the pre-consensus message differently depending on a message type.
 	validateMsg := func() error {
 		if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
 			return err

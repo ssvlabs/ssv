@@ -99,7 +99,7 @@ func (r *AggregatorCommitteeRunner) StartNewDuty(ctx context.Context, logger *za
 
 	d, ok := duty.(*spectypes.AggregatorCommitteeDuty)
 	if !ok {
-		return traces.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
+		return traces.Errorf(span, "duty is not a AggregatorCommitteeDuty: %T", duty)
 	}
 
 	span.SetAttributes(observability.DutyCountAttribute(len(d.ValidatorDuties)))
@@ -126,14 +126,14 @@ func (r *AggregatorCommitteeRunner) Decode(data []byte) error {
 func (r *AggregatorCommitteeRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("could not encode CommitteeRunner: %w", err)
+		return [32]byte{}, fmt.Errorf("could not encode AggregatorCommitteeRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
 }
 
 func (r *AggregatorCommitteeRunner) MarshalJSON() ([]byte, error) {
-	type CommitteeRunnerAlias struct {
+	type AggregatorCommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
@@ -143,7 +143,7 @@ func (r *AggregatorCommitteeRunner) MarshalJSON() ([]byte, error) {
 	}
 
 	// Create object and marshal
-	alias := &CommitteeRunnerAlias{
+	alias := &AggregatorCommitteeRunnerAlias{
 		BaseRunner:     r.BaseRunner,
 		beacon:         r.beacon,
 		network:        r.network,
@@ -158,7 +158,7 @@ func (r *AggregatorCommitteeRunner) MarshalJSON() ([]byte, error) {
 }
 
 func (r *AggregatorCommitteeRunner) UnmarshalJSON(data []byte) error {
-	type CommitteeRunnerAlias struct {
+	type AggregatorCommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
@@ -168,7 +168,7 @@ func (r *AggregatorCommitteeRunner) UnmarshalJSON(data []byte) error {
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
-	aux := &CommitteeRunnerAlias{}
+	aux := &AggregatorCommitteeRunnerAlias{}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}

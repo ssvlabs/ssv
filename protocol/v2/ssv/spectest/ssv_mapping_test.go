@@ -590,7 +590,7 @@ func fixCommitteeForRun(
 					if brMap, ok := brAny.(map[string]interface{}); ok {
 						if roleAny, ok := brMap["RunnerRoleType"]; ok {
 							// JSON numbers -> float64
-							if roleFloat, ok := roleAny.(float64); ok && int(roleFloat) == 6 {
+							if roleFloat, ok := roleAny.(float64); ok && int(roleFloat) == int(spectypes.RoleAggregatorCommittee) {
 								aggMap[slot] = rMap
 								delete(runnersMap, slot)
 							}
