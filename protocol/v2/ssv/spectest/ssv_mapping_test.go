@@ -500,8 +500,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 				// Check the type of the first validator duty
 				firstDuty := validatorDuties[0].(map[string]interface{})
 				if dutyType, ok := firstDuty["Type"].(float64); ok {
-					// Type 1 is BNRoleAggregator, Type 4 is BNRoleSyncCommitteeContribution
-					if int(dutyType) == 1 || int(dutyType) == 4 {
+					if int(dutyType) == int(spectypes.RoleAggregator) || int(dutyType) == int(spectypes.BNRoleSyncCommitteeContribution) {
 						// This is an aggregator committee duty
 						aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{}
 						err = json.Unmarshal(byts, &aggregatorCommitteeDuty)
