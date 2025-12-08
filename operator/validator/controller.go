@@ -693,7 +693,7 @@ func (c *Controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 		return
 	}
 
-	cm.ConsumeQueue(ctx, logger, q, cm.GetProcessMessageF(false), r)
+	cm.ConsumeQueue(ctx, logger, q, cm.ProcessMessage, r)
 
 	span.SetStatus(codes.Ok, "")
 }
@@ -733,7 +733,7 @@ func (c *Controller) ExecuteAggregatorCommitteeDuty(ctx context.Context, logger 
 		return
 	}
 
-	cm.ConsumeQueue(ctx, logger, q, cm.GetProcessMessageF(true), r)
+	cm.ConsumeQueue(ctx, logger, q, cm.ProcessMessage, r)
 
 	span.SetStatus(codes.Ok, "")
 }

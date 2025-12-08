@@ -137,8 +137,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 				return errors.Wrap(err, "failed to decode SignedSSVMessage")
 			}
 
-			aggComm := msg.MsgID.GetRoleType() == spectypes.RoleAggregatorCommittee
-			err = test.Committee.GetProcessMessageF(aggComm)(context.TODO(), logger, msg)
+			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
 				// In committee spectests we bypass queues; treat retryable errors as transient.
 				if runner.IsRetryable(err) {

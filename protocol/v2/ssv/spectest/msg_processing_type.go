@@ -156,7 +156,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.GetProcessMessageF(test.Duty.RunnerRole() == spectypes.RoleAggregatorCommittee)(ctx, logger, dmsg)
+			err = c.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
