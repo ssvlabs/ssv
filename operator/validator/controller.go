@@ -781,14 +781,12 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 	if !found {
 		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
 		committeeRunnerFunc := SetupCommitteeRunners(c.ctx, opts)
-		aggregatorCommitteeRunnerFunc := SetupAggregatorCommitteeRunners(c.ctx, opts)
 
 		vc = validator.NewCommittee(
 			c.logger,
 			c.networkConfig,
 			operator,
 			committeeRunnerFunc,
-			aggregatorCommitteeRunnerFunc,
 			nil,
 			c.dutyGuard,
 		)
@@ -1058,70 +1056,48 @@ func SetupCommitteeRunners(
 	}
 
 	return func(
-		slot phase0.Slot,
+		duty spectypes.Duty,
 		shares map[phase0.ValidatorIndex]*spectypes.Share,
 		attestingValidators []phase0.BLSPubKey,
 		dutyGuard runner.CommitteeDutyGuard,
-	) (*runner.CommitteeRunner, error) {
-		crunner, err := runner.NewCommitteeRunner(
-			options.NetworkConfig,
-			shares,
-			attestingValidators,
-			buildController(spectypes.RoleCommittee),
-			options.Beacon,
-			options.Network,
-			options.Signer,
-			options.OperatorSigner,
-			dutyGuard,
-			options.DoppelgangerHandler,
-			options.MajorityForkProtectionStrict,
-		)
-		if err != nil {
-			return nil, err
+	) (runner.Runner, error) {
+		switch duty.(type) {
+		case *spectypes.CommitteeDuty:
+			crunner, err := runner.NewCommitteeRunner(
+				options.NetworkConfig,
+				shares,
+				attestingValidators,
+				buildController(spectypes.RoleCommittee),
+				options.Beacon,
+				options.Network,
+				options.Signer,
+				options.OperatorSigner,
+				dutyGuard,
+				options.DoppelgangerHandler,
+				options.MajorityForkProtectionStrict,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return crunner, nil
+		case *spectypes.AggregatorCommitteeDuty:
+			acrunner, err := runner.NewAggregatorCommitteeRunner(
+				options.NetworkConfig,
+				shares,
+				buildController(spectypes.RoleAggregatorCommittee),
+				options.Beacon,
+				options.Network,
+				options.Signer,
+				options.OperatorSigner,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			return acrunner, nil
+		default:
+			return nil, fmt.Errorf("unknown duty type: %T", duty)
 		}
-		return crunner.(*runner.CommitteeRunner), nil
-	}
-}
-
-func SetupAggregatorCommitteeRunners(
-	ctx context.Context,
-	options *validator.Options,
-) validator.AggregatorCommitteeRunnerFunc {
-	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
-		config := &qbft.Config{
-			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType,
-			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbft.RoundRobinProposer(state, round)
-				return leader
-			},
-			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: roundtimer.CutOffRound,
-		}
-
-		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
-		return qbftCtrl
-	}
-
-	return func(
-		shares map[phase0.ValidatorIndex]*spectypes.Share,
-	) (*runner.AggregatorCommitteeRunner, error) {
-		aggCommRunner, err := runner.NewAggregatorCommitteeRunner(
-			options.NetworkConfig,
-			shares,
-			buildController(spectypes.RoleAggregatorCommittee),
-			options.Beacon,
-			options.Network,
-			options.Signer,
-			options.OperatorSigner,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		return aggCommRunner.(*runner.AggregatorCommitteeRunner), nil
 	}
 }
 

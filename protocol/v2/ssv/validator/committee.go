@@ -27,15 +27,11 @@ import (
 )
 
 type CommitteeRunnerFunc func(
-	slot phase0.Slot,
+	duty spectypes.Duty,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	attestingValidators []phase0.BLSPubKey,
 	dutyGuard runner.CommitteeDutyGuard,
-) (*runner.CommitteeRunner, error)
-
-type AggregatorCommitteeRunnerFunc func(
-	shares map[phase0.ValidatorIndex]*spectypes.Share,
-) (*runner.AggregatorCommitteeRunner, error)
+) (runner.Runner, error)
 
 type Committee struct {
 	logger *zap.Logger
@@ -56,10 +52,8 @@ type Committee struct {
 
 	CommitteeMember *spectypes.CommitteeMember
 
-	dutyGuard *CommitteeDutyGuard
-	// TODO: consider joining, probably by passing duty and checking its type inside
-	CreateRunnerFn           CommitteeRunnerFunc
-	CreateAggregatorRunnerFn AggregatorCommitteeRunnerFunc
+	dutyGuard      *CommitteeDutyGuard
+	CreateRunnerFn CommitteeRunnerFunc
 }
 
 // NewCommittee creates a new cluster
@@ -68,7 +62,6 @@ func NewCommittee(
 	networkConfig *networkconfig.Network,
 	operator *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
-	createAggregatorRunnerFn AggregatorCommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	dutyGuard *CommitteeDutyGuard,
 ) *Committee {
@@ -81,17 +74,16 @@ func NewCommittee(
 		With(fields.CommitteeID(operator.CommitteeID))
 
 	return &Committee{
-		logger:                   logger,
-		networkConfig:            networkConfig,
-		Queues:                   make(map[phase0.Slot]queueContainer),
-		AggregatorQueues:         make(map[phase0.Slot]queueContainer),
-		Runners:                  make(map[phase0.Slot]*runner.CommitteeRunner),
-		AggregatorRunners:        make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
-		Shares:                   shares,
-		CommitteeMember:          operator,
-		CreateRunnerFn:           createRunnerFn,
-		CreateAggregatorRunnerFn: createAggregatorRunnerFn,
-		dutyGuard:                dutyGuard,
+		logger:            logger,
+		networkConfig:     networkConfig,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		AggregatorQueues:  make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		Shares:            shares,
+		CommitteeMember:   operator,
+		CreateRunnerFn:    createRunnerFn,
+		dutyGuard:         dutyGuard,
 	}
 }
 
@@ -177,20 +169,16 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 		return nil, queueContainer{}, nil, traces.Error(span, err)
 	}
 
+	commRunner, err = c.CreateRunnerFn(duty, shares, attesters, c.dutyGuard)
+	if err != nil {
+		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create committee runner: %w", err)
+	}
+	commRunner.SetTimeoutFunc(c.onTimeout)
+
 	switch duty := duty.(type) {
 	case *spectypes.CommitteeDuty:
-		commRunner, err = c.CreateRunnerFn(duty.DutySlot(), shares, attesters, c.dutyGuard)
-		if err != nil {
-			return nil, queueContainer{}, nil, traces.Errorf(span, "could not create committee runner: %w", err)
-		}
-		commRunner.SetTimeoutFunc(c.onTimeout)
 		c.Runners[duty.DutySlot()] = commRunner.(*runner.CommitteeRunner) // TODO: make sure type assertion is safe
 	case *spectypes.AggregatorCommitteeDuty:
-		commRunner, err = c.CreateAggregatorRunnerFn(shares)
-		if err != nil {
-			return nil, queueContainer{}, nil, traces.Errorf(span, "could not create aggregator committee runner: %w", err)
-		}
-		commRunner.SetTimeoutFunc(c.onTimeout)
 		c.AggregatorRunners[duty.DutySlot()] = commRunner.(*runner.AggregatorCommitteeRunner) // TODO: make sure type assertion is safe
 	}
 

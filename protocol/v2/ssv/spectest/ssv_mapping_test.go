@@ -624,13 +624,22 @@ func fixCommitteeForRun(
 		logger,
 		networkconfig.TestNetwork,
 		&specCommittee.CommitteeMember,
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
-			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
-			return r.(*runner.CommitteeRunner), nil
-		},
-		func(shareMap map[phase0.ValidatorIndex]*spectypes.Share) (*runner.AggregatorCommitteeRunner, error) {
-			r := ssvtesting.AggregatorCommitteeRunnerWithShareMap(logger, shareMap)
-			return r.(*runner.AggregatorCommitteeRunner), nil
+		func(
+			duty spectypes.Duty,
+			shareMap map[phase0.ValidatorIndex]*spectypes.Share,
+			_ []phase0.BLSPubKey,
+			_ runner.CommitteeDutyGuard,
+		) (runner.Runner, error) {
+			switch duty.(type) {
+			case *spectypes.CommitteeDuty:
+				r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
+				return r, nil
+			case *spectypes.AggregatorCommitteeDuty:
+				r := ssvtesting.AggregatorCommitteeRunnerWithShareMap(logger, shareMap)
+				return r, nil
+			default:
+				return nil, fmt.Errorf("unknown duty type: %T", duty)
+			}
 		},
 		specCommittee.Share,
 		validator.NewCommitteeDutyGuard(),

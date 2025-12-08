@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -295,52 +296,53 @@ var baseCommitteeWithRunner = func(
 	}
 
 	createRunnerF := func(
-		_ phase0.Slot,
+		duty spectypes.Duty,
 		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
-	) (*runner.CommitteeRunner, error) {
-		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			attestingValidators,
-			controller.NewController(
-				baseRunner.QBFTController.Identifier,
-				baseRunner.QBFTController.CommitteeMember,
-				baseRunner.QBFTController.GetConfig(),
-				spectestingutils.TestingOperatorSigner(keySetSample),
+	) (runner.Runner, error) {
+		switch duty.(type) {
+		case *spectypes.CommitteeDuty:
+			r, err := runner.NewCommitteeRunner(
+				networkconfig.TestNetwork,
+				shareMap,
+				attestingValidators,
+				controller.NewController(
+					baseRunner.QBFTController.Identifier,
+					baseRunner.QBFTController.CommitteeMember,
+					baseRunner.QBFTController.GetConfig(),
+					spectestingutils.TestingOperatorSigner(keySetSample),
+					false,
+				),
+				runnerSample.GetBeaconNode(),
+				runnerSample.GetNetwork(),
+				runnerSample.GetSigner(),
+				runnerSample.GetOperatorSigner(),
+				committeeDutyGuard,
+				dgHandler,
 				false,
-			),
-			runnerSample.GetBeaconNode(),
-			runnerSample.GetNetwork(),
-			runnerSample.GetSigner(),
-			runnerSample.GetOperatorSigner(),
-			committeeDutyGuard,
-			dgHandler,
-			false,
-		)
-		return r.(*runner.CommitteeRunner), err
-	}
-
-	createAggregatorRunnerF := func(
-		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
-	) (*runner.AggregatorCommitteeRunner, error) {
-		r, err := runner.NewAggregatorCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			controller.NewController(
-				baseRunner.QBFTController.Identifier,
-				baseRunner.QBFTController.CommitteeMember,
-				baseRunner.QBFTController.GetConfig(),
-				spectestingutils.TestingOperatorSigner(keySetSample),
-				false,
-			),
-			runnerSample.GetBeaconNode(),
-			runnerSample.GetNetwork(),
-			runnerSample.GetSigner(),
-			runnerSample.GetOperatorSigner(),
-		)
-		return r.(*runner.AggregatorCommitteeRunner), err
+			)
+			return r, err
+		case *spectypes.AggregatorCommitteeDuty:
+			r, err := runner.NewAggregatorCommitteeRunner(
+				networkconfig.TestNetwork,
+				shareMap,
+				controller.NewController(
+					baseRunner.QBFTController.Identifier,
+					baseRunner.QBFTController.CommitteeMember,
+					baseRunner.QBFTController.GetConfig(),
+					spectestingutils.TestingOperatorSigner(keySetSample),
+					false,
+				),
+				runnerSample.GetBeaconNode(),
+				runnerSample.GetNetwork(),
+				runnerSample.GetSigner(),
+				runnerSample.GetOperatorSigner(),
+			)
+			return r, err
+		default:
+			return nil, fmt.Errorf("invalid duty type %T", duty)
+		}
 	}
 
 	c := validator.NewCommittee(
@@ -348,7 +350,6 @@ var baseCommitteeWithRunner = func(
 		baseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
-		createAggregatorRunnerF,
 		shareMap,
 		committeeDutyGuard,
 	)
