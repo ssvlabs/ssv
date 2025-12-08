@@ -151,17 +151,8 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	switch duty := duty.(type) {
-	case *spectypes.CommitteeDuty:
-		if _, exists := c.Runners[duty.DutySlot()]; exists {
-			return nil, queueContainer{}, nil, traces.Errorf(span, "committee runner for slot %d already exists", duty.DutySlot())
-		}
-	case *spectypes.AggregatorCommitteeDuty:
-		if _, exists := c.AggregatorRunners[duty.DutySlot()]; exists {
-			return nil, queueContainer{}, nil, traces.Errorf(span, "aggregator committee runner for slot %d already exists", duty.DutySlot())
-		}
-	default:
-		return nil, queueContainer{}, nil, fmt.Errorf("unexpected duty type: %T", duty)
+	if _, ok := c.runnerForDuty(duty); ok {
+		return nil, queueContainer{}, nil, traces.Errorf(span, "committee runner for slot %d already exists", duty.DutySlot())
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
@@ -169,17 +160,9 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 		return nil, queueContainer{}, nil, traces.Error(span, err)
 	}
 
-	commRunner, err = c.CreateRunnerFn(duty, shares, attesters, c.dutyGuard)
+	commRunner, err = c.createRunner(duty, shares, attesters)
 	if err != nil {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create committee runner: %w", err)
-	}
-	commRunner.SetTimeoutFunc(c.onTimeout)
-
-	switch duty := duty.(type) {
-	case *spectypes.CommitteeDuty:
-		c.Runners[duty.DutySlot()] = commRunner.(*runner.CommitteeRunner) // TODO: make sure type assertion is safe
-	case *spectypes.AggregatorCommitteeDuty:
-		c.AggregatorRunners[duty.DutySlot()] = commRunner.(*runner.AggregatorCommitteeRunner) // TODO: make sure type assertion is safe
+		return nil, queueContainer{}, nil, traces.Error(span, err)
 	}
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
@@ -330,19 +313,10 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			return fmt.Errorf("validate QBFT message: %w", err)
 		}
 
-		var r interface {
-			ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error
-		}
-		var exists bool
-
 		c.mtx.RLock()
-		if msg.GetID().GetRoleType() == spectypes.RoleAggregatorCommittee {
-			r, exists = c.AggregatorRunners[slot]
-		} else {
-			r, exists = c.Runners[slot]
-		}
+		r, ok := c.runnerForRole(msg.GetID().GetRoleType(), slot)
 		c.mtx.RUnlock()
-		if !exists {
+		if !ok {
 			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
 		}
 
@@ -363,19 +337,10 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		// Locate the runner for this slot once and route by message subtype.
-		var r interface {
-			ProcessPreConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
-			ProcessPostConsensus(ctx context.Context, logger *zap.Logger, msgs *spectypes.PartialSignatureMessages) error
-		}
-		var exists bool
 		c.mtx.RLock()
-		if msg.GetID().GetRoleType() == spectypes.RoleAggregatorCommittee {
-			r, exists = c.AggregatorRunners[pSigMessages.Slot]
-		} else {
-			r, exists = c.Runners[pSigMessages.Slot]
-		}
+		r, ok := c.runnerForRole(msg.GetID().GetRoleType(), slot)
 		c.mtx.RUnlock()
-		if !exists {
+		if !ok {
 			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
 		}
 
@@ -406,19 +371,10 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		case types.Timeout:
 			span.AddEvent("process committee message = event(timeout)")
 
-			var dutyRunner interface {
-				OnTimeoutQBFT(context.Context, *zap.Logger, *types.TimeoutData) error
-			}
-			var found bool
-
 			c.mtx.RLock()
-			if msg.GetID().GetRoleType() == spectypes.RoleAggregatorCommittee {
-				dutyRunner, found = c.AggregatorRunners[slot]
-			} else {
-				dutyRunner, found = c.Runners[slot]
-			}
+			r, ok := c.runnerForRole(msg.GetID().GetRoleType(), slot)
 			c.mtx.RUnlock()
-			if !found {
+			if !ok {
 				return fmt.Errorf("no committee runner found for slot %d", slot)
 			}
 
@@ -427,7 +383,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 				return fmt.Errorf("get timeout data: %w", err)
 			}
 
-			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
+			if err := r.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
 				return fmt.Errorf("timeout event: %w", err)
 			}
 
@@ -547,6 +503,53 @@ func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
 	}
 
 	return nil
+}
+
+func (c *Committee) runnerForDuty(duty spectypes.Duty) (runner.Runner, bool) {
+	switch duty.(type) {
+	case *spectypes.CommitteeDuty:
+		r, ok := c.Runners[duty.DutySlot()]
+		return r, ok
+	case *spectypes.AggregatorCommitteeDuty:
+		r, ok := c.AggregatorRunners[duty.DutySlot()]
+		return r, ok
+	default:
+		return nil, false
+	}
+}
+
+func (c *Committee) runnerForRole(role spectypes.RunnerRole, slot phase0.Slot) (runner.Runner, bool) {
+	switch role {
+	case spectypes.RoleCommittee:
+		r, ok := c.Runners[slot]
+		return r, ok
+	case spectypes.RoleAggregatorCommittee:
+		r, ok := c.AggregatorRunners[slot]
+		return r, ok
+	default:
+		return nil, false
+	}
+}
+
+func (c *Committee) createRunner(
+	duty spectypes.Duty,
+	shares map[phase0.ValidatorIndex]*spectypes.Share,
+	attesters []phase0.BLSPubKey,
+) (runner.Runner, error) {
+	r, err := c.CreateRunnerFn(duty, shares, attesters, c.dutyGuard)
+	if err != nil {
+		return nil, fmt.Errorf("create committee runner: %w", err)
+	}
+	r.SetTimeoutFunc(c.onTimeout)
+
+	switch duty := duty.(type) {
+	case *spectypes.CommitteeDuty:
+		c.Runners[duty.DutySlot()] = r.(*runner.CommitteeRunner)
+	case *spectypes.AggregatorCommitteeDuty:
+		c.AggregatorRunners[duty.DutySlot()] = r.(*runner.AggregatorCommitteeRunner)
+	}
+
+	return r, err
 }
 
 func extractValidatorDuties(duty spectypes.Duty) []*spectypes.ValidatorDuty {
