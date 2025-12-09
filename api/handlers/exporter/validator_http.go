@@ -26,9 +26,13 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	if err := api.Bind(r, &request); err != nil {
 		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, err)
 	}
+	coreReq, perr := toValidatorTracesQuery(&request)
+	if perr != nil {
+		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, formatPubKeyLengthError(perr))
+	}
 
 	// == 2 == Call core logic
-	duties, schedule, errs := e.ValidatorTracesCore(&request)
+	result, errs := e.ValidatorTracesCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if isValidationError(errs) {
@@ -36,12 +40,11 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(duties) == 0 && errs.ErrorOrNil() != nil {
+	if len(result.Traces) == 0 && errs.ErrorOrNil() != nil {
 		return toApiError(e.logger, r, "validator_traces", http.StatusInternalServerError, request, errs.ErrorOrNil())
 	}
 
 	// otherwise return a partial response with valid duties
-	resp := toValidatorTraceResponse(duties, errs)
-	resp.Schedule = schedule
-	return api.Render(w, r, resp)
+	response := toValidatorTraceResponse(result, errs)
+	return api.Render(w, r, response)
 }

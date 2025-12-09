@@ -1,7 +1,6 @@
 package exporter
 
 import (
-	"encoding/hex"
 	"fmt"
 	"slices"
 
@@ -13,31 +12,30 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
+	exporter2 "github.com/ssvlabs/ssv/exporter2"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
-func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesRequest) ([]validatorDutyTraceWithCommitteeID, []ValidatorSchedule, *multierror.Error) {
+func (e *Exporter) ValidatorTracesCore(request *exporter2.ValidatorTracesQuery) (*exporter2.ValidatorTracesResult, *multierror.Error) {
 	if err := validateValidatorRequest(request); err != nil {
-		return nil, nil, multierror.Append(nil, &ValidationError{Err: err})
+		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
-	var results []validatorDutyTraceWithCommitteeID
+	var results []exporter2.ValidatorCommitteeTrace
 	var errs *multierror.Error
 
 	indices, indicesErr := e.extractIndices(request)
 	errs = multierror.Append(errs, indicesErr)
 
 	// if the request was for a specific set of participants and we couldn't resolve any, we're done
-	if request.hasFilters() && len(indices) == 0 {
-		return nil, nil, multierror.Append(nil, &ValidationError{Err: indicesErr})
+	if request.HasFilters() && len(indices) == 0 {
+		return nil, multierror.Append(nil, &ValidationError{Err: indicesErr})
 	}
 
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
-		for _, r := range request.Roles {
-			role := spectypes.BeaconRole(r)
-
+		for _, role := range request.Roles {
 			providerFunc := e.getValidatorDutiesForRoleAndSlot
 			if isCommitteeDuty(role) {
 				providerFunc = e.getValidatorCommitteeDutiesForRoleAndSlot
@@ -55,10 +53,10 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesRequest) ([]valid
 	// Build schedule from disk, read-only.
 	schedule := e.buildValidatorSchedule(request, indices)
 
-	return results, schedule, errs
+	return &exporter2.ValidatorTracesResult{Traces: results, Schedule: schedule}, errs
 }
 
-func validateValidatorRequest(request *ValidatorTracesRequest) error {
+func validateValidatorRequest(request *exporter2.ValidatorTracesQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -69,39 +67,31 @@ func validateValidatorRequest(request *ValidatorTracesRequest) error {
 
 	// either PubKeys or Indices are required for committee duty roles
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
-		for _, r := range request.Roles {
-			role := spectypes.BeaconRole(r)
+		for _, role := range request.Roles {
 			if isCommitteeDuty(role) {
 				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
 			}
 		}
 	}
 
-	requiredLength := len(spectypes.ValidatorPK{})
-	for _, req := range request.PubKeys {
-		if len(req) != requiredLength {
-			return fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req))
-		}
-	}
-
 	return nil
 }
 
-func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]validatorDutyTraceWithCommitteeID, error) {
+func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]exporter2.ValidatorCommitteeTrace, error) {
 	if len(indices) == 0 {
 		traces, err := e.traceStore.GetValidatorDuties(role, slot)
-		out := make([]validatorDutyTraceWithCommitteeID, 0, len(traces))
+		out := make([]exporter2.ValidatorCommitteeTrace, 0, len(traces))
 		for _, t := range traces {
-			out = append(out, validatorDutyTraceWithCommitteeID{ValidatorDutyTrace: *t})
+			out = append(out, exporter2.ValidatorCommitteeTrace{ValidatorDutyTrace: *t})
 		}
 		return out, err
 	}
 
-	duties := make([]validatorDutyTraceWithCommitteeID, 0, len(indices))
+	duties := make([]exporter2.ValidatorCommitteeTrace, 0, len(indices))
 	var errs *multierror.Error
 
 	for _, idx := range indices {
-		var result validatorDutyTraceWithCommitteeID
+		var result exporter2.ValidatorCommitteeTrace
 
 		duty, err := e.traceStore.GetValidatorDuty(role, slot, idx)
 		if err != nil {
@@ -127,8 +117,8 @@ func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, s
 	return duties, errs.ErrorOrNil()
 }
 
-func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]validatorDutyTraceWithCommitteeID, error) {
-	results := make([]validatorDutyTraceWithCommitteeID, 0, len(indices))
+func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]exporter2.ValidatorCommitteeTrace, error) {
+	results := make([]exporter2.ValidatorCommitteeTrace, 0, len(indices))
 	var errs *multierror.Error
 
 	for _, index := range indices {
@@ -171,7 +161,7 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 			continue
 		}
 
-		validatorDuty := validatorDutyTraceWithCommitteeID{
+		validatorDuty := exporter2.ValidatorCommitteeTrace{
 			ValidatorDutyTrace: exporter.ValidatorDutyTrace{
 				ConsensusTrace: duty.ConsensusTrace,
 				Slot:           duty.Slot,
@@ -187,33 +177,19 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 	return results, errs.ErrorOrNil()
 }
 
-func toValidatorTraceResponse(duties []validatorDutyTraceWithCommitteeID, errs *multierror.Error) *ValidatorTracesResponse {
-	r := new(ValidatorTracesResponse)
-	r.Data = make([]ValidatorTrace, 0)
-	for _, t := range duties {
-		trace := toValidatorTrace(&t.ValidatorDutyTrace)
-		if t.CommitteeID != nil {
-			trace.CommitteeID = hex.EncodeToString(t.CommitteeID[:])
-		}
-		r.Data = append(r.Data, trace)
-	}
-	r.Errors = toStrings(errs)
-	return r
-}
-
 // buildValidatorSchedule reads the compact on-disk schedule and returns a filtered
 // per-validator schedule for the requested roles and slot range.
-func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices []phase0.ValidatorIndex) []ValidatorSchedule {
-	out := make([]ValidatorSchedule, 0)
+func (e *Exporter) buildValidatorSchedule(req *exporter2.ValidatorTracesQuery, indices []phase0.ValidatorIndex) []exporter2.ValidatorScheduleEntry {
+	out := make([]exporter2.ValidatorScheduleEntry, 0)
 
 	// Deduplicate requested roles (idiomatic way is to build a map in ~O(n) cost).
 	roleWanted := map[spectypes.BeaconRole]struct{}{}
 	for _, r := range req.Roles {
-		roleWanted[spectypes.BeaconRole(r)] = struct{}{}
+		roleWanted[r] = struct{}{}
 	}
 
 	// If no filters provided, we’ll include all indices present in the schedule per slot.
-	filter := req.hasFilters()
+	filter := req.HasFilters()
 
 	for s := req.From; s <= req.To; s++ {
 		slot := phase0.Slot(s)
@@ -239,23 +215,23 @@ func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesRequest, indices [
 			if !ok {
 				continue
 			}
-			roles := make([]string, 0, len(req.Roles))
+			roles := make([]spectypes.BeaconRole, 0, len(roleWanted))
 			for role := range roleWanted {
 				if rolemask.Has(mask, role) {
-					roles = append(roles, role.String())
+					roles = append(roles, role)
 				}
 			}
 			if len(roles) == 0 {
 				// If the request specified explicit indices/pubkeys, include the
 				// validator entry with empty roles to make absence explicit.
 				if filter {
-					out = append(out, ValidatorSchedule{Slot: uint64(slot), Validator: uint64(idx), Roles: roles})
+					out = append(out, exporter2.ValidatorScheduleEntry{Slot: slot, Validator: idx, Roles: roles})
 				}
 				continue
 			}
-			out = append(out, ValidatorSchedule{
-				Slot:      uint64(slot),
-				Validator: uint64(idx),
+			out = append(out, exporter2.ValidatorScheduleEntry{
+				Slot:      slot,
+				Validator: idx,
 				Roles:     roles,
 			})
 		}

@@ -151,3 +151,26 @@ func (e *Exporter) indicesFromDecidedsQuery(query *exporter2.DecidedsQuery) ([]p
 
 	return indices, errs.ErrorOrNil()
 }
+
+// extractIndices resolves validator indices from an
+// exporter2.ValidatorTracesQuery by combining explicit indices with indices
+// looked up from pubkeys.
+func (e *Exporter) extractIndices(query *exporter2.ValidatorTracesQuery) ([]phase0.ValidatorIndex, error) {
+	indices := make([]phase0.ValidatorIndex, 0, len(query.Indices)+len(query.PubKeys))
+	var errs *multierror.Error
+
+	indices = append(indices, query.Indices...)
+	for _, pk := range query.PubKeys {
+		i, ok := e.validators.ValidatorIndex(pk)
+		if !ok {
+			errs = multierror.Append(errs, fmt.Errorf("validator not found for pubkey: %x", pk))
+			continue
+		}
+		indices = append(indices, i)
+	}
+
+	slices.Sort(indices)
+	indices = slices.Compact(indices)
+
+	return indices, errs.ErrorOrNil()
+}
