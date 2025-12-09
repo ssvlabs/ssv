@@ -3,7 +3,6 @@ package exporter
 import (
 	"encoding/hex"
 	"fmt"
-	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -11,35 +10,15 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
-// CommitteeTraces godoc
-// @Summary Retrieve committee duty traces
-// @Description Returns consensus and post-consensus traces for requested committees.
-// @Tags Exporter
-// @Accept json
-// @Produce json
-// @Param request query CommitteeTracesRequest false "Filters as query parameters"
-// @Param request body CommitteeTracesRequest false "Filters as JSON body"
-// @Success 200 {object} CommitteeTracesResponse
-// @Failure 400 {object} api.ErrorResponse
-// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
-// @Failure 500 {object} api.ErrorResponse
-// @Router /v1/exporter/traces/committee [get]
-// @Router /v1/exporter/traces/committee [post]
-func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
-	var request CommitteeTracesRequest
-
-	if err := api.Bind(r, &request); err != nil {
-		return toApiError(e.logger, r, "committee_traces", http.StatusBadRequest, request, err)
-	}
-
-	if err := validateCommitteeRequest(&request); err != nil {
-		return toApiError(e.logger, r, "committee_traces", http.StatusBadRequest, request, err)
+// CommitteeTracesCore contains the core logic for CommitteeTraces without any HTTP concerns.
+func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesRequest) ([]*exporter.CommitteeDutyTrace, []CommitteeSchedule, *multierror.Error) {
+	if err := validateCommitteeRequest(request); err != nil {
+		return nil, nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
 	var all []*exporter.CommitteeDutyTrace
@@ -55,16 +34,10 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	// by design, not found duties are expected and not considered as API errors
 	errs = filterOutDutyNotFoundErrors(errs)
 
-	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(all) == 0 && errs.ErrorOrNil() != nil {
-		return toApiError(e.logger, r, "committee_traces", http.StatusInternalServerError, request, errs.ErrorOrNil())
-	}
-
 	// Attach read-only schedule unioned per committee for the requested slot range.
-	schedule := e.buildCommitteeSchedule(&request)
-	resp := toCommitteeTraceResponse(all, errs)
-	resp.Schedule = schedule
-	return api.Render(w, r, resp)
+	schedule := e.buildCommitteeSchedule(request)
+
+	return all, schedule, errs
 }
 
 func validateCommitteeRequest(request *CommitteeTracesRequest) error {
