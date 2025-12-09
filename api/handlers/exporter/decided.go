@@ -16,40 +16,22 @@ import (
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 )
 
-// TraceDecideds godoc
-// @Summary Retrieve decided message traces
-// @Description Returns decided duty participant traces for validators or committees, including partial error details.
-// @Tags Exporter
-// @Accept json
-// @Produce json
-// @Param request query DecidedsRequest false "Filters as query parameters"
-// @Param request body DecidedsRequest false "Filters as JSON body"
-// @Success 200 {object} TraceDecidedsResponse
-// @Failure 400 {object} api.ErrorResponse
-// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
-// @Failure 500 {object} api.ErrorResponse
-// @Router /v1/exporter/decideds [get]
-// @Router /v1/exporter/decideds [post]
-func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
-	var request DecidedsRequest
-
-	if err := api.Bind(r, &request); err != nil {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, err)
-	}
-
-	if err := validateDecidedRequest(&request); err != nil {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, err)
+// TraceDecidedsCore contains the core logic for TraceDecideds without any HTTP concerns.
+func (e *Exporter) TraceDecidedsCore(request *DecidedsRequest) ([]*DecidedParticipant, *multierror.Error) {
+	if err := validateDecidedRequest(request); err != nil {
+		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
 	var participants = make([]*DecidedParticipant, 0)
 	var errs *multierror.Error
 
-	indices, err := e.extractIndices(&request)
-	errs = multierror.Append(errs, err)
+	indices, indicesErr := e.extractIndices(request)
+	errs = multierror.Append(errs, indicesErr)
 
 	// if the request was for a specific set of participants and we couldn't resolve any, we're done
 	if request.hasFilters() && len(indices) == 0 {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, errs.ErrorOrNil())
+		// for retro-compatibility we should return a validation error here
+		return nil, multierror.Append(nil, &ValidationError{Err: indicesErr})
 	}
 
 	for _, roleVal := range request.Roles {
@@ -96,14 +78,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	// by design, not found duties are expected and not considered as API errors
 	errs = filterOutDutyNotFoundErrors(errs)
 
-	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(participants) == 0 && errs.ErrorOrNil() != nil {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusInternalServerError, request, errs.ErrorOrNil())
-	}
-
-	// otherwise return a partial response with valid participants
-	response := TraceDecidedsResponseFromParticipants(participants, toStrings(errs))
-	return api.Render(w, r, response)
+	return participants, errs
 }
 
 // Decideds is the backward-compatible handler for exporter-v1 "decideds" endpoint.
