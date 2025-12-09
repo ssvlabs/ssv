@@ -34,11 +34,11 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	var request DecidedsRequest
 
 	if err := api.Bind(r, &request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, err)
 	}
 
 	if err := validateDecidedRequest(&request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, err)
 	}
 
 	var participants = make([]*DecidedParticipant, 0)
@@ -49,11 +49,11 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 
 	// if the request was for a specific set of participants and we couldn't resolve any, we're done
 	if request.hasFilters() && len(indices) == 0 {
-		return toApiError(errs)
+		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, errs.ErrorOrNil())
 	}
 
-	for _, r := range request.Roles {
-		role := spectypes.BeaconRole(r)
+	for _, roleVal := range request.Roles {
+		role := spectypes.BeaconRole(roleVal)
 
 		for s := request.From; s <= request.To; s++ {
 			slot := phase0.Slot(s)
@@ -98,8 +98,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 
 	// if we don't have a single valid result and we have at least one meaningful error, return an error
 	if len(participants) == 0 && errs.ErrorOrNil() != nil {
-		e.logger.Error("error serving SSV API request", zap.Any("request", request), zap.Error(errs))
-		return toApiError(errs)
+		return toApiError(e.logger, r, "trace_decideds", http.StatusInternalServerError, request, errs.ErrorOrNil())
 	}
 
 	// otherwise return a partial response with valid participants
@@ -112,11 +111,11 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	var request DecidedsRequest
 
 	if err := api.Bind(r, &request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, err)
 	}
 
 	if err := validateDecidedRequest(&request); err != nil {
-		return api.BadRequestError(err)
+		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, err)
 	}
 
 	pubkeys := request.pubKeys()
@@ -128,8 +127,8 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
 
-	for _, r := range request.Roles {
-		role := spectypes.BeaconRole(r)
+	for _, roleVal := range request.Roles {
+		role := spectypes.BeaconRole(roleVal)
 		store := e.participantStores.Get(role)
 
 		var participantsRange []storage.ParticipantsRangeEntry
@@ -138,14 +137,14 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			var err error
 			participantsRange, err = store.GetAllParticipantsInRange(from, to)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting participants: %w", err))
+				return toApiError(e.logger, r, "decideds_v1", http.StatusInternalServerError, request, fmt.Errorf("error getting participants: %w", err))
 			}
 		}
 
 		for _, pubkey := range pubkeys {
 			participantsByPK, err := store.GetParticipantsInRange(pubkey, from, to)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting participants: %w", err))
+				return toApiError(e.logger, r, "decideds_v1", http.StatusInternalServerError, request, fmt.Errorf("error getting participants: %w", err))
 			}
 			participantsRange = append(participantsRange, participantsByPK...)
 		}

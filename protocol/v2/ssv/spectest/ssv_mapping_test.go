@@ -42,7 +42,7 @@ func TestSSVMapping(t *testing.T) {
 
 	logger := log.TestLogger(t)
 
-	untypedTests := map[string]interface{}{}
+	untypedTests := map[string]any{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
@@ -69,13 +69,13 @@ type runnable struct {
 	test func(t *testing.T)
 }
 
-func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}) *runnable {
+func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runnable {
 	testName := strings.Split(name, "_")[1]
 	testType := strings.Split(name, "_")[0]
 
 	switch testType {
 	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
-		typedTest := msgProcessingSpecTestFromMap(t, test.(map[string]interface{}))
+		typedTest := msgProcessingSpecTestFromMap(t, test.(map[string]any))
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -85,11 +85,11 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		}
 	case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
 		typedTest := &MultiMsgProcessingSpecTest{
-			Name: test.(map[string]interface{})["Name"].(string),
+			Name: test.(map[string]any)["Name"].(string),
 		}
-		subtests := test.(map[string]interface{})["Tests"].([]interface{})
+		subtests := test.(map[string]any)["Tests"].([]any)
 		for _, subtest := range subtests {
-			typedTest.Tests = append(typedTest.Tests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
+			typedTest.Tests = append(typedTest.Tests, msgProcessingSpecTestFromMap(t, subtest.(map[string]any)))
 		}
 
 		return &runnable{
@@ -136,15 +136,15 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		}
 	case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
 		typedTest := &MultiStartNewRunnerDutySpecTest{
-			Name: test.(map[string]interface{})["Name"].(string),
+			Name: test.(map[string]any)["Name"].(string),
 		}
 
 		return &runnable{
 			name: typedTest.TestName(),
 			test: func(t *testing.T) {
-				subtests := test.(map[string]interface{})["Tests"].([]interface{})
+				subtests := test.(map[string]any)["Tests"].([]any)
 				for _, subtest := range subtests {
-					typedTest.Tests = append(typedTest.Tests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]interface{})))
+					typedTest.Tests = append(typedTest.Tests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]any)))
 				}
 				typedTest.Run(t, logger)
 			},
@@ -162,7 +162,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 			},
 		}
 	case reflect.TypeOf(&committee.CommitteeSpecTest{}).String():
-		typedTest := committeeSpecTestFromMap(t, logger, test.(map[string]interface{}))
+		typedTest := committeeSpecTestFromMap(t, logger, test.(map[string]any))
 		return &runnable{
 			name: typedTest.TestName(),
 			test: func(t *testing.T) {
@@ -170,14 +170,14 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 			},
 		}
 	case reflect.TypeOf(&committee.MultiCommitteeSpecTest{}).String():
-		subtests := test.(map[string]interface{})["Tests"].([]interface{})
+		subtests := test.(map[string]any)["Tests"].([]any)
 		typedTests := make([]*CommitteeSpecTest, 0)
 		for _, subtest := range subtests {
-			typedTests = append(typedTests, committeeSpecTestFromMap(t, logger, subtest.(map[string]interface{})))
+			typedTests = append(typedTests, committeeSpecTestFromMap(t, logger, subtest.(map[string]any)))
 		}
 
 		typedTest := &MultiCommitteeSpecTest{
-			Name:  test.(map[string]interface{})["Name"].(string),
+			Name:  test.(map[string]any)["Name"].(string),
 			Tests: typedTests,
 		}
 
@@ -206,9 +206,9 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 	}
 }
 
-func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *StartNewRunnerDutySpecTest {
-	runnerMap := m["Runner"].(map[string]interface{})
-	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
+func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]any) *StartNewRunnerDutySpecTest {
+	runnerMap := m["Runner"].(map[string]any)
+	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
 	var testDuty spectypes.Duty
 	if _, ok := m["CommitteeDuty"]; ok {
@@ -240,7 +240,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
 	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
 	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]interface{}) {
+		for _, msg := range m["OutputMessages"].([]any) {
 			byts, err := json.Marshal(msg)
 			require.NoError(t, err)
 			typedMsg := &spectypes.PartialSignatureMessages{}
@@ -250,7 +250,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	}
 
 	shareInstance := &spectypes.Share{}
-	for _, share := range baseRunnerMap["Share"].(map[string]interface{}) {
+	for _, share := range baseRunnerMap["Share"].(map[string]any) {
 		shareBytes, err := json.Marshal(share)
 		if err != nil {
 			panic(err)
@@ -276,9 +276,9 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	}
 }
 
-func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgProcessingSpecTest {
-	runnerMap := m["Runner"].(map[string]interface{})
-	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
+func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessingSpecTest {
+	runnerMap := m["Runner"].(map[string]any)
+	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
 	var duty spectypes.Duty
 	if _, ok := m["CommitteeDuty"]; ok {
@@ -308,7 +308,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	}
 
 	msgs := make([]*spectypes.SignedSSVMessage, 0)
-	for _, msg := range m["Messages"].([]interface{}) {
+	for _, msg := range m["Messages"].([]any) {
 		byts, err := json.Marshal(msg)
 		require.NoError(t, err)
 		typedMsg := &spectypes.SignedSSVMessage{}
@@ -319,7 +319,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
 	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
 	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]interface{}) {
+		for _, msg := range m["OutputMessages"].([]any) {
 			byts, err := json.Marshal(msg)
 			require.NoError(t, err)
 			typedMsg := &spectypes.PartialSignatureMessages{}
@@ -330,13 +330,13 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 
 	beaconBroadcastedRoots := make([]string, 0)
 	if m["BeaconBroadcastedRoots"] != nil {
-		for _, r := range m["BeaconBroadcastedRoots"].([]interface{}) {
+		for _, r := range m["BeaconBroadcastedRoots"].([]any) {
 			beaconBroadcastedRoots = append(beaconBroadcastedRoots, r.(string))
 		}
 	}
 
 	shareInstance := &spectypes.Share{}
-	for _, share := range baseRunnerMap["Share"].(map[string]interface{}) {
+	for _, share := range baseRunnerMap["Share"].(map[string]any) {
 		shareBytes, err := json.Marshal(share)
 		if err != nil {
 			panic(err)
@@ -366,10 +366,10 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	}
 }
 
-func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectestingutils.TestKeySet) runner.Runner {
+func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutils.TestKeySet) runner.Runner {
 	logger := log.TestLogger(t)
 
-	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
+	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
 	baseRunner := &runner.BaseRunner{}
 	byts, err := json.Marshal(baseRunnerMap)
@@ -476,11 +476,11 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 	}
 }
 
-func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]interface{}) *CommitteeSpecTest {
-	committeeMap := m["Committee"].(map[string]interface{})
+func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any) *CommitteeSpecTest {
+	committeeMap := m["Committee"].(map[string]any)
 
-	inputs := make([]interface{}, 0)
-	for _, input := range m["Input"].([]interface{}) {
+	inputs := make([]any, 0)
+	for _, input := range m["Input"].([]any) {
 		byts, err := json.Marshal(input)
 		if err != nil {
 			panic(err)
@@ -519,7 +519,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
 	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
 	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]interface{}) {
+		for _, msg := range m["OutputMessages"].([]any) {
 			byts, err := json.Marshal(msg)
 			require.NoError(t, err)
 			typedMsg := &spectypes.PartialSignatureMessages{}
@@ -530,7 +530,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 
 	beaconBroadcastedRoots := make([]string, 0)
 	if m["BeaconBroadcastedRoots"] != nil {
-		for _, r := range m["BeaconBroadcastedRoots"].([]interface{}) {
+		for _, r := range m["BeaconBroadcastedRoots"].([]any) {
 			beaconBroadcastedRoots = append(beaconBroadcastedRoots, r.(string))
 		}
 	}
@@ -548,7 +548,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]interface{}) *validator.Committee {
+func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]any) *validator.Committee {
 	byts, err := json.Marshal(committeeMap)
 	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
@@ -577,7 +577,7 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 			break
 		}
 
-		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), spectestingutils.KeySetForShare(shareInstance))
+		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]any)[fmt.Sprintf("%v", slot)].(map[string]any), spectestingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
 	}
 

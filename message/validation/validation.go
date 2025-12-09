@@ -127,11 +127,17 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}
 
 	validationStart := time.Now()
-	defer func() {
-		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
-	}()
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
+
+	defer func() {
+		role := spectypes.RunnerRole(spectypes.RoleUnknown)
+		if decodedMessage != nil {
+			role = decodedMessage.GetID().GetRoleType()
+		}
+		recordMessageDuration(ctx, role, time.Since(validationStart))
+	}()
+
 	if err != nil {
 		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}

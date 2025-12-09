@@ -3,6 +3,7 @@ package exporter
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -51,11 +52,40 @@ type dutyTraceStore interface {
 }
 
 // Common helpers shared across handlers
-func toApiError(errs *multierror.Error) *api.ErrorResponse {
-	if len(errs.Errors) == 1 {
-		return api.Error(errs.Errors[0])
+// toApiError produces a rendered API error response, logs it with context, and
+// allows callers to choose the HTTP status code. It should be the only
+// function used by exporter handlers to return errors so logging remains
+// consistent.
+func toApiError(logger *zap.Logger, r *http.Request, endpoint string, status int, req any, err error) *api.ErrorResponse {
+	if err == nil {
+		err = errors.New("unknown error")
 	}
-	return api.Error(errs)
+
+	// Wrap the error into the standard response shape with the desired status.
+	var apiErr *api.ErrorResponse
+	if status == http.StatusBadRequest {
+		apiErr = api.BadRequestError(err)
+	} else {
+		apiErr = &api.ErrorResponse{
+			Err:     err,
+			Code:    status,
+			Status:  http.StatusText(status),
+			Message: err.Error(),
+		}
+	}
+
+	if logger != nil {
+		logger.Error("exporter API request failed",
+			zap.String("endpoint", endpoint),
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+			zap.Int("status", status),
+			zap.String("error", apiErr.Message),
+			zap.Any("request", req),
+		)
+	}
+
+	return apiErr
 }
 
 func toStrings(err *multierror.Error) []string {

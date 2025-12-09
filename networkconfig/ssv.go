@@ -92,7 +92,7 @@ func (s *SSV) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.marshal())
 }
 
-func (s *SSV) MarshalYAML() (interface{}, error) {
+func (s *SSV) MarshalYAML() (any, error) {
 	return s.marshal(), nil
 }
 
@@ -120,7 +120,7 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	return nil
 }
 
-func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (s *SSV) UnmarshalYAML(unmarshal func(any) error) error {
 	var aux marshaledConfig
 	if err := unmarshal(&aux); err != nil {
 		return err
