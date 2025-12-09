@@ -32,7 +32,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	// == 2 == Call core logic
-	result, errs := e.ValidatorTracesCore(coreReq)
+	result, errs := e.svc.ValidatorTracesCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if isValidationError(errs) {

@@ -1,4 +1,4 @@
-package exporter
+package exporter2
 
 import (
 	"fmt"
@@ -12,17 +12,16 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
-func (e *Exporter) ValidatorTracesCore(request *exporter2.ValidatorTracesQuery) (*exporter2.ValidatorTracesResult, *multierror.Error) {
+func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*ValidatorTracesResult, *multierror.Error) {
 	if err := validateValidatorRequest(request); err != nil {
 		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
-	var results []exporter2.ValidatorCommitteeTrace
+	var results []ValidatorCommitteeTrace
 	var errs *multierror.Error
 
 	indices, indicesErr := e.extractIndices(request)
@@ -53,10 +52,10 @@ func (e *Exporter) ValidatorTracesCore(request *exporter2.ValidatorTracesQuery) 
 	// Build schedule from disk, read-only.
 	schedule := e.buildValidatorSchedule(request, indices)
 
-	return &exporter2.ValidatorTracesResult{Traces: results, Schedule: schedule}, errs
+	return &ValidatorTracesResult{Traces: results, Schedule: schedule}, errs
 }
 
-func validateValidatorRequest(request *exporter2.ValidatorTracesQuery) error {
+func validateValidatorRequest(request *ValidatorTracesQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -77,21 +76,21 @@ func validateValidatorRequest(request *exporter2.ValidatorTracesQuery) error {
 	return nil
 }
 
-func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]exporter2.ValidatorCommitteeTrace, error) {
+func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]ValidatorCommitteeTrace, error) {
 	if len(indices) == 0 {
 		traces, err := e.traceStore.GetValidatorDuties(role, slot)
-		out := make([]exporter2.ValidatorCommitteeTrace, 0, len(traces))
+		out := make([]ValidatorCommitteeTrace, 0, len(traces))
 		for _, t := range traces {
-			out = append(out, exporter2.ValidatorCommitteeTrace{ValidatorDutyTrace: *t})
+			out = append(out, ValidatorCommitteeTrace{ValidatorDutyTrace: *t})
 		}
 		return out, err
 	}
 
-	duties := make([]exporter2.ValidatorCommitteeTrace, 0, len(indices))
+	duties := make([]ValidatorCommitteeTrace, 0, len(indices))
 	var errs *multierror.Error
 
 	for _, idx := range indices {
-		var result exporter2.ValidatorCommitteeTrace
+		var result ValidatorCommitteeTrace
 
 		duty, err := e.traceStore.GetValidatorDuty(role, slot, idx)
 		if err != nil {
@@ -117,8 +116,8 @@ func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, s
 	return duties, errs.ErrorOrNil()
 }
 
-func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]exporter2.ValidatorCommitteeTrace, error) {
-	results := make([]exporter2.ValidatorCommitteeTrace, 0, len(indices))
+func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]ValidatorCommitteeTrace, error) {
+	results := make([]ValidatorCommitteeTrace, 0, len(indices))
 	var errs *multierror.Error
 
 	for _, index := range indices {
@@ -161,7 +160,7 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 			continue
 		}
 
-		validatorDuty := exporter2.ValidatorCommitteeTrace{
+		validatorDuty := ValidatorCommitteeTrace{
 			ValidatorDutyTrace: exporter.ValidatorDutyTrace{
 				ConsensusTrace: duty.ConsensusTrace,
 				Slot:           duty.Slot,
@@ -179,8 +178,8 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 
 // buildValidatorSchedule reads the compact on-disk schedule and returns a filtered
 // per-validator schedule for the requested roles and slot range.
-func (e *Exporter) buildValidatorSchedule(req *exporter2.ValidatorTracesQuery, indices []phase0.ValidatorIndex) []exporter2.ValidatorScheduleEntry {
-	out := make([]exporter2.ValidatorScheduleEntry, 0)
+func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesQuery, indices []phase0.ValidatorIndex) []ValidatorScheduleEntry {
+	out := make([]ValidatorScheduleEntry, 0)
 
 	// Deduplicate requested roles (idiomatic way is to build a map in ~O(n) cost).
 	roleWanted := map[spectypes.BeaconRole]struct{}{}
@@ -225,11 +224,11 @@ func (e *Exporter) buildValidatorSchedule(req *exporter2.ValidatorTracesQuery, i
 				// If the request specified explicit indices/pubkeys, include the
 				// validator entry with empty roles to make absence explicit.
 				if filter {
-					out = append(out, exporter2.ValidatorScheduleEntry{Slot: slot, Validator: idx, Roles: roles})
+					out = append(out, ValidatorScheduleEntry{Slot: slot, Validator: idx, Roles: roles})
 				}
 				continue
 			}
-			out = append(out, exporter2.ValidatorScheduleEntry{
+			out = append(out, ValidatorScheduleEntry{
 				Slot:      slot,
 				Validator: idx,
 				Roles:     roles,

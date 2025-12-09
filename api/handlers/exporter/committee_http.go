@@ -34,7 +34,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	// == 2 == Call core logic
-	result, errs := e.CommitteeTracesCore(coreReq)
+	result, errs := e.svc.CommitteeTracesCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if isValidationError(errs) {

@@ -34,7 +34,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// == 2 == Call core logic
-	result, errs := e.TraceDecidedsCore(coreReq)
+	result, errs := e.svc.TraceDecidedsCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if isValidationError(errs) {

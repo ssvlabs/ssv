@@ -1,4 +1,4 @@
-package exporter
+package exporter2
 
 import (
 	"fmt"
@@ -11,12 +11,11 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // CommitteeTracesCore contains the core logic for CommitteeTraces without any HTTP concerns.
-func (e *Exporter) CommitteeTracesCore(request *exporter2.CommitteeTracesQuery) (*exporter2.CommitteeTracesResult, *multierror.Error) {
+func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesQuery) (*CommitteeTracesResult, *multierror.Error) {
 	if err := validateCommitteeRequest(request); err != nil {
 		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
@@ -37,10 +36,10 @@ func (e *Exporter) CommitteeTracesCore(request *exporter2.CommitteeTracesQuery) 
 	// Attach read-only schedule unioned per committee for the requested slot range.
 	schedule := e.buildCommitteeSchedule(request)
 
-	return &exporter2.CommitteeTracesResult{Traces: all, Schedule: schedule}, errs
+	return &CommitteeTracesResult{Traces: all, Schedule: schedule}, errs
 }
 
-func validateCommitteeRequest(request *exporter2.CommitteeTracesQuery) error {
+func validateCommitteeRequest(request *CommitteeTracesQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -70,8 +69,8 @@ func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []sp
 
 // buildCommitteeSchedule constructs per-committee schedules by grouping scheduled indices
 // via stored validator→committee links at each slot in-range.
-func (e *Exporter) buildCommitteeSchedule(req *exporter2.CommitteeTracesQuery) []exporter2.CommitteeScheduleEntry {
-	out := make([]exporter2.CommitteeScheduleEntry, 0)
+func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesQuery) []CommitteeScheduleEntry {
+	out := make([]CommitteeScheduleEntry, 0)
 	// Optional filter for committees.
 	var filter map[spectypes.CommitteeID]struct{}
 	if len(req.CommitteeIDs) > 0 {
@@ -123,7 +122,7 @@ func (e *Exporter) buildCommitteeSchedule(req *exporter2.CommitteeTracesQuery) [
 			}
 		}
 		for cid, roles := range grouped {
-			out = append(out, exporter2.CommitteeScheduleEntry{Slot: slot, CommitteeID: cid, Roles: roles})
+			out = append(out, CommitteeScheduleEntry{Slot: slot, CommitteeID: cid, Roles: roles})
 		}
 	}
 	return out

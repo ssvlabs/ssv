@@ -1,4 +1,4 @@
-package exporter
+package exporter2
 
 import (
 	"fmt"
@@ -9,18 +9,17 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	exporter2 "github.com/ssvlabs/ssv/exporter2"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 )
 
 // TraceDecidedsCore contains the core logic for TraceDecideds without any HTTP concerns.
-func (e *Exporter) TraceDecidedsCore(request *exporter2.DecidedsQuery) (*exporter2.TraceDecidedsResult, *multierror.Error) {
+func (e *Exporter) TraceDecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, *multierror.Error) {
 	if err := validateDecidedRequest(request); err != nil {
 		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
-	var participants = make([]exporter2.DecidedParticipant, 0)
+	var participants = make([]DecidedParticipant, 0)
 	var errs *multierror.Error
 
 	indices, indicesErr := e.indicesFromDecidedsQuery(request)
@@ -66,7 +65,7 @@ func (e *Exporter) TraceDecidedsCore(request *exporter2.DecidedsQuery) (*exporte
 					continue
 				}
 
-				participants = append(participants, exporter2.DecidedParticipantFromRange(role, pr, idxEntry.Index))
+				participants = append(participants, DecidedParticipantFromRange(role, pr, idxEntry.Index))
 			}
 		}
 	}
@@ -74,18 +73,18 @@ func (e *Exporter) TraceDecidedsCore(request *exporter2.DecidedsQuery) (*exporte
 	// by design, not found duties are expected and not considered as API errors
 	errs = filterOutDutyNotFoundErrors(errs)
 
-	return &exporter2.TraceDecidedsResult{Participants: participants}, errs
+	return &TraceDecidedsResult{Participants: participants}, errs
 }
 
 // DecidedsCore contains the core logic for the backward-compatible exporter-v1 "decideds" endpoint.
-func (e *Exporter) DecidedsCore(request *exporter2.DecidedsQuery) (*exporter2.TraceDecidedsResult, error) {
+func (e *Exporter) DecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, error) {
 	if err := validateDecidedRequest(request); err != nil {
 		return nil, &ValidationError{Err: err}
 	}
 
 	// Initialize with empty slice to ensure we always return [] instead of null
-	var response exporter2.TraceDecidedsResult
-	response.Participants = make([]exporter2.DecidedParticipant, 0)
+	var response TraceDecidedsResult
+	response.Participants = make([]DecidedParticipant, 0)
 
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
@@ -112,14 +111,14 @@ func (e *Exporter) DecidedsCore(request *exporter2.DecidedsQuery) (*exporter2.Tr
 		}
 
 		for _, pr := range participantsRange {
-			response.Participants = append(response.Participants, exporter2.DecidedParticipantFromRange(role, pr, 0))
+			response.Participants = append(response.Participants, DecidedParticipantFromRange(role, pr, 0))
 		}
 	}
 
 	return &response, nil
 }
 
-func validateDecidedRequest(request *exporter2.DecidedsQuery) error {
+func validateDecidedRequest(request *DecidedsQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}

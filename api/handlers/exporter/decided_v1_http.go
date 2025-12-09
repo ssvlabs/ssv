@@ -20,7 +20,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// == 2 == Call core logic
-	result, err := e.DecidedsCore(coreReq)
+	result, err := e.svc.DecidedsCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if err != nil {
