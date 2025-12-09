@@ -586,9 +586,9 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	// sync committee duties to be fetched for the current period.
 	waitForDuties.Set(true)
 	startScheduler(ctx, t, scheduler, schedulerPool)
-	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) current epoch fetch-call
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{

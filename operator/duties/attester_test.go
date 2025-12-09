@@ -973,8 +973,8 @@ func TestScheduler_Attester_Start_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
 	// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epochs
 	waitForDuties.Set(true)
 	startScheduler(ctx, t, scheduler, schedulerPool)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout) // current epoch fetch-call
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout) // next epoch fetch-call
 
 	// STEP 2: wait for attester duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
