@@ -45,7 +45,6 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode
 		duties:       duties,
 		exporterMode: exporterMode,
 	}
-	h.fetchCurrentPeriod = true
 	return h
 }
 
