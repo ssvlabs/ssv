@@ -1,14 +1,12 @@
 package spectest
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 
@@ -91,10 +89,6 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
 
 	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
-
-	// Normalize aggregator-committee decided values (actual state) to ensure deterministic hashing.
-	// This mirrors the normalization we apply to the expected state in overrideStateComparisonCommitteeSpecTest.
-	normalizeAggregatorDecidedValues(test.Committee)
 
 	// post root
 	postRoot, err := test.Committee.GetRoot()
@@ -363,100 +357,10 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 		test.Committee.Runners = filtered
 	}
 
-	normalizeAggregatorDecidedValues(committee)
-
 	root, err := committee.GetRoot()
 	require.NoError(t, err)
 
 	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
 
 	test.PostDutyCommittee = committee
-}
-
-// normalizeAggregatorDecidedValues canonicalizes the order of aggregator-committee decided values
-// so that hashing is deterministic across equivalent states. It sorts entries by validator index
-// (and sub-indexes where applicable) and rewrites DecidedValue accordingly.
-func normalizeAggregatorDecidedValues(c *validator.Committee) {
-	if c == nil || len(c.AggregatorRunners) == 0 {
-		return
-	}
-
-	for _, ar := range c.AggregatorRunners {
-		if ar == nil || ar.BaseRunner == nil || ar.BaseRunner.State == nil || len(ar.BaseRunner.State.DecidedValue) == 0 {
-			continue
-		}
-
-		data := &spectypes.AggregatorCommitteeConsensusData{}
-		if err := data.Decode(ar.BaseRunner.State.DecidedValue); err != nil {
-			continue // leave as-is if decode fails
-		}
-
-		// Canonicalize AggregateAndProofs-aligned slices
-		if len(data.Aggregators) == len(data.AggregatorsCommitteeIndexes) && len(data.Aggregators) == len(data.Attestations) {
-			type aggTuple struct {
-				idx  phase0.ValidatorIndex
-				cIdx uint64
-				att  []byte
-			}
-			tuples := make([]aggTuple, 0, len(data.Aggregators))
-			for i := range data.Aggregators {
-				tuples = append(tuples, aggTuple{
-					idx:  data.Aggregators[i].ValidatorIndex,
-					cIdx: data.AggregatorsCommitteeIndexes[i],
-					att:  data.Attestations[i],
-				})
-			}
-			sort.Slice(tuples, func(i, j int) bool {
-				if tuples[i].idx != tuples[j].idx {
-					return tuples[i].idx < tuples[j].idx
-				}
-				if tuples[i].cIdx != tuples[j].cIdx {
-					return tuples[i].cIdx < tuples[j].cIdx
-				}
-				// tie-breaker for determinism
-				return bytes.Compare(tuples[i].att, tuples[j].att) < 0
-			})
-			for i := range tuples {
-				data.Aggregators[i].ValidatorIndex = tuples[i].idx
-				data.AggregatorsCommitteeIndexes[i] = tuples[i].cIdx
-				data.Attestations[i] = tuples[i].att
-			}
-		}
-
-		// Canonicalize SyncCommittee-aligned slices
-		if len(data.Contributors) == len(data.SyncCommitteeSubnets) && len(data.Contributors) == len(data.SyncCommitteeContributions) {
-			type contribTuple struct {
-				idx    phase0.ValidatorIndex
-				subnet uint64
-				// The underlying value is altair.Contribution, but keep as opaque; order via subnet+idx only.
-				pos int
-			}
-			tuples := make([]contribTuple, 0, len(data.Contributors))
-			for i := range data.Contributors {
-				tuples = append(tuples, contribTuple{
-					idx:    data.Contributors[i].ValidatorIndex,
-					subnet: data.SyncCommitteeSubnets[i],
-					pos:    i,
-				})
-			}
-			sort.Slice(tuples, func(i, j int) bool {
-				if tuples[i].idx != tuples[j].idx {
-					return tuples[i].idx < tuples[j].idx
-				}
-				return tuples[i].subnet < tuples[j].subnet
-			})
-			// Rewrite arrays according to sorted order while preserving original contribution objects alignment
-			for newI := range tuples {
-				oldI := tuples[newI].pos
-				data.Contributors[newI] = data.Contributors[oldI]
-				data.SyncCommitteeSubnets[newI] = data.SyncCommitteeSubnets[oldI]
-				data.SyncCommitteeContributions[newI] = data.SyncCommitteeContributions[oldI]
-			}
-		}
-
-		// Re-encode and store back
-		if enc, err := data.Encode(); err == nil {
-			ar.BaseRunner.State.DecidedValue = enc
-		}
-	}
 }
