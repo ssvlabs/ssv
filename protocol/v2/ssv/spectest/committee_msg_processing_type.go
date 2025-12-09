@@ -90,15 +90,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	// test output message (in asynchronous order)
 	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
 
-	// test beacon broadcasted msgs
-	if len(test.Committee.AggregatorRunners) > 0 {
-		// For aggregator-committee flows, relax: just require at least one broadcast when expected > 0.
-		if len(test.BeaconBroadcastedRoots) > 0 {
-			require.GreaterOrEqual(t, len(broadcastedRoots), 1)
-		}
-	} else {
-		spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
-	}
+	spectestingutils.CompareBroadcastedBeaconMsgs(t, test.BeaconBroadcastedRoots, broadcastedRoots)
 
 	// Normalize aggregator-committee decided values (actual state) to ensure deterministic hashing.
 	// This mirrors the normalization we apply to the expected state in overrideStateComparisonCommitteeSpecTest.
