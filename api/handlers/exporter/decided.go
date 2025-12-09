@@ -3,7 +3,6 @@ package exporter
 import (
 	"encoding/hex"
 	"fmt"
-	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -11,7 +10,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 )
@@ -81,16 +79,10 @@ func (e *Exporter) TraceDecidedsCore(request *DecidedsRequest) ([]*DecidedPartic
 	return participants, errs
 }
 
-// Decideds is the backward-compatible handler for exporter-v1 "decideds" endpoint.
-func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
-	var request DecidedsRequest
-
-	if err := api.Bind(r, &request); err != nil {
-		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, err)
-	}
-
-	if err := validateDecidedRequest(&request); err != nil {
-		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, err)
+// DecidedsCore contains the core logic for the backward-compatible exporter-v1 "decideds" endpoint.
+func (e *Exporter) DecidedsCore(request *DecidedsRequest) (*DecidedsResponse, error) {
+	if err := validateDecidedRequest(request); err != nil {
+		return nil, &ValidationError{Err: err}
 	}
 
 	pubkeys := request.pubKeys()
@@ -112,14 +104,14 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			var err error
 			participantsRange, err = store.GetAllParticipantsInRange(from, to)
 			if err != nil {
-				return toApiError(e.logger, r, "decideds_v1", http.StatusInternalServerError, request, fmt.Errorf("error getting participants: %w", err))
+				return nil, fmt.Errorf("error getting participants: %w", err)
 			}
 		}
 
 		for _, pubkey := range pubkeys {
 			participantsByPK, err := store.GetParticipantsInRange(pubkey, from, to)
 			if err != nil {
-				return toApiError(e.logger, r, "decideds_v1", http.StatusInternalServerError, request, fmt.Errorf("error getting participants: %w", err))
+				return nil, fmt.Errorf("error getting participants: %w", err)
 			}
 			participantsRange = append(participantsRange, participantsByPK...)
 		}
@@ -130,7 +122,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	return api.Render(w, r, response)
+	return &response, nil
 }
 
 func validateDecidedRequest(request *DecidedsRequest) error {
