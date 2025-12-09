@@ -111,21 +111,29 @@ func recordRequest(
 	// to it (there are too many requests being made to log them every time, some requests don't even result
 	// into a network-based call due to caching implemented for some routes).
 	if err != nil || duration > 1*time.Millisecond {
+		success := "true"
+		if err != nil {
+			success = "false"
+			if errors.Is(err, context.Canceled) {
+				success = "unknown" // we don't know the outcome of this request
+			}
+		}
 		logger.Debug("EL request done",
 			zap.String("route_name", routeName),
 			zap.String("client_addr", client.Address()),
 			fields.Took(duration),
-			zap.Bool("success", err == nil),
+			zap.String("success", success),
 			zap.Error(err),
 		)
 	}
 
-	// Build metric attributes, add error-code attribute in case there is an error.
+	// Build metric attributes, add error-code attribute in case there is an error (treat context.Canceled
+	// as non-error since it means we've canceled the request ourselves).
 	attr := []attribute.KeyValue{
 		semconv.ServerAddress(client.Address()),
 		attribute.String("rpc.route_name", routeName),
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		// Error code of 0 signifies the presence of some error, see if we can clarify if further by checking
 		// for rpc error codes.
 		errCode := 0
