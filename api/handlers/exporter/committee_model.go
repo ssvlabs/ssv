@@ -4,11 +4,17 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
+	exporter2 "github.com/ssvlabs/ssv/exporter2"
 )
+
+type CommitteeIDLengthError struct {
+	CommitteeID api.Hex
+}
 
 // CommitteeTracesRequest represents the filter parameters accepted by the
 // committee traces endpoints.
@@ -29,6 +35,23 @@ func (req *CommitteeTracesRequest) parseCommitteeIds() []spectypes.CommitteeID {
 	return committeeIDs
 }
 
+func toCommitteeTracesQuery(r *CommitteeTracesRequest) (*exporter2.CommitteeTracesQuery, *CommitteeIDLengthError) {
+	requiredLength := len(spectypes.CommitteeID{})
+	for _, cmt := range r.CommitteeIDs {
+		if len(cmt) != requiredLength {
+			return nil, &CommitteeIDLengthError{CommitteeID: cmt}
+		}
+	}
+
+	q := &exporter2.CommitteeTracesQuery{
+		From:         r.From,
+		To:           r.To,
+		CommitteeIDs: r.parseCommitteeIds(),
+	}
+
+	return q, nil
+}
+
 // CommitteeTracesResponse represents the API response returned by the
 // committee traces endpoints.
 type CommitteeTracesResponse struct {
@@ -38,6 +61,17 @@ type CommitteeTracesResponse struct {
 	Schedule []CommitteeSchedule `json:"schedule"`
 	// Errors lists non-fatal issues encountered while building the response (duties not found, enrichment errors, etc.).
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"committee duty missing for slot 123456"`
+}
+
+func toCommitteeTraceResponse(result *exporter2.CommitteeTracesResult, errs *multierror.Error) *CommitteeTracesResponse {
+	r := new(CommitteeTracesResponse)
+	r.Data = make([]CommitteeTrace, 0)
+	for _, duty := range result.Traces {
+		r.Data = append(r.Data, toCommitteeTrace(duty))
+	}
+	r.Schedule = toCommitteeSchedule(result.Schedule)
+	r.Errors = toStrings(errs)
+	return r
 }
 
 // CommitteeTrace contains the duty trace information for a specific committee.
@@ -99,4 +133,24 @@ type CommitteeSchedule struct {
 	Slot        uint64              `json:"slot" format:"int64"`
 	CommitteeID string              `json:"committeeID" format:"hex"`
 	Roles       map[string][]uint64 `json:"roles"`
+}
+
+func toCommitteeSchedule(entries []exporter2.CommitteeScheduleEntry) []CommitteeSchedule {
+	out := make([]CommitteeSchedule, 0, len(entries))
+	for _, e := range entries {
+		roles := make(map[string][]uint64, len(e.Roles))
+		for role, idxs := range e.Roles {
+			indices := make([]uint64, 0, len(idxs))
+			for _, idx := range idxs {
+				indices = append(indices, uint64(idx))
+			}
+			roles[role.String()] = indices
+		}
+		out = append(out, CommitteeSchedule{
+			Slot:        uint64(e.Slot),
+			CommitteeID: hex.EncodeToString(e.CommitteeID[:]),
+			Roles:       roles,
+		})
+	}
+	return out
 }

@@ -1,6 +1,8 @@
 package exporter
 
 import (
+	"encoding/hex"
+	"fmt"
 	"net/http"
 
 	"github.com/ssvlabs/ssv/api"
@@ -26,9 +28,13 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	if err := api.Bind(r, &request); err != nil {
 		return toApiError(e.logger, r, "committee_traces", http.StatusBadRequest, request, err)
 	}
+	coreReq, cerr := toCommitteeTracesQuery(&request)
+	if cerr != nil {
+		return toApiError(e.logger, r, "committee_traces", http.StatusBadRequest, request, formatCommitteeIDLengthError(cerr))
+	}
 
 	// == 2 == Call core logic
-	duties, schedule, errs := e.CommitteeTracesCore(&request)
+	result, errs := e.CommitteeTracesCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if isValidationError(errs) {
@@ -36,12 +42,15 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(duties) == 0 && errs.ErrorOrNil() != nil {
+	if len(result.Traces) == 0 && errs.ErrorOrNil() != nil {
 		return toApiError(e.logger, r, "committee_traces", http.StatusInternalServerError, request, errs.ErrorOrNil())
 	}
 
 	// otherwise return a partial response with valid duties
-	resp := toCommitteeTraceResponse(duties, errs)
-	resp.Schedule = schedule
-	return api.Render(w, r, resp)
+	response := toCommitteeTraceResponse(result, errs)
+	return api.Render(w, r, response)
+}
+
+func formatCommitteeIDLengthError(err *CommitteeIDLengthError) error {
+	return fmt.Errorf("invalid committee ID length: %s", hex.EncodeToString(err.CommitteeID))
 }

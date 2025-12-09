@@ -1,7 +1,6 @@
 package exporter
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,18 +11,19 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
+	exporter2 "github.com/ssvlabs/ssv/exporter2"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // CommitteeTracesCore contains the core logic for CommitteeTraces without any HTTP concerns.
-func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesRequest) ([]*exporter.CommitteeDutyTrace, []CommitteeSchedule, *multierror.Error) {
+func (e *Exporter) CommitteeTracesCore(request *exporter2.CommitteeTracesQuery) (*exporter2.CommitteeTracesResult, *multierror.Error) {
 	if err := validateCommitteeRequest(request); err != nil {
-		return nil, nil, multierror.Append(nil, &ValidationError{Err: err})
+		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
 	var all []*exporter.CommitteeDutyTrace
 	var errs *multierror.Error
-	cids := request.parseCommitteeIds()
+	cids := request.CommitteeIDs
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		duties, err := e.getCommitteeDutiesForSlot(slot, cids)
@@ -37,19 +37,12 @@ func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesRequest) ([]*expo
 	// Attach read-only schedule unioned per committee for the requested slot range.
 	schedule := e.buildCommitteeSchedule(request)
 
-	return all, schedule, errs
+	return &exporter2.CommitteeTracesResult{Traces: all, Schedule: schedule}, errs
 }
 
-func validateCommitteeRequest(request *CommitteeTracesRequest) error {
+func validateCommitteeRequest(request *exporter2.CommitteeTracesQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
-	}
-
-	requiredLength := len(spectypes.CommitteeID{})
-	for _, cmt := range request.CommitteeIDs {
-		if len(cmt) != requiredLength {
-			return fmt.Errorf("invalid committee ID length: %s", hex.EncodeToString(cmt))
-		}
 	}
 	return nil
 }
@@ -75,27 +68,15 @@ func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []sp
 	return duties, errs.ErrorOrNil()
 }
 
-func toCommitteeTraceResponse(duties []*exporter.CommitteeDutyTrace, errs *multierror.Error) *CommitteeTracesResponse {
-	r := new(CommitteeTracesResponse)
-	r.Data = make([]CommitteeTrace, 0)
-	for _, t := range duties {
-		r.Data = append(r.Data, toCommitteeTrace(t))
-	}
-	r.Errors = toStrings(errs)
-	return r
-}
-
 // buildCommitteeSchedule constructs per-committee schedules by grouping scheduled indices
 // via stored validator→committee links at each slot in-range.
-func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesRequest) []CommitteeSchedule {
-	out := make([]CommitteeSchedule, 0)
+func (e *Exporter) buildCommitteeSchedule(req *exporter2.CommitteeTracesQuery) []exporter2.CommitteeScheduleEntry {
+	out := make([]exporter2.CommitteeScheduleEntry, 0)
 	// Optional filter for committees.
 	var filter map[spectypes.CommitteeID]struct{}
 	if len(req.CommitteeIDs) > 0 {
 		filter = make(map[spectypes.CommitteeID]struct{}, len(req.CommitteeIDs))
-		for _, c := range req.CommitteeIDs {
-			var id spectypes.CommitteeID
-			copy(id[:], c)
+		for _, id := range req.CommitteeIDs {
 			filter[id] = struct{}{}
 		}
 	}
@@ -142,16 +123,7 @@ func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesRequest) []Committ
 			}
 		}
 		for cid, roles := range grouped {
-			// Convert to API shape: string committeeID and role->[]uint64
-			apiRoles := make(map[string][]uint64, len(roles))
-			for role, idxs := range roles {
-				arr := make([]uint64, 0, len(idxs))
-				for _, i := range idxs {
-					arr = append(arr, uint64(i))
-				}
-				apiRoles[role.String()] = arr
-			}
-			out = append(out, CommitteeSchedule{Slot: uint64(slot), CommitteeID: hex.EncodeToString(cid[:]), Roles: apiRoles})
+			out = append(out, exporter2.CommitteeScheduleEntry{Slot: slot, CommitteeID: cid, Roles: roles})
 		}
 	}
 	return out
