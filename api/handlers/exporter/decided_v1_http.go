@@ -14,9 +14,13 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	if err := api.Bind(r, &request); err != nil {
 		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, err)
 	}
+	coreReq, perr := toDecidedsQuery(&request)
+	if perr != nil {
+		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, formatPubKeyLengthError(perr))
+	}
 
 	// == 2 == Call core logic
-	response, err := e.DecidedsCore(&request)
+	result, err := e.DecidedsCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if err != nil {
@@ -26,5 +30,6 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		return toApiError(e.logger, r, "decideds_v1", http.StatusInternalServerError, request, err)
 	}
 
+	response := DecidedsResponseFromResult(result)
 	return api.Render(w, r, response)
 }

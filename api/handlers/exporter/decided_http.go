@@ -1,6 +1,8 @@
 package exporter
 
 import (
+	"encoding/hex"
+	"fmt"
 	"net/http"
 
 	"github.com/ssvlabs/ssv/api"
@@ -26,9 +28,13 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	if err := api.Bind(r, &request); err != nil {
 		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, err)
 	}
+	coreReq, perr := toDecidedsQuery(&request)
+	if perr != nil {
+		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, formatPubKeyLengthError(perr))
+	}
 
 	// == 2 == Call core logic
-	participants, errs := e.TraceDecidedsCore(&request)
+	result, errs := e.TraceDecidedsCore(coreReq)
 
 	// == 3 == Convert core response model to HTTP response model
 	if isValidationError(errs) {
@@ -36,11 +42,15 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(participants) == 0 && errs.ErrorOrNil() != nil {
+	if len(result.Participants) == 0 && errs.ErrorOrNil() != nil {
 		return toApiError(e.logger, r, "trace_decideds", http.StatusInternalServerError, request, errs.ErrorOrNil())
 	}
 
 	// otherwise return a partial response with valid participants
-	response := TraceDecidedsResponseFromParticipants(participants, toStrings(errs))
+	response := TraceDecidedsResponseFromParticipants(result, errs)
 	return api.Render(w, r, response)
+}
+
+func formatPubKeyLengthError(err *PubKeyLengthError) error {
+	return fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(err.PubKey))
 }
