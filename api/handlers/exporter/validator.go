@@ -3,7 +3,6 @@ package exporter
 import (
 	"encoding/hex"
 	"fmt"
-	"net/http"
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,46 +11,26 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
-// ValidatorTraces godoc
-// @Summary Retrieve validator duty traces
-// @Description Returns consensus, decided, and message traces for the requested validator duties.
-// @Tags Exporter
-// @Accept json
-// @Produce json
-// @Param request query ValidatorTracesRequest false "Filters as query parameters"
-// @Param request body ValidatorTracesRequest false "Filters as JSON body"
-// @Success 200 {object} ValidatorTracesResponse
-// @Failure 400 {object} api.ErrorResponse
-// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
-// @Failure 500 {object} api.ErrorResponse
-// @Router /v1/exporter/traces/validator [get]
-// @Router /v1/exporter/traces/validator [post]
-func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error {
-	var request ValidatorTracesRequest
-
-	if err := api.Bind(r, &request); err != nil {
-		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, err)
-	}
-
-	if err := validateValidatorRequest(&request); err != nil {
-		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, err)
+// ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
+func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesRequest) ([]validatorDutyTraceWithCommitteeID, []ValidatorSchedule, *multierror.Error) {
+	if err := validateValidatorRequest(request); err != nil {
+		return nil, nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
 	var results []validatorDutyTraceWithCommitteeID
 	var errs *multierror.Error
 
-	indices, err := e.extractIndices(&request)
-	errs = multierror.Append(errs, err)
+	indices, indicesErr := e.extractIndices(request)
+	errs = multierror.Append(errs, indicesErr)
 
 	// if the request was for a specific set of participants and we couldn't resolve any, we're done
 	if request.hasFilters() && len(indices) == 0 {
-		return toApiError(e.logger, r, "validator_traces", http.StatusBadRequest, request, errs.ErrorOrNil())
+		return nil, nil, multierror.Append(nil, &ValidationError{Err: indicesErr})
 	}
 
 	for s := request.From; s <= request.To; s++ {
@@ -73,17 +52,10 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	// by design, not found duties are expected and not considered as API errors
 	errs = filterOutDutyNotFoundErrors(errs)
 
-	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(results) == 0 && errs.ErrorOrNil() != nil {
-		return toApiError(e.logger, r, "validator_traces", http.StatusInternalServerError, request, errs.ErrorOrNil())
-	}
-
 	// Build schedule from disk, read-only.
-	schedule := e.buildValidatorSchedule(&request, indices)
+	schedule := e.buildValidatorSchedule(request, indices)
 
-	resp := toValidatorTraceResponse(results, errs)
-	resp.Schedule = schedule
-	return api.Render(w, r, resp)
+	return results, schedule, errs
 }
 
 func validateValidatorRequest(request *ValidatorTracesRequest) error {
