@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	baseDuration            = 100 * time.Millisecond
+	baseDuration            = 200 * time.Millisecond
 	slotDuration            = 15 * baseDuration
 	timeout                 = 20 * baseDuration
 	noActionTimeout         = 2 * baseDuration
