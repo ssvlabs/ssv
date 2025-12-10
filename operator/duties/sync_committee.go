@@ -30,7 +30,7 @@ type SyncCommitteeHandler struct {
 	// fetchCurrentPeriod stores the intent to fetch duties for the current period, while
 	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchCurrentPeriod bool
-	// fetchCurrentPeriod stores the intent to fetch duties for the next period, while
+	// fetchNextPeriod stores the intent to fetch duties for the next period, while
 	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchNextPeriod bool
 
@@ -138,8 +138,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-// HandleInitialDuties fetches duties for the current and next epochs.
-// Fetching duties for the next epoch is necessary if we are starting close to epoch-boundary because
+// HandleInitialDuties fetches duties for the current and next periods.
+// Fetching duties for the next period is necessary if we are starting close to epoch-boundary because
 // our ticker might "miss" that rollover otherwise.
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)

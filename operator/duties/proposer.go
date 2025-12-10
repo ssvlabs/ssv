@@ -119,9 +119,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-// HandleInitialDuties fetches duties for the current and next epochs.
-// Fetching duties for the next epoch is necessary if we are starting close to epoch-boundary because
-// our ticker might "miss" that rollover otherwise.
+// HandleInitialDuties fetches duties for the current epoch.
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
 	defer cancel()
