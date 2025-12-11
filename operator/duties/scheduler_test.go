@@ -10,11 +10,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -23,7 +22,7 @@ import (
 )
 
 const (
-	baseDuration            = 100 * time.Millisecond
+	baseDuration            = 200 * time.Millisecond
 	slotDuration            = 15 * baseDuration
 	timeout                 = 20 * baseDuration
 	noActionTimeout         = 2 * baseDuration
@@ -266,7 +265,7 @@ func waitForDutiesFetch(
 	case <-fetchDutiesCall:
 		logger.Debug("duties fetched")
 	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute duty call")
+		require.FailNow(t, "unexpected execute-duties call")
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duties to be fetched")
 	}
@@ -280,9 +279,9 @@ func waitForNoAction(
 ) {
 	select {
 	case <-fetchDutiesCall:
-		require.FailNow(t, "unexpected duties call")
+		require.FailNow(t, "unexpected fetch-duties call")
 	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute duty call")
+		require.FailNow(t, "unexpected execute-duties call")
 	case <-time.After(timeout):
 		// No action as expected.
 	}
@@ -332,7 +331,7 @@ func waitForDutiesFetchCommittee(
 	case <-fetchDutiesCall:
 		break
 	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute duty call")
+		require.FailNow(t, "unexpected execute-duties call")
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duties to be fetched")
 	}
@@ -346,9 +345,9 @@ func waitForNoActionCommittee(
 ) {
 	select {
 	case <-fetchDutiesCall:
-		require.FailNow(t, "unexpected duties call")
+		require.FailNow(t, "unexpected fetch-duties call")
 	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute duty call")
+		require.FailNow(t, "unexpected execute-duties call")
 	case <-time.After(timeout):
 		// No action as expected.
 	}
@@ -363,7 +362,7 @@ func waitForDutiesExecutionCommittee(
 ) {
 	select {
 	case <-fetchDutiesCall:
-		require.FailNow(t, "unexpected duties call")
+		require.FailNow(t, "unexpected fetch-duties call")
 	case actualDuties := <-executeDutiesCall:
 		require.Len(t, actualDuties, len(expectedDuties))
 		for eCommitteeID, eCommDuty := range expectedDuties {

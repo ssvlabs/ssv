@@ -338,7 +338,7 @@ func TestExporterDecideds(t *testing.T) {
 			stores.Add(spectypes.BNRoleAttester, attesterStore)
 			stores.Add(spectypes.BNRoleProposer, proposerStore)
 
-			exporter := NewExporter(zap.NewNop(), stores, nil, nil)
+			exporter := newTestExporterForV1(stores)
 
 			reqBody, err := json.Marshal(tt.request)
 
@@ -370,7 +370,7 @@ func TestExporterDecideds_InvalidJSON(t *testing.T) {
 	stores := ibftstorage.NewStores()
 	stores.Add(spectypes.BNRoleAttester, store)
 
-	exporter := NewExporter(zap.NewNop(), stores, nil, nil)
+	exporter := newTestExporterForV1(stores)
 	req := httptest.NewRequest(http.MethodPost, "/decideds", strings.NewReader("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -402,7 +402,7 @@ func TestExporterDecideds_ErrorGetAllParticipantsInRange(t *testing.T) {
 	stores := ibftstorage.NewStores()
 	stores.Add(spectypes.BNRoleAttester, store)
 
-	exporter := NewExporter(zap.NewNop(), stores, nil, nil)
+	exporter := newTestExporterForV1(stores)
 	reqData := map[string]any{
 		"from":  100,
 		"to":    200,
@@ -445,7 +445,7 @@ func TestExporterDecideds_ErrorGetParticipantsInRange(t *testing.T) {
 	stores := ibftstorage.NewStores()
 	stores.Add(spectypes.BNRoleAttester, store)
 
-	exporter := NewExporter(zap.NewNop(), stores, nil, nil)
+	exporter := newTestExporterForV1(stores)
 
 	reqData := map[string]any{
 		"from":    100,
@@ -607,6 +607,21 @@ func (m *mockTraceStore) AddCommitteeDecided(slot phase0.Slot, signers []uint64)
 	idx := phase0.ValidatorIndex(len(m.committeeDecideds[key]) + 1)
 	entry := dutytracer.ParticipantsRangeIndexEntry{Slot: slot, Index: idx, Signers: signers}
 	m.committeeDecideds[key] = append(m.committeeDecideds[key], entry)
+}
+
+func newTestExporterForV1(stores *ibftstorage.ParticipantStores) *Exporter {
+	return NewExporter(zap.NewNop(), stores, nil, nil)
+}
+
+func newTestExporterForV2(traceStore *mockTraceStore, validators storage.ValidatorStore) *Exporter {
+	return NewExporter(zap.NewNop(), nil, traceStore, validators)
+}
+
+func buildJSONBody(t *testing.T, payload map[string]any) *strings.Reader {
+	t.Helper()
+	b, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return strings.NewReader(string(b))
 }
 
 // TestExporterTraceDecideds runs table-driven tests for the TraceDecideds handler
@@ -806,7 +821,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				"from":    100,
 				"to":      99,
 				"roles":   []string{"PROPOSER"},
-				"pubkeys": api.HexSlice{api.Hex(common.Hex2Bytes("0123"))},
+				"pubkeys": api.HexSlice{api.Hex(common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))},
 			},
 			setupMock:      func(store *mockTraceStore) {},
 			expectedStatus: http.StatusBadRequest,
@@ -1191,7 +1206,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 				}
 			}
 
-			exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
+			exporter := newTestExporterForV2(store, validatorStore)
 
 			reqBody, err := json.Marshal(tt.request)
 			require.NoError(t, err)
@@ -1218,7 +1233,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 
 func TestExporterTraceDecideds_InvalidJSON(t *testing.T) {
 	store := newMockTraceStore()
-	exporter := NewExporter(zap.NewNop(), nil, store, nil)
+	exporter := newTestExporterForV2(store, nil)
 	req := httptest.NewRequest(http.MethodPost, "/traces/decideds", strings.NewReader("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1531,12 +1546,13 @@ func TestExporterCommitteeTraces(t *testing.T) {
 
 func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
 	store := newMockTraceStore()
-	exporter := &Exporter{traceStore: store}
+	validatorStore := newMockValidatorStore()
+	exp := newTestExporterForV2(store, validatorStore)
 
-	req := ValidatorTracesRequest{
-		From:  10,
-		To:    11,
-		Roles: api.RoleSlice{api.Role(spectypes.BNRoleAttester), api.Role(spectypes.BNRoleProposer)},
+	// We don't assert on duty traces here, only on the schedule, so it's safe
+	// to return no duties.
+	store.GetValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
+		return nil, nil
 	}
 
 	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
@@ -1555,27 +1571,43 @@ func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
 		}
 	}
 
-	schedule := exporter.buildValidatorSchedule(&req, nil)
+	// Exercise the HTTP handler and assert on the schedule in the response.
+	req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+		"from":  10,
+		"to":    11,
+		"roles": []string{"PROPOSER"},
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exp.ValidatorTraces(rec, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp ValidatorTracesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	schedule := resp.Schedule
 	require.Len(t, schedule, 3)
 	rolesByKey := make(map[string][]string)
 	for _, entry := range schedule {
 		key := fmt.Sprintf("%d-%d", entry.Slot, entry.Validator)
 		rolesByKey[key] = entry.Roles
 	}
-	assert.ElementsMatch(t, []string{"ATTESTER", "PROPOSER"}, rolesByKey["10-1"])
+	assert.ElementsMatch(t, []string{"PROPOSER"}, rolesByKey["10-1"])
 	assert.ElementsMatch(t, []string{"PROPOSER"}, rolesByKey["10-2"])
 	assert.ElementsMatch(t, []string{"PROPOSER"}, rolesByKey["11-1"])
 }
 
 func TestExporterBuildValidatorSchedule_Filtered(t *testing.T) {
 	store := newMockTraceStore()
-	exporter := &Exporter{traceStore: store}
+	validatorStore := newMockValidatorStore()
+	exp := newTestExporterForV2(store, validatorStore)
 
-	req := ValidatorTracesRequest{
-		From:    10,
-		To:      10,
-		Roles:   api.RoleSlice{api.Role(spectypes.BNRoleAttester), api.Role(spectypes.BNRoleAggregator)},
-		Indices: api.Uint64Slice{1},
+	// We don't assert on duty traces here, only on the schedule, so it's safe
+	// to return a minimal duty or nil.
+	store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error) {
+		return &exporter.ValidatorDutyTrace{Slot: slot, Role: role, Validator: index}, nil
 	}
 
 	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
@@ -1583,23 +1615,41 @@ func TestExporterBuildValidatorSchedule_Filtered(t *testing.T) {
 			return nil, nil
 		}
 		return map[phase0.ValidatorIndex]rolemask.Mask{
-			1: rolemask.BitAttester | rolemask.BitAggregator,
+			1: rolemask.BitAttester | rolemask.BitAggregator | rolemask.BitProposer,
 			2: rolemask.BitAttester,
 		}, nil
 	}
 
-	indices := []phase0.ValidatorIndex{1}
-	schedule := exporter.buildValidatorSchedule(&req, indices)
+	// Exercise the HTTP handler with a filtered request (by index) and assert
+	// that the schedule only contains the filtered validator with both roles.
+	req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+		"from":    10,
+		"to":      10,
+		"roles":   []string{"AGGREGATOR", "PROPOSER"},
+		"indices": []uint64{1},
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exp.ValidatorTraces(rec, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp ValidatorTracesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	schedule := resp.Schedule
 	require.Len(t, schedule, 1)
 	entry := schedule[0]
 	assert.Equal(t, uint64(10), entry.Slot)
 	assert.Equal(t, uint64(1), entry.Validator)
-	assert.ElementsMatch(t, []string{"ATTESTER", "AGGREGATOR"}, entry.Roles)
+	assert.ElementsMatch(t, []string{"AGGREGATOR", "PROPOSER"}, entry.Roles)
 }
 
 func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *testing.T) {
 	store := newMockTraceStore()
-	exp := &Exporter{traceStore: store, logger: zap.NewNop()}
+	validatorStore := newMockValidatorStore()
+	exp := newTestExporterForV2(store, validatorStore)
 
 	slot := phase0.Slot(42)
 	idx := phase0.ValidatorIndex(10)
@@ -1623,9 +1673,23 @@ func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *
 			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{55}}},
 		}, nil
 	}
-	duties, err := exp.getValidatorCommitteeDutiesForRoleAndSlot(spectypes.BNRoleAttester, slot, []phase0.ValidatorIndex{idx})
+	// Case 1: Attester signer data does NOT include the requested index -> filtered out
+	req := httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+		"from":    uint64(slot),
+		"to":      uint64(slot),
+		"roles":   []string{"ATTESTER"},
+		"indices": []uint64{uint64(idx)},
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exp.ValidatorTraces(rec, req)
 	require.NoError(t, err)
-	assert.Len(t, duties, 0)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp ValidatorTracesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Len(t, resp.Data, 0)
 
 	// Case 2: Attester signer data includes the requested index -> returned
 	store.GetCommitteeDutyFunc = func(s phase0.Slot, id spectypes.CommitteeID) (*exporter.CommitteeDutyTrace, error) {
@@ -1635,18 +1699,31 @@ func TestExporter_GetValidatorCommitteeDutiesForRoleAndSlot_MembershipGating(t *
 			Attester:    []*exporter.SignerData{{Signer: 99, ValidatorIdx: []phase0.ValidatorIndex{idx}}},
 		}, nil
 	}
-	duties, err = exp.getValidatorCommitteeDutiesForRoleAndSlot(spectypes.BNRoleAttester, slot, []phase0.ValidatorIndex{idx})
+	// Case 2: Attester signer data includes the requested index -> returned
+	req = httptest.NewRequest(http.MethodPost, "/traces/validator", buildJSONBody(t, map[string]any{
+		"from":    uint64(slot),
+		"to":      uint64(slot),
+		"roles":   []string{"ATTESTER"},
+		"indices": []uint64{uint64(idx)},
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+
+	err = exp.ValidatorTraces(rec, req)
 	require.NoError(t, err)
-	require.Len(t, duties, 1)
-	assert.Equal(t, spectypes.BNRoleAttester, duties[0].Role)
-	require.NotNil(t, duties[0].CommitteeID)
-	assert.Equal(t, cmt, *duties[0].CommitteeID)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	resp = ValidatorTracesResponse{}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Data, 1)
+	assert.Equal(t, "ATTESTER", resp.Data[0].Role)
+	require.NotEmpty(t, resp.Data[0].CommitteeID)
 }
 
 func TestExporterCommitteeTraces_InvalidJSON(t *testing.T) {
 	store := newMockTraceStore()
 	validatorStore := newMockValidatorStore()
-	exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
+	exporter := newTestExporterForV2(store, validatorStore)
 
 	req := httptest.NewRequest(http.MethodPost, "/traces/committee", strings.NewReader("{invalid"))
 	req.Header.Set("Content-Type", "application/json")

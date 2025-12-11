@@ -17,8 +17,12 @@ import (
 )
 
 func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.ValidatorDuty) {
-	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+	// fetchDutiesCall relays/signals duty-fetch calls, it is buffered so that our test code can run in a single
+	// go-routine (so that we don't need to worry about draining this channel to let the execution proceed). The
+	// buffer size should be large enough for the test to not block.
+	fetchDutiesCall := make(chan struct{}, 100)
+	// executeDutiesCall is similar to fetchDutiesCall but signals the duty-executions.
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty, 100)
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().ProposerDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {

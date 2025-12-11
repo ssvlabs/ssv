@@ -119,8 +119,9 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+// HandleInitialDuties fetches duties for the current epoch.
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration/2)
+	ctx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration)
 	defer cancel()
 
 	epoch := h.netCfg.EstimatedCurrentEpoch()

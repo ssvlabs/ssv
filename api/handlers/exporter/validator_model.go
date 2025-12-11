@@ -1,12 +1,17 @@
 package exporter
 
 import (
+	"encoding/hex"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/hashicorp/go-multierror"
+
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
+	exporter2 "github.com/ssvlabs/ssv/exporter2"
 )
 
 // ValidatorTracesRequest represents the filter parameters accepted by the
@@ -24,19 +29,27 @@ type ValidatorTracesRequest struct {
 	Indices api.Uint64Slice `json:"indices" swaggertype:"array,integer" format:"int64" minimum:"0"`
 }
 
-// pubKeys implements the filterRequest interface.
 func (r *ValidatorTracesRequest) pubKeys() []spectypes.ValidatorPK {
 	return parsePubkeysSlice(r.PubKeys)
 }
 
-// indices implements the filterRequest interface.
-func (r *ValidatorTracesRequest) indices() []uint64 {
-	return r.Indices
-}
+func toValidatorTracesQuery(r *ValidatorTracesRequest) (*exporter2.ValidatorTracesQuery, *PubKeyLengthError) {
+	q := &exporter2.ValidatorTracesQuery{
+		From:    r.From,
+		To:      r.To,
+		Roles:   toBeaconRoles(r.Roles),
+		PubKeys: r.pubKeys(),
+		Indices: toValidatorIndices(r.Indices),
+	}
 
-// hasFilters implements the filterRequest interface.
-func (r *ValidatorTracesRequest) hasFilters() bool {
-	return len(r.PubKeys) > 0 || len(r.Indices) > 0
+	requiredLength := len(spectypes.ValidatorPK{})
+	for _, req := range r.PubKeys {
+		if len(req) != requiredLength {
+			return nil, &PubKeyLengthError{PubKey: req}
+		}
+	}
+
+	return q, nil
 }
 
 // ValidatorTracesResponse represents the API response returned by the
@@ -48,6 +61,23 @@ type ValidatorTracesResponse struct {
 	Schedule []ValidatorSchedule `json:"schedule"`
 	// Errors lists non-fatal issues encountered while building the response (duties not found, enrichment errors, etc.).
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"duty data unavailable for slot 123457"`
+}
+
+func toValidatorTraceResponse(result *exporter2.ValidatorTracesResult, errs *multierror.Error) *ValidatorTracesResponse {
+	r := new(ValidatorTracesResponse)
+	r.Data = make([]ValidatorTrace, 0)
+	if result != nil {
+		for _, rec := range result.Traces {
+			trace := toValidatorTrace(&rec.ValidatorDutyTrace)
+			if rec.CommitteeID != nil {
+				trace.CommitteeID = hex.EncodeToString(rec.CommitteeID[:])
+			}
+			r.Data = append(r.Data, trace)
+		}
+		r.Schedule = toValidatorSchedule(result.Schedule)
+	}
+	r.Errors = toStrings(errs)
+	return r
 }
 
 // ValidatorTrace captures the consensus trace information for a single
@@ -86,15 +116,26 @@ func toValidatorTrace(t *exporter.ValidatorDutyTrace) ValidatorTrace {
 	}
 }
 
-type validatorDutyTraceWithCommitteeID struct {
-	exporter.ValidatorDutyTrace
-	CommitteeID *spectypes.CommitteeID
-}
-
 // ValidatorSchedule is a compact, user-friendly representation of scheduled duties
 // for a single validator at a given slot.
 type ValidatorSchedule struct {
 	Slot      uint64   `json:"slot" format:"int64"`
 	Validator uint64   `json:"validator" format:"int64"`
 	Roles     []string `json:"roles"`
+}
+
+func toValidatorSchedule(entries []exporter2.ValidatorScheduleEntry) []ValidatorSchedule {
+	out := make([]ValidatorSchedule, 0, len(entries))
+	for _, e := range entries {
+		roles := make([]string, 0, len(e.Roles))
+		for _, role := range e.Roles {
+			roles = append(roles, role.String())
+		}
+		out = append(out, ValidatorSchedule{
+			Slot:      uint64(e.Slot),
+			Validator: uint64(e.Validator),
+			Roles:     roles,
+		})
+	}
+	return out
 }
