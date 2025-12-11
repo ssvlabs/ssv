@@ -46,7 +46,7 @@ to run validators in a decentralized and trustless way.
 
 The following documents contain instructions and information on how to get started:
 
-- [Operator Node Installation](https://docs.ssv.network/run-a-node/operator-node/installation)
+- [Operator Node Installation](https://docs.ssv.network/operators/operator-node/node-setup/)
 - [Developers' Guide](./docs/DEV_GUIDE.md)
 - [SSV API Docs](https://ssvlabs.github.io/ssv/)
 

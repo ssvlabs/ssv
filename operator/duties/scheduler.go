@@ -214,6 +214,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 		// This call is blocking.
 		handler.HandleInitialDuties(ctx)
+
 		s.pool.Go(func(ctx context.Context) error {
 			handler.HandleDuties(ctx)
 			return nil
