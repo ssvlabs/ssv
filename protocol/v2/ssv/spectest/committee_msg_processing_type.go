@@ -60,29 +60,17 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
 	for _, r := range test.Committee.Runners {
-		if net := r.GetNetwork(); net != nil {
-			if tn, ok := net.(*spectestingutils.TestingNetwork); ok {
-				broadcastedMsgs = append(broadcastedMsgs, tn.BroadcastedMsgs...)
-			}
-		}
-		if bn := r.GetBeaconNode(); bn != nil {
-			if bw, ok := bn.(*protocoltesting.BeaconNodeWrapped); ok {
-				broadcastedRoots = append(broadcastedRoots, bw.GetBroadcastedRoots()...)
-			}
-		}
+		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
+		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
 	}
 
 	for _, r := range test.Committee.AggregatorRunners {
-		if net := r.GetNetwork(); net != nil {
-			if tn, ok := net.(*spectestingutils.TestingNetwork); ok {
-				broadcastedMsgs = append(broadcastedMsgs, tn.BroadcastedMsgs...)
-			}
-		}
-		if bn := r.GetBeaconNode(); bn != nil {
-			if bw, ok := bn.(*protocoltesting.BeaconNodeWrapped); ok {
-				broadcastedRoots = append(broadcastedRoots, bw.GetBroadcastedRoots()...)
-			}
-		}
+		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
+		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
 	}
 
 	// test output message (in asynchronous order)
@@ -125,12 +113,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 
 			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
-				// In committee spectests we bypass queues; treat retryable errors as transient.
-				if runner.IsRetryable(err) {
-					// ignore and continue; later messages will complete the flow
-				} else {
-					lastErr = err
-				}
+				lastErr = err
 			}
 		default:
 			panic("input is neither duty or SignedSSVMessage")
