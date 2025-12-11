@@ -6,8 +6,8 @@
 # SSV Node
 
 [![API Reference](https://img.shields.io/badge/API%20Reference-blue)](https://pkg.go.dev/github.com/ssvlabs/ssv)
-![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml/badge.svg?branch=main)
-![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml/badge.svg?branch=main)
+[![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml/badge.svg?branch=main)](https://github.com/ssvlabs/ssv/actions/workflows/unit-test.yml)
+[![Github Actions](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ssvlabs/ssv/actions/workflows/lint.yml)
 [![Coverage Status](https://codecov.io/gh/ssvlabs/ssv/branch/main/graph/badge.svg)](https://codecov.io/gh/ssvlabs/ssv/tree/main)
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/5vT22pRBrf)
 
@@ -46,7 +46,7 @@ to run validators in a decentralized and trustless way.
 
 The following documents contain instructions and information on how to get started:
 
-- [Operator Node Installation](https://docs.ssv.network/run-a-node/operator-node/installation)
+- [Operator Node Installation](https://docs.ssv.network/operators/operator-node/node-setup/)
 - [Developers' Guide](./docs/DEV_GUIDE.md)
 - [SSV API Docs](https://ssvlabs.github.io/ssv/)
 

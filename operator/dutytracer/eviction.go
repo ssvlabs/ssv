@@ -2,7 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -140,7 +140,7 @@ func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]p
 			for ts := range byTs {
 				tsKeys = append(tsKeys, ts)
 			}
-			sort.Slice(tsKeys, func(i, j int) bool { return tsKeys[i] < tsKeys[j] })
+			slices.Sort(tsKeys)
 
 			buckets := make([]map[string]any, 0, len(tsKeys))
 			for _, ts := range tsKeys {
@@ -159,7 +159,7 @@ func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]p
 				for v := range ded {
 					arr = append(arr, v)
 				}
-				sort.Slice(arr, func(i, j int) bool { return arr[i] < arr[j] })
+				slices.Sort(arr)
 				buckets = append(buckets, map[string]any{"t": ts, "indices": arr})
 			}
 			// union indices sorted
@@ -167,7 +167,7 @@ func pendingDetails(data map[phase0.Root]map[spectypes.OperatorID]map[uint64][]p
 			for v := range union {
 				unionArr = append(unionArr, v)
 			}
-			sort.Slice(unionArr, func(i, j int) bool { return unionArr[i] < unionArr[j] })
+			slices.Sort(unionArr)
 
 			inner[strconv.FormatUint(signer, 10)] = map[string]any{
 				"by_timestamp":  buckets,

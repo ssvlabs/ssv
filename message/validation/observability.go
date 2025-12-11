@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"time"
 
 	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
@@ -60,4 +61,8 @@ func recordRejectedMessage(ctx context.Context, role types.RunnerRole, reason st
 
 func recordIgnoredMessage(ctx context.Context, role types.RunnerRole, reason string) {
 	messageValidationsIgnoredCounter.Add(ctx, 1, metric.WithAttributes(reasonAttribute(reason), observability.RunnerRoleAttribute(role)))
+}
+
+func recordMessageDuration(ctx context.Context, role types.RunnerRole, dur time.Duration) {
+	messageValidationDurationHistogram.Record(ctx, dur.Seconds(), metric.WithAttributes(observability.RunnerRoleAttribute(role)))
 }
