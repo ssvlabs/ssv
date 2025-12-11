@@ -149,14 +149,14 @@ func TestTransformToParticipantResponse(t *testing.T) {
 func TestExporterDecideds(t *testing.T) {
 	tests := []struct {
 		name           string
-		request        map[string]interface{}
+		request        map[string]any
 		setupMock      func(*mockParticipantStore)
 		expectedStatus int
 		validateResp   func(*testing.T, *httptest.ResponseRecorder)
 	}{
 		{
 			name: "valid request - roles & slot range",
-			request: map[string]interface{}{
+			request: map[string]any{
 				"from":  100,
 				"to":    200,
 				"roles": []string{"ATTESTER"},
@@ -197,7 +197,7 @@ func TestExporterDecideds(t *testing.T) {
 		},
 		{
 			name: "valid request - pubkeys filter",
-			request: map[string]interface{}{
+			request: map[string]any{
 				"from":    100,
 				"to":      200,
 				"roles":   []string{"ATTESTER"},
@@ -232,7 +232,7 @@ func TestExporterDecideds(t *testing.T) {
 		},
 		{
 			name: "invalid request - from > to",
-			request: map[string]interface{}{
+			request: map[string]any{
 				"from":  200,
 				"to":    100,
 				"roles": []string{"ATTESTER"},
@@ -253,7 +253,7 @@ func TestExporterDecideds(t *testing.T) {
 		},
 		{
 			name: "invalid request - no roles",
-			request: map[string]interface{}{
+			request: map[string]any{
 				"from": 100,
 				"to":   200,
 			},
@@ -273,7 +273,7 @@ func TestExporterDecideds(t *testing.T) {
 		},
 		{
 			name: "multiple roles",
-			request: map[string]interface{}{
+			request: map[string]any{
 				"from":  100,
 				"to":    200,
 				"roles": []string{"ATTESTER", "PROPOSER"},
@@ -303,7 +303,7 @@ func TestExporterDecideds(t *testing.T) {
 		},
 		{
 			name: "invalid request - invalid pubkey length",
-			request: map[string]interface{}{
+			request: map[string]any{
 				"from":    100,
 				"to":      200,
 				"roles":   []string{"ATTESTER"},
@@ -403,7 +403,7 @@ func TestExporterDecideds_ErrorGetAllParticipantsInRange(t *testing.T) {
 	stores.Add(spectypes.BNRoleAttester, store)
 
 	exporter := NewExporter(zap.NewNop(), stores, nil, nil)
-	reqData := map[string]interface{}{
+	reqData := map[string]any{
 		"from":  100,
 		"to":    200,
 		"roles": []string{"ATTESTER"},
@@ -447,7 +447,7 @@ func TestExporterDecideds_ErrorGetParticipantsInRange(t *testing.T) {
 
 	exporter := NewExporter(zap.NewNop(), stores, nil, nil)
 
-	reqData := map[string]interface{}{
+	reqData := map[string]any{
 		"from":    100,
 		"to":      200,
 		"roles":   []string{"ATTESTER"},

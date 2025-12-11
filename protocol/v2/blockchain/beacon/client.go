@@ -107,7 +107,7 @@ type proposalPreparations interface {
 
 // TODO need to handle differently (by spec)
 type signer interface {
-	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
+	ComputeSigningRoot(object any, domain phase0.Domain) ([32]byte, error)
 }
 
 // TODO: remove temp spec intefaces once spec is settled

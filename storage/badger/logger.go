@@ -20,21 +20,21 @@ func newLogger(l *zap.Logger) badger.Logger {
 }
 
 // Errorf implements badger.Logger
-func (bl *badgerLogger) Errorf(s string, i ...interface{}) {
+func (bl *badgerLogger) Errorf(s string, i ...any) {
 	bl.logger.Error(fmt.Sprintf(s, i...))
 }
 
 // Warningf implements badger.Logger
-func (bl *badgerLogger) Warningf(s string, i ...interface{}) {
+func (bl *badgerLogger) Warningf(s string, i ...any) {
 	bl.logger.Warn(fmt.Sprintf(s, i...))
 }
 
 // Infof implements badger.Logger
-func (bl *badgerLogger) Infof(s string, i ...interface{}) {
+func (bl *badgerLogger) Infof(s string, i ...any) {
 	bl.logger.Info(fmt.Sprintf(s, i...))
 }
 
 // Debugf implements badger.Logger
-func (bl *badgerLogger) Debugf(s string, i ...interface{}) {
+func (bl *badgerLogger) Debugf(s string, i ...any) {
 	bl.logger.Debug(fmt.Sprintf(s, i...))
 }

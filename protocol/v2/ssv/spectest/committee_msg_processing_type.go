@@ -32,7 +32,7 @@ type CommitteeSpecTest struct {
 	Name                   string
 	ParentName             string
 	Committee              *validator.Committee
-	Input                  []interface{} // Can be a types.Duty or a *types.SignedSSVMessage
+	Input                  []any // Can be a types.Duty or a *types.SignedSSVMessage
 	PostDutyCommitteeRoot  string
 	PostDutyCommittee      spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages         []*spectypes.PartialSignatureMessages
@@ -119,7 +119,7 @@ func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
 	overrideStateComparisonCommitteeSpecTest(t, test, test.Name, strType)
 }
 
-func (test *CommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
+func (test *CommitteeSpecTest) GetPostState(logger *zap.Logger) (any, error) {
 	lastErr := test.runPreTesting(logger)
 	if lastErr != nil && test.ExpectedErrorCode == 0 {
 		return nil, lastErr
@@ -159,7 +159,7 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 	}
 }
 
-func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
+func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (any, error) {
 	ret := make(map[string]spectypes.Root, len(tests.Tests))
 	for _, test := range tests.Tests {
 		err := test.runPreTesting(logger)

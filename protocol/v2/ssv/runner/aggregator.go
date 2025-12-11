@@ -614,7 +614,7 @@ type hasher struct {
 func newHasher() *hasher {
 	return &hasher{
 		sha256Pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return sha256.New()
 			},
 		},
