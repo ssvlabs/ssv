@@ -23,8 +23,12 @@ func setupAttesterDutiesMock(
 	dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty],
 	waitForDuties *SafeValue[bool],
 ) (chan struct{}, chan []*spectypes.ValidatorDuty) {
-	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+	// fetchDutiesCall relays/signals duty-fetch calls, it is buffered so that our test code can run in a single
+	// go-routine (so that we don't need to worry about draining this channel to let the execution proceed). The
+	// buffer size should be large enough for the test to not block.
+	fetchDutiesCall := make(chan struct{}, 100)
+	// executeDutiesCall is similar to fetchDutiesCall but signals the duty-executions.
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty, 100)
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
@@ -336,7 +340,6 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
 		{
@@ -346,9 +349,9 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for next epoch
+	// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 	waitForDuties.Set(true)
-	mockTicker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
+	startScheduler(ctx, t, scheduler, schedulerPool)
 	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -423,7 +426,6 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
 		{
@@ -433,11 +435,10 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for next epoch
+	// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 	waitForDuties.Set(true)
-	mockTicker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
+	startScheduler(ctx, t, scheduler, schedulerPool)
 	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
@@ -703,7 +704,6 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
 		{
@@ -713,9 +713,9 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for next epoch
+	// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 	waitForDuties.Set(true)
-	mockTicker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2))
+	startScheduler(ctx, t, scheduler, schedulerPool)
 	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -797,7 +797,6 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+testSlotsPerEpoch/2)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
 		{
@@ -807,9 +806,9 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for next epoch
+	// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 	waitForDuties.Set(true)
-	mockTicker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2))
+	startScheduler(ctx, t, scheduler, schedulerPool)
 	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -941,7 +940,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	require.NoError(t, schedulerPool.Wait())
 }
 
-func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
+func TestScheduler_Attester_Start_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -955,8 +954,14 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-1)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
 
+	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+		{
+			PubKey:         phase0.BLSPubKey{1, 2, 3},
+			Slot:           phase0.Slot(testSlotsPerEpoch),
+			ValidatorIndex: phase0.ValidatorIndex(1),
+		},
+	})
 	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -965,10 +970,11 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for the next epoch
+	// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epochs
 	waitForDuties.Set(true)
-	mockTicker.Send(phase0.Slot(testSlotsPerEpoch - 1))
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+	startScheduler(ctx, t, scheduler, schedulerPool)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout) // current epoch fetch-call
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout) // next epoch fetch-call
 
 	// STEP 2: wait for attester duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
