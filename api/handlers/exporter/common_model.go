@@ -8,14 +8,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
 )
-
-type filterRequest interface {
-	pubKeys() []spectypes.ValidatorPK
-	indices() []uint64
-	hasFilters() bool
-}
 
 // Decided represents a decided message within a duty trace.
 type Decided struct {
@@ -178,3 +173,23 @@ func toUint64Slice(s []phase0.ValidatorIndex) []uint64 {
 
 // Formatting helper to avoid fmt import in validator model
 func formatProposalData(b []byte) string { return fmt.Sprintf("%x", b) }
+
+// toBeaconRoles converts an API RoleSlice into a slice of beacon roles.
+// It is used by HTTP adapters when constructing core query models.
+func toBeaconRoles(rs []api.Role) []spectypes.BeaconRole {
+	out := make([]spectypes.BeaconRole, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, spectypes.BeaconRole(r))
+	}
+	return out
+}
+
+// toValidatorIndices converts an API Uint64Slice into a slice of
+// phase0.ValidatorIndex for use by core query models.
+func toValidatorIndices(indices api.Uint64Slice) []phase0.ValidatorIndex {
+	out := make([]phase0.ValidatorIndex, 0, len(indices))
+	for _, idx := range indices {
+		out = append(out, phase0.ValidatorIndex(idx))
+	}
+	return out
+}

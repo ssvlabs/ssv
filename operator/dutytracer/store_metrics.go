@@ -6,7 +6,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 

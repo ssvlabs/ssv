@@ -23,7 +23,7 @@ func TestQBFTMapping(t *testing.T) {
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
 
-	untypedTests := map[string]interface{}{}
+	untypedTests := map[string]any{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}

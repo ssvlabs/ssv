@@ -17,7 +17,7 @@ type Binder interface {
 
 var errInvalidType = errors.New("invalid type")
 
-func Bind(r *http.Request, dest interface{}) error {
+func Bind(r *http.Request, dest any) error {
 	if err := r.ParseForm(); err != nil {
 		return err
 	}

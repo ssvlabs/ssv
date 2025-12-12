@@ -26,8 +26,12 @@ func setupCommitteeDutiesMock(
 	syncDuties *hashmap.Map[uint64, []*eth2apiv1.SyncCommitteeDuty],
 	waitForDuties *SafeValue[bool],
 ) (chan struct{}, chan committeeDutiesMap) {
-	fetchDutiesCall := make(chan struct{})
-	executeDutiesCall := make(chan committeeDutiesMap)
+	// fetchDutiesCall relays/signals duty-fetch calls, it is buffered so that our test code can run in a single
+	// go-routine (so that we don't need to worry about draining this channel to let the execution proceed). The
+	// buffer size should be large enough for the test to not block.
+	fetchDutiesCall := make(chan struct{}, 100)
+	// executeDutiesCall is similar to fetchDutiesCall but signals the duty-executions.
+	executeDutiesCall := make(chan committeeDutiesMap, 100)
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
@@ -569,7 +573,6 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
 		{
@@ -579,11 +582,13 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for next epoch
+	// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epoch, plus for
+	// sync committee duties to be fetched for the current period.
 	waitForDuties.Set(true)
-	ticker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
-	// wait for attester duties to be fetched
-	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	startScheduler(ctx, t, scheduler, schedulerPool)
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) current epoch fetch-call
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
@@ -661,7 +666,6 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
 	waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	attDuties.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
 		{
@@ -671,10 +675,12 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for next epoch
+	// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epoch, plus for
+	// sync committee duties to be fetched for the current period.
 	waitForDuties.Set(true)
-	ticker.Send(phase0.Slot(testSlotsPerEpoch*2 - 1))
-	// wait for attester duties to be fetched
+	startScheduler(ctx, t, scheduler, schedulerPool)
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event

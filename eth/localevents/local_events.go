@@ -19,7 +19,7 @@ type Event struct {
 	// Name is the event name used for internal representation.
 	Name string
 	// Data is the parsed event
-	Data interface{}
+	Data any
 }
 
 func Load(path string) ([]Event, error) {
@@ -37,7 +37,7 @@ func Load(path string) ([]Event, error) {
 }
 
 type eventData interface {
-	toEventData() (interface{}, error)
+	toEventData() (any, error)
 }
 
 type eventDataUnmarshaler struct {
@@ -88,7 +88,7 @@ type ValidatorExitedEventYAML struct {
 	OperatorIds []uint64 `yaml:"OperatorIds"`
 }
 
-func (e *OperatorAddedEventYAML) toEventData() (interface{}, error) {
+func (e *OperatorAddedEventYAML) toEventData() (any, error) {
 	return contract.ContractOperatorAdded{
 		OperatorId: e.ID,
 		Owner:      ethcommon.HexToAddress(e.Owner),
@@ -96,13 +96,13 @@ func (e *OperatorAddedEventYAML) toEventData() (interface{}, error) {
 	}, nil
 }
 
-func (e *OperatorRemovedEventYAML) toEventData() (interface{}, error) {
+func (e *OperatorRemovedEventYAML) toEventData() (any, error) {
 	return contract.ContractOperatorRemoved{
 		OperatorId: e.ID,
 	}, nil
 }
 
-func (e *ValidatorAddedEventYAML) toEventData() (interface{}, error) {
+func (e *ValidatorAddedEventYAML) toEventData() (any, error) {
 	pubKey, err := hex.DecodeString(strings.TrimPrefix(e.PublicKey, "0x"))
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (e *ValidatorAddedEventYAML) toEventData() (interface{}, error) {
 	}, nil
 }
 
-func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
+func (e *ValidatorRemovedEventYAML) toEventData() (any, error) {
 	return contract.ContractValidatorRemoved{
 		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
@@ -129,28 +129,28 @@ func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
 	}, nil
 }
 
-func (e *ClusterLiquidatedEventYAML) toEventData() (interface{}, error) {
+func (e *ClusterLiquidatedEventYAML) toEventData() (any, error) {
 	return contract.ContractClusterLiquidated{
 		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
-func (e *ClusterReactivatedEventYAML) toEventData() (interface{}, error) {
+func (e *ClusterReactivatedEventYAML) toEventData() (any, error) {
 	return contract.ContractClusterReactivated{
 		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
-func (e *FeeRecipientAddressUpdatedEventYAML) toEventData() (interface{}, error) {
+func (e *FeeRecipientAddressUpdatedEventYAML) toEventData() (any, error) {
 	return contract.ContractFeeRecipientAddressUpdated{
 		Owner:            ethcommon.HexToAddress(e.Owner),
 		RecipientAddress: ethcommon.HexToAddress(e.RecipientAddress),
 	}, nil
 }
 
-func (e *ValidatorExitedEventYAML) toEventData() (interface{}, error) {
+func (e *ValidatorExitedEventYAML) toEventData() (any, error) {
 	return contract.ContractValidatorExited{
 		PublicKey:   []byte(strings.TrimPrefix(e.PublicKey, "0x")),
 		OperatorIds: e.OperatorIds,
