@@ -90,6 +90,7 @@ var (
 	ErrDuplicatedMessage                = Error{text: "message is duplicated"}
 	ErrInvalidPartialSignatureTypeCount = Error{text: "sent more partial signature messages of a certain type than allowed"}
 	ErrTooManyPartialSignatureMessages  = Error{text: "too many partial signature messages"}
+	ErrDifferentProposalData            = Error{text: "different proposal data"}
 )
 
 // Rejected errors.
@@ -122,7 +123,6 @@ var (
 	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
 	ErrDecidedNotEnoughSigners                 = Error{text: "not enough signers in decided message", reject: true}
-	ErrDifferentProposalData                   = Error{text: "different proposal data", reject: true}
 	ErrMalformedPrepareJustifications          = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications      = Error{text: "malformed round change justifications", reject: true}
