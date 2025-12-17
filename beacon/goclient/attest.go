@@ -102,17 +102,28 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 	respCh := make(chan *attestationDataResponse, reqTotal)
 	errCh := make(chan *attestationDataError, reqTotal)
 
+	// reqCtx is used to control the lifetime of CL requests issued below.
+	reqCtx, reqCancel := context.WithCancel(ctx)
+	defer reqCancel()
+
 	for _, client := range gc.clients {
-		go gc.fetchWeightedAttestationData(ctx, client, respCh, errCh, slot, logger)
+		go gc.fetchWeightedAttestationData(reqCtx, client, respCh, errCh, slot, logger)
 	}
 
-	// Wait for all responses (or context done).
+	// Wait for all responses and compare them, or if we hit soft deadline use the 1st response
+	// that becomes available, or if we hit the hard-deadline (context done) just return.
 	var (
 		reqSucceeded, reqErrored, reqTimedOut int
 		bestScore                             float64
 		bestAttestationData                   *phase0.AttestationData
 		bestClientAddr                        string
 	)
+
+	softDeadline := time.Unix(1<<63-62135596801, 999999999).UTC() // infinity
+	hardDeadline, ok := ctx.Deadline()
+	if ok {
+		softDeadline = hardDeadline.Add(-300 * time.Millisecond)
+	}
 
 	onSuccess := func(resp *attestationDataResponse) {
 		reqSucceeded++
@@ -141,35 +152,40 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 		logger.With(
 			fields.Took(time.Since(started)),
 			zap.String("client_addr", resp.clientAddr),
-			zap.Int("succeeded", reqSucceeded),
-			zap.Int("errored", reqErrored),
 			zap.Error(resp.err),
 		).Error("fetch attestation data, error received")
 	}
 
-loop:
+loopSoft:
 	for haveAttestationDataReqInFlight(reqSucceeded, reqErrored, reqTotal) {
 		select {
 		case resp := <-respCh:
 			onSuccess(resp)
 		case resp := <-errCh:
 			onFailure(resp)
-		case <-ctx.Done():
-			reqTimedOut = reqTotal - (reqSucceeded + reqErrored)
-			break loop
+		case <-time.After(time.Until(softDeadline)):
+			// We've hit the soft deadline, let's see if we got any responses so far.
+			break loopSoft
 		}
 	}
 
-	// Wait for requests that timed out to complete (every one of those should return shortly after reaching
-	// timeout) since we might have some successful results coming in at the very last moment.
-	for haveAttestationDataReqInFlight(reqSucceeded, reqErrored, reqTotal) {
-		select {
-		case resp := <-respCh:
-			onSuccess(resp)
-		case resp := <-errCh:
-			onFailure(resp)
+	// If we got at least 1 response already - we'll use that, and cancel the rest inflight
+	// requests. Otherwise, we'll keep waiting for the first success or the hard deadline
+	// in the loop below.
+	if reqSucceeded == 0 {
+	loopHard:
+		for haveAttestationDataReqInFlight(reqSucceeded, reqErrored, reqTotal) {
+			select {
+			case resp := <-respCh:
+				onSuccess(resp)
+				break loopHard // 1 success is good enough at this point
+			case resp := <-errCh:
+				onFailure(resp)
+			}
 		}
 	}
+
+	reqTimedOut = reqTotal - (reqSucceeded + reqErrored)
 
 	logger.With(
 		zap.Int("succeeded", reqSucceeded),

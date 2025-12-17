@@ -26,7 +26,7 @@ var (
 	epochs = []phase0.Epoch{318584, 318585, 318586, 318587, 318588}
 
 	defaultHardTimeout = time.Second * 2
-	defaultSoftTimeout = time.Duration(float64(defaultHardTimeout) / 2.5)
+	defaultSoftTimeout = defaultHardTimeout - 300*time.Millisecond
 
 	// roots is a bunch of random roots.
 	roots = []string{
@@ -396,7 +396,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		client, err := createClient(ctx, strings.Join(beaconServersURLs, ";"), withWeightedAttestationData)
 		require.NoError(t, err)
 
-		reqCtx, cancel := context.WithTimeout(ctx, defaultSoftTimeout)
+		reqCtx, cancel := context.WithTimeout(ctx, defaultHardTimeout)
 		defer cancel()
 
 		startTime := time.Now()
