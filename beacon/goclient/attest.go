@@ -95,21 +95,12 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 
 func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	logger := gc.log.With(fields.Slot(slot), weightedAttestationDataRequestIDField(uuid.New()))
-	// We have two timeouts: a soft timeout and a hard timeout.
-	// At the soft timeout, we return if we have any responses so far.
-	// At the hard timeout, we return unconditionally.
-	// The soft timeout is half the duration of the hard timeout.
-	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataHardTimeout)
-	defer cancel()
-
-	softCtx, softCancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout)
-	defer softCancel()
 
 	started := time.Now()
 
-	numberOfRequests := len(gc.clients)
-	respCh := make(chan *attestationDataResponse, numberOfRequests)
-	errCh := make(chan *attestationDataError, numberOfRequests)
+	reqTotal := len(gc.clients)
+	respCh := make(chan *attestationDataResponse, reqTotal)
+	errCh := make(chan *attestationDataError, reqTotal)
 
 	for _, client := range gc.clients {
 		go gc.fetchWeightedAttestationData(ctx, client, respCh, errCh, slot, logger)
@@ -117,140 +108,101 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 
 	// Wait for all responses (or context done).
 	var (
-		succeeded,
-		errored,
-		softTimedOut,
-		hardTimedOut int
-		bestScore           float64
-		bestAttestationData *phase0.AttestationData
-		bestClientAddr      string
+		reqSucceeded, reqErrored, reqTimedOut int
+		bestScore                             float64
+		bestAttestationData                   *phase0.AttestationData
+		bestClientAddr                        string
 	)
 
-	for shouldWaitForAttestationDataResponse(succeeded, errored, softTimedOut, numberOfRequests) {
+	onSuccess := func(resp *attestationDataResponse) {
+		reqSucceeded++
+
+		logger.With(
+			fields.Took(time.Since(started)),
+			zap.String("client_addr", resp.clientAddr),
+		).Debug("fetch attestation data, successful response received")
+
+		if bestAttestationData == nil || resp.score > bestScore {
+			if bestAttestationData != nil {
+				logger.Debug("updating best attestation data because of higher score",
+					zap.String("client_addr", resp.clientAddr),
+					zap.Float64("score", resp.score),
+					fields.Root(resp.attestationData.BeaconBlockRoot),
+				)
+			}
+			bestAttestationData = resp.attestationData
+			bestScore = resp.score
+			bestClientAddr = resp.clientAddr
+		}
+	}
+	onFailure := func(resp *attestationDataError) {
+		reqErrored++
+
+		logger.With(
+			fields.Took(time.Since(started)),
+			zap.String("client_addr", resp.clientAddr),
+			zap.Int("succeeded", reqSucceeded),
+			zap.Int("errored", reqErrored),
+			zap.Error(resp.err),
+		).Error("fetch attestation data, error received")
+	}
+
+loop:
+	for haveAttestationDataReqInFlight(reqSucceeded, reqErrored, reqTotal) {
 		select {
 		case resp := <-respCh:
-			succeeded++
-			logger.With(
-				zap.Duration("elapsed", time.Since(started)),
-				zap.String("client_addr", resp.clientAddr),
-				zap.Int("succeeded", succeeded),
-				zap.Int("errored", errored),
-			).Debug("response received")
-
-			if bestAttestationData == nil || resp.score > bestScore {
-				if bestAttestationData != nil {
-					logger.Debug("updating best attestation data because of higher score",
-						zap.String("client_addr", resp.clientAddr),
-						zap.Float64("score", resp.score),
-						fields.Root(resp.attestationData.BeaconBlockRoot),
-					)
-				}
-				bestAttestationData = resp.attestationData
-				bestScore = resp.score
-				bestClientAddr = resp.clientAddr
-			}
-		case err := <-errCh:
-			errored++
-			logger.With(
-				zap.Duration("elapsed", time.Since(started)),
-				zap.String("client_addr", err.clientAddr),
-				zap.Int("succeeded", succeeded),
-				zap.Int("errored", errored),
-				zap.Error(err.err),
-			).Error("error received")
-		case <-softCtx.Done():
-			softTimedOut = numberOfRequests - (succeeded + errored)
-
-			logger.With(
-				zap.Duration("elapsed", time.Since(started)),
-				zap.Int("succeeded", succeeded),
-				zap.Int("errored", errored),
-				zap.Int("soft_timed_out", softTimedOut),
-			).Debug("soft timeout reached")
+			onSuccess(resp)
+		case resp := <-errCh:
+			onFailure(resp)
+		case <-ctx.Done():
+			reqTimedOut = reqTotal - (reqSucceeded + reqErrored)
+			break loop
 		}
 	}
 
-	if succeeded == 0 {
-		for shouldWaitForAttestationDataResponse(succeeded, errored, hardTimedOut, numberOfRequests) {
-			select {
-			case resp := <-respCh:
-				succeeded++
-				logger.With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.String("client_addr", resp.clientAddr),
-					zap.Int("succeeded", succeeded),
-					zap.Int("errored", errored),
-				).Debug("response received")
-
-				if bestAttestationData == nil || resp.score > bestScore {
-					if bestAttestationData != nil {
-						logger.Debug("updating best attestation data because of higher score",
-							zap.String("client_addr", resp.clientAddr),
-							zap.Float64("score", resp.score),
-							fields.Root(resp.attestationData.BeaconBlockRoot),
-						)
-					}
-					bestAttestationData = resp.attestationData
-					bestScore = resp.score
-					bestClientAddr = resp.clientAddr
-				}
-			case err := <-errCh:
-				errored++
-				logger.With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.String("client_addr", err.clientAddr),
-					zap.Int("succeeded", succeeded),
-					zap.Int("errored", errored),
-					zap.Error(err.err),
-				).Error("received error fetching attestation data")
-			case <-ctx.Done():
-				hardTimedOut = numberOfRequests - (succeeded + errored)
-				logger.With(
-					zap.Duration("elapsed", time.Since(started)),
-					zap.Int("succeeded", succeeded),
-					zap.Int("errored", errored),
-					zap.Int("hard_timed_out", hardTimedOut),
-				).Error("hard timeout reached")
-			}
+	// Wait for requests that timed out to complete (every one of those should return shortly after reaching
+	// timeout) since we might have some successful results coming in at the very last moment.
+	for haveAttestationDataReqInFlight(reqSucceeded, reqErrored, reqTotal) {
+		select {
+		case resp := <-respCh:
+			onSuccess(resp)
+		case resp := <-errCh:
+			onFailure(resp)
 		}
 	}
 
-	resultLogger := logger.With(
-		zap.Duration("elapsed", time.Since(started)),
-		zap.Int("succeeded", succeeded),
-		zap.Int("errored", errored),
-		zap.Int("soft_timed_out", softTimedOut),
-		zap.Int("hard_timed_out", hardTimedOut),
+	logger.With(
+		zap.Int("succeeded", reqSucceeded),
+		zap.Int("errored", reqErrored),
+		zap.Int("timed_out", reqTimedOut),
 		zap.Bool("with_weighted_attestation_data", true),
-	)
+		zap.String("client_addr", bestClientAddr),
+		zap.Float64("best_score", bestScore),
+		fields.Took(time.Since(started)),
+	).Debug("done fetching weighted attestation data")
+
 	if bestAttestationData == nil {
-		resultLogger.Error("no attestations received")
 		return nil, fmt.Errorf("no attestations received")
 	}
-
-	resultLogger.With(
-		zap.String("client_addr", bestClientAddr),
-		zap.Float64("score", bestScore)).
-		Debug("successfully fetched attestation data")
 
 	recordAttestationDataClientSelection(ctx, bestClientAddr)
 
 	return bestAttestationData, nil
 }
 
-func shouldWaitForAttestationDataResponse(responded, errored, timedOut, requestsTotal int) bool {
-	return responded+errored+timedOut != requestsTotal
+func haveAttestationDataReqInFlight(responded, errored, requestsTotal int) bool {
+	return responded+errored != requestsTotal
 }
 
 func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	logger := gc.log.With(fields.Slot(slot))
 
-	attDataReqStart := time.Now()
+	reqStart := time.Now()
 	resp, err := gc.multiClient.AttestationData(ctx, &api.AttestationDataOpts{
 		Slot:           slot,
 		CommitteeIndex: 0,
 	})
-	recordRequest(ctx, logger, "AttestationData", gc.multiClient, http.MethodGet, true, time.Since(attDataReqStart), err)
+	recordRequest(ctx, logger, "AttestationData", gc.multiClient, http.MethodGet, true, time.Since(reqStart), err)
 	if err != nil {
 		return nil, errMultiClient(fmt.Errorf("get attestation data: %w", err), "AttestationData")
 	}
@@ -313,6 +265,7 @@ func (gc *GoClient) fetchWeightedAttestationData(
 
 	logger.Debug("scoring attestation data")
 	score := gc.scoreAttestationData(ctx, client, attestationData, logger)
+	logger.Debug("scoring attestation data, got score", zap.Float64("score", score))
 
 	respCh <- &attestationDataResponse{
 		clientAddr:      client.Address(),
@@ -321,31 +274,28 @@ func (gc *GoClient) fetchWeightedAttestationData(
 	}
 }
 
-// scoreAttestationData generates a score for attestation data.
-// The score is relative to the reward expected from the contents of the attestation.
-func (gc *GoClient) scoreAttestationData(ctx context.Context,
+// scoreAttestationData generates a score for attestation data. The score is relative to the reward expected from
+// the contents of the attestation. This function retries multiple times in case the CL hasn't indexed the block
+// with the corresponding root by the time we issue our 1st request.
+func (gc *GoClient) scoreAttestationData(
+	ctx context.Context,
 	client Client,
 	attestationData *phase0.AttestationData,
 	logger *zap.Logger,
 ) float64 {
-	// Initial score is based on height of source and target epochs.
+	// The initial score is based on the height of source and target epochs.
 	score := float64(attestationData.Source.Epoch + attestationData.Target.Epoch)
 	logger.
 		With(zap.Float64("base_score", score)).
 		Debug("base score was set. Fetching slot for block root")
 
-	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
-	defer cancel()
-
-	ticker := time.NewTicker(time.Millisecond * 100)
-	defer ticker.Stop()
-
 	var (
-		retries uint32
-		start   = time.Now()
+		attempt = 1
+		started = time.Now()
 	)
+	for attempt <= 5 {
+		logger = logger.With(zap.Int("attempt", attempt))
 
-	for {
 		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, logger)
 		if err == nil {
 			// Increase score based on the nearness of the head slot.
@@ -359,7 +309,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 			}
 
 			logger.With(
-				zap.Duration("elapsed", time.Since(start)),
+				fields.Took(time.Since(started)),
 				zap.Uint64("head_slot", uint64(slot)),
 				zap.Uint64("source_epoch", uint64(attestationData.Source.Epoch)),
 				zap.Uint64("target_epoch", uint64(attestationData.Target.Epoch)),
@@ -372,23 +322,37 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		logger.
 			With(zap.Error(err)).
 			Warn("couldn't fetch slot for block root")
+
+		const retryDelay = 100 * time.Millisecond
 		select {
 		case <-ctx.Done():
 			logger.
-				With(zap.Uint32("try", retries)).
-				With(zap.Duration("total_elapsed", time.Since(start))).
+				With(fields.Took(time.Since(started))).
 				Error("timeout for obtaining slot for block root was reached. Returning base score")
 			return score
-		case <-ticker.C:
-			retries++
+		case <-time.After(retryDelay):
 			logger.
-				With(zap.Uint32("try", retries)).
-				With(zap.Duration("total_elapsed", time.Since(start))).
+				With(fields.Took(time.Since(started))).
 				Warn("retrying to obtain slot for block root")
+			attempt++
+			continue
 		}
 	}
+
+	logger.
+		With(fields.Took(time.Since(started))).
+		Error("ran out of retries for obtaining slot for block root. Returning base score")
+	return score
 }
 
+// blockRootToSlot looks up slot number by the provided block-root making a request to the provided CL client
+// if necessary, caching the result for future re-use.
+// Note, a block root "commits" (hashes over it) to a specific slot number - hence we can't accidentally
+// update gc.blockRootToSlotCache here overwriting the freshest slot value with a different one regardless
+// of whether blockRootToSlot is called concurrently. Hence, there is no need to worry about the atomicity of
+// gc.blockRootToSlotCache updates, on the contrary - we shouldn't prevent concurrent blockRootToSlot calls
+// for different clients from executing in parallel (such requests should execute in parallel so we can start
+// using the results from those that finish faster than the rest of them).
 func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
 	cacheResult := gc.blockRootToSlotCache.Get(root)
 	if cacheResult != nil {
@@ -402,23 +366,22 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 
 	logger.Debug("slot was not found in cache, fetching from the client")
 
-	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/4)
-	defer cancel()
-
-	blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{
+	reqStart := time.Now()
+	blockResponse, err := client.BeaconBlockHeader(ctx, &api.BeaconBlockHeaderOpts{
 		Block: root.String(),
 	})
-
+	recordRequest(ctx, logger, "BeaconBlockHeader", client, http.MethodGet, false, time.Since(reqStart), err)
 	if err != nil {
-		return 0, fmt.Errorf("failed to fetch block header from the client: %w", err)
+		return 0, errSingleClient(fmt.Errorf("failed to fetch block header from the client: %w", err), client.Address(), "BeaconBlockHeader")
 	}
-
 	if !isBlockHeaderResponseValid(blockResponse) {
-		return 0, fmt.Errorf("block header response was not valid")
+		return 0, errSingleClient(fmt.Errorf("block header response was not valid"), client.Address(), "BeaconBlockHeader")
 	}
 
 	slot := blockResponse.Data.Header.Message.Slot
+
 	gc.blockRootToSlotCache.Set(root, slot, ttlcache.NoTTL)
+
 	logger.
 		With(zap.Uint64("cached_slot", uint64(slot))).
 		Debug("block root to slot cache updated from the BeaconBlockHeader call")

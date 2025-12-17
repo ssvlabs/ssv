@@ -1040,17 +1040,32 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 
 	r.measurements.StartDutyFlow()
 
-	start := time.Now()
-	slot := duty.DutySlot()
+	// We must fetch the attestation data before a certain deadline is reached to be able to participate and
+	// complete QBFT round 1 in time before QBFT round-change happens, that deadline is defined as:
+	//
+	// `slot_start_time + round1_timeout - qbft_consensus_duration - misc_time`
+	//
+	// plugging in the following estimates we get the deadline of `slot_start_time + 5.5s`:
+	// - round1_timeout = 6s (https://github.com/ssvlabs/ssv/blob/stage/protocol/v2/qbft/roundtimer/timer.go#L77-L135)
+	// - qbft_consensus_duration = 350ms (as per previous estimates in https://github.com/ssvlabs/ssv/blob/stage/docs/MEV_CONSIDERATIONS.md)
+	// - misc_time = 150ms (to account for miscellaneous delays in code execution)
+	deadline := r.BaseRunner.NetworkConfig.SlotStartTime(duty.DutySlot()).Add(5500 * time.Millisecond)
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 
-	attData, _, err := r.GetBeaconNode().GetAttestationData(ctx, slot)
+	span.AddEvent("fetching attestation data",
+		trace.WithAttributes(observability.BeaconSlotAttribute(duty.DutySlot())),
+	)
+	reqStart := time.Now()
+	attData, _, err := r.GetBeaconNode().GetAttestationData(ctx, duty.DutySlot())
 	if err != nil {
 		return fmt.Errorf("failed to get attestation data: %w", err)
 	}
-
 	const attestationDataFetchedEvent = "fetched attestation data from CL"
-	logger.Debug(attestationDataFetchedEvent, fields.Took(time.Since(start)))
-	span.AddEvent(attestationDataFetchedEvent)
+	logger.Debug(attestationDataFetchedEvent, fields.Took(time.Since(reqStart)))
+	span.AddEvent(attestationDataFetchedEvent,
+		trace.WithAttributes(observability.BeaconSlotAttribute(duty.DutySlot())),
+	)
 
 	vote := &spectypes.BeaconVote{
 		BlockRoot: attData.BeaconBlockRoot,
@@ -1061,7 +1076,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 	r.measurements.StartConsensus()
 	r.ValCheck = ssv.NewVoteChecker(
 		r.signer,
-		slot,
+		duty.DutySlot(),
 		r.attestingValidators,
 		r.GetNetworkConfig().EstimatedCurrentEpoch(),
 		vote,
