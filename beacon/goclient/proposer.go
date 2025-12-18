@@ -271,7 +271,6 @@ collectFirst:
 				zap.String("client", res.client),
 				fields.Slot(slot),
 			)
-			cancelParallel()
 			return res.proposal, nil
 
 		case <-ctx.Done():
