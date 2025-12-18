@@ -156,6 +156,7 @@ func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slo
 		).Error("fetch attestation data, error received")
 	}
 
+	// Wait until all requests finish, or until we hit soft-deadline.
 loopSoft:
 	for haveAttestationDataReqInFlight(reqSucceeded, reqErrored, reqTotal) {
 		select {
@@ -164,14 +165,13 @@ loopSoft:
 		case resp := <-errCh:
 			onFailure(resp)
 		case <-time.After(time.Until(softDeadline)):
-			// We've hit the soft deadline, let's see if we got any responses so far.
 			break loopSoft
 		}
 	}
 
-	// If we got at least 1 response already - we'll use that, and cancel the rest inflight
-	// requests. Otherwise, we'll keep waiting for the first success or the hard deadline
-	// in the loop below.
+	// If we got some responses already - we'll use that, and cancel the rest inflight
+	// requests. Otherwise, we'll keep waiting for the first success or until all requests
+	// time out in the loop below.
 	if reqSucceeded == 0 {
 	loopHard:
 		for haveAttestationDataReqInFlight(reqSucceeded, reqErrored, reqTotal) {
