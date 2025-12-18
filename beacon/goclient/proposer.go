@@ -200,7 +200,6 @@ func (gc *GoClient) getProposalParallel(
 	var bestClient string
 
 	pendingClients := len(gc.clients)
-collectBest:
 	for pendingClients > 0 {
 		select {
 		case res := <-resultCh:
@@ -208,13 +207,7 @@ collectBest:
 
 			if res.err != nil {
 				errs = errors.Join(errs, res.err)
-
-				if pendingClients > 0 {
-					continue collectBest
-				}
-
-				// we are not expecting any more proposals
-				break collectBest
+				continue
 			}
 
 			proposalScore := gc.scoreProposal(res.proposal)
@@ -232,7 +225,7 @@ collectBest:
 
 		case <-collectCtx.Done():
 			// we are done collecting;
-			break collectBest
+			break
 		}
 	}
 
@@ -255,7 +248,6 @@ collectBest:
 	)
 
 	// there are potentially still some collectors running, just return the frist valid one
-collectFirst:
 	for pendingClients > 0 {
 		select {
 		case res := <-resultCh:
@@ -263,13 +255,7 @@ collectFirst:
 
 			if res.err != nil {
 				errs = errors.Join(errs, res.err)
-
-				if pendingClients > 0 {
-					continue collectFirst
-				}
-
-				// we are not expecting any more proposals
-				break collectFirst
+				continue
 			}
 
 			// Got a successful response, cancel other requests and return.
