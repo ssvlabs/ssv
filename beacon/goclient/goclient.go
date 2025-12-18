@@ -134,6 +134,12 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
+	// proposalCollectTimeout is the maximum time to wait for multiple block proposals in
+	// order to select the best one from multiple clients.
+	// If no proposal has been received after this time elapses, the first valid proposal
+	// seen is returned
+	proposalCollectTimeout time.Duration
+
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
 	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
@@ -191,6 +197,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
+		proposalCollectTimeout:             time.Duration(float64(commonTimeout) / 5),
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
