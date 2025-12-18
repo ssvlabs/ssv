@@ -508,22 +508,6 @@ func (r *CommitteeRunner) signAttesterDuty(
 		return false, partialMsg, fmt.Errorf("failed signing attestation data: %w", err)
 	}
 
-	attDataRoot, err := attestationData.HashTreeRoot()
-	if err != nil {
-		return false, partialMsg, fmt.Errorf("failed to hash attestation data: %w", err)
-	}
-
-	const eventMsg = "signed attestation data"
-	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(attDataRoot)))
-	logger.Debug(eventMsg,
-		zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
-		zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
-		zap.Any("attestation_data", attestationData),
-		zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
-		zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
-		zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
-	)
-
 	return false, partialMsg, nil
 }
 
@@ -649,8 +633,6 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					errCh <- fmt.Errorf("%s: %w", eventMsg, err)
 					return
 				}
-
-				vLogger.Debug("🧩 reconstructed partial signature")
 
 				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,
