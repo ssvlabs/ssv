@@ -1,6 +1,6 @@
 global:
   # Console log level (debug, info, warn, error, fatal, panic)
-  LogLevel: info
+  LogLevel: debug
   
   # Debug logs file path
   LogFilePath: ./data/debug.log

@@ -24,7 +24,7 @@ The `generate-config` command allows you to generate a YAML configuration file b
 | Flag                                 | Type   | Default                           | Description                                                                |
 |--------------------------------------|--------|-----------------------------------|----------------------------------------------------------------------------|
 | `--output-path`                      | string | `./config/config.local.yaml`      | Output path for the generated configuration file.                          |
-| `--log-level`                        | string | `info`                            | Sets the logging level (e.g., `debug`, `info`, `warn`, `error`).           |
+| `--log-level`                        | string | `debug`                           | Sets the logging level (e.g., `debug`, `info`, `warn`, `error`).           |
 | `--db-path`                          | string | `./data/db`                       | Path to the database directory.                                            |
 | `--discovery`                        | string | `mdns`                            | Discovery method.                                                          |
 | `--consensus-client`                 | string | _Mandatory_                       | Address of the consensus client (e.g., `http://localhost:9000`).           |

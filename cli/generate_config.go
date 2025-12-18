@@ -19,7 +19,7 @@ import (
 
 const (
 	defaultOutputPath     = "./config/config.local.yaml"
-	defaultLogLevel       = "info"
+	defaultLogLevel       = "debug"
 	defaultDBPath         = "./data/db"
 	defaultDiscovery      = "mdns"
 	sliceSeparator        = ","
