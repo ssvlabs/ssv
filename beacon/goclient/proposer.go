@@ -200,6 +200,7 @@ func (gc *GoClient) getProposalParallel(
 	var bestClient string
 
 	pendingClients := len(gc.clients)
+collect:
 	for pendingClients > 0 {
 		select {
 		case res := <-resultCh:
@@ -225,7 +226,7 @@ func (gc *GoClient) getProposalParallel(
 
 		case <-collectCtx.Done():
 			// we are done collecting;
-			break
+			break collect
 		}
 	}
 
