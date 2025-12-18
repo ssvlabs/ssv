@@ -201,7 +201,7 @@ func (gc *GoClient) getProposalParallel(
 
 	pendingClients := len(gc.clients)
 collectBest:
-	for {
+	for pendingClients > 0 {
 		select {
 		case res := <-resultCh:
 			pendingClients--
@@ -230,11 +230,6 @@ collectBest:
 				bestClient = res.client
 			}
 
-			if pendingClients == 0 {
-				// we are not expecing more proposals
-				break collectBest
-			}
-
 		case <-collectCtx.Done():
 			// we are done collecting;
 			break collectBest
@@ -253,16 +248,13 @@ collectBest:
 		return bestProposal, nil
 	}
 
-	// if we have no more pending clients, they all failed during collection
-	if pendingClients == 0 {
-		goto fail
-	}
-
 	// there are still some collectors running, just return the frist valid one
 collectFirst:
-	for {
+	for pendingClients > 0 {
 		select {
 		case res := <-resultCh:
+			pendingClients--
+
 			if res.err != nil {
 				errs = errors.Join(errs, res.err)
 
@@ -287,7 +279,6 @@ collectFirst:
 		}
 	}
 
-fail:
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
