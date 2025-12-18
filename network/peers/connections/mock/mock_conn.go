@@ -80,6 +80,13 @@ func (m Conn) GetStreams() []libp2pnetwork.Stream {
 }
 
 func (m Conn) IsClosed() bool {
-	//TODO implement me
+	panic("implement me")
+}
+
+func (m Conn) CloseWithError(errCode libp2pnetwork.ConnErrorCode) error {
+	panic("implement me")
+}
+
+func (m Conn) As(target any) bool {
 	panic("implement me")
 }
