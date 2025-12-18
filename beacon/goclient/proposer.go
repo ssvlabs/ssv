@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"slices"
 	"time"
@@ -144,13 +145,20 @@ func (gc *GoClient) GetBeaconBlock(
 	}
 }
 
-// getProposalParallel races all beacon nodes and returns the first successful response.
-// This minimizes latency for time-critical block proposals. Remaining requests are
+// getProposalParallel races all beacon nodes and collects proposals for a short time
+// and returns the best one according to our score function.
+// If no valud proposals are collected in this time it returns the first valid one
+// it sees.
+//
+// This minimizes latency for time-critical block proposals, while still affording
+// some time for selecting maximally profitable proposals. Remaining requests are
 // canceled immediately to reduce load.
 //
-// Note: We prioritize speed over fee recipient validation - returning the first response
-// rather than waiting to compare fee recipients, as missing a proposal slot is worse
-// than a nil fee recipient.
+// Note: We used to prioritize speed over fee recipient validation - returning
+// the first response rather than waiting to compare fee recipients, as missing
+// a proposal slot is worse than a nil fee recipient.
+// However, it has been observed that the first proposal is usually not the most
+// profitable, so we added a little slack time to collect proposals.
 func (gc *GoClient) getProposalParallel(
 	ctx context.Context,
 	slot phase0.Slot,
@@ -160,6 +168,12 @@ func (gc *GoClient) getProposalParallel(
 	// Create a context that we'll cancel as soon as we get the first successful response
 	parallelCtx, cancelParallel := context.WithCancel(ctx)
 	defer cancelParallel()
+
+	// Create a contet that we 'll use to collect and evaluate proposals for a short time
+	// after this context expires, we will return the current best proposal or the first
+	// on we see if we have none
+	collectCtx, cancelCollect := context.WithTimeout(parallelCtx, gc.proposalCollectTimeout)
+	defer cancelCollect()
 
 	type result struct {
 		proposal *api.VersionedProposal
@@ -181,13 +195,85 @@ func (gc *GoClient) getProposalParallel(
 	}
 
 	var errs error
-	for range gc.clients {
+	var bestProposal *api.VersionedProposal
+	var bestScore float64
+	var bestClient string
+
+	pendingClients := len(gc.clients)
+collectBest:
+	for {
+		select {
+		case res := <-resultCh:
+			pendingClients--
+
+			if res.err != nil {
+				errs = errors.Join(errs, res.err)
+
+				if pendingClients > 0 {
+					continue collectBest
+				}
+
+				// we are not expecting any more proposals
+				break collectBest
+			}
+
+			proposalScore := gc.scoreProposal(res.proposal)
+			gc.log.Debug("received proposal",
+				zap.String("client", res.client),
+				zap.Float64("score", proposalScore),
+				fields.Slot(slot),
+			)
+
+			if bestProposal == nil || proposalScore > bestScore {
+				bestProposal = res.proposal
+				bestScore = proposalScore
+				bestClient = res.client
+			}
+
+			if pendingClients == 0 {
+				// we are not expecing more proposals
+				break collectBest
+			}
+
+		case <-collectCtx.Done():
+			// we are done collecting;
+			break collectBest
+		}
+	}
+
+	// at this point if we have a proposal, we can just return it, it is the
+	// best one we've seen
+	if bestProposal != nil {
+		gc.log.Debug("selected best proposal",
+			zap.String("client", bestClient),
+			zap.Float64("score", bestScore),
+			fields.Slot(slot),
+		)
+
+		return bestProposal, nil
+	}
+
+	// if we have no more pending clients, they all failed during collection
+	if pendingClients == 0 {
+		goto fail
+	}
+
+	// there are still some collectors running, just return the frist valid one
+collectFirst:
+	for {
 		select {
 		case res := <-resultCh:
 			if res.err != nil {
 				errs = errors.Join(errs, res.err)
-				continue
+
+				if pendingClients > 0 {
+					continue collectFirst
+				}
+
+				// we are not expecting any more proposals
+				break collectFirst
 			}
+
 			// Got a successful response, cancel other requests and return.
 			gc.log.Debug("received proposal, canceling other requests",
 				zap.String("client", res.client),
@@ -195,12 +281,23 @@ func (gc *GoClient) getProposalParallel(
 			)
 			cancelParallel()
 			return res.proposal, nil
+
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
 
+fail:
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
+}
+
+// scoreProposal computes a score for a beacon proposal.
+// see https://github.com/attestantio/vouch/blob/master/strategies/beaconblockproposal/best/score.go as well
+func (gc *GoClient) scoreProposal(
+	proposal *api.VersionedProposal,
+) float64 {
+	score, _ := new(big.Int).Add(proposal.ConsensusValue, proposal.ExecutionValue).Float64()
+	return score
 }
 
 // SubmitBeaconBlock submit the block to the node
