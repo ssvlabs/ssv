@@ -248,7 +248,13 @@ collectBest:
 		return bestProposal, nil
 	}
 
-	// there are still some collectors running, just return the frist valid one
+	gc.log.Debug("did not receive any valid proposals during the collection period",
+		zap.Int("clients", len(gc.clients)),
+		zap.Int("pending", pendingClients),
+		fields.Slot(slot),
+	)
+
+	// there are potentially still some collectors running, just return the frist valid one
 collectFirst:
 	for pendingClients > 0 {
 		select {
