@@ -172,7 +172,7 @@ func (gc *GoClient) getProposalParallel(
 	// Create a contet that we 'll use to collect and evaluate proposals for a short time
 	// after this context expires, we will return the current best proposal or the first
 	// on we see if we have none
-	collectCtx, cancelCollect := context.WithTimeout(parallelCtx, gc.proposalCollectTimeout)
+	collectCtx, cancelCollect := context.WithTimeout(ctx, gc.proposalCollectTimeout)
 	defer cancelCollect()
 
 	type result struct {
