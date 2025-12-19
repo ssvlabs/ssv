@@ -39,8 +39,8 @@ const (
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
 	// Proposal timeouts
-	DefaultProposalCollectTimeout = time.Second
-	DefaultProposalHardTimeout    = time.Second * 2
+	DefaultProposalSoftTimeout = time.Second
+	DefaultProposalHardTimeout = time.Second * 2
 
 	BlockRootToSlotCacheCapacityEpochs = 64
 
@@ -138,14 +138,14 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// proposalCollectTimeout is the maximum time to wait for multiple block proposals in
+	// proposalSoftTimeout is the maximum time to wait for multiple block proposals in
 	// order to select the best one from multiple clients.
 	// If no proposal has been received after this time elapses, the first valid proposal
 	// seen is returned
 	// proposalHardTimeout is the hard timeout for retrieving any proposals.
 	// TODO these should be configurable by the operator
-	proposalCollectTimeout time.Duration
-	proposalHardTimeout    time.Duration
+	proposalSoftTimeout time.Duration
+	proposalHardTimeout time.Duration
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
@@ -193,9 +193,9 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	if longTimeout == 0 {
 		longTimeout = DefaultLongTimeout
 	}
-	proposalCollectTimeout := opt.ProposalCollectTimeout
-	if proposalCollectTimeout == 0 {
-		proposalCollectTimeout = DefaultProposalCollectTimeout
+	proposalSoftTimeout := opt.ProposalSoftTimeout
+	if proposalSoftTimeout == 0 {
+		proposalSoftTimeout = DefaultProposalSoftTimeout
 	}
 	proposalHardTimeout := opt.ProposalHardTimeout
 	if proposalHardTimeout == 0 {
@@ -212,7 +212,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		proposalCollectTimeout:             proposalCollectTimeout,
+		proposalSoftTimeout:                proposalSoftTimeout,
 		proposalHardTimeout:                proposalHardTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),

@@ -168,7 +168,7 @@ func (gc *GoClient) getProposalParallel(
 	// Create a context that we'll use to collect and evaluate proposals for a short time
 	// after this context expires, we will return the current best proposal or the first
 	// on we see if we have none
-	softCtx, cancelSoft := context.WithTimeout(ctx, gc.proposalCollectTimeout)
+	softCtx, cancelSoft := context.WithTimeout(ctx, gc.proposalSoftTimeout)
 	defer cancelSoft()
 
 	// Create a context for hard proposal timeout; we fail if this timeout expires
