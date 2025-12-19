@@ -38,6 +38,10 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
+	// Proposal timeouts
+	DefaultProposalCollectTimeout = time.Second
+	DefaultProposalHardTimeout    = time.Second * 2
+
 	BlockRootToSlotCacheCapacityEpochs = 64
 
 	// ProposalPreparationBatchSize is the maximum number of preparations to submit in a single request
@@ -189,6 +193,14 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	if longTimeout == 0 {
 		longTimeout = DefaultLongTimeout
 	}
+	proposalCollectTimeout := opt.ProposalCollectTimeout
+	if proposalCollectTimeout == 0 {
+		proposalCollectTimeout = DefaultProposalCollectTimeout
+	}
+	proposalHardTimeout := opt.ProposalHardTimeout
+	if proposalHardTimeout == 0 {
+		proposalHardTimeout = DefaultProposalHardTimeout
+	}
 
 	client := &GoClient{
 		log:                                logger.Named(log.NameConsensusClient),
@@ -200,8 +212,8 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		proposalCollectTimeout:             time.Second,
-		proposalHardTimeout:                2 * time.Second,
+		proposalCollectTimeout:             proposalCollectTimeout,
+		proposalHardTimeout:                proposalHardTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
