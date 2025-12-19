@@ -170,7 +170,7 @@ func (gc *GoClient) getProposalParallel(
 	parallelCtx, cancelParallel := context.WithCancel(ctx)
 	defer cancelParallel()
 
-	// Create a contet that we'll use to collect and evaluate proposals for a short time
+	// Create a context that we'll use to collect and evaluate proposals for a short time
 	// after this context expires, we will return the current best proposal or the first
 	// on we see if we have none
 	collectCtx, cancelCollect := context.WithTimeout(ctx, gc.proposalCollectTimeout)
