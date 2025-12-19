@@ -268,7 +268,7 @@ collect:
 
 			// Got a successful response, cancel other requests and return.
 			proposalScore := gc.scoreProposal(res.proposal)
-			gc.log.Debug("received proposal",
+			gc.log.Debug("received proposal; selected first proposal",
 				zap.String("client", res.client),
 				zap.Float64("score", proposalScore),
 				zap.Duration("latency", time.Since(startCollect)),
