@@ -169,11 +169,15 @@ func (gc *GoClient) getProposalParallel(
 	parallelCtx, cancelParallel := context.WithCancel(ctx)
 	defer cancelParallel()
 
-	// Create a contet that we 'll use to collect and evaluate proposals for a short time
+	// Create a contet that we'll use to collect and evaluate proposals for a short time
 	// after this context expires, we will return the current best proposal or the first
 	// on we see if we have none
 	collectCtx, cancelCollect := context.WithTimeout(ctx, gc.proposalCollectTimeout)
 	defer cancelCollect()
+
+	// Create a context for hard proposal timeout; we fail if this timeout expires
+	hardTimeoutCtx, cancelHardTimeout := context.WithTimeout(ctx, gc.proposalHardTimeout)
+	defer cancelHardTimeout()
 
 	type result struct {
 		proposal *api.VersionedProposal
@@ -199,6 +203,7 @@ func (gc *GoClient) getProposalParallel(
 	var bestScore float64
 	var bestClient string
 
+	startCollect := time.Now()
 	pendingClients := len(gc.clients)
 collect:
 	for pendingClients > 0 {
@@ -215,6 +220,7 @@ collect:
 			gc.log.Debug("received proposal",
 				zap.String("client", res.client),
 				zap.Float64("score", proposalScore),
+				zap.Duration("latency", time.Since(startCollect)),
 				fields.Slot(slot),
 			)
 
@@ -266,8 +272,8 @@ collect:
 			)
 			return res.proposal, nil
 
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		case <-hardTimeoutCtx.Done():
+			return nil, hardTimeoutCtx.Err()
 		}
 	}
 
