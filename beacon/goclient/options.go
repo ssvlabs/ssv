@@ -17,6 +17,7 @@ type Options struct {
 	CommonTimeout time.Duration // Optional.
 	LongTimeout   time.Duration // Optional.
 
+	// TODO these should be configurable by the operator
 	ProposalSoftTimeout time.Duration // Optional
 	ProposalHardTimeout time.Duration // Optional
 }
