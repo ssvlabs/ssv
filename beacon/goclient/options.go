@@ -16,4 +16,7 @@ type Options struct {
 
 	CommonTimeout time.Duration // Optional.
 	LongTimeout   time.Duration // Optional.
+
+	ProposalCollectTimeout time.Duration // Optional
+	ProposalHardTimeout    time.Duration // Optional
 }
