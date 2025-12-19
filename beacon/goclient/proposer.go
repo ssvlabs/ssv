@@ -221,6 +221,7 @@ collect:
 				zap.String("client", res.client),
 				zap.Float64("score", proposalScore),
 				zap.Duration("latency", time.Since(startCollect)),
+				zap.Int("pending", pendingClients),
 				fields.Slot(slot),
 			)
 
@@ -266,8 +267,12 @@ collect:
 			}
 
 			// Got a successful response, cancel other requests and return.
-			gc.log.Debug("received proposal, canceling other requests",
+			proposalScore := gc.scoreProposal(res.proposal)
+			gc.log.Debug("received proposal",
 				zap.String("client", res.client),
+				zap.Float64("score", proposalScore),
+				zap.Duration("latency", time.Since(startCollect)),
+				zap.Int("pending", pendingClients),
 				fields.Slot(slot),
 			)
 			return res.proposal, nil
