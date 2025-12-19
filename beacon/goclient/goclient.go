@@ -39,8 +39,8 @@ const (
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
 	// Proposal timeouts
-	DefaultProposalSoftTimeout = 1500 * time.Millisecond
-	DefaultProposalHardTimeout = 2500 * time.Millisecond
+	DefaultProposalSoftTimeout = time.Second * 3
+	DefaultProposalHardTimeout = time.Second * 4
 
 	BlockRootToSlotCacheCapacityEpochs = 64
 
