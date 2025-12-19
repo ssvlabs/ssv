@@ -138,7 +138,10 @@ type GoClient struct {
 	// order to select the best one from multiple clients.
 	// If no proposal has been received after this time elapses, the first valid proposal
 	// seen is returned
+	// proposalHardTimeout is the hard timeout for retrieving any proposals.
+	// TODO these should be configurable by the operator
 	proposalCollectTimeout time.Duration
+	proposalHardTimeout    time.Duration
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
@@ -198,6 +201,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
 		proposalCollectTimeout:             time.Duration(float64(commonTimeout) / 5),
+		proposalHardTimeout:                commonTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
@@ -233,6 +237,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	client.log.Debug("fetched beacon config successfully")
 
 	client.blockRootToSlotCache = ttlcache.New(
+
 		ttlcache.WithCapacity[phase0.Root, phase0.Slot](config.SlotsPerEpoch * BlockRootToSlotCacheCapacityEpochs),
 	)
 
