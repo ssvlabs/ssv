@@ -237,7 +237,6 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	client.log.Debug("fetched beacon config successfully")
 
 	client.blockRootToSlotCache = ttlcache.New(
-
 		ttlcache.WithCapacity[phase0.Root, phase0.Slot](config.SlotsPerEpoch * BlockRootToSlotCacheCapacityEpochs),
 	)
 
