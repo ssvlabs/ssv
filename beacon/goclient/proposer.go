@@ -165,20 +165,15 @@ func (gc *GoClient) getProposalParallel(
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
 ) (*api.VersionedProposal, error) {
-	// Create a context that we'll cancel if we return early so that we don't have
-	// lingering goroutines.
-	parallelCtx, cancelParallel := context.WithCancel(ctx)
-	defer cancelParallel()
-
 	// Create a context that we'll use to collect and evaluate proposals for a short time
 	// after this context expires, we will return the current best proposal or the first
 	// on we see if we have none
-	collectCtx, cancelCollect := context.WithTimeout(ctx, gc.proposalCollectTimeout)
-	defer cancelCollect()
+	softCtx, cancelSoft := context.WithTimeout(ctx, gc.proposalCollectTimeout)
+	defer cancelSoft()
 
 	// Create a context for hard proposal timeout; we fail if this timeout expires
-	hardTimeoutCtx, cancelHardTimeout := context.WithTimeout(ctx, gc.proposalHardTimeout)
-	defer cancelHardTimeout()
+	hardCtx, cancelHard := context.WithTimeout(ctx, gc.proposalHardTimeout)
+	defer cancelHard()
 
 	type result struct {
 		proposal *api.VersionedProposal
@@ -190,10 +185,10 @@ func (gc *GoClient) getProposalParallel(
 
 	for _, client := range gc.clients {
 		go func(c Client) {
-			proposal, err := gc.fetchProposal(parallelCtx, c, slot, sig, graffiti)
+			proposal, err := gc.fetchProposal(hardCtx, c, slot, sig, graffiti)
 			select {
 			case resultCh <- result{proposal: proposal, err: err, client: c.Address()}:
-			case <-parallelCtx.Done():
+			case <-hardCtx.Done():
 				// Context canceled, exit without blocking
 			}
 		}(client)
@@ -232,7 +227,7 @@ collect:
 				bestClient = res.client
 			}
 
-		case <-collectCtx.Done():
+		case <-softCtx.Done():
 			// we are done collecting;
 			break collect
 		}
@@ -278,8 +273,8 @@ collect:
 			)
 			return res.proposal, nil
 
-		case <-hardTimeoutCtx.Done():
-			return nil, hardTimeoutCtx.Err()
+		case <-hardCtx.Done():
+			return nil, hardCtx.Err()
 		}
 	}
 
