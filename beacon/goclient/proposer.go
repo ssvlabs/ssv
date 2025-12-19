@@ -218,6 +218,7 @@ collect:
 				zap.Float64("score", proposalScore),
 				zap.Duration("latency", time.Since(startCollect)),
 				zap.Int("pending", pendingClients),
+				zap.Bool("blinded", res.proposal.Blinded),
 				fields.Slot(slot),
 			)
 
@@ -239,6 +240,7 @@ collect:
 		gc.log.Debug("selected best proposal",
 			zap.String("client", bestClient),
 			zap.Float64("score", bestScore),
+			zap.Bool("blinded", bestProposal.Blinded),
 			fields.Slot(slot),
 		)
 
@@ -269,6 +271,7 @@ collect:
 				zap.Float64("score", proposalScore),
 				zap.Duration("latency", time.Since(startCollect)),
 				zap.Int("pending", pendingClients),
+				zap.Bool("blinded", res.proposal.Blinded),
 				fields.Slot(slot),
 			)
 			return res.proposal, nil
