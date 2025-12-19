@@ -200,8 +200,8 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		proposalCollectTimeout:             time.Duration(float64(commonTimeout) / 5),
-		proposalHardTimeout:                commonTimeout,
+		proposalCollectTimeout:             time.Second,
+		proposalHardTimeout:                2 * time.Second,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
