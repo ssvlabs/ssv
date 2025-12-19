@@ -143,7 +143,6 @@ type GoClient struct {
 	// If no proposal has been received after this time elapses, the first valid proposal
 	// seen is returned
 	// proposalHardTimeout is the hard timeout for retrieving any proposals.
-	// TODO these should be configurable by the operator
 	proposalSoftTimeout time.Duration
 	proposalHardTimeout time.Duration
 
