@@ -165,7 +165,8 @@ func (gc *GoClient) getProposalParallel(
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
 ) (*api.VersionedProposal, error) {
-	// Create a context that we'll cancel as soon as we get the first successful response
+	// Create a context that we'll cancel if we return early so that we don't have
+	// lingering goroutines.
 	parallelCtx, cancelParallel := context.WithCancel(ctx)
 	defer cancelParallel()
 
