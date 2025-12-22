@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -238,15 +240,15 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 	logger.Debug(gotPreConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
 	span.AddEvent(gotPreConsensusMsgEvent)
 
-	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
-		logger.Debug(gotPreConsensusQuorumEvent)
+		logger.Debug(gotPreConsensusQuorumEvent, zap.Any("quorum_roots", quorumRoots))
 		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
 
-	return hasQuorum, roots, nil
+	return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
@@ -309,7 +311,12 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(
+	ctx context.Context,
+	logger *zap.Logger,
+	runner Runner,
+	signedMsg *spectypes.PartialSignatureMessages,
+) (ok bool, roots [][32]byte, err error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
@@ -321,27 +328,26 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, logger 
 	logger.Debug(gotPostConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
 	span.AddEvent(gotPostConsensusMsgEvent)
 
-	hasQuorum, roots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
 
 	if hasQuorum {
 		const gotPostConsensusQuorumEvent = "🎯 got post-consensus quorum"
-		logger.Debug(gotPostConsensusQuorumEvent)
+		logger.Debug(gotPostConsensusQuorumEvent, zap.Any("quorum_roots", roots))
 		span.AddEvent(gotPostConsensusQuorumEvent)
 	}
 
-	return hasQuorum, roots, nil
+	return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil
 }
 
 // basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
 	signedMsg *spectypes.PartialSignatureMessages,
 	container *ssv.PartialSigContainer,
-) (bool, [][32]byte) {
-	roots := make([][32]byte, 0)
-	quorumReached := false
+) (gotAnyQuorum bool, roots map[[32]byte][]spectypes.OperatorID) {
+	roots = make(map[[32]byte][]spectypes.OperatorID)
 
 	for _, msg := range signedMsg.Messages {
-		quorumReachedPreviously := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
+		quorumReachedPreviously, _ := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
 
 		// Check if it has two signatures for the same signer
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
@@ -350,16 +356,15 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 			container.AddSignature(msg)
 		}
 
-		hasQuorum := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
-
+		// We are interested in any quorum that occurs for the very first time (for this root).
+		hasQuorum, quorumSigners := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
 		if hasQuorum && !quorumReachedPreviously {
-			// Notify about first quorum only
-			roots = append(roots, msg.SigningRoot)
-			quorumReached = true
+			roots[msg.SigningRoot] = quorumSigners
+			gotAnyQuorum = true
 		}
 	}
 
-	return quorumReached, roots
+	return gotAnyQuorum, roots
 }
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly

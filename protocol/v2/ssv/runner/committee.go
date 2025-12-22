@@ -508,16 +508,31 @@ func (r *CommitteeRunner) signAttesterDuty(
 		return false, partialMsg, fmt.Errorf("failed signing attestation data: %w", err)
 	}
 
+	attDataRoot, err := attestationData.HashTreeRoot()
+	if err != nil {
+		return false, partialMsg, fmt.Errorf("failed to hash attestation data: %w", err)
+	}
+
+	const eventMsg = "signed attestation data"
+	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(attDataRoot)))
+	logger.Debug(eventMsg,
+		zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
+		zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
+		zap.Any("attestation_data", attestationData),
+		zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
+		zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+		zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+	)
+
 	return false, partialMsg, nil
 }
 
-// TODO finish edge case where some roots may be missing
 func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("base post consensus message processing")
-	hasQuorum, quorumRoots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) {
 		err = NewRetryableError(err)
 	}
@@ -536,7 +551,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
 		zap.Uint64s("validators", vIndices),
 		zap.Bool("quorum", hasQuorum),
-		zap.Int("quorum_roots", len(quorumRoots)),
+		zap.Int("quorum_roots", len(roots)),
 	)
 
 	if !hasQuorum {
@@ -558,17 +573,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
-	// Get unique roots to avoid repetition
-	deduplicatedRoots := make(map[[32]byte]struct{})
-	for _, root := range quorumRoots {
-		deduplicatedRoots[root] = struct{}{}
-	}
-
 	var executionErr error
 
-	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(deduplicatedRoots)))
+	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
-	for root := range deduplicatedRoots {
+	for _, root := range roots {
 		// Get validators related to the given root
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
 		if !found {
@@ -603,7 +612,8 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
 			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
-			if !r.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root) {
+			gotQuorum, quorumSigners := r.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root)
+			if !gotQuorum {
 				continue
 			}
 			// Skip if already submitted
@@ -612,18 +622,23 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			}
 
 			wg.Add(1)
-			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots map[[32]byte]struct{}) {
+			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots [][32]byte) {
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
-
 				pubKey := share.ValidatorPubKey
-				vLogger := logger.With(zap.Uint64("validator_index", uint64(validatorIndex)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
+
+				vLogger := logger.With(
+					zap.Uint64("validator_index", uint64(validatorIndex)),
+					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+					fields.BlockRoot(root),
+					zap.Uint64s("quorum_signers", quorumSigners),
+				)
 
 				sig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
 				// If the reconstructed signature verification failed, fall back to verifying each partial signature
 				if err != nil {
-					for root := range roots {
+					for _, root := range roots {
 						r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PostConsensusContainer, root, share.Committee, validatorIndex)
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
@@ -634,11 +649,13 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					return
 				}
 
+				vLogger.Debug("🧩 reconstructed partial signature")
+
 				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,
 					signature:      (phase0.BLSSignature)(sig),
 				}
-			}(validator, root, deduplicatedRoots)
+			}(validator, root, roots)
 		}
 
 		go func() {
@@ -693,10 +710,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			}
 		}
 
-		logger.Debug("🧩 reconstructed partial signatures for root",
-			zap.Uint64s("signers", getPostConsensusCommitteeSigners(r.BaseRunner.State, root)),
-			fields.BlockRoot(root),
-		)
+		logger.Debug("🧩 reconstructed partial signatures for root", fields.BlockRoot(root))
 	}
 
 	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
