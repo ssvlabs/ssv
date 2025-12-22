@@ -11,6 +11,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"github.com/sanity-io/litter"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
@@ -244,7 +245,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
-		logger.Debug(gotPreConsensusQuorumEvent, zap.Any("quorum_roots", quorumRoots))
+		logger.Debug(gotPreConsensusQuorumEvent, zap.Any("quorum_roots", litter.Sdump(quorumRoots)))
 		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
 
@@ -332,7 +333,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(
 
 	if hasQuorum {
 		const gotPostConsensusQuorumEvent = "🎯 got post-consensus quorum"
-		logger.Debug(gotPostConsensusQuorumEvent, zap.Any("quorum_roots", roots))
+		logger.Debug(gotPostConsensusQuorumEvent, zap.Any("quorum_roots", litter.Sdump(quorumRoots)))
 		span.AddEvent(gotPostConsensusQuorumEvent)
 	}
 
