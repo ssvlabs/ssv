@@ -306,6 +306,9 @@ func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
 }
 
+// QuorumRoots turns roots map into zap.Field, we can't just use zap.Any instead of this method
+// because zap will use the json-encoder that can't digest [32]byte (so we convert it to string
+// here explicitly before json-encoding the roots).
 func QuorumRoots(roots map[[32]byte][]spectypes.OperatorID) zap.Field {
 	tmp := make(map[string][]spectypes.OperatorID, len(roots))
 	for k, v := range roots {

@@ -245,7 +245,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
-		logger.Debug(gotPreConsensusQuorumEvent, zap.Any("quorum_roots", fields.QuorumRoots(quorumRoots)))
+		logger.Debug(gotPreConsensusQuorumEvent, fields.QuorumRoots(quorumRoots))
 		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
 
