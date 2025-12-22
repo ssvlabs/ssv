@@ -25,9 +25,14 @@ import (
 type SyncCommitteeHandler struct {
 	baseHandler
 
-	duties             *dutystore.SyncCommitteeDuties
+	duties *dutystore.SyncCommitteeDuties
+
+	// fetchCurrentPeriod stores the intent to fetch duties for the current period, while
+	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchCurrentPeriod bool
-	fetchNextPeriod    bool
+	// fetchNextPeriod stores the intent to fetch duties for the next period, while
+	// processFetching func uses this value to decide on whether the fetch is needed.
+	fetchNextPeriod bool
 
 	// preparationSlots is the number of slots ahead of the sync committee
 	// period change at which to prepare the relevant duties.
@@ -40,7 +45,6 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode
 		duties:       duties,
 		exporterMode: exporterMode,
 	}
-	h.fetchCurrentPeriod = true
 	return h
 }
 
@@ -71,14 +75,6 @@ func (h *SyncCommitteeHandler) Name() string {
 func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
-
-	// Prepare relevant duties 1.5 epochs (48 slots) ahead of the sync committee period change.
-	// The 1.5 epochs timing helps ensure setup occurs when the beacon node is likely less busy.
-	h.preparationSlots = h.beaconConfig.SlotsPerEpoch * 3 / 2
-
-	if h.shouldFetchNextPeriod(h.beaconConfig.EstimatedCurrentSlot()) {
-		h.fetchNextPeriod = true
-	}
 
 	next := h.ticker.Next()
 	for {
@@ -142,9 +138,22 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+// HandleInitialDuties fetches duties for the current and next periods.
+// Fetching duties for the next period is necessary if we are starting close to epoch-boundary because
+// our ticker might "miss" that rollover otherwise.
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
 	defer cancel()
+
+	h.fetchCurrentPeriod = true
+
+	// Prepare relevant duties 1.5 epochs (48 slots) ahead of the sync committee period change.
+	// The 1.5 epochs timing helps ensure setup occurs when the beacon node is likely less busy.
+	h.preparationSlots = h.beaconConfig.SlotsPerEpoch * 3 / 2
+
+	if h.shouldFetchNextPeriod(h.beaconConfig.EstimatedCurrentSlot()) {
+		h.fetchNextPeriod = true
+	}
 
 	epoch := h.beaconConfig.EstimatedCurrentEpoch()
 	period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
@@ -164,7 +173,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 	if h.fetchCurrentPeriod {
 		span.AddEvent("fetching current period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
-			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
+			h.logger.Error("failed to fetch duties for current period", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
@@ -174,7 +183,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 	if h.fetchNextPeriod {
 		span.AddEvent("fetching next period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period+1, waitForInitial); err != nil {
-			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
+			h.logger.Error("failed to fetch duties for next period", zap.Error(err))
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}

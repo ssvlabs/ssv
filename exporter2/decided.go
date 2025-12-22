@@ -1,9 +1,7 @@
-package exporter
+package exporter2
 
 import (
-	"encoding/hex"
 	"fmt"
-	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
@@ -11,50 +9,29 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 )
 
-// TraceDecideds godoc
-// @Summary Retrieve decided message traces
-// @Description Returns decided duty participant traces for validators or committees, including partial error details.
-// @Tags Exporter
-// @Accept json
-// @Produce json
-// @Param request query DecidedsRequest false "Filters as query parameters"
-// @Param request body DecidedsRequest false "Filters as JSON body"
-// @Success 200 {object} TraceDecidedsResponse
-// @Failure 400 {object} api.ErrorResponse
-// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
-// @Failure 500 {object} api.ErrorResponse
-// @Router /v1/exporter/decideds [get]
-// @Router /v1/exporter/decideds [post]
-func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
-	var request DecidedsRequest
-
-	if err := api.Bind(r, &request); err != nil {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, err)
+// TraceDecidedsCore contains the core logic for TraceDecideds without any HTTP concerns.
+func (e *Exporter) TraceDecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, *multierror.Error) {
+	if err := validateDecidedRequest(request); err != nil {
+		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
-	if err := validateDecidedRequest(&request); err != nil {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, err)
-	}
-
-	var participants = make([]*DecidedParticipant, 0)
+	var participants = make([]DecidedParticipant, 0)
 	var errs *multierror.Error
 
-	indices, err := e.extractIndices(&request)
-	errs = multierror.Append(errs, err)
+	indices, indicesErr := e.indicesFromDecidedsQuery(request)
+	errs = multierror.Append(errs, indicesErr)
 
 	// if the request was for a specific set of participants and we couldn't resolve any, we're done
-	if request.hasFilters() && len(indices) == 0 {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusBadRequest, request, errs.ErrorOrNil())
+	if request.HasFilters() && len(indices) == 0 {
+		// for retro-compatibility we should return a validation error here
+		return nil, multierror.Append(nil, &ValidationError{Err: indicesErr})
 	}
 
-	for _, roleVal := range request.Roles {
-		role := spectypes.BeaconRole(roleVal)
-
+	for _, role := range request.Roles {
 		for s := request.From; s <= request.To; s++ {
 			slot := phase0.Slot(s)
 
@@ -88,7 +65,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					continue
 				}
 
-				participants = append(participants, toParticipantResponse(role, pr))
+				participants = append(participants, DecidedParticipantFromRange(role, pr, idxEntry.Index))
 			}
 		}
 	}
@@ -96,69 +73,52 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	// by design, not found duties are expected and not considered as API errors
 	errs = filterOutDutyNotFoundErrors(errs)
 
-	// if we don't have a single valid result and we have at least one meaningful error, return an error
-	if len(participants) == 0 && errs.ErrorOrNil() != nil {
-		return toApiError(e.logger, r, "trace_decideds", http.StatusInternalServerError, request, errs.ErrorOrNil())
-	}
-
-	// otherwise return a partial response with valid participants
-	response := TraceDecidedsResponseFromParticipants(participants, toStrings(errs))
-	return api.Render(w, r, response)
+	return &TraceDecidedsResult{Participants: participants}, errs
 }
 
-// Decideds is the backward-compatible handler for exporter-v1 "decideds" endpoint.
-func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
-	var request DecidedsRequest
-
-	if err := api.Bind(r, &request); err != nil {
-		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, err)
+// DecidedsCore contains the core logic for the backward-compatible exporter-v1 "decideds" endpoint.
+func (e *Exporter) DecidedsCore(request *DecidedsQuery) (*TraceDecidedsResult, error) {
+	if err := validateDecidedRequest(request); err != nil {
+		return nil, &ValidationError{Err: err}
 	}
-
-	if err := validateDecidedRequest(&request); err != nil {
-		return toApiError(e.logger, r, "decideds_v1", http.StatusBadRequest, request, err)
-	}
-
-	pubkeys := request.pubKeys()
 
 	// Initialize with empty slice to ensure we always return [] instead of null
-	var response DecidedsResponse
-	response.Data = make([]*DecidedParticipant, 0)
+	var response TraceDecidedsResult
+	response.Participants = make([]DecidedParticipant, 0)
 
 	from := phase0.Slot(request.From)
 	to := phase0.Slot(request.To)
 
-	for _, roleVal := range request.Roles {
-		role := spectypes.BeaconRole(roleVal)
+	for _, role := range request.Roles {
 		store := e.participantStores.Get(role)
 
 		var participantsRange []storage.ParticipantsRangeEntry
 
-		if len(pubkeys) == 0 {
+		if len(request.PubKeys) == 0 {
 			var err error
 			participantsRange, err = store.GetAllParticipantsInRange(from, to)
 			if err != nil {
-				return toApiError(e.logger, r, "decideds_v1", http.StatusInternalServerError, request, fmt.Errorf("error getting participants: %w", err))
+				return nil, fmt.Errorf("error getting participants: %w", err)
 			}
 		}
 
-		for _, pubkey := range pubkeys {
+		for _, pubkey := range request.PubKeys {
 			participantsByPK, err := store.GetParticipantsInRange(pubkey, from, to)
 			if err != nil {
-				return toApiError(e.logger, r, "decideds_v1", http.StatusInternalServerError, request, fmt.Errorf("error getting participants: %w", err))
+				return nil, fmt.Errorf("error getting participants: %w", err)
 			}
 			participantsRange = append(participantsRange, participantsByPK...)
 		}
 
-		// map to API response
 		for _, pr := range participantsRange {
-			response.Data = append(response.Data, toParticipantResponse(role, pr))
+			response.Participants = append(response.Participants, DecidedParticipantFromRange(role, pr, 0))
 		}
 	}
 
-	return api.Render(w, r, response)
+	return &response, nil
 }
 
-func validateDecidedRequest(request *DecidedsRequest) error {
+func validateDecidedRequest(request *DecidedsQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -167,12 +127,6 @@ func validateDecidedRequest(request *DecidedsRequest) error {
 		return fmt.Errorf("at least one role is required")
 	}
 
-	requiredLength := len(spectypes.ValidatorPK{})
-	for _, req := range request.PubKeys {
-		if len(req) != requiredLength {
-			return fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req))
-		}
-	}
 	return nil
 }
 

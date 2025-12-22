@@ -103,7 +103,7 @@ docker-benchmark:
 .PHONY: build
 .DEFAULT_GOAL := build # this makes `make` default to `make build`
 build:
-	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
+	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags --exact-match HEAD 2>/dev/null || echo "untagged"`" ./cmd/ssvnode/
 
 .PHONY: spec-alignment-diff
 spec-alignment-diff:

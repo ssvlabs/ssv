@@ -6,17 +6,17 @@ set -eo pipefail
 export DOCKER_BUILDKIT=1
 export DOCKER_CLI_EXPERIMENTAL=enabled
 
+# Use HEAD commit if none was specified (eg. when running locally)
+COMMIT="HEAD"
 if [ -n "${SOURCE_COMMIT}" ]; then
-  APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}")
+  COMMIT="${SOURCE_COMMIT}"
   echo "Using SOURCE_COMMIT=${SOURCE_COMMIT}"
-else
-  # Extract Git tag when running locally
-  APP_VERSION=$(git describe --tags 2>/dev/null || echo "latest")
 fi
+APP_VERSION=$(git describe --tags --exact-match "${COMMIT}" 2>/dev/null || echo "untagged")
 
 echo "Build Configuration:"
 echo "  Image: ${IMAGE_NAME}"
-echo "  Commit: ${SOURCE_COMMIT}"
+echo "  Commit: ${COMMIT}"
 echo "  Version: ${APP_VERSION}"
 
 docker buildx rm ssv-multiplatform-builder 2>/dev/null || true
