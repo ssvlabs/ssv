@@ -2,6 +2,7 @@ package fields
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
@@ -303,6 +304,15 @@ func Root(r [32]byte) zap.Field {
 
 func BlockRoot(r [32]byte) zap.Field {
 	return zap.String("block_root", hex.EncodeToString(r[:]))
+}
+
+func QuorumRoots(roots map[[32]byte][]spectypes.OperatorID) zap.Field {
+	tmp := make(map[string][]spectypes.OperatorID, len(roots))
+	for k, v := range roots {
+		tmp["0x"+hex.EncodeToString(k[:])] = v
+	}
+	result, _ := json.Marshal(tmp)
+	return zap.String("quorum_roots", string(result))
 }
 
 func Committee(operatorIDs []spectypes.OperatorID) zap.Field {

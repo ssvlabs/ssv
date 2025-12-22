@@ -11,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"github.com/sanity-io/litter"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
@@ -20,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
@@ -245,7 +245,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
-		logger.Debug(gotPreConsensusQuorumEvent, zap.Any("quorum_roots", litter.Sdump(quorumRoots)))
+		logger.Debug(gotPreConsensusQuorumEvent, zap.Any("quorum_roots", fields.QuorumRoots(quorumRoots)))
 		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
 
@@ -333,7 +333,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(
 
 	if hasQuorum {
 		const gotPostConsensusQuorumEvent = "🎯 got post-consensus quorum"
-		logger.Debug(gotPostConsensusQuorumEvent, zap.Any("quorum_roots", litter.Sdump(quorumRoots)))
+		logger.Debug(gotPostConsensusQuorumEvent, fields.QuorumRoots(quorumRoots))
 		span.AddEvent(gotPostConsensusQuorumEvent)
 	}
 
