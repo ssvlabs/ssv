@@ -195,19 +195,10 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	proposalSoftTimeout := opt.ProposalSoftTimeout
 	if proposalSoftTimeout == 0 {
 		proposalSoftTimeout = DefaultProposalSoftTimeout
-		if opt.ProposerDelay < proposalSoftTimeout {
-			proposalSoftTimeout -= opt.ProposerDelay
-		}
 	}
 	proposalHardTimeout := opt.ProposalHardTimeout
 	if proposalHardTimeout == 0 {
 		proposalHardTimeout = DefaultProposalHardTimeout
-		if opt.ProposerDelay < proposalHardTimeout {
-			proposalHardTimeout -= opt.ProposerDelay
-		}
-		if proposalHardTimeout < proposalSoftTimeout {
-			proposalHardTimeout = proposalSoftTimeout
-		}
 	}
 
 	client := &GoClient{

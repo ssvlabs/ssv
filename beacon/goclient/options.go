@@ -20,5 +20,4 @@ type Options struct {
 	// TODO these should be configurable by the operator
 	ProposalSoftTimeout time.Duration // Optional
 	ProposalHardTimeout time.Duration // Optional
-	ProposerDelay       time.Duration // Optional
 }
