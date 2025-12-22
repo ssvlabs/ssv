@@ -222,24 +222,23 @@ collect:
 				fields.Slot(slot),
 			)
 
-			if res.proposal.Blinded && proposalScore >= bestScore {
-				// this is a blinded proposal that is at least as good as any proposal
-				// we've seen so far.
-				// We immediately return this as an optimization, under the assumption
+			if bestProposal == nil ||
+				proposalScore > bestScore ||
+				// this condition prefers the blinded proposal even if same score
+				// as the best we have observed so far
+				(res.proposal.Blinded && proposalScore == bestScore) {
+				bestProposal = res.proposal
+				bestScore = proposalScore
+				bestClient = res.client
+			}
+
+			if res.proposal.Blinded {
+				// We immediately return as an optimization, under the assumption
 				// that this is a MEV block; it is a reasonable assumption to make in
 				// the usual operating environment.
 				// Note: We may want to add an operator option to disable this behavior
 				// in the future.
-				bestProposal = res.proposal
-				bestScore = proposalScore
-				bestClient = res.client
 				break collect
-			}
-
-			if bestProposal == nil || proposalScore > bestScore {
-				bestProposal = res.proposal
-				bestScore = proposalScore
-				bestClient = res.client
 			}
 
 		case <-softCtx.Done():
