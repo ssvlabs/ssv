@@ -310,12 +310,18 @@ func BlockRoot(r [32]byte) zap.Field {
 // because zap will use the json-encoder that can't digest [32]byte (so we convert it to string
 // here explicitly before json-encoding the roots).
 func QuorumRoots(roots map[[32]byte]map[phase0.ValidatorIndex][]spectypes.OperatorID) zap.Field {
+	const zapKey = "quorum_roots"
+
 	tmp := make(map[string]map[phase0.ValidatorIndex][]spectypes.OperatorID, len(roots))
 	for k, v := range roots {
 		tmp["0x"+hex.EncodeToString(k[:])] = v
 	}
-	result, _ := json.Marshal(tmp)
-	return zap.String("quorum_roots", string(result))
+	result, err := json.Marshal(tmp)
+	if err != nil {
+		return zap.String(zapKey, fmt.Sprintf("QuorumRoots error: %s", err))
+	}
+
+	return zap.String(zapKey, string(result))
 }
 
 func Committee(operatorIDs []spectypes.OperatorID) zap.Field {
