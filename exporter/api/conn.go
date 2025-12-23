@@ -224,6 +224,7 @@ func (c *conn) sendMsg(msg []byte) (int, error) {
 	return n, nil
 }
 
+// Use this logging here for debugging only (since it produces lots of log-lines).
 //func (c *conn) logMsg(logger *zap.Logger, message []byte, byteWritten int) {
 //	if byteWritten == 0 {
 //		return
