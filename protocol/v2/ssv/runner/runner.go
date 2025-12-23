@@ -237,8 +237,16 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 		return false, nil, fmt.Errorf("invalid pre-consensus message: %w", err)
 	}
 
+	vIndices := make([]uint64, 0, len(signedMsg.Messages))
+	for _, msg := range signedMsg.Messages {
+		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
+	}
 	const gotPreConsensusMsgEvent = "📬 got pre-consensus message"
-	logger.Debug(gotPreConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
+	logger.Debug(
+		gotPreConsensusMsgEvent,
+		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
+		zap.Uint64s("validators", vIndices),
+	)
 	span.AddEvent(gotPreConsensusMsgEvent)
 
 	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
@@ -325,8 +333,16 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(
 		return false, nil, fmt.Errorf("invalid post-consensus message: %w", err)
 	}
 
+	vIndices := make([]uint64, 0, len(signedMsg.Messages))
+	for _, msg := range signedMsg.Messages {
+		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
+	}
 	const gotPostConsensusMsgEvent = "📬 got post-consensus message"
-	logger.Debug(gotPostConsensusMsgEvent, zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
+	logger.Debug(
+		gotPostConsensusMsgEvent,
+		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
+		zap.Uint64s("validators", vIndices),
+	)
 	span.AddEvent(gotPostConsensusMsgEvent)
 
 	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
@@ -344,8 +360,8 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(
 func (b *BaseRunner) basePartialSigMsgProcessing(
 	signedMsg *spectypes.PartialSignatureMessages,
 	container *ssv.PartialSigContainer,
-) (gotAnyQuorum bool, roots map[[32]byte][]spectypes.OperatorID) {
-	roots = make(map[[32]byte][]spectypes.OperatorID)
+) (gotAnyQuorum bool, roots map[[32]byte]map[phase0.ValidatorIndex][]spectypes.OperatorID) {
+	roots = make(map[[32]byte]map[phase0.ValidatorIndex][]spectypes.OperatorID)
 
 	for _, msg := range signedMsg.Messages {
 		quorumReachedPreviously, _ := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
@@ -359,8 +375,11 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 		// We are interested in any quorum that occurs for the very first time (for this root).
 		hasQuorum, quorumSigners := container.HasQuorum(msg.ValidatorIndex, msg.SigningRoot)
-		if hasQuorum && !quorumReachedPreviously {
-			roots[msg.SigningRoot] = quorumSigners
+		if !quorumReachedPreviously && hasQuorum {
+			if roots[msg.SigningRoot] == nil {
+				roots[msg.SigningRoot] = make(map[phase0.ValidatorIndex][]spectypes.OperatorID)
+			}
+			roots[msg.SigningRoot][msg.ValidatorIndex] = quorumSigners
 			gotAnyQuorum = true
 		}
 	}

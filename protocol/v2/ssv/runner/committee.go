@@ -540,20 +540,6 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
 
-	vIndices := make([]uint64, 0, len(signedMsg.Messages))
-	for _, msg := range signedMsg.Messages {
-		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
-	}
-
-	const eventMsg = "🧩 got partial signatures (post consensus)"
-	span.AddEvent(eventMsg)
-	logger.Debug(eventMsg,
-		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
-		zap.Uint64s("validators", vIndices),
-		zap.Bool("quorum", hasQuorum),
-		zap.Int("quorum_roots", len(roots)),
-	)
-
 	if !hasQuorum {
 		return nil
 	}
