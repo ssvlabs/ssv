@@ -1,6 +1,8 @@
 package discovery
 
 import (
+	"slices"
+
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -76,12 +78,7 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 		if err != nil {
 			return false
 		}
-		for _, subnet := range subnets {
-			if fromEntry.IsSet(subnet) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(subnets, fromEntry.IsSet)
 	}
 }
 
