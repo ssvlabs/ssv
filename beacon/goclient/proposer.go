@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/traces"
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -83,6 +84,12 @@ func (gc *GoClient) GetBeaconBlock(
 	graffitiBytes []byte,
 	randao []byte,
 ) (*api.VersionedProposal, ssz.Marshaler, error) {
+	// Enrich logger with duty ID if available in context.
+	logger := gc.log
+	if dutyID, ok := traces.DutyIDFromContext(ctx); ok {
+		logger = logger.With(fields.DutyID(dutyID))
+	}
+
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
@@ -100,7 +107,7 @@ func (gc *GoClient) GetBeaconBlock(
 		}
 	} else {
 		// For multiple clients, race them in parallel for the fastest response
-		beaconBlock, err = gc.getProposalParallel(ctx, slot, sig, graffiti)
+		beaconBlock, err = gc.getProposalParallel(ctx, logger, slot, sig, graffiti)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -112,7 +119,7 @@ func (gc *GoClient) GetBeaconBlock(
 		return nil, nil, fmt.Errorf("failed to get fee recipient: %w", err)
 	}
 	if feeRecipient.IsZero() {
-		gc.log.Warn("proposal missing fee recipient - fees will be burned",
+		logger.Warn("proposal missing fee recipient - fees will be burned",
 			fields.Slot(slot),
 			zap.Bool("blinded", beaconBlock.Blinded))
 	}
@@ -161,6 +168,7 @@ func (gc *GoClient) GetBeaconBlock(
 // profitable, so we added a little slack time to collect proposals.
 func (gc *GoClient) getProposalParallel(
 	ctx context.Context,
+	logger *zap.Logger,
 	slot phase0.Slot,
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
@@ -213,7 +221,7 @@ collect:
 			}
 
 			proposalScore := gc.scoreProposal(res.proposal)
-			gc.log.Debug("received proposal",
+			logger.Debug("received proposal",
 				zap.String("client", res.client),
 				zap.Float64("score", proposalScore),
 				zap.Duration("latency", time.Since(startCollect)),
@@ -252,7 +260,7 @@ collect:
 	// at this point if we have a proposal, we can just return it, it is the
 	// best one we've seen
 	if bestProposal != nil {
-		gc.log.Debug("selected best proposal",
+		logger.Debug("selected best proposal",
 			zap.String("client", bestClient),
 			zap.Float64("score", bestScore),
 			zap.Bool("blinded", bestProposal.Blinded),
@@ -262,7 +270,7 @@ collect:
 		return bestProposal, nil
 	}
 
-	gc.log.Debug("did not receive any valid proposals during the collection period",
+	logger.Debug("did not receive any valid proposals during the collection period",
 		zap.Int("clients", len(gc.clients)),
 		zap.Int("pending", pendingClients),
 		fields.Slot(slot),
@@ -281,7 +289,7 @@ collect:
 
 			// Got a successful response, cancel other requests and return.
 			proposalScore := gc.scoreProposal(res.proposal)
-			gc.log.Debug("received proposal; selected first proposal",
+			logger.Debug("received proposal; selected first proposal",
 				zap.String("client", res.client),
 				zap.Float64("score", proposalScore),
 				zap.Duration("latency", time.Since(startCollect)),
