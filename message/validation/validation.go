@@ -47,15 +47,10 @@ type validatorStore interface {
 	Committee(id spectypes.CommitteeID) (*registrystorage.Committee, bool)
 }
 
-type peerIDWithMessageID struct {
-	peerID    peer.ID
-	messageID spectypes.MessageID
-}
-
 type messageValidator struct {
 	logger         *zap.Logger
 	netCfg         *networkconfig.Network
-	state          *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
+	state          *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 	validatorStore validatorStore
 	operators      operators
 	dutyStore      *dutystore.Store
@@ -65,12 +60,12 @@ type messageValidator struct {
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
 	// the same ID apply any state modifications (during message validation - which is not
 	// stateless) in an isolated synchronized manner with respect to each other.
-	validationLockCache *ttlcache.Cache[peerIDWithMessageID, *sync.Mutex]
+	validationLockCache *ttlcache.Cache[spectypes.MessageID, *sync.Mutex]
 	// validationLocksInflight helps us prevent generating 2 different validation locks
 	// for messages that must lock on the same lock (messages with the same ID) when undergoing
 	// validation (that validation is not stateless - it often requires messageValidator to
 	// update some state).
-	validationLocksInflight singleflight.Group[peerIDWithMessageID, *sync.Mutex]
+	validationLocksInflight singleflight.Group[spectypes.MessageID, *sync.Mutex]
 
 	selfPID    peer.ID
 	selfAccept bool
@@ -89,7 +84,7 @@ func New(
 	mv := &messageValidator{
 		logger:              zap.NewNop(),
 		netCfg:              netCfg,
-		validationLockCache: ttlcache.New[peerIDWithMessageID, *sync.Mutex](),
+		validationLockCache: ttlcache.New[spectypes.MessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
 		operators:           operators,
 		dutyStore:           dutyStore,
@@ -98,7 +93,7 @@ func New(
 
 	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
 	mv.state = ttlcache.New(
-		ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
+		ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
 	)
 
 	for _, opt := range opts {
@@ -190,11 +185,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	key := peerIDWithMessageID{
-		peerID:    receivedFrom,
-		messageID: signedSSVMessage.SSVMessage.GetID(),
-	}
-
+	key := signedSSVMessage.SSVMessage.GetID()
 	validationMu := mv.getValidationLock(key)
 	validationMu.Lock()
 	defer validationMu.Unlock()
@@ -239,7 +230,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	return nil
 }
 
-func (mv *messageValidator) getValidationLock(key peerIDWithMessageID) *sync.Mutex {
+func (mv *messageValidator) getValidationLock(key spectypes.MessageID) *sync.Mutex {
 	lock, _, _ := mv.validationLocksInflight.Do(key, func() (*sync.Mutex, error) {
 		cachedLock := mv.validationLockCache.Get(key)
 		if cachedLock != nil {
@@ -315,7 +306,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
 }
 
-func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {
+func (mv *messageValidator) validatorState(key spectypes.MessageID, committee []spectypes.OperatorID) *ValidatorState {
 	if v := mv.state.Get(key); v != nil {
 		return v.Value()
 	}
