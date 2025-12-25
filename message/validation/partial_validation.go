@@ -238,13 +238,13 @@ func validatePartialSignatureMessageLimit(
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		if signerState.SeenMsgTypes.reachedPreConsensusLimit() {
-			e := signerState.DecideIgnoreOrReject(ErrTooManyPartialSigMessage, ErrTooManyPartialSigMessageFromSamePeer, receivedFrom)
+			e := signerState.IgnoreOrReject(ErrTooManyPartialSigMessage, ErrTooManyPartialSigMessageFromSamePeer, receivedFrom)
 			e.got = fmt.Sprintf("pre-consensus, having %v", signerState.SeenMsgTypes.String())
 			return e
 		}
 	case spectypes.PostConsensusPartialSig:
 		if signerState.SeenMsgTypes.reachedPostConsensusLimit() {
-			e := signerState.DecideIgnoreOrReject(ErrTooManyPartialSigMessage, ErrTooManyPartialSigMessageFromSamePeer, receivedFrom)
+			e := signerState.IgnoreOrReject(ErrTooManyPartialSigMessage, ErrTooManyPartialSigMessageFromSamePeer, receivedFrom)
 			e.got = fmt.Sprintf("post-consensus, having %v", signerState.SeenMsgTypes.String())
 			return e
 		}

@@ -212,11 +212,11 @@ func (mv *messageValidator) validateQBFTLogic(
 			if consensusMessage.Round == signerState.Round {
 				// Rule: Peer must not send two proposals with different data
 				if len(signedSSVMessage.FullData) != 0 && signerState.HashedProposalData != nil {
-					hashedProposalData := sha256.Sum256(signedSSVMessage.FullData)
-					if *signerState.HashedProposalData != hashedProposalData {
-						e := signerState.DecideIgnoreOrReject(ErrDifferentProposalData, ErrDifferentProposalDataFromSamePeer, receivedFrom)
-						e.want = *signerState.HashedProposalData
-						e.got = hashedProposalData
+					msgHashedProposalData := sha256.Sum256(signedSSVMessage.FullData)
+					if *signerState.HashedProposalData != msgHashedProposalData {
+						e := signerState.IgnoreOrReject(ErrDifferentProposalData, ErrDifferentProposalDataFromSamePeer, receivedFrom)
+						e.want = "0x" + hex.EncodeToString((*signerState.HashedProposalData)[:])
+						e.got = "0x" + hex.EncodeToString(msgHashedProposalData[:])
 						return e
 					}
 				}
@@ -235,7 +235,7 @@ func (mv *messageValidator) validateQBFTLogic(
 			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
 			if signerState.SeenSigners != nil {
 				if _, ok := signerState.SeenSigners[quorum.ToBitMask()]; ok {
-					e := signerState.DecideIgnoreOrReject(ErrDecidedWithSameSigners, ErrDecidedWithSameSignersFromSamePeer, receivedFrom)
+					e := signerState.IgnoreOrReject(ErrDecidedWithSameSigners, ErrDecidedWithSameSignersFromSamePeer, receivedFrom)
 					return e
 				}
 			}
@@ -438,27 +438,27 @@ func validateConsensusMessageLimit(
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		if signerState.SeenMsgTypes.reachedProposalLimit() {
-			e := signerState.DecideIgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
+			e := signerState.IgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
 			e.got = fmt.Sprintf("proposal, having %v", signerState.SeenMsgTypes.String())
 			return e
 		}
 	case specqbft.PrepareMsgType:
 		if signerState.SeenMsgTypes.reachedPrepareLimit() {
-			e := signerState.DecideIgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
+			e := signerState.IgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
 			e.got = fmt.Sprintf("prepare, having %v", signerState.SeenMsgTypes.String())
 			return e
 		}
 	case specqbft.CommitMsgType:
 		if len(signedSSVMessage.OperatorIDs) == 1 {
 			if signerState.SeenMsgTypes.reachedCommitLimit() {
-				e := signerState.DecideIgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
+				e := signerState.IgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
 				e.got = fmt.Sprintf("commit, having %v", signerState.SeenMsgTypes.String())
 				return e
 			}
 		}
 	case specqbft.RoundChangeMsgType:
 		if signerState.SeenMsgTypes.reachedRoundChangeLimit() {
-			e := signerState.DecideIgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
+			e := signerState.IgnoreOrReject(ErrDuplicatedMessage, ErrDuplicatedMessageFromSamePeer, receivedFrom)
 			e.got = fmt.Sprintf("round change, having %v", signerState.SeenMsgTypes.String())
 			return e
 		}

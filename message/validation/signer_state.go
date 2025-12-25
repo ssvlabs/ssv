@@ -54,19 +54,19 @@ func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
 	s.SeenViolations = nil // lazy init on demand to reduce mem consumption
 }
 
-// DecideIgnoreOrReject decides between returning an ignoreErr or rejectErr depending on whether this violation
+// IgnoreOrReject decides between returning an ignoreErr or rejectErr depending on whether this violation
 // (this particular error type) has already been seen from the very same peer.
 // 1-time violations are always allowed (ignored) because it's computationally expensive to indentify it, and
 // the rest must be rejected since it is easily detectable.
-func (s *SignerState) DecideIgnoreOrReject(ignoreErr, rejectErr Error, receivedFrom peer.ID) (resultingErr Error) {
+func (s *SignerState) IgnoreOrReject(ignoreErr, rejectErr Error, receivedFrom peer.ID) (chosenErr Error) {
 	if s.SeenViolations == nil {
 		s.SeenViolations = make(map[peer.ID]map[Error]struct{})
 	}
 	if s.SeenViolations[receivedFrom] == nil {
 		s.SeenViolations[receivedFrom] = make(map[Error]struct{})
 	}
-	_, seenViolation := s.SeenViolations[receivedFrom][ignoreErr]
-	if seenViolation {
+	_, seen := s.SeenViolations[receivedFrom][ignoreErr]
+	if seen {
 		return rejectErr
 	}
 	s.SeenViolations[receivedFrom][ignoreErr] = struct{}{}
