@@ -33,8 +33,8 @@ type SignerState struct {
 	SeenSigners map[SignersBitMask]struct{}
 
 	// SeenViolations keeps track of validation violations by peers we get messages for this signer from detected
-	// so far.
-	SeenViolations map[peer.ID]map[Error]struct{}
+	// so far (mapping peer-id -> error-text).
+	SeenViolations map[peer.ID]map[string]struct{}
 }
 
 func newSignerState(slot phase0.Slot, round specqbft.Round) *SignerState {
@@ -60,15 +60,15 @@ func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
 // the rest must be rejected since it is easily detectable.
 func (s *SignerState) IgnoreOrReject(ignoreErr, rejectErr Error, receivedFrom peer.ID) (chosenErr Error) {
 	if s.SeenViolations == nil {
-		s.SeenViolations = make(map[peer.ID]map[Error]struct{})
+		s.SeenViolations = make(map[peer.ID]map[string]struct{})
 	}
 	if s.SeenViolations[receivedFrom] == nil {
-		s.SeenViolations[receivedFrom] = make(map[Error]struct{})
+		s.SeenViolations[receivedFrom] = make(map[string]struct{})
 	}
-	_, seen := s.SeenViolations[receivedFrom][ignoreErr]
+	_, seen := s.SeenViolations[receivedFrom][ignoreErr.text]
 	if seen {
 		return rejectErr
 	}
-	s.SeenViolations[receivedFrom][ignoreErr] = struct{}{}
+	s.SeenViolations[receivedFrom][ignoreErr.text] = struct{}{}
 	return ignoreErr
 }
