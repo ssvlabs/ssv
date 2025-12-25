@@ -142,8 +142,6 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 				logger.Warn("failed to send message", zap.Error(err))
 				return
 			}
-			// Use this logging here for debugging only (since it produces lots of log-lines).
-			//c.logMsg(logger, message, bytesWritten)
 		}
 	}
 }
@@ -223,26 +221,6 @@ func (c *conn) sendMsg(msg []byte) (int, error) {
 	}
 	return n, nil
 }
-
-// Use this logging here for debugging only (since it produces lots of log-lines).
-//func (c *conn) logMsg(logger *zap.Logger, message []byte, byteWritten int) {
-//	if byteWritten == 0 {
-//		return
-//	}
-//	j := make(map[string]json.RawMessage)
-//	if err := json.Unmarshal(message, &j); err != nil {
-//		logger.Error("could not parse msg", zap.Error(err))
-//	}
-//	fraw, ok := j["filter"]
-//	if !ok {
-//		return
-//	}
-//	filter, err := fraw.MarshalJSON()
-//	if err != nil {
-//		logger.Error("could not parse filter", zap.Error(err))
-//	}
-//	logger.Debug("ws msg was sent", zap.Int("bytes", byteWritten), zap.ByteString("filter", filter))
-//}
 
 // isCloseError determines whether the given error is of CloseError type
 func isCloseError(err error) bool {
