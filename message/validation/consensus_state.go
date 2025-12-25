@@ -19,7 +19,7 @@ func (cs *ValidatorState) OperatorState(operatorIdx int) *OperatorState {
 }
 
 type OperatorState struct {
-	signers         []*SignerState // the slice index is slot % storedSlotCount
+	signers         []*SignerState // the slice index is slot % ValidatorState.storedSlotCount
 	maxSlot         phase0.Slot
 	maxEpoch        phase0.Epoch
 	currEpochDuties uint64

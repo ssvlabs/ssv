@@ -32,7 +32,8 @@ type SignerState struct {
 	// 13 (f=4): C(13,9)+C(13,10)+C(13,11)+C(13,12)+C(13,13)=1093
 	SeenSigners map[SignersBitMask]struct{}
 
-	// SeenViolations keeps track of validation violations by this signer detected so far.
+	// SeenViolations keeps track of validation violations by peers we get messages for this signer from detected
+	// so far.
 	SeenViolations map[peer.ID]map[Error]struct{}
 }
 
@@ -68,6 +69,6 @@ func (s *SignerState) DecideIgnoreOrReject(ignoreErr, rejectErr Error, receivedF
 	if seenViolation {
 		return rejectErr
 	}
-	s.SeenViolations[receivedFrom][ErrTooManyPartialSigMessage] = struct{}{}
+	s.SeenViolations[receivedFrom][ignoreErr] = struct{}{}
 	return ignoreErr
 }
