@@ -211,7 +211,9 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 			return e
 		}
 
-		// Rule: a ValidatorIndex can't appear more than 2 times in the []*PartialSignatureMessage list
+		// Rule: a ValidatorIndex can't appear in the []*PartialSignatureMessage list:
+		// - more than 2 times for RoleCommittee
+		// - more than 5 times for RoleAggregatorCommittee
 		validatorIndexCount := make(map[phase0.ValidatorIndex]int)
 		for _, message := range partialSignatureMessages.Messages {
 			validatorIndexCount[message.ValidatorIndex]++

@@ -95,13 +95,13 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
-type validatorConsensusDataChecker struct{}
+type aggregatorCommitteeChecker struct{}
 
-func NewValidatorConsensusDataChecker() ValueChecker {
-	return &validatorConsensusDataChecker{}
+func NewAggregatorCommitteeChecker() ValueChecker {
+	return &aggregatorCommitteeChecker{}
 }
 
-func (v *validatorConsensusDataChecker) CheckValue(value []byte) error {
+func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
 	cd := &spectypes.AggregatorCommitteeConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return fmt.Errorf("failed decoding aggregator committee consensus data: %w", err)

@@ -77,7 +77,7 @@ func NewAggregatorCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		ValCheck:        ssv.NewValidatorConsensusDataChecker(),
+		ValCheck:        ssv.NewAggregatorCommitteeChecker(),
 		beacon:          beacon,
 		network:         network,
 		signer:          signer,
@@ -90,16 +90,12 @@ func NewAggregatorCommitteeRunner(
 }
 
 func (r *AggregatorCommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.start_aggregator_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	d, ok := duty.(*spectypes.AggregatorCommitteeDuty)
 	if !ok {
-		return traces.Errorf(span, "duty is not a AggregatorCommitteeDuty: %T", duty)
+		return fmt.Errorf("duty is not an AggregatorCommitteeDuty: %T", duty)
 	}
 
 	span.SetAttributes(observability.DutyCountAttribute(len(d.ValidatorDuties)))
@@ -256,13 +252,6 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 	vDuty *spectypes.ValidatorDuty,
 	aggregatorData *spectypes.AggregatorCommitteeConsensusData,
 ) (bool, error) {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_aggregator_selection_proof"),
-		trace.WithAttributes(
-		// TODO
-		))
-	defer span.End()
-
 	isAggregator := r.IsAggregator(ctx, vDuty.Slot, vDuty.CommitteeIndex, vDuty.CommitteeLength, selectionProof[:])
 	if !isAggregator {
 		return false, nil
@@ -272,7 +261,7 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 
 	attestation, _, err := r.beacon.GetAggregateAttestation(ctx, vDuty.Slot, vDuty.CommitteeIndex)
 	if err != nil {
-		return true, traces.Errorf(span, "failed to get aggregate attestation: %w", err)
+		return true, fmt.Errorf("failed to get aggregate attestation: %w", err)
 	}
 
 	aggregatorData.Aggregators = append(aggregatorData.Aggregators, spectypes.AssignedAggregator{
@@ -284,7 +273,7 @@ func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
 	// Marshal attestation for storage
 	attestationBytes, err := attestation.MarshalSSZ()
 	if err != nil {
-		return true, traces.Errorf(span, "failed to marshal attestation: %w", err)
+		return true, fmt.Errorf("failed to marshal attestation: %w", err)
 	}
 
 	aggregatorData.AggregatorsCommitteeIndexes = append(aggregatorData.AggregatorsCommitteeIndexes, uint64(vDuty.CommitteeIndex))
@@ -357,11 +346,10 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
-		return traces.Errorf(span, "failed processing selection proof message: %w", err)
+		return fmt.Errorf("failed processing selection proof message: %w", err)
 	}
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {
-		span.AddEvent("no quorum")
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
@@ -371,7 +359,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 
 	aggregatorMap, contributionMap, err := r.expectedPreConsensusRoots(ctx)
 	if err != nil {
-		return traces.Errorf(span, "could not get expected pre-consensus roots: %w", err)
+		return fmt.Errorf("could not get expected pre-consensus roots: %w", err)
 	}
 
 	duty := r.BaseRunner.State.CurrentDuty.(*spectypes.AggregatorCommitteeDuty)
@@ -464,7 +452,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 							hasAnyAggregator = true
 						}
 					} else {
-						anyErr = traces.Errorf(span, "failed to process aggregator selection proof: %w", err)
+						anyErr = fmt.Errorf("failed to process aggregator selection proof: %w", err)
 					}
 				}
 
@@ -477,7 +465,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 							hasAnyAggregator = true
 						}
 					} else {
-						anyErr = traces.Errorf(span, "failed to process sync committee selection proof: %w", err)
+						anyErr = fmt.Errorf("failed to process sync committee selection proof: %w", err)
 					}
 				}
 
@@ -491,18 +479,23 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 	// Early exit if no aggregators selected
 	if !hasAnyAggregator {
 		r.BaseRunner.State.Finished = true
-		if anyErr != nil {
-			return anyErr
-		}
-		return nil
+		r.measurements.EndDutyFlow()
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
+		signer := ssvtypes.PartialSigMsgSigner(signedMsg)
+		const aggCommDutyWontBeNeededEvent = "aggregator committee duty won't be needed from this validator for this slot"
+		span.AddEvent(aggCommDutyWontBeNeededEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
+		logger.Debug(aggCommDutyWontBeNeededEvent, zap.Any("signer", signer), zap.Error(anyErr))
+
+		return anyErr
 	}
 
 	if err := aggregatorData.Validate(); err != nil {
-		return traces.Errorf(span, "invalid aggregator consensus data: %w", err)
+		return fmt.Errorf("invalid aggregator consensus data: %w", err)
 	}
 
+	r.measurements.StartConsensus()
 	if err := r.BaseRunner.decide(ctx, logger, r.BaseRunner.State.CurrentDuty.DutySlot(), aggregatorData, r.ValCheck); err != nil {
-		return traces.Errorf(span, "failed to start consensus: %w", err)
+		return fmt.Errorf("failed to start consensus: %w", err)
 	}
 
 	if anyErr != nil {
@@ -514,19 +507,13 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 }
 
 func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_committee_consensus"),
-		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.SSVMessage.GetID()),
-			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.GetType()),
-			observability.RunnerRoleAttribute(msg.SSVMessage.GetID().GetRoleType()),
-		))
-	defer span.End()
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("checking if instance is decided")
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, msg, &spectypes.AggregatorCommitteeConsensusData{})
 	if err != nil {
-		return traces.Errorf(span, "failed processing consensus message: %w", err)
+		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
 
 	// Decided returns true only once so if it is true it must be for the current running instance
@@ -536,23 +523,20 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 		return nil
 	}
 
-	span.AddEvent("instance is decided")
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregatorCommittee)
-
-	r.measurements.StartPostConsensus()
 
 	duty := r.BaseRunner.State.CurrentDuty
 	aggCommDuty, ok := duty.(*spectypes.AggregatorCommitteeDuty)
 	if !ok {
-		return traces.Errorf(span, "duty is not an AggregatorCommitteeDuty: %T", duty)
+		return fmt.Errorf("duty is not an AggregatorCommitteeDuty: %T", duty)
 	}
 
 	consensusData := decidedValue.(*spectypes.AggregatorCommitteeConsensusData)
 
 	_, hashRoots, err := consensusData.GetAggregateAndProofs()
 	if err != nil {
-		return traces.Errorf(span, "failed to get aggregate and proofs: %w", err)
+		return fmt.Errorf("failed to get aggregate and proofs: %w", err)
 	}
 
 	messages := make([]*spectypes.PartialSignatureMessage, 0)
@@ -577,7 +561,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 			spectypes.DomainAggregateAndProof,
 		)
 		if err != nil {
-			return traces.Errorf(span, "failed to sign aggregate and proof: %w", err)
+			return fmt.Errorf("failed to sign aggregate and proof: %w", err)
 		}
 
 		messages = append(messages, msg)
@@ -585,7 +569,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 
 	contributions, err := consensusData.GetSyncCommitteeContributions()
 	if err != nil {
-		return traces.Errorf(span, "failed to get sync committee contributions: %w", err)
+		return fmt.Errorf("failed to get sync committee contributions: %w", err)
 	}
 
 	for i, contribution := range contributions {
@@ -615,7 +599,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 			spectypes.DomainContributionAndProof,
 		)
 		if err != nil {
-			return traces.Errorf(span, "failed to sign contribution and proof: %w", err)
+			return fmt.Errorf("failed to sign contribution and proof: %w", err)
 		}
 
 		messages = append(messages, msg)
@@ -643,13 +627,13 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 	}
 	ssvMsg.Data, err = postConsensusMsg.Encode()
 	if err != nil {
-		return traces.Errorf(span, "failed to encode post consensus signature msg: %w", err)
+		return fmt.Errorf("failed to encode post consensus signature msg: %w", err)
 	}
 
 	span.AddEvent("signing post consensus partial signature message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return traces.Errorf(span, "could not sign SSVMessage: %w", err)
+		return fmt.Errorf("could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -658,9 +642,10 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(ctx context.Context, logger
 		SSVMessage:  ssvMsg,
 	}
 
+	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := r.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
-		return traces.Errorf(span, "can't broadcast partial post consensus sig: %w", err)
+		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -675,41 +660,37 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 	span.AddEvent("base post consensus message processing")
 	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if err != nil {
-		return traces.Errorf(span, "failed processing post consensus message: %w", err)
+		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
-
-	logger = logger.With(fields.Slot(signedMsg.Slot))
 
 	indices := make([]uint64, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
 		indices[i] = uint64(msg.ValidatorIndex)
 	}
-	logger = logger.With(fields.ConsensusTime(r.measurements.ConsensusTime()))
 
 	const eventMsg = "🧩 got partial signatures"
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		zap.Bool("quorum", hasQuorum),
-		fields.Slot(r.BaseRunner.State.CurrentDuty.DutySlot()),
-		zap.Uint64("signer", signedMsg.Messages[0].Signer),
+		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
 		zap.Int("roots", len(roots)),
 		zap.Uint64s("validators", indices))
 
 	if !hasQuorum {
-		span.AddEvent("no quorum")
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
+
+	r.measurements.EndPostConsensus()
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregatorCommittee)
 
 	span.AddEvent("getting aggregations, sync committee contributions and root beacon objects")
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
 	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
 	if err != nil {
-		return traces.Errorf(span, "could not get expected post consensus roots and beacon objects: %w", err)
+		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
 	if len(beaconObjects) == 0 {
-		r.BaseRunner.State.Finished = true
-		span.SetStatus(codes.Error, ErrNoValidDutiesToExecute.Error())
 		return ErrNoValidDutiesToExecute
 	}
 
@@ -914,13 +895,6 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 		)
 	}
 
-	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregatorCommittee)
-
-	logger = logger.With(fields.PostConsensusTime(r.measurements.PostConsensusTime()))
-
-	r.measurements.EndDutyFlow()
-
 	if executionErr != nil {
 		span.SetStatus(codes.Error, executionErr.Error())
 		return executionErr
@@ -929,9 +903,30 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(ctx context.Context, lo
 	// Check if duty has terminated (runner has submitted for all duties)
 	if r.HasSubmittedAllDuties(ctx) {
 		r.BaseRunner.State.Finished = true
+		r.measurements.EndDutyFlow()
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, r.BaseRunner.State.RunningInstance.State.Round)
+		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
+		logger.Info(dutyFinishedEvent,
+			fields.ConsensusTime(r.measurements.ConsensusTime()),
+			fields.ConsensusRounds(uint64(r.BaseRunner.State.RunningInstance.State.Round)),
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+		)
+		span.AddEvent(dutyFinishedEvent)
+		span.SetStatus(codes.Ok, "")
+		return nil
 	}
+	const dutyFinishedEvent = "✔️finished duty processing (partial success)"
+	logger.Info(dutyFinishedEvent,
+		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.ConsensusRounds(uint64(r.BaseRunner.State.RunningInstance.State.Round)),
+		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+	)
+	span.AddEvent(dutyFinishedEvent)
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -1344,7 +1339,6 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 	defer span.End()
 
 	r.measurements.StartDutyFlow()
-	r.measurements.StartPreConsensus()
 
 	aggCommitteeDuty, ok := duty.(*spectypes.AggregatorCommitteeDuty)
 	if !ok {
@@ -1377,7 +1371,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 				spectypes.DomainSelectionProof,
 			)
 			if err != nil {
-				return traces.Errorf(span, "failed to sign aggregator selection proof: %w", err)
+				return fmt.Errorf("failed to sign aggregator selection proof: %w", err)
 			}
 
 			msg.Messages = append(msg.Messages, partialSig)
@@ -1402,7 +1396,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 					spectypes.DomainSyncCommitteeSelectionProof,
 				)
 				if err != nil {
-					return traces.Errorf(span, "failed to sign sync committee selection proof: %w", err)
+					return fmt.Errorf("failed to sign sync committee selection proof: %w", err)
 				}
 
 				// TODO: find a better way to handle this
@@ -1416,13 +1410,26 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		}
 	}
 
+	// Early exit if no selection proofs needed
+	if len(msg.Messages) == 0 {
+		r.BaseRunner.State.Finished = true
+		r.measurements.EndDutyFlow()
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
+		const dutyFinishedNoMessages = "✔️successfully finished duty processing (no messages)"
+		logger.Info(dutyFinishedNoMessages,
+			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+		)
+		span.AddEvent(dutyFinishedNoMessages)
+		return nil
+	}
+
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msg.Encode()
 	if err != nil {
-		return traces.Errorf(span, "could not encode aggregator committee partial signature message: %w", err)
+		return fmt.Errorf("could not encode aggregator committee partial signature message: %w", err)
 	}
-
-	r.measurements.StartConsensus()
 
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
@@ -1433,7 +1440,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return traces.Errorf(span, "could not sign SSVMessage: %w", err)
+		return fmt.Errorf("could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -1442,9 +1449,10 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		SSVMessage:  ssvMsg,
 	}
 
+	r.measurements.StartPreConsensus()
 	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return traces.Errorf(span, "can't broadcast partial aggregator committee sig: %w", err)
+		return fmt.Errorf("can't broadcast partial aggregator committee sig: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")

@@ -22,9 +22,7 @@ func (gc *GoClient) IsAggregator(
 	committeeLength uint64,
 	slotSig []byte,
 ) bool {
-	const targetAggregatorsPerCommittee = 16
-
-	modulo := committeeLength / targetAggregatorsPerCommittee
+	modulo := committeeLength / gc.beaconConfig.TargetAggregatorsPerCommittee
 	if modulo == 0 {
 		modulo = 1
 	}

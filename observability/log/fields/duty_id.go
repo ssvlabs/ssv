@@ -19,8 +19,5 @@ func BuildCommitteeDutyID(
 	slot phase0.Slot,
 	role spectypes.RunnerRole,
 ) string {
-	if role == spectypes.RoleAggregatorCommittee {
-		return fmt.Sprintf("AGGREGATOR_COMMITTEE-%s-e%d-s%d", utils.FormatCommittee(operators), epoch, slot)
-	}
-	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", utils.FormatCommittee(operators), epoch, slot)
+	return fmt.Sprintf("%s-%s-e%d-s%d", utils.FormatRunnerRole(role), utils.FormatCommittee(operators), epoch, slot)
 }

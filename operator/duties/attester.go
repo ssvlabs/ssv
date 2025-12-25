@@ -98,12 +98,13 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				defer cancel()
 
 				if h.netCfg.AggregatorCommitteeFork() {
-					// After fork: keep fetching duties (to feed AggregatorCommittee handler) but skip legacy execution.
+					// After fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
+					// but skip legacy execution, as the aggregator committee handler will be responsible for executing them.
 					h.processFetching(tickCtx, currentEpoch, slot)
 					return
 				}
 
-				// Pre-fork: execute legacy aggregator (attestation) flow and fetch duties.
+				// Pre-fork: execute legacy sync-committee contribution flow and fetch duties.
 				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
 				h.processFetching(tickCtx, currentEpoch, slot)
 			}()

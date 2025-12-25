@@ -482,10 +482,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		const eventMsg = "🔧 executing committee duty"
 		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg,
-			fields.RunnerRole(duty.RunnerRole()),
-			fields.Duties(dutyEpoch, duty.ValidatorDuties, -1),
-		)
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.CommitteeIDAttribute(committee.id),

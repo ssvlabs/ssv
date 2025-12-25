@@ -61,10 +61,13 @@ func (h *AggregatorCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
-				// Attestations and sync-committee submissions are rewarded as long as they are finished within
-				// 2 slots after the target slot (the target slot itself, plus the next slot after that), hence
-				// we are setting the deadline here to target slot + 2.
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+1)
+				// Aggregator and sync-committee-contribution submissions are rewarded as long as they are finished within
+				// 32 slots after the target slot (the target slot itself, plus the next slot after that), hence
+				// we are setting the deadline here to target slot + 32.
+				// Since ctxWithDeadlineOnNextSlot creates a deadline for the next slot,
+				// we need to subtract 1 from the passed slot.
+				// TODO: pull the limit from message validation (or extract the limit into another package)
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+32-1)
 				defer cancel()
 
 				h.processExecution(tickCtx, period, epoch, slot)
@@ -81,7 +84,7 @@ func (h *AggregatorCommitteeHandler) HandleDuties(ctx context.Context) {
 
 func (h *AggregatorCommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "committee.execute"),
+		observability.InstrumentName(observabilityNamespace, "aggregator_committee.execute"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconEpochAttribute(epoch),

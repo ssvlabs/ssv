@@ -586,7 +586,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
 	for root := range deduplicatedRoots {
 		// Get validators related to the given root
-		role, validators, found := r.findValidators(root, attestationMap, committeeMap)
+		role, validators, found := findValidators(root, attestationMap, committeeMap)
 		if !found {
 			// Edge case: since operators may have divergent sets of validators,
 			// it's possible that an operator doesn't have the validator associated to a root.
@@ -898,7 +898,7 @@ func (r *CommitteeRunner) HasSubmitted(role spectypes.BeaconRole, valIdx phase0.
 	return ok
 }
 
-func (cr *CommitteeRunner) findValidators(
+func findValidators(
 	expectedRoot [32]byte,
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	committeeMap map[phase0.ValidatorIndex][32]byte) (spectypes.BeaconRole, []phase0.ValidatorIndex, bool) {

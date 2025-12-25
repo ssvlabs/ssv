@@ -38,14 +38,12 @@ type Committee struct {
 
 	networkConfig *networkconfig.Network
 
-	// mtx syncs access to Queues, Runners, Shares.
+	// mtx syncs access to Queues, AggregatorQueues, Runners, AggregatorRunners, Shares.
 	mtx sync.RWMutex
-	// Queues is used for standard Committee duties.
+	// Queues is used for Committee duties (attestations and sync committees).
 	Queues map[phase0.Slot]queueContainer
-	// AggregatorQueues isolates aggregator-committee traffic to avoid
-	// concurrent Pops on the same queue from two consumers.
-	AggregatorQueues map[phase0.Slot]queueContainer
-	// TODO: consider joining
+	// AggregatorQueues is used for AggregatorCommittee duties (aggregations and sync committee contributions).
+	AggregatorQueues  map[phase0.Slot]queueContainer
 	Runners           map[phase0.Slot]*runner.CommitteeRunner
 	AggregatorRunners map[phase0.Slot]*runner.AggregatorCommitteeRunner
 	Shares            map[phase0.ValidatorIndex]*spectypes.Share
@@ -112,7 +110,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(extractValidatorDuties(duty))),
+			observability.DutyCountAttribute(len(c.extractValidatorDuties(duty))),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
 
@@ -138,7 +136,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	runnableDuty spectypes.Duty,
 	err error,
 ) {
-	validatorDuties := extractValidatorDuties(duty)
+	validatorDuties := c.extractValidatorDuties(duty)
 
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
@@ -183,12 +181,14 @@ func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role s
 	var assign func(slot phase0.Slot, qc queueContainer)
 
 	switch role {
-	case spectypes.RoleAggregator, spectypes.RoleAggregatorCommittee:
+	case spectypes.RoleAggregatorCommittee:
 		m = c.AggregatorQueues
 		assign = func(slot phase0.Slot, qc queueContainer) { c.AggregatorQueues[slot] = qc }
-	default:
+	case spectypes.RoleCommittee:
 		m = c.Queues
 		assign = func(slot phase0.Slot, qc queueContainer) { c.Queues[slot] = qc }
+	default:
+		c.logger.Panic("BUG: unexpected committee queue role", fields.RunnerRole(role))
 	}
 
 	q, exists := m[slot]
@@ -226,7 +226,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty spectypes.Duty) (
 	runnableDuty spectypes.Duty,
 	err error,
 ) {
-	validatorDuties := extractValidatorDuties(duty)
+	validatorDuties := c.extractValidatorDuties(duty)
 	if len(validatorDuties) == 0 {
 		return nil, nil, nil,
 			spectypes.NewError(spectypes.NoBeaconDutiesErrorCode, "no beacon duties")
@@ -269,6 +269,8 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty spectypes.Duty) (
 			Slot:            duty.Slot,
 			ValidatorDuties: runnableValidatorDuties,
 		}
+	default:
+		c.logger.Panic("BUG: unexpected duty type", zap.String("type", fmt.Sprintf("%T", duty)))
 	}
 
 	return shares, attesters, runnableDuty, nil
@@ -375,7 +377,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, ok := c.runnerForRole(msg.GetID().GetRoleType(), slot)
 			c.mtx.RUnlock()
 			if !ok {
-				return fmt.Errorf("no committee runner found for slot %d", slot)
+				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
 			}
 
 			timeoutData, err := eventMsg.GetTimeoutData()
@@ -547,18 +549,23 @@ func (c *Committee) createRunner(
 		c.Runners[duty.DutySlot()] = r.(*runner.CommitteeRunner)
 	case *spectypes.AggregatorCommitteeDuty:
 		c.AggregatorRunners[duty.DutySlot()] = r.(*runner.AggregatorCommitteeRunner)
+	default:
+		c.logger.Panic("BUG: attempt to create committee runner with non-committee duty type",
+			zap.String("type", fmt.Sprintf("%T", duty)))
 	}
 
 	return r, err
 }
 
-func extractValidatorDuties(duty spectypes.Duty) []*spectypes.ValidatorDuty {
+func (c *Committee) extractValidatorDuties(duty spectypes.Duty) []*spectypes.ValidatorDuty {
 	switch duty := duty.(type) {
 	case *spectypes.CommitteeDuty:
 		return duty.ValidatorDuties
 	case *spectypes.AggregatorCommitteeDuty:
 		return duty.ValidatorDuties
 	default:
-		return nil
+		c.logger.Panic("BUG: attempt to extract validator duties from non-committee duty type",
+			zap.String("type", fmt.Sprintf("%T", duty)))
+		panic("BUG: unreachable")
 	}
 }
