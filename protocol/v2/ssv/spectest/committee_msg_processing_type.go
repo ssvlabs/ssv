@@ -21,6 +21,7 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -240,72 +241,83 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	}
 
 	beaconCfg := *networkconfig.TestNetwork.Beacon
-	fuluFork := phase0.Fork{
-		PreviousVersion: beaconCfg.Forks[eth2clientspec.DataVersionFulu].PreviousVersion,
-		CurrentVersion:  beaconCfg.Forks[eth2clientspec.DataVersionFulu].CurrentVersion,
-		Epoch:           math.MaxUint64, // aggregator committee spec tests are implemented for Electra
-	}
+	beaconCfg.Forks = maps.Clone(beaconCfg.Forks)
+	fuluFork := beaconCfg.Forks[eth2clientspec.DataVersionFulu]
+	fuluFork.Epoch = math.MaxUint64 // aggregator committee spec tests are implemented for Electra
 	beaconCfg.Forks[eth2clientspec.DataVersionFulu] = fuluFork
 
 	netCfg := *networkconfig.TestNetwork
 	netCfg.Beacon = &beaconCfg
 
 	// Normalize runners/networks and set value checkers for both expected and actual committee runners.
-	for i := range committee.Runners {
-		cr := committee.Runners[i]
-		cr.BaseRunner.NetworkConfig = &netCfg
-		cr.ValCheck = protocoltesting.TestingValueChecker{}
-		// Ensure controller instances have a value checker
-		for _, inst := range cr.BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = protocoltesting.TestingValueChecker{}
+	normalizeBaseRunner := func(base *runner.BaseRunner) {
+		if base == nil {
+			return
+		}
+		base.NetworkConfig = &netCfg
+		// Ensure controller instances have a value checker.
+		if base.QBFTController != nil {
+			for _, inst := range base.QBFTController.StoredInstances {
+				if inst.ValueChecker == nil {
+					inst.ValueChecker = protocoltesting.TestingValueChecker{}
+				}
 			}
 		}
-		if cr.BaseRunner.State != nil && cr.BaseRunner.State.RunningInstance != nil && cr.BaseRunner.State.RunningInstance.ValueChecker == nil {
-			cr.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if base.State != nil && base.State.RunningInstance != nil && base.State.RunningInstance.ValueChecker == nil {
+			base.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	}
-	for i := range test.Committee.Runners {
-		cr := test.Committee.Runners[i]
-		cr.BaseRunner.NetworkConfig = &netCfg
+	normalizeCommitteeRunner := func(cr *runner.CommitteeRunner) {
+		if cr == nil || cr.BaseRunner == nil {
+			return
+		}
+		normalizeBaseRunner(cr.BaseRunner)
 		cr.ValCheck = protocoltesting.TestingValueChecker{}
-		for _, inst := range cr.BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = protocoltesting.TestingValueChecker{}
-			}
+	}
+	normalizeAggregatorRunner := func(ar *runner.AggregatorCommitteeRunner) {
+		if ar == nil || ar.BaseRunner == nil {
+			return
 		}
-		if cr.BaseRunner.State != nil && cr.BaseRunner.State.RunningInstance != nil && cr.BaseRunner.State.RunningInstance.ValueChecker == nil {
-			cr.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
+		normalizeBaseRunner(ar.BaseRunner)
+		ar.ValCheck = protocoltesting.TestingValueChecker{}
+	}
+
+	for i := range committee.Runners {
+		normalizeCommitteeRunner(committee.Runners[i])
+	}
+	for i := range test.Committee.Runners {
+		normalizeCommitteeRunner(test.Committee.Runners[i])
 	}
 
 	if needsAggRunners {
 		// Normalize existing aggregator runners on both sides without synthesizing new ones.
 		for i := range committee.AggregatorRunners {
-			ar := committee.AggregatorRunners[i]
-			ar.BaseRunner.NetworkConfig = &netCfg
-			ar.ValCheck = protocoltesting.TestingValueChecker{}
-			for _, inst := range ar.BaseRunner.QBFTController.StoredInstances {
-				if inst.ValueChecker == nil {
-					inst.ValueChecker = protocoltesting.TestingValueChecker{}
-				}
-			}
-			if ar.BaseRunner.State != nil && ar.BaseRunner.State.RunningInstance != nil && ar.BaseRunner.State.RunningInstance.ValueChecker == nil {
-				ar.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
-			}
+			normalizeAggregatorRunner(committee.AggregatorRunners[i])
 		}
 		for i := range test.Committee.AggregatorRunners {
-			ar := test.Committee.AggregatorRunners[i]
-			ar.BaseRunner.NetworkConfig = &netCfg
-			ar.ValCheck = protocoltesting.TestingValueChecker{}
-			for _, inst := range ar.BaseRunner.QBFTController.StoredInstances {
-				if inst.ValueChecker == nil {
-					inst.ValueChecker = protocoltesting.TestingValueChecker{}
-				}
+			normalizeAggregatorRunner(test.Committee.AggregatorRunners[i])
+		}
+	}
+
+	if test.Committee != nil && test.Committee.CreateRunnerFn != nil {
+		origCreateRunner := test.Committee.CreateRunnerFn
+		test.Committee.CreateRunnerFn = func(
+			duty spectypes.Duty,
+			shareMap map[phase0.ValidatorIndex]*spectypes.Share,
+			attestingValidators []phase0.BLSPubKey,
+			dutyGuard runner.CommitteeDutyGuard,
+		) (runner.Runner, error) {
+			r, err := origCreateRunner(duty, shareMap, attestingValidators, dutyGuard)
+			if err != nil {
+				return nil, err
 			}
-			if ar.BaseRunner.State != nil && ar.BaseRunner.State.RunningInstance != nil && ar.BaseRunner.State.RunningInstance.ValueChecker == nil {
-				ar.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+			switch created := r.(type) {
+			case *runner.CommitteeRunner:
+				normalizeCommitteeRunner(created)
+			case *runner.AggregatorCommitteeRunner:
+				normalizeAggregatorRunner(created)
 			}
+			return r, nil
 		}
 	}
 
