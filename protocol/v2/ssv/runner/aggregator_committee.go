@@ -245,41 +245,22 @@ func (r *AggregatorCommitteeRunner) findValidatorDuty(duty *spectypes.Aggregator
 	return nil
 }
 
-// processAggregatorSelectionProof handles aggregator selection proofs
-func (r *AggregatorCommitteeRunner) processAggregatorSelectionProof(
-	ctx context.Context,
-	selectionProof phase0.BLSSignature,
-	vDuty *spectypes.ValidatorDuty,
-	aggregatorData *spectypes.AggregatorCommitteeConsensusData,
-) (bool, error) {
-	isAggregator := r.IsAggregator(ctx, vDuty.Slot, vDuty.CommitteeIndex, vDuty.CommitteeLength, selectionProof[:])
-	if !isAggregator {
-		return false, nil
+// waitTwoThirdsIntoSlot waits until two-thirds of the slot has passed.
+func (r *AggregatorCommitteeRunner) waitTwoThirdsIntoSlot(ctx context.Context, slot phase0.Slot) error {
+	finalTime := r.GetNetworkConfig().SlotStartTime(slot).Add(2 * r.GetNetworkConfig().IntervalDuration())
+	wait := time.Until(finalTime)
+	if wait <= 0 {
+		return nil
 	}
 
-	// TODO: waitToSlotTwoThirds(vDuty.Slot)
-
-	attestation, _, err := r.beacon.GetAggregateAttestation(ctx, vDuty.Slot, vDuty.CommitteeIndex)
-	if err != nil {
-		return true, fmt.Errorf("failed to get aggregate attestation: %w", err)
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
-
-	aggregatorData.Aggregators = append(aggregatorData.Aggregators, spectypes.AssignedAggregator{
-		ValidatorIndex: vDuty.ValidatorIndex,
-		SelectionProof: selectionProof,
-		CommitteeIndex: uint64(vDuty.CommitteeIndex),
-	})
-
-	// Marshal attestation for storage
-	attestationBytes, err := attestation.MarshalSSZ()
-	if err != nil {
-		return true, fmt.Errorf("failed to marshal attestation: %w", err)
-	}
-
-	aggregatorData.AggregatorsCommitteeIndexes = append(aggregatorData.AggregatorsCommitteeIndexes, uint64(vDuty.CommitteeIndex))
-	aggregatorData.Attestations = append(aggregatorData.Attestations, attestationBytes)
-
-	return true, nil
 }
 
 // processSyncCommitteeSelectionProof handles sync committee selection proofs with known index
@@ -386,6 +367,12 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(rootSet)))
 
+	type aggregatorSelection struct {
+		duty           *spectypes.ValidatorDuty
+		selectionProof phase0.BLSSignature
+	}
+
+	var aggregatorSelections []aggregatorSelection
 	var anyErr error
 	for _, root := range sortedRoots {
 		metadataList, found := r.findValidatorsForPreConsensusRoot(root, aggregatorMap, contributionMap)
@@ -446,13 +433,12 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 			case spectypes.BNRoleAggregator:
 				vDuty := r.findValidatorDuty(duty, validatorIndex, spectypes.BNRoleAggregator)
 				if vDuty != nil {
-					isAggregator, err := r.processAggregatorSelectionProof(ctx, blsSig, vDuty, aggregatorData)
-					if err == nil {
-						if isAggregator {
-							hasAnyAggregator = true
-						}
-					} else {
-						anyErr = fmt.Errorf("failed to process aggregator selection proof: %w", err)
+					if r.IsAggregator(ctx, vDuty.Slot, vDuty.CommitteeIndex, vDuty.CommitteeLength, blsSig[:]) {
+						hasAnyAggregator = true
+						aggregatorSelections = append(aggregatorSelections, aggregatorSelection{
+							duty:           vDuty,
+							selectionProof: blsSig,
+						})
 					}
 				}
 
@@ -487,6 +473,38 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(ctx context.Context, log
 		logger.Debug(aggCommDutyWontBeNeededEvent, zap.Any("signer", signer), zap.Error(anyErr))
 
 		return anyErr
+	}
+
+	if len(aggregatorSelections) > 0 {
+		// Wait once per duty before fetching aggregate attestations (spec: 2/3 into slot).
+		if err := r.waitTwoThirdsIntoSlot(ctx, duty.DutySlot()); err != nil {
+			return err
+		}
+
+		for _, selection := range aggregatorSelections {
+			attestation, _, err := r.beacon.GetAggregateAttestation(ctx, selection.duty.Slot, selection.duty.CommitteeIndex)
+			if err != nil {
+				anyErr = fmt.Errorf("failed to get aggregate attestation: %w", err)
+				continue
+			}
+
+			attestationBytes, err := attestation.MarshalSSZ()
+			if err != nil {
+				anyErr = fmt.Errorf("failed to marshal attestation: %w", err)
+				continue
+			}
+
+			aggregatorData.Aggregators = append(aggregatorData.Aggregators, spectypes.AssignedAggregator{
+				ValidatorIndex: selection.duty.ValidatorIndex,
+				SelectionProof: selection.selectionProof,
+				CommitteeIndex: uint64(selection.duty.CommitteeIndex),
+			})
+			aggregatorData.AggregatorsCommitteeIndexes = append(
+				aggregatorData.AggregatorsCommitteeIndexes,
+				uint64(selection.duty.CommitteeIndex),
+			)
+			aggregatorData.Attestations = append(aggregatorData.Attestations, attestationBytes)
+		}
 	}
 
 	if err := aggregatorData.Validate(); err != nil {
