@@ -148,7 +148,7 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
 	ssvCfg := *networkconfig.TestNetwork.SSV
-	ssvCfg.Forks.AggregatorCommittee = math.MaxUint64
+	ssvCfg.Forks.Boole = math.MaxUint64
 
 	netCfg := *networkconfig.TestNetwork
 	netCfg.Beacon = &beaconCfg

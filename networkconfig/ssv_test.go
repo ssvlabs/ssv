@@ -28,9 +28,8 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:                0,
-			GasLimit36:          0,
-			AggregatorCommittee: 0,
+			GasLimit36: 0,
+			Boole:      0,
 		},
 	}
 
@@ -71,9 +70,8 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:                0,
-			GasLimit36:          0,
-			AggregatorCommittee: 0,
+			GasLimit36: 0,
+			Boole:      0,
 		},
 	}
 
@@ -168,9 +166,8 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:                0,
-				GasLimit36:          0,
-				AggregatorCommittee: 0,
+				GasLimit36: 0,
+				Boole:      0,
 			},
 		}
 
@@ -193,7 +190,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "1d537a4aa4b710cbc49c37524268e5cf95cd515f4e2074150b063750cea1f6ac"
+		expectedJSONHash := "2b224cbe97afb6d8f82d5115e8125f111998b109a643e72b70ae8c45c58be0c0"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -208,9 +205,8 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:                0,
-				GasLimit36:          0,
-				AggregatorCommittee: 0,
+				GasLimit36: 0,
+				Boole:      0,
 			},
 		}
 

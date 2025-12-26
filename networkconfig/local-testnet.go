@@ -18,8 +18,7 @@ var LocalTestnetSSV = &SSV{
 	}, DiscoveryProtocolID: [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	TotalEthereumValidators: TestNetwork.TotalEthereumValidators,
 	Forks: SSVForks{
-		Alan:                0,
-		GasLimit36:          0,
-		AggregatorCommittee: 0,
+		GasLimit36: 0,
+		Boole:      0,
 	},
 }
