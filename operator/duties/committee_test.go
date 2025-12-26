@@ -375,7 +375,10 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	// wait for sync committee duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 1
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+	slotOneThird := scheduler.netCfg.SlotStartTime(phase0.Slot(1)).Add(scheduler.netCfg.IntervalDuration())
+	if remaining := time.Until(slotOneThird); remaining > 0 {
+		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, remaining)
+	}
 
 	// STEP 4: wait for committee duties to be executed
 	waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
