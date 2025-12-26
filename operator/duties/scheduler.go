@@ -507,7 +507,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 				logger.Warn("parent-context has no deadline set")
 			}
 
-			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
+			if duty.RunnerRole() == spectypes.RoleCommittee {
+				s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
+			}
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
 		}()
 	}
