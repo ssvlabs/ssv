@@ -488,16 +488,16 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	}
 
 	// Early exit if no aggregators selected
-	if !hasAnyAggregator {
+	if !hasAnyAggregator && anyErr == nil {
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
 		signer := ssvtypes.PartialSigMsgSigner(signedMsg)
 		const aggCommDutyWontBeNeededEvent = "aggregator committee duty won't be needed from this validator for this slot"
 		span.AddEvent(aggCommDutyWontBeNeededEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
-		logger.Debug(aggCommDutyWontBeNeededEvent, zap.Any("signer", signer), zap.Error(anyErr))
+		logger.Debug(aggCommDutyWontBeNeededEvent, zap.Any("signer", signer))
 
-		return anyErr
+		return nil
 	}
 
 	if len(aggregatorSelections) > 0 {
@@ -530,6 +530,12 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			)
 			aggregatorData.Attestations = append(aggregatorData.Attestations, attestationBytes)
 		}
+	}
+
+	if len(aggregatorData.Aggregators) == 0 &&
+		len(aggregatorData.Contributors) == 0 &&
+		anyErr != nil {
+		return anyErr
 	}
 
 	if err := aggregatorData.Validate(); err != nil {
