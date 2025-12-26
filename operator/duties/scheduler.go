@@ -163,8 +163,6 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	if !opts.ExporterMode {
 		s.handlers = append(s.handlers,
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
-			// TODO: NewAttesterHandler and NewSyncCommitteeHandler handle aggregator and sync committee contribution duties too.
-			// Should aggregator committee be handled by NewCommitteeHandler?
 			NewAggregatorCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),

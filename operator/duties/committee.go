@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -24,6 +25,8 @@ type CommitteeHandler struct {
 
 	attDuties  *dutystore.Duties[eth2apiv1.AttesterDuty]
 	syncDuties *dutystore.SyncCommitteeDuties
+
+	isAggregator bool
 }
 
 type committeeDuty struct {
@@ -32,17 +35,33 @@ type committeeDuty struct {
 	operatorIDs []spectypes.OperatorID
 }
 
-func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], syncDuties *dutystore.SyncCommitteeDuties) *CommitteeHandler {
-	h := &CommitteeHandler{
-		attDuties:  attDuties,
-		syncDuties: syncDuties,
+func NewCommitteeHandler(
+	attDuties *dutystore.Duties[eth2apiv1.AttesterDuty],
+	syncDuties *dutystore.SyncCommitteeDuties,
+) *CommitteeHandler {
+	return &CommitteeHandler{
+		isAggregator: false,
+		attDuties:    attDuties,
+		syncDuties:   syncDuties,
 	}
+}
 
-	return h
+func NewAggregatorCommitteeHandler(
+	attDuties *dutystore.Duties[eth2apiv1.AttesterDuty],
+	syncDuties *dutystore.SyncCommitteeDuties,
+) *CommitteeHandler {
+	return &CommitteeHandler{
+		isAggregator: true,
+		attDuties:    attDuties,
+		syncDuties:   syncDuties,
+	}
 }
 
 func (h *CommitteeHandler) Name() string {
-	return "COMMITTEE"
+	if h.isAggregator {
+		return utils.FormatRunnerRole(spectypes.RoleAggregatorCommittee)
+	}
+	return utils.FormatRunnerRole(spectypes.RoleCommittee)
 }
 
 func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
@@ -58,16 +77,21 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
+			if h.isAggregator && !h.netCfg.AggregatorCommitteeFork() {
+				continue
+			}
 			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
 			period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			slotsPerEpoch := phase0.Slot(h.netCfg.SlotsPerEpoch)
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%slotsPerEpoch+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
-				// Attestations and sync-committee submissions are rewarded as long as they are finished within
-				// 2 slots after the target slot (the target slot itself, plus the next slot after that), hence
-				// we are setting the deadline here to target slot + 2.
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+1)
+				// Duties are rewarded as long as they are finished within 32 slots after the target slot,
+				// so we are setting the deadline here to target slot + 32.
+				// Since ctxWithDeadlineOnNextSlot creates a deadline for the next slot,
+				// we need to subtract 1 from the passed slot.
+				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+slotsPerEpoch-1)
 				defer cancel()
 
 				h.processExecution(tickCtx, period, epoch, slot)
@@ -83,8 +107,12 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+	spanName := "committee.execute"
+	if h.isAggregator {
+		spanName = "aggregator_committee.execute"
+	}
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "committee.execute"),
+		observability.InstrumentName(observabilityNamespace, spanName),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconEpochAttribute(epoch),
@@ -118,6 +146,13 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 	epoch phase0.Epoch,
 	slot phase0.Slot,
 ) committeeDutiesMap {
+	attRole := spectypes.BNRoleAttester
+	syncRole := spectypes.BNRoleSyncCommittee
+	if h.isAggregator {
+		attRole = spectypes.BNRoleAggregator
+		syncRole = spectypes.BNRoleSyncCommitteeContribution
+	}
+
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	selfValidators := h.validatorProvider.SelfParticipatingValidators(epoch)
@@ -134,12 +169,12 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 	resultCommitteeMap := make(committeeDutiesMap)
 	for _, duty := range attDuties {
 		if h.shouldExecuteAtt(duty, epoch) {
-			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, attRole))
 		}
 	}
 	for _, duty := range syncDuties {
 		if h.shouldExecuteSync(duty, slot, epoch) {
-			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecSyncDuty(duty, slot, syncRole))
 		}
 	}
 
