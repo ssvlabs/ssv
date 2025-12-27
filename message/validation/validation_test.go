@@ -190,7 +190,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorContains(t, err, ErrDuplicatedMessageFromSamePeer.Error())
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		operatorState := state.OperatorState(0)
 		require.NotNil(t, operatorState)
@@ -220,7 +220,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorContains(t, err, ErrDuplicatedMessageFromSamePeer.Error())
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot+1, func(message *specqbft.Message) {
 			message.MsgType = specqbft.CommitMsgType
@@ -235,7 +235,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
-		require.ErrorContains(t, err, ErrDuplicatedMessageFromSamePeer.Error())
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		signedSSVMessage = generateMultiSignedMessage(ks, committeeIdentifier, slot+1)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
@@ -1380,7 +1380,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = anotherFullData
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		expectedErr := ErrDifferentProposalDataFromSamePeer
+		expectedErr := ErrDifferentProposalData
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1402,7 +1402,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		expectedErr := ErrDuplicatedMessageFromSamePeer
+		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "prepare, having prepare"
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -1424,7 +1424,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		expectedErr := ErrDuplicatedMessageFromSamePeer
+		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "commit, having commit"
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -1446,7 +1446,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		expectedErr := ErrDuplicatedMessageFromSamePeer
+		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "round change, having round change"
 		require.ErrorIs(t, err, expectedErr)
 	})
