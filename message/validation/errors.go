@@ -65,10 +65,8 @@ func (e Error) Is(target error) bool {
 	return e.text == t.text
 }
 
-// Ignored errors.
+// Messages with these errors are ignored (or rejected if they come from the same peer as duplicates).
 var (
-	// sanity-checks:
-
 	ErrWrongDomain                      = Error{text: "wrong domain"}
 	ErrNoShareMetadata                  = Error{text: "share has no metadata"}
 	ErrUnknownValidator                 = Error{text: "unknown validator"}
@@ -88,19 +86,14 @@ var (
 	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
 	ErrUnknownOperator                  = Error{text: "operator is unknown"}
 	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
-
-	// duplicate message checks:
-
-	ErrDuplicatedMessage        = Error{text: "got duplicate message"}
-	ErrTooManyPartialSigMessage = Error{text: "got more partial signature messages of a certain type than allowed"}
-	ErrDifferentProposalData    = Error{text: "got different proposal data"}
-	ErrDecidedWithSameSigners   = Error{text: "decided with same number of signers"}
+	ErrDuplicatedMessage                = Error{text: "got duplicate message"}
+	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
+	ErrDifferentProposalData            = Error{text: "got different proposal data"}
+	ErrDecidedWithSameSigners           = Error{text: "decided with same number of signers"}
 )
 
-// Rejected errors.
+// Messages with these errors are rejected.
 var (
-	// sanity-checks:
-
 	ErrEmptyData                               = Error{text: "empty data", reject: true}
 	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
@@ -143,13 +136,6 @@ var (
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
-
-	// duplicate message checks:
-
-	ErrDuplicatedMessageFromSamePeer        = Error{text: "got duplicate message (from the same peer)", reject: true}
-	ErrTooManyPartialSigMessageFromSamePeer = Error{text: "got more partial signature messages of a certain type than allowed (from the same peer)", reject: true}
-	ErrDifferentProposalDataFromSamePeer    = Error{text: "got different proposal data (from the same peer)", reject: true}
-	ErrDecidedWithSameSignersFromSamePeer   = Error{text: "decided with same number of signers (from the same peer)"}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {

@@ -3,6 +3,8 @@ package validation
 // signer_state.go describes state of a signer.
 
 import (
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -54,11 +56,11 @@ func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
 	s.SeenViolations = nil // lazy init on demand to reduce mem consumption
 }
 
-// IgnoreOrReject decides between returning an ignoreErr or rejectErr depending on whether this violation
-// (this particular error type) has already been seen from the very same peer.
-// 1-time violations are always allowed (ignored) because it's computationally expensive to indentify it, and
-// the rest must be rejected since it is easily detectable.
-func (s *SignerState) IgnoreOrReject(ignoreErr, rejectErr Error, receivedFrom peer.ID) (chosenErr Error) {
+// IgnoreOrReject decides between returning an ignoreErr or the reject version of it, depending
+// on whether this violation (this particular error type) has already been seen from the very
+// same peer. 1-time violations are always allowed (ignored) because it's computationally
+// expensive to indentify it, and the rest must be rejected since it is easily detectable.
+func (s *SignerState) IgnoreOrReject(ignoreErr Error, receivedFrom peer.ID) (resultingErr Error) {
 	if s.SeenViolations == nil {
 		s.SeenViolations = make(map[peer.ID]map[string]struct{})
 	}
@@ -67,6 +69,14 @@ func (s *SignerState) IgnoreOrReject(ignoreErr, rejectErr Error, receivedFrom pe
 	}
 	_, seen := s.SeenViolations[receivedFrom][ignoreErr.text]
 	if seen {
+		rejectErr := Error{
+			text: fmt.Sprintf(
+				"%s (duplicate message from this peer %s)",
+				ignoreErr.text,
+				receivedFrom.String(),
+			),
+			reject: true,
+		}
 		return rejectErr
 	}
 	s.SeenViolations[receivedFrom][ignoreErr.text] = struct{}{}
