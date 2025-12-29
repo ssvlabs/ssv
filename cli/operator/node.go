@@ -190,7 +190,14 @@ var StartNodeCmd = &cobra.Command{
 			zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
 		)
 
-		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
+		cliopt, err := goclient.NewOptions(cfg.ConsensusClient, cfg.ProposerDelay)
+		if err != nil {
+			logger.Fatal("failed to create beacon client options",
+				zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			)
+		}
+		consensusClient, err := goclient.New(cmd.Context(), logger, cliopt)
 		if err != nil {
 			logger.Fatal("failed to create beacon go-client",
 				zap.Error(err),

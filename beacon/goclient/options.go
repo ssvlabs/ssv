@@ -1,6 +1,7 @@
 package goclient
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -17,7 +18,33 @@ type Options struct {
 	CommonTimeout time.Duration // Optional.
 	LongTimeout   time.Duration // Optional.
 
-	// TODO these should be configurable by the operator
-	ProposalSoftTimeout time.Duration // Optional
-	ProposalHardTimeout time.Duration // Optional
+	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout"`
+	ProposalHardTimeout time.Duration `yaml:"ProposalHardTimeout"`
+}
+
+func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
+	options := base
+	if options.ProposalSoftTimeout == 0 {
+		options.ProposalSoftTimeout = DefaultProposalSoftTimeout
+	}
+
+	if options.ProposalHardTimeout == 0 {
+		options.ProposalHardTimeout = DefaultProposalHardTimeout
+	}
+
+	if proposerDelay > 0 {
+		options.ProposalSoftTimeout -= proposerDelay
+		options.ProposalHardTimeout -= proposerDelay
+	}
+
+	if options.ProposalSoftTimeout < 0 {
+		return Options{}, fmt.Errorf("invalid proposal soft timeout: %s", options.ProposalSoftTimeout)
+	}
+
+	if options.ProposalHardTimeout < options.ProposalSoftTimeout ||
+		options.ProposalHardTimeout < 0 {
+		return Options{}, fmt.Errorf("invalid proposal hard timeout: %s", options.ProposalHardTimeout)
+	}
+
+	return options, nil
 }
