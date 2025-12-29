@@ -1424,12 +1424,7 @@ func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
 }
 
 func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.execute_aggregator_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
+	span := trace.SpanFromContext(ctx)
 
 	r.measurements.StartDutyFlow()
 
