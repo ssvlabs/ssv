@@ -413,7 +413,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				continue
 			}
 
-			if !r.state().PreConsensusContainer.HasQuorum(validatorIndex, root) {
+			gotQuorum, quorumSigners := r.state().PreConsensusContainer.HasQuorum(validatorIndex, root)
+			if !gotQuorum {
 				continue
 			}
 
@@ -438,7 +439,11 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				// Record the error and continue to next validators
 				const eventMsg = "got pre-consensus quorum but it has invalid signatures"
 				span.AddEvent(eventMsg)
-				logger.Error(eventMsg, fields.Slot(duty.Slot), zap.Error(err))
+				logger.Error(eventMsg,
+					fields.Slot(duty.Slot),
+					zap.Uint64s("quorum_signers", quorumSigners),
+					zap.Error(err),
+				)
 				anyErr = err
 				continue
 			}
@@ -490,10 +495,6 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
-		signer := ssvtypes.PartialSigMsgSigner(signedMsg)
-		const aggCommDutyWontBeNeededEvent = "aggregator committee duty won't be needed from this validator for this slot"
-		span.AddEvent(aggCommDutyWontBeNeededEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
-		logger.Debug(aggCommDutyWontBeNeededEvent, zap.Any("signer", signer))
 
 		return nil
 	}
@@ -735,19 +736,6 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
 
-	indices := make([]uint64, len(signedMsg.Messages))
-	for i, msg := range signedMsg.Messages {
-		indices[i] = uint64(msg.ValidatorIndex)
-	}
-
-	const eventMsg = "🧩 got partial signatures"
-	span.AddEvent(eventMsg)
-	logger.Debug(eventMsg,
-		zap.Bool("quorum", hasQuorum),
-		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
-		zap.Int("roots", len(roots)),
-		zap.Uint64s("validators", indices))
-
 	if !hasQuorum {
 		span.SetStatus(codes.Ok, "")
 		return nil
@@ -766,25 +754,15 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		return ErrNoValidDutiesToExecute
 	}
 
-	// Get unique roots to avoid repetition
-	deduplicatedRoots := make(map[[32]byte]struct{})
-	for _, root := range roots {
-		deduplicatedRoots[root] = struct{}{}
-	}
-
-	sortedRoots := make([][32]byte, 0, len(deduplicatedRoots))
-	for root := range deduplicatedRoots {
-		sortedRoots = append(sortedRoots, root)
-	}
-	sort.Slice(sortedRoots, func(i, j int) bool {
-		return bytes.Compare(sortedRoots[i][:], sortedRoots[j][:]) < 0
+	sort.Slice(roots, func(i, j int) bool {
+		return bytes.Compare(roots[i][:], roots[j][:]) < 0
 	})
 
 	var executionErr error
 
-	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(deduplicatedRoots)))
+	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
-	for _, root := range sortedRoots {
+	for _, root := range roots {
 		// Get validators related to the given root
 		role, validators, found := r.findValidatorsForPostConsensusRoot(root, aggregatorMap, contributionMap)
 
@@ -819,7 +797,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
 			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
-			if !r.state().PostConsensusContainer.HasQuorum(validator, root) {
+			gotQuorum, quorumSigners := r.state().PostConsensusContainer.HasQuorum(validator, root)
+			if !gotQuorum {
 				continue
 			}
 			// Skip if already submitted
@@ -828,7 +807,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 			}
 
 			wg.Add(1)
-			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots map[[32]byte]struct{}) {
+			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots [][32]byte) {
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
@@ -840,12 +819,14 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				vlogger := logger.With(
 					zap.Uint64("validator_index", uint64(validatorIndex)),
 					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+					fields.BlockRoot(root),
+					zap.Uint64s("quorum_signers", quorumSigners),
 				)
 
 				sig, err := r.state().ReconstructBeaconSig(r.state().PostConsensusContainer, root, pubKey[:], validatorIndex)
 				// If the reconstructed signature verification failed, fall back to verifying each partial signature
 				if err != nil {
-					for root := range roots {
+					for _, root := range roots {
 						r.BaseRunner.FallBackAndVerifyEachSignature(
 							r.state().PostConsensusContainer,
 							root,
@@ -870,7 +851,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					validatorIndex: validatorIndex,
 					signature:      (phase0.BLSSignature)(sig),
 				}
-			}(validator, root, deduplicatedRoots)
+			}(validator, root, roots)
 		}
 
 		go func() {
@@ -975,7 +956,6 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		}
 
 		logger.Debug("🧩 reconstructed partial signatures for root",
-			zap.Uint64s("signers", getPostConsensusCommitteeSigners(r.state(), root)),
 			fields.BlockRoot(root),
 		)
 	}
