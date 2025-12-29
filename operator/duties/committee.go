@@ -87,8 +87,9 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
-				// Duties are rewarded as long as they are finished within 32 slots after the target slot,
-				// so we are setting the deadline here to target slot + 32.
+				// Attester/aggregator duties are rewarded as long as they are finished within 1 epoch
+				// after the target slot (https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards),
+				// so we are setting the deadline here to target slot + SlotsPerEpoch.
 				// Since ctxWithDeadlineOnNextSlot creates a deadline for the next slot,
 				// we need to subtract 1 from the passed slot.
 				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot+slotsPerEpoch-1)
