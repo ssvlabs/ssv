@@ -104,7 +104,10 @@ func NewAggregatorCommitteeChecker() ValueChecker {
 func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
 	cd := &spectypes.AggregatorCommitteeConsensusData{}
 	if err := cd.Decode(value); err != nil {
-		return fmt.Errorf("failed decoding aggregator committee consensus data: %w", err)
+		return spectypes.WrapError(
+			spectypes.AggCommConsensusDataDecodeErrorCode,
+			fmt.Errorf("failed decoding aggregator committee consensus data: %w", err),
+		)
 	}
 	if err := cd.Validate(); err != nil {
 		return fmt.Errorf("invalid value: %w", err)
@@ -115,7 +118,10 @@ func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
 	hasContributors := len(cd.Contributors) > 0
 
 	if !hasAggregators && !hasContributors {
-		return errors.New("no aggregators or sync committee contributors in consensus data")
+		return spectypes.WrapError(
+			spectypes.AggCommConsensusDataNoValidatorErrorCode,
+			errors.New("no aggregators or sync committee contributors in consensus data"),
+		)
 	}
 
 	return nil

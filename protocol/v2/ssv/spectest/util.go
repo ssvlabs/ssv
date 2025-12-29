@@ -29,6 +29,8 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		r = &runner.ValidatorRegistrationRunner{}
 	case *runner.VoluntaryExitRunner:
 		r = &runner.VoluntaryExitRunner{}
+	case *runner.AggregatorCommitteeRunner:
+		r = &runner.AggregatorCommitteeRunner{}
 	default:
 		t.Fatalf("unknown runner type")
 	}
@@ -79,6 +81,8 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		r.(*runner.ValidatorRegistrationRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
 	case *runner.VoluntaryExitRunner:
 		r.(*runner.VoluntaryExitRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.AggregatorCommitteeRunner:
+		r.(*runner.AggregatorCommitteeRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
 	default:
 		t.Fatalf("unknown runner type")
 	}

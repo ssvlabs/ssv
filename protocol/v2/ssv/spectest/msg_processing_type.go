@@ -290,7 +290,7 @@ var baseCommitteeWithRunner = func(
 	case *runner.CommitteeRunner:
 		baseRunner = r.BaseRunner
 		dgHandler = r.GetDoppelgangerHandler()
-	case *runner.AggregatorRunner:
+	case *runner.AggregatorCommitteeRunner:
 		baseRunner = r.BaseRunner
 		dgHandler = mockDGHandler{}
 	}

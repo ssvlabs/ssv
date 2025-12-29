@@ -41,6 +41,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 				spectypes.RoleProposer:                  ProposerRunner(logger, keySet),
 				spectypes.RoleAggregator:                AggregatorRunner(logger, keySet),
 				spectypes.RoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
+				spectypes.RoleAggregatorCommittee:       AggregatorCommitteeRunner(logger, keySet),
 				spectypes.RoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
 				spectypes.RoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
 			}),

@@ -402,14 +402,12 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			continue
 		}
 
-		// TODO(Aleg) why this sort? why not root sort?
 		sort.Slice(metadataList, func(i, j int) bool {
 			return metadataList[i].ValidatorIndex < metadataList[j].ValidatorIndex
 		})
 
 		for _, metadata := range metadataList {
 			validatorIndex := metadata.ValidatorIndex
-			//TODO(Aleg) decide if we need to keep this validation here
 			share := r.BaseRunner.Share[validatorIndex]
 			if share == nil {
 				continue
@@ -599,13 +597,13 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 
 	consensusData := decidedValue.(*spectypes.AggregatorCommitteeConsensusData)
 
-	_, hashRoots, err := consensusData.GetAggregateAndProofs()
+	aggProofs, err := consensusData.GetAggregateAndProofs()
 	if err != nil {
 		return fmt.Errorf("failed to get aggregate and proofs: %w", err)
 	}
 
 	messages := make([]*spectypes.PartialSignatureMessage, 0)
-	for i, hashRoot := range hashRoots {
+	for i, aggProof := range aggProofs {
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 
 		_, exists := r.BaseRunner.Share[validatorIndex]
@@ -619,6 +617,11 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		}
 
 		// Sign the aggregate and proof
+		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggProof)
+		if err != nil {
+			return errors.Wrap(err, "failed to get aggregate and proof hash root")
+		}
+
 		msg, err := signBeaconObject(
 			ctx,
 			r, vDuty, hashRoot,
@@ -854,7 +857,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					span.AddEvent(eventMsg)
 					vlogger.Error(eventMsg, fields.Slot(r.state().CurrentDuty.DutySlot()), zap.Error(err))
 
-					errCh <- fmt.Errorf("%s: %w", eventMsg, err)
+					errCh <- spectypes.WrapError(
+						spectypes.PostConsensusQuorumWithInvalidSignatures,
+						fmt.Errorf("%s: %w", eventMsg, err),
+					)
 					return
 				}
 
@@ -1224,7 +1230,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(c
 
 	epoch := r.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot())
 
-	aggregateAndProofs, hashRoots, err := consensusData.GetAggregateAndProofs()
+	aggregateAndProofs, err := consensusData.GetAggregateAndProofs()
 	if err != nil {
 		return nil, nil, nil,
 			errors.Wrap(err, "could not get aggregate and proofs")
@@ -1232,7 +1238,10 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(c
 
 	for i, aggregateAndProof := range aggregateAndProofs {
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
-		hashRoot := hashRoots[i]
+		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggregateAndProof)
+		if err != nil {
+			continue
+		}
 
 		// Calculate signing root for aggregate and proof
 		domain, err := r.beacon.DomainData(ctx, epoch, spectypes.DomainAggregateAndProof)

@@ -222,6 +222,17 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]any) *StartNewRunne
 			panic("cant unmarshal committee duty")
 		}
 		testDuty = committeeDuty
+	} else if _, ok := m["AggregatorCommitteeDuty"]; ok {
+		byts, err := json.Marshal(m["AggregatorCommitteeDuty"])
+		if err != nil {
+			panic("cant marshal aggregator committee duty")
+		}
+		aggCommDuty := &spectypes.AggregatorCommitteeDuty{}
+		err = json.Unmarshal(byts, aggCommDuty)
+		if err != nil {
+			panic("cant unmarshal aggregator committee duty")
+		}
+		testDuty = aggCommDuty
 	} else if _, ok := m["ValidatorDuty"]; ok {
 		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
@@ -292,6 +303,17 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 			panic("cant unmarshal committee duty")
 		}
 		duty = committeeDuty
+	} else if _, ok := m["AggregatorCommitteeDuty"]; ok {
+		byts, err := json.Marshal(m["AggregatorCommitteeDuty"])
+		if err != nil {
+			panic("cant marshal aggregator committee duty")
+		}
+		aggCommDuty := &spectypes.AggregatorCommitteeDuty{}
+		err = json.Unmarshal(byts, aggCommDuty)
+		if err != nil {
+			panic("cant unmarshal aggregator committee duty")
+		}
+		duty = aggCommDuty
 	} else if _, ok := m["ValidatorDuty"]; ok {
 		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
@@ -462,6 +484,10 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 	case spectypes.RoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
+		return ret
+	case spectypes.RoleAggregatorCommittee:
+		ret := ssvtesting.AggregatorCommitteeRunner(logger, ks)
+		ret.(*runner.AggregatorCommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleVoluntaryExit:
 		ret := ssvtesting.VoluntaryExitRunner(logger, ks)

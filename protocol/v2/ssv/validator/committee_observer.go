@@ -491,7 +491,7 @@ func (ncv *CommitteeObserver) saveAggregatorRoots(
 	epoch phase0.Epoch,
 	data *spectypes.AggregatorCommitteeConsensusData,
 ) error {
-	_, hashRoots, err := data.GetAggregateAndProofs()
+	aggregateAndProofs, err := data.GetAggregateAndProofs()
 	if err != nil {
 		return err
 	}
@@ -500,8 +500,12 @@ func (ncv *CommitteeObserver) saveAggregatorRoots(
 	if err != nil {
 		return err
 	}
-	for _, h := range hashRoots {
-		root, err := spectypes.ComputeETHSigningRoot(h, dAgg)
+	for _, aggAndProof := range aggregateAndProofs {
+		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggAndProof)
+		if err != nil {
+			continue
+		}
+		root, err := spectypes.ComputeETHSigningRoot(hashRoot, dAgg)
 		if err != nil {
 			return err
 		}

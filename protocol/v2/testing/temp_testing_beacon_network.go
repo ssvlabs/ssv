@@ -44,6 +44,9 @@ func (bn *BeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) 
 func (bn *BeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
 	return bn.Bn.IsSyncCommitteeAggregator(proof)
 }
+func (bn *BeaconNodeWrapped) IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+	return bn.Bn.IsAggregator(slot, committeeIndex, committeeLength, slotSig)
+}
 func (bn *BeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)
 }

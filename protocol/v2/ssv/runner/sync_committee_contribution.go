@@ -326,7 +326,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			for _, root := range roots {
 				r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
-			return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+			return spectypes.WrapError(
+				spectypes.PostConsensusQuorumWithInvalidSignatures,
+				fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err),
+			)
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
