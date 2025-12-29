@@ -85,7 +85,7 @@ func (i *Instance) uponRoundChange(
 
 		i.metrics.RecordRoundChange(ctx, prevRound, reasonJustified)
 
-		logger.Debug("🔄 got justified round change, broadcasting proposal message",
+		logger.Debug("🔄 got justified round change, leader broadcasting proposal message",
 			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(prevRound))),
 		)
 

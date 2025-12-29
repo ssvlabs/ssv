@@ -123,11 +123,6 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	if err != nil {
 		return fmt.Errorf("failed processing randao message: %w", err)
 	}
-
-	duty := r.state().CurrentDuty.(*spectypes.ValidatorDuty)
-
-	logger.Debug("🧩 got partial RANDAO signatures (pre consensus)", zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)))
-
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {
 		return nil
@@ -139,19 +134,14 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// only 1 root, verified in expectedPreConsensusRootsAndDomain
 	root := roots[0]
 
-	// randao is relevant only for block proposals, no need to check type
-	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 	fullSig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
-	logger.Debug(
-		"🧩 reconstructed partial RANDAO signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.state(), root)),
-		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-	)
+
+	duty := r.state().CurrentDuty.(*spectypes.ValidatorDuty)
 
 	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
 	slotTime := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
@@ -363,7 +353,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]
 
-	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 	sig, err := r.state().ReconstructBeaconSig(r.state().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
@@ -372,10 +361,6 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], sig)
-
-	logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
-		zap.Uint64s("signers", getPostConsensusProposerSigners(r.state(), root)),
-	)
 
 	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 

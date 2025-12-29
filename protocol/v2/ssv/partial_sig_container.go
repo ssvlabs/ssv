@@ -3,6 +3,7 @@ package ssv
 import (
 	"encoding/hex"
 	"maps"
+	"slices"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -139,11 +140,16 @@ func (ps *PartialSigContainer) ReconstructSignature(root [32]byte, validatorPubK
 	return signature.Serialize(), nil
 }
 
-func (ps *PartialSigContainer) HasQuorum(validatorIndex phase0.ValidatorIndex, root [32]byte) bool {
+func (ps *PartialSigContainer) HasQuorum(validatorIndex phase0.ValidatorIndex, root [32]byte) (
+	ok bool,
+	signers []spectypes.OperatorID,
+) {
 	ps.signaturesMu.RLock()
 	defer ps.signaturesMu.RUnlock()
 
-	return uint64(len(ps.Signatures[validatorIndex][signingRootHex(root)])) >= ps.Quorum
+	rootSigs := ps.Signatures[validatorIndex][signingRootHex(root)]
+
+	return uint64(len(rootSigs)) >= ps.Quorum, slices.Collect(maps.Keys(rootSigs))
 }
 
 func signingRootHex(r [32]byte) specssv.SigningRoot {

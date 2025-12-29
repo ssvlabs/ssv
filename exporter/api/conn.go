@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 	"sync"
@@ -137,13 +136,12 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 			}
 		case message := <-c.send:
 			c.writeLock.Lock()
-			n, err := c.sendMsg(message)
+			_, err := c.sendMsg(message)
 			c.writeLock.Unlock()
 			if err != nil {
 				logger.Warn("failed to send message", zap.Error(err))
 				return
 			}
-			c.logMsg(logger, message, n)
 		}
 	}
 }
@@ -222,25 +220,6 @@ func (c *conn) sendMsg(msg []byte) (int, error) {
 		return 0, errors.Wrap(err, "could not close writer")
 	}
 	return n, nil
-}
-
-func (c *conn) logMsg(logger *zap.Logger, message []byte, byteWritten int) {
-	if byteWritten == 0 {
-		return
-	}
-	j := make(map[string]json.RawMessage)
-	if err := json.Unmarshal(message, &j); err != nil {
-		logger.Error("could not parse msg", zap.Error(err))
-	}
-	fraw, ok := j["filter"]
-	if !ok {
-		return
-	}
-	filter, err := fraw.MarshalJSON()
-	if err != nil {
-		logger.Error("could not parse filter", zap.Error(err))
-	}
-	logger.Debug("ws msg was sent", zap.Int("bytes", byteWritten), zap.ByteString("filter", filter))
 }
 
 // isCloseError determines whether the given error is of CloseError type
