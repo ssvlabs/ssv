@@ -192,6 +192,9 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	if longTimeout == 0 {
 		longTimeout = DefaultLongTimeout
 	}
+
+	// TODO this can be removed once we have confirmed that all instantiations
+	// (mainly tests) use the NewOptions constructions, that properly sets though.
 	proposalSoftTimeout := opt.ProposalSoftTimeout
 	if proposalSoftTimeout == 0 {
 		proposalSoftTimeout = DefaultProposalSoftTimeout
