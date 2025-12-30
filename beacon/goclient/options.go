@@ -18,8 +18,8 @@ type Options struct {
 	CommonTimeout time.Duration // Optional.
 	LongTimeout   time.Duration // Optional.
 
-	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout"`
-	ProposalHardTimeout time.Duration `yaml:"ProposalHardTimeout"`
+	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout; it will be adjusted for the proposer delay"`
+	ProposalHardTimeout time.Duration `yaml:"ProposalHardTimeout" env:"WITH_PROPOSAL_HARD" env-description:"Specifies the beacon proposal collection hard timeout; it will be adjusted for the proposer delay"`
 }
 
 func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
