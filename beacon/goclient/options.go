@@ -24,6 +24,7 @@ type Options struct {
 
 func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
 	options := base
+
 	if options.ProposalSoftTimeout == 0 {
 		options.ProposalSoftTimeout = DefaultProposalSoftTimeout
 	}
