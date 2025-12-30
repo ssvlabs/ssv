@@ -193,17 +193,6 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		longTimeout = DefaultLongTimeout
 	}
 
-	// TODO this can be removed once we have confirmed that all instantiations
-	// (mainly tests) use the NewOptions constructions, that properly sets though.
-	proposalSoftTimeout := opt.ProposalSoftTimeout
-	if proposalSoftTimeout == 0 {
-		proposalSoftTimeout = DefaultProposalSoftTimeout
-	}
-	proposalHardTimeout := opt.ProposalHardTimeout
-	if proposalHardTimeout == 0 {
-		proposalHardTimeout = DefaultProposalHardTimeout
-	}
-
 	client := &GoClient{
 		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),
@@ -214,8 +203,8 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		proposalSoftTimeout:                proposalSoftTimeout,
-		proposalHardTimeout:                proposalHardTimeout,
+		proposalSoftTimeout:                opt.ProposalSoftTimeout,
+		proposalHardTimeout:                opt.ProposalHardTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
