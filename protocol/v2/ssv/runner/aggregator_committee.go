@@ -44,8 +44,8 @@ type AggregatorCommitteeRunner struct {
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
 
-	//TODO(Aleg) not sure we need it
-	//DutyGuard           CommitteeDutyGuard
+	// No DutyGuard because AggregatorCommitteeRunner's duties aren't slashable.
+
 	measurements *dutyMeasurements
 
 	// For aggregator role: tracks by validator index only (one submission per validator)
@@ -397,14 +397,19 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		for _, metadata := range metadataList {
 			validatorIndex := metadata.ValidatorIndex
 			share := r.BaseRunner.Share[validatorIndex]
-			if share == nil {
-				continue
-			}
+			pubKey := share.ValidatorPubKey
 
 			gotQuorum, quorumSigners := r.state().PreConsensusContainer.HasQuorum(validatorIndex, root)
 			if !gotQuorum {
 				continue
 			}
+
+			vLogger := logger.With(
+				zap.Uint64("validator_index", uint64(validatorIndex)),
+				zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+				fields.BlockRoot(root),
+				zap.Uint64s("quorum_signers", quorumSigners),
+			)
 
 			// Reconstruct signature
 			fullSig, err := r.state().ReconstructBeaconSig(
@@ -423,14 +428,11 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 						validatorIndex,
 					)
 				}
-				// TODO(Aleg) align to new committee runner
-				// Record the error and continue to next validators
+
 				const eventMsg = "got pre-consensus quorum but it has invalid signatures"
 				span.AddEvent(eventMsg)
-				logger.Error(eventMsg,
-					zap.Uint64s("quorum_signers", quorumSigners),
-					zap.Error(err),
-				)
+				vLogger.Error(eventMsg, zap.Error(err))
+
 				anyErr = err
 				continue
 			}
@@ -702,7 +704,6 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 	return nil
 }
 
-// TODO finish edge case where some roots may be missing
 func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -739,6 +740,8 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	})
 
 	var executionErr error
+	aggregatesToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*spec.VersionedSignedAggregateAndProof)
+	contributionsToSubmit := make(map[phase0.ValidatorIndex]map[[32]byte]*altair.SignedContributionAndProof)
 
 	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
@@ -746,7 +749,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		// Get validators related to the given root
 		role, validators, found := r.findValidatorsForPostConsensusRoot(root, aggregatorMap, contributionMap)
 		if !found {
-			// Edge case: operator doesn't have the validator associated to a root
+			// Edge case: operator doesn't have the validator associated to a root. This probably might mean a bug.
+			logger.Error("BUG: could not find validators for root",
+				zap.String("root", hex.EncodeToString(root[:])),
+			)
 			continue
 		}
 
@@ -867,30 +873,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 						continue
 					}
 
-					// TODO: store in a map and submit afterwards like in committee duty?
-					start := time.Now()
-					if err := r.beacon.SubmitSignedAggregateSelectionProof(ctx, signedAgg); err != nil {
-						executionErr = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
-						continue
+					if aggregatesToSubmit[signatureResult.validatorIndex] == nil {
+						aggregatesToSubmit[signatureResult.validatorIndex] = make(map[[32]byte]*spec.VersionedSignedAggregateAndProof)
 					}
-
-					const eventMsg = "✅ successfully submitted signed aggregate and proof"
-					span.AddEvent(eventMsg)
-					logger.Debug(
-						eventMsg,
-						fields.Took(time.Since(start)),
-						fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-					)
-
-					recordSuccessfulSubmission(
-						ctx,
-						1,
-						r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()),
-						spectypes.BNRoleAggregator,
-					)
-
-					r.RecordSubmission(spectypes.BNRoleAggregator, signatureResult.validatorIndex, root)
+					aggregatesToSubmit[signatureResult.validatorIndex][root] = signedAgg
 
 				case spectypes.BNRoleSyncCommitteeContribution:
 					contribAndProof := sszObject.(*altair.ContributionAndProof)
@@ -899,30 +885,10 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 						Signature: signatureResult.signature,
 					}
 
-					// TODO: store in a map and submit afterwards like in committee duty?
-					start := time.Now()
-					if err := r.beacon.SubmitSignedContributionAndProof(ctx, signedContrib); err != nil {
-						executionErr = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
-						continue
+					if contributionsToSubmit[signatureResult.validatorIndex] == nil {
+						contributionsToSubmit[signatureResult.validatorIndex] = make(map[[32]byte]*altair.SignedContributionAndProof)
 					}
-
-					const eventMsg = "✅ successfully submitted sync committee contributions"
-					span.AddEvent(eventMsg)
-					logger.Debug(
-						eventMsg,
-						fields.Took(time.Since(start)),
-						fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-						fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-					)
-
-					recordSuccessfulSubmission(
-						ctx,
-						1,
-						r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()),
-						spectypes.BNRoleSyncCommitteeContribution,
-					)
-
-					r.RecordSubmission(spectypes.BNRoleSyncCommitteeContribution, signatureResult.validatorIndex, root)
+					contributionsToSubmit[signatureResult.validatorIndex][root] = signedContrib
 
 				default:
 					return errors.Errorf("unexpected role type in post-consensus: %v", role)
@@ -933,6 +899,66 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		logger.Debug("🧩 reconstructed partial signatures for root",
 			fields.BlockRoot(root),
 		)
+	}
+
+	for validatorIndex, signedByRoot := range aggregatesToSubmit {
+		for root, signedAgg := range signedByRoot {
+			start := time.Now()
+			if err := r.beacon.SubmitSignedAggregateSelectionProof(ctx, signedAgg); err != nil {
+				recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
+				executionErr = fmt.Errorf("failed to submit signed aggregate and proof: %w", err)
+				continue
+			}
+
+			const eventMsg = "✅ successfully submitted signed aggregate and proof"
+			span.AddEvent(eventMsg)
+			logger.Debug(
+				eventMsg,
+				fields.BlockRoot(root),
+				fields.Took(time.Since(start)),
+				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+			)
+
+			recordSuccessfulSubmission(
+				ctx,
+				1,
+				r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()),
+				spectypes.BNRoleAggregator,
+			)
+
+			r.RecordSubmission(spectypes.BNRoleAggregator, validatorIndex, root)
+		}
+	}
+
+	for validatorIndex, signedByRoot := range contributionsToSubmit {
+		for root, signedContrib := range signedByRoot {
+			start := time.Now()
+			if err := r.beacon.SubmitSignedContributionAndProof(ctx, signedContrib); err != nil {
+				recordFailedSubmission(ctx, spectypes.BNRoleSyncCommitteeContribution)
+				executionErr = fmt.Errorf("failed to submit signed contribution and proof: %w", err)
+				continue
+			}
+
+			const eventMsg = "✅ successfully submitted sync committee contributions"
+			span.AddEvent(eventMsg)
+			logger.Debug(
+				eventMsg,
+				fields.BlockRoot(root),
+				fields.Took(time.Since(start)),
+				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+			)
+
+			recordSuccessfulSubmission(
+				ctx,
+				1,
+				r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()),
+				spectypes.BNRoleSyncCommitteeContribution,
+			)
+
+			r.RecordSubmission(spectypes.BNRoleSyncCommitteeContribution, validatorIndex, root)
+		}
 	}
 
 	if executionErr != nil {
@@ -1401,13 +1427,10 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
+	seenSigs := make(map[string]struct{})
+
 	// Generate selection proofs for all validators and duties
 	for _, vDuty := range aggCommitteeDuty.ValidatorDuties {
-		//TODO(Aleg) decide if we need to keep this validation here
-		if _, ok := r.BaseRunner.Share[vDuty.ValidatorIndex]; !ok {
-			continue
-		}
-
 		switch vDuty.Type {
 		case spectypes.BNRoleAggregator:
 			span.AddEvent("signing beacon object")
@@ -1449,9 +1472,9 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 					return fmt.Errorf("failed to sign sync committee selection proof: %w", err)
 				}
 
-				// TODO: find a better way to handle this
-				if len(msg.Messages) == 0 || !bytes.Equal(msg.Messages[len(msg.Messages)-1].PartialSignature, partialSig.PartialSignature) {
+				if _, ok := seenSigs[string(partialSig.PartialSignature)]; !ok {
 					msg.Messages = append(msg.Messages, partialSig)
+					seenSigs[string(partialSig.PartialSignature)] = struct{}{}
 				}
 			}
 
