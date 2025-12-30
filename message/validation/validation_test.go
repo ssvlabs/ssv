@@ -1379,9 +1379,19 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 		signedSSVMessage.FullData = anotherFullData
 
+		var gotErr Error
+
+		// the 1st message from this peer is ignored
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.False(t, gotErr.reject)
 		expectedErr := ErrDifferentProposalData
 		require.ErrorIs(t, err, expectedErr)
+
+		// the 2nd message from this peer is rejected
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.True(t, gotErr.reject)
 	})
 
 	// Receive prepare from same operator twice with different messages (same round) should receive an error
@@ -1401,10 +1411,20 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var gotErr Error
+
+		// the 1st message from this peer is ignored
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.False(t, gotErr.reject)
 		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "prepare, having prepare"
 		require.ErrorIs(t, err, expectedErr)
+
+		// the 2nd message from this peer is rejected
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.True(t, gotErr.reject)
 	})
 
 	// Receive commit from same operator twice with different messages (same round) should receive an error
@@ -1423,10 +1443,20 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var gotErr Error
+
+		// the 1st message from this peer is ignored
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.False(t, gotErr.reject)
 		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "commit, having commit"
 		require.ErrorIs(t, err, expectedErr)
+
+		// the 2nd message from this peer is rejected
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.True(t, gotErr.reject)
 	})
 
 	// Receive round change from same operator twice with different messages (same round) should receive an error
@@ -1445,10 +1475,20 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var gotErr Error
+
+		// the 1st message from this peer is ignored
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.False(t, gotErr.reject)
 		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "round change, having round change"
 		require.ErrorIs(t, err, expectedErr)
+
+		// the 2nd message from this peer is rejected
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.True(t, gotErr.reject)
 	})
 
 	// Decided with same signers should receive an error
@@ -1468,8 +1508,19 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var gotErr Error
+
+		// the 1st message from this peer is ignored
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrDecidedWithSameSigners)
+		require.True(t, errors.As(err, &gotErr))
+		require.False(t, gotErr.reject)
+		expectedErr := ErrDecidedWithSameSigners
+		require.ErrorIs(t, err, expectedErr)
+
+		// the 2nd message from this peer is rejected
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.True(t, errors.As(err, &gotErr))
+		require.True(t, gotErr.reject)
 	})
 
 	// Send message with a slot lower than in the previous message
