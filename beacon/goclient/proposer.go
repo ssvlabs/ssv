@@ -154,7 +154,7 @@ func (gc *GoClient) GetBeaconBlock(
 
 // getProposalParallel races all beacon nodes and collects proposals for a short time
 // and returns the best one according to our score function.
-// If no valud proposals are collected in this time it returns the first valid one
+// If no valid proposals are collected in this time it returns the first valid one
 // it sees.
 //
 // This minimizes latency for time-critical block proposals, while still affording
@@ -276,7 +276,7 @@ collect:
 		fields.Slot(slot),
 	)
 
-	// there are potentially still some collectors running, just return the frist valid one
+	// there are potentially still some collectors running, just return the first valid one
 	for pendingClients > 0 {
 		select {
 		case res := <-resultCh:
