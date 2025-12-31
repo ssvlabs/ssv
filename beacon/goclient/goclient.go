@@ -34,14 +34,6 @@ const (
 	// Don't check for it, check for errors or nil data instead.
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
-	// Client timeouts.
-	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 60 // For long requests.
-
-	// Proposal timeouts
-	DefaultProposalSoftTimeout = time.Millisecond * 1600
-	DefaultProposalHardTimeout = time.Millisecond * 2600
-
 	BlockRootToSlotCacheCapacityEpochs = 64
 
 	// ProposalPreparationBatchSize is the maximum number of preparations to submit in a single request
@@ -184,25 +176,16 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
 
-	commonTimeout := opt.CommonTimeout
-	if commonTimeout == 0 {
-		commonTimeout = DefaultCommonTimeout
-	}
-	longTimeout := opt.LongTimeout
-	if longTimeout == 0 {
-		longTimeout = DefaultLongTimeout
-	}
-
 	client := &GoClient{
 		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		commonTimeout:                      commonTimeout,
-		longTimeout:                        longTimeout,
+		commonTimeout:                      opt.CommonTimeout,
+		longTimeout:                        opt.LongTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		withParallelSubmissions:            opt.WithParallelSubmissions,
-		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
-		weightedAttestationDataHardTimeout: commonTimeout,
+		weightedAttestationDataSoftTimeout: time.Duration(float64(opt.CommonTimeout) / 2.5),
+		weightedAttestationDataHardTimeout: opt.CommonTimeout,
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		proposalHardTimeout:                opt.ProposalHardTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},

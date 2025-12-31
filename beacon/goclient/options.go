@@ -7,6 +7,16 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
+const (
+	// Client timeouts.
+	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 60 // For long requests.
+
+	// Proposal timeouts
+	DefaultProposalSoftTimeout = time.Millisecond * 1600
+	DefaultProposalHardTimeout = time.Millisecond * 2600
+)
+
 // Options defines beacon client options
 type Options struct {
 	BeaconConfig                *networkconfig.Beacon
@@ -15,8 +25,8 @@ type Options struct {
 	WithWeightedAttestationData bool   `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`
 	WithParallelSubmissions     bool   `yaml:"WithParallelSubmissions" env:"WITH_PARALLEL_SUBMISSIONS" env-default:"false" env-description:"Enables parallel Attestation and Sync Committee submissions to all Beacon nodes (as opposed to submitting to a single Beacon node via multiclient instance)"`
 
-	CommonTimeout time.Duration // Optional.
-	LongTimeout   time.Duration // Optional.
+	CommonTimeout time.Duration `yaml:"CommonTimeout" env:"WITH_COMMON_TIMEOUT" env-description:"Specifies the common timeout for network operations"`
+	LongTimeout   time.Duration `yaml:"LongTimeout" env:"WITH_LONG_TIMEOUT" env-description:"Specifies the long timeout for network operations"`
 
 	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout; it will be adjusted for the proposer delay"`
 	ProposalHardTimeout time.Duration `yaml:"ProposalHardTimeout" env:"WITH_PROPOSAL_HARD_TIMEOUT" env-description:"Specifies the beacon proposal collection hard timeout; it will be adjusted for the proposer delay"`
@@ -24,6 +34,14 @@ type Options struct {
 
 func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
 	options := base
+
+	if options.CommonTimeout == 0 {
+		options.CommonTimeout = DefaultCommonTimeout
+	}
+
+	if options.LongTimeout == 0 {
+		options.LongTimeout = DefaultLongTimeout
+	}
 
 	if options.ProposalSoftTimeout == 0 {
 		options.ProposalSoftTimeout = DefaultProposalSoftTimeout
