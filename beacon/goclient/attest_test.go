@@ -45,7 +45,7 @@ var (
 		"/eth/v1/node/syncing": []byte(`{
 			"data": {
 				"head_slot": "4239945",
-				"sync_distance": "1", 
+				"sync_distance": "1",
 				"is_syncing": false,
 				"is_optimistic": false,
 				"el_offline": false
@@ -492,17 +492,18 @@ func createClient(
 	ctx context.Context,
 	beaconServerURL string,
 	withWeightedAttestationData bool) (*GoClient, error) {
-	client, err := New(
-		ctx,
-		zap.NewNop(),
+	opt, err := NewOptions(
 		Options{
 			BeaconNodeAddr:              beaconServerURL,
 			CommonTimeout:               defaultHardTimeout,
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
-		},
-	)
-	return client, err
+		}, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return New(ctx, zap.NewNop(), opt)
 }
 
 type beaconServerResponseOptions struct {
