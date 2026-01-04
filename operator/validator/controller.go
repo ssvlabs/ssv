@@ -1023,7 +1023,7 @@ func SetupCommitteeRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbft.RoundRobinProposer(state, round)
+				leader := qbft.ForkAwareRoundRobinProposer(state, round, options.NetworkConfig.BooleFork())
 				return leader
 			},
 			Network:     options.Network,
@@ -1085,7 +1085,7 @@ func SetupRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbft.RoundRobinProposer(state, round)
+				leader := qbft.ForkAwareRoundRobinProposer(state, round, options.NetworkConfig.BooleFork())
 				return leader
 			},
 			Network:     options.Network,
