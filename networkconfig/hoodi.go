@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -22,5 +23,6 @@ var HoodiSSV = &SSV{
 	Forks: SSVForks{
 		Alan:       0,
 		GasLimit36: 29000, // Jul-24-2025 09:30:00 AM UTC
+		Boole:      math.MaxUint64,
 	},
 }
