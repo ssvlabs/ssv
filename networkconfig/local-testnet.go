@@ -20,5 +20,6 @@ var LocalTestnetSSV = &SSV{
 	Forks: SSVForks{
 		Alan:       0,
 		GasLimit36: 0,
+		Boole:      0,
 	},
 }
