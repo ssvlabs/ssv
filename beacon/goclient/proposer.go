@@ -127,8 +127,8 @@ func (gc *GoClient) GetBeaconBlock(
 		}
 	}
 
-	beaconBlock = gc.selectProposal(beaconBlock, latestBeaconBlock)
-	if beaconBlock == latestBeaconBlock {
+	if latestBeaconBlock != nil {
+		beaconBlock = latestBeaconBlock
 		beaconClient = latestBeaconClient
 	}
 
