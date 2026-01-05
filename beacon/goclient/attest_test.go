@@ -498,7 +498,7 @@ func createClient(
 			CommonTimeout:               defaultHardTimeout,
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
-		}, 0)
+		})
 	if err != nil {
 		return nil, err
 	}

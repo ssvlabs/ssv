@@ -684,7 +684,7 @@ func createClientForProposerTest(t *testing.T, serverURL string) (*GoClient, err
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  time.Second * 2,
 			LongTimeout:    time.Second * 5,
-		}, 0)
+		})
 	if err != nil {
 		return nil, err
 	}
