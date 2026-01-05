@@ -42,6 +42,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/leader"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -1023,8 +1024,7 @@ func SetupCommitteeRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbft.ForkAwareRoundRobinProposer(state, round, options.NetworkConfig.BooleFork())
-				return leader
+				return leader.ForState(state, round, options.NetworkConfig)
 			},
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
@@ -1085,8 +1085,7 @@ func SetupRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := qbft.ForkAwareRoundRobinProposer(state, round, options.NetworkConfig.BooleFork())
-				return leader
+				return leader.ForState(state, round, options.NetworkConfig)
 			},
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),

@@ -38,6 +38,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/leader"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
@@ -195,7 +196,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.Signer(0)
+		leader := leader.For(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
+		leaderIndex := slices.Index(committee, leader)
+		require.GreaterOrEqual(t, leaderIndex, 0)
+
+		stateBySlot := state.Signer(leaderIndex)
 		require.NotNil(t, stateBySlot)
 
 		storedState := stateBySlot.GetSignerState(slot)
@@ -212,6 +217,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			message.MsgType = specqbft.PrepareMsgType
 		})
 		signedSSVMessage.FullData = nil
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{leader}
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
@@ -229,6 +235,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			message.MsgType = specqbft.CommitMsgType
 		})
 		signedSSVMessage.FullData = nil
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{leader}
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
 
@@ -1256,7 +1263,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
+		leader := leader.For(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
+		leaderIndex := slices.Index(committee, leader)
+		require.GreaterOrEqual(t, leaderIndex, 0)
+		nonLeader := committee[(leaderIndex+1)%len(committee)]
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{nonLeader}
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -1987,7 +1998,11 @@ func generateSignedMessage(
 		opt(qbftMessage)
 	}
 
-	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
+	committee := slices.Collect(maps.Keys(ks.Shares))
+	slices.Sort(committee)
+
+	signer := leader.For(qbftMessage.Height, qbftMessage.Round, committee, networkconfig.TestNetwork)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[signer], signer, qbftMessage)
 	signedSSVMessage.FullData = fullData
 
 	return signedSSVMessage
