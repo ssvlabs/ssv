@@ -156,7 +156,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// compute the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
 	slotTime := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
 	proposeTime := slotTime.Add(r.proposerDelay)
-	fetchCtx := context.WithValue(ctx, "ProposeTime", proposeTime)
+	fetchCtx := context.WithValue(ctx, beacon.ProposeTimeContextKey{}, proposeTime)
 	start := time.Now()
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator

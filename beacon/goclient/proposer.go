@@ -26,6 +26,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -68,9 +69,9 @@ func (gc *GoClient) GetBeaconBlock(
 	graffiti := [32]byte{}
 	copy(graffiti[:], graffitiBytes[:])
 
-	proposeTime, ok := ctx.Value("ProposeTime").(time.Time)
+	proposeTime, ok := ctx.Value(beacon.ProposeTimeContextKey{}).(time.Time)
 	if !ok {
-		// short circut the prefetch
+		// short circuit the prefetch
 		proposeTime = time.Now()
 	}
 
