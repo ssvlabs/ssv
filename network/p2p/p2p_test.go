@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/leader"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -202,14 +204,13 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 
 func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 	share := spectestingutils.TestingShare(ks, 1)
-
-	firstRoundIndex := 0
-	if height != specqbft.FirstHeight {
-		firstRoundIndex += int(height) % len(share.Committee)
+	committee := make([]spectypes.OperatorID, 0, len(share.Committee))
+	for _, member := range share.Committee {
+		committee = append(committee, member.Signer)
 	}
+	sort.Slice(committee, func(i, j int) bool { return committee[i] < committee[j] })
 
-	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(share.Committee)
-	return share.Committee[index].Signer
+	return leader.For(height, round, committee, networkconfig.TestNetwork)
 }
 
 func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
