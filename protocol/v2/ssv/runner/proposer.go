@@ -153,31 +153,20 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 	)
 
-	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
+	// compute the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
 	slotTime := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
 	proposeTime := slotTime.Add(r.proposerDelay)
-	if timeLeft := time.Until(proposeTime); timeLeft > 0 {
-		select {
-		case <-time.After(timeLeft):
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-
-	waitedOutProposerDelayEvent := fmt.Sprintf("waited out proposer delay of %dms", r.proposerDelay.Milliseconds())
-	logger.Debug(waitedOutProposerDelayEvent)
-	span.AddEvent(waitedOutProposerDelayEvent)
-
-	duty = r.state().CurrentDuty.(*spectypes.ValidatorDuty)
+	fetchCtx := context.WithValue(ctx, "ProposeTime", proposeTime)
+	start := time.Now()
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
-	start := time.Now()
-	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(fetchCtx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		return fmt.Errorf("get beacon block: %w", err)
 	}
+
 	// Log essentials about the retrieved block.
 	logFields := []zap.Field{
 		zap.String("version", vBlk.Version.String()),

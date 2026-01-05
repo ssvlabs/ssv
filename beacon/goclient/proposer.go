@@ -49,34 +49,6 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 	return resp.Data, nil
 }
 
-// fetchProposal fetches a proposal from a single client and records metrics
-func (gc *GoClient) fetchProposal(
-	ctx context.Context,
-	client Client,
-	slot phase0.Slot,
-	sig phase0.BLSSignature,
-	graffiti [32]byte,
-) (*api.VersionedProposal, error) {
-	reqStart := time.Now()
-	resp, err := client.Proposal(ctx, &api.ProposalOpts{
-		Slot:         slot,
-		RandaoReveal: sig,
-		Graffiti:     graffiti,
-	})
-	recordRequest(ctx, gc.log, "Proposal", client, http.MethodGet, false, time.Since(reqStart), err)
-	if err != nil {
-		return nil, errSingleClient(fmt.Errorf("fetch proposal: %w", err), client.Address(), "Proposal")
-	}
-	if resp == nil {
-		return nil, errSingleClient(fmt.Errorf("proposal response is nil"), client.Address(), "Proposal")
-	}
-	if resp.Data == nil {
-		return nil, errSingleClient(fmt.Errorf("proposal response data is nil"), client.Address(), "Proposal")
-	}
-
-	return resp.Data, nil
-}
-
 // GetBeaconBlock implements ProposerCalls.GetBeaconBlock
 func (gc *GoClient) GetBeaconBlock(
 	ctx context.Context,
@@ -96,22 +68,77 @@ func (gc *GoClient) GetBeaconBlock(
 	graffiti := [32]byte{}
 	copy(graffiti[:], graffitiBytes[:])
 
+	proposeTime, ok := ctx.Value("ProposeTime").(time.Time)
+	if !ok {
+		// short circut the prefetch
+		proposeTime = time.Now()
+	}
+
 	var beaconBlock *api.VersionedProposal
+	var beaconClient string
 	var err error
 
-	// For single client, use direct call to avoid multi-client overhead
-	if len(gc.clients) == 1 {
-		beaconBlock, err = gc.fetchProposal(ctx, gc.clients[0], slot, sig, graffiti)
+	start := time.Now()
+
+	// if there is time before the proposal is due (factoring in proposer delay)
+	// we prefetch the current best block so that we are always ready to return
+	// a block.
+	if time.Now().Before(proposeTime) {
+		prefetchCtx, prefetchCancel := context.WithDeadline(ctx, proposeTime)
+		defer prefetchCancel()
+
+		startPrefetch := time.Now()
+
+		beaconBlock, beaconClient, err = gc.getProposal(prefetchCtx, logger, slot, sig, graffiti)
 		if err != nil {
-			return nil, nil, err
+			logger.Warn("failed to prefetch block proposal", zap.Error(err))
+		} else {
+			proposalScore := gc.scoreProposal(beaconBlock)
+			logger.Debug("prefetched proposal",
+				zap.String("client", beaconClient),
+				zap.Float64("score", proposalScore),
+				zap.Duration("latency", time.Since(startPrefetch)),
+				zap.Bool("blinded", beaconBlock.Blinded),
+				fields.Slot(slot),
+			)
 		}
-	} else {
-		// For multiple clients, race them in parallel for the fastest response
-		beaconBlock, err = gc.getProposalParallel(ctx, logger, slot, sig, graffiti)
-		if err != nil {
+
+		// wait out the prposer delay
+		if timeLeft := time.Until(proposeTime); timeLeft > 0 {
+			select {
+			case <-prefetchCtx.Done():
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			}
+		}
+	}
+
+	// now fetch again the best available block
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, gc.proposalTimeout)
+	defer fetchCancel()
+
+	latestBeaconBlock, latestBeaconClient, err := gc.getProposal(fetchCtx, logger, slot, sig, graffiti)
+	if err != nil {
+		logger.Warn("failed to fetch final block proposal", zap.Error(err))
+
+		if beaconBlock == nil {
 			return nil, nil, err
 		}
 	}
+
+	beaconBlock = gc.selectProposal(beaconBlock, latestBeaconBlock)
+	if beaconBlock == latestBeaconBlock {
+		beaconClient = latestBeaconClient
+	}
+
+	proposalScore := gc.scoreProposal(beaconBlock)
+	logger.Debug("selected proposal",
+		zap.String("client", beaconClient),
+		zap.Float64("score", proposalScore),
+		zap.Duration("latency", time.Since(start)),
+		zap.Bool("blinded", beaconBlock.Blinded),
+		fields.Slot(slot),
+	)
 
 	// Check and log if fee recipient is missing (for both single and multi-client paths)
 	feeRecipient, err := beaconBlock.FeeRecipient()
@@ -152,37 +179,68 @@ func (gc *GoClient) GetBeaconBlock(
 	}
 }
 
-// getProposalParallel races all beacon nodes and collects proposals for a short time
-// and returns the best one according to our score function.
-// If no valid proposals are collected in this time it returns the first valid one
-// it sees.
-//
-// This minimizes latency for time-critical block proposals, while still affording
-// some time for selecting maximally profitable proposals. Remaining requests are
-// canceled immediately to reduce load.
+func (gc *GoClient) getProposal(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	sig phase0.BLSSignature,
+	graffiti [32]byte,
+) (*api.VersionedProposal, string, error) {
+	if len(gc.clients) == 1 {
+		client := gc.clients[0]
+		block, err := gc.fetchProposal(ctx, logger, client, slot, sig, graffiti)
+		return block, client.Address(), err
+	}
+
+	return gc.fetchProposalParallel(ctx, logger, slot, sig, graffiti)
+}
+
+// fetchProposal fetches a proposal from a single client and records metrics
+func (gc *GoClient) fetchProposal(
+	ctx context.Context,
+	logger *zap.Logger,
+	client Client,
+	slot phase0.Slot,
+	sig phase0.BLSSignature,
+	graffiti [32]byte,
+) (*api.VersionedProposal, error) {
+	reqStart := time.Now()
+	resp, err := client.Proposal(ctx, &api.ProposalOpts{
+		Slot:         slot,
+		RandaoReveal: sig,
+		Graffiti:     graffiti,
+	})
+	recordRequest(ctx, gc.log, "Proposal", client, http.MethodGet, false, time.Since(reqStart), err)
+	if err != nil {
+		return nil, errSingleClient(fmt.Errorf("fetch proposal: %w", err), client.Address(), "Proposal")
+	}
+	if resp == nil {
+		return nil, errSingleClient(fmt.Errorf("proposal response is nil"), client.Address(), "Proposal")
+	}
+	if resp.Data == nil {
+		return nil, errSingleClient(fmt.Errorf("proposal response data is nil"), client.Address(), "Proposal")
+	}
+
+	return resp.Data, nil
+}
+
+// fetchProposalParallel races all beacon nodes to select the best block according
+// to our score function.
+// The race ends early if a blinded (MEV) block is encountered, at which point
+// we short circuit and select the current best block.
 //
 // Note: We used to prioritize speed over fee recipient validation - returning
 // the first response rather than waiting to compare fee recipients, as missing
 // a proposal slot is worse than a nil fee recipient.
 // However, it has been observed that the first proposal is usually not the most
 // profitable, so we added a little slack time to collect proposals.
-func (gc *GoClient) getProposalParallel(
+func (gc *GoClient) fetchProposalParallel(
 	ctx context.Context,
 	logger *zap.Logger,
 	slot phase0.Slot,
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
-) (*api.VersionedProposal, error) {
-	// Create a context that we'll use to collect and evaluate proposals for a short time
-	// after this context expires, we will return the current best proposal or the first
-	// on we see if we have none
-	softCtx, cancelSoft := context.WithTimeout(ctx, gc.proposalSoftTimeout)
-	defer cancelSoft()
-
-	// Create a context for hard proposal timeout; we fail if this timeout expires
-	hardCtx, cancelHard := context.WithTimeout(ctx, gc.proposalHardTimeout)
-	defer cancelHard()
-
+) (*api.VersionedProposal, string, error) {
 	type result struct {
 		proposal *api.VersionedProposal
 		err      error
@@ -193,23 +251,22 @@ func (gc *GoClient) getProposalParallel(
 
 	for _, client := range gc.clients {
 		go func(c Client) {
-			proposal, err := gc.fetchProposal(hardCtx, c, slot, sig, graffiti)
+			proposal, err := gc.fetchProposal(ctx, logger, c, slot, sig, graffiti)
 			select {
 			case resultCh <- result{proposal: proposal, err: err, client: c.Address()}:
-			case <-hardCtx.Done():
-				// Context canceled, exit without blocking
+			case <-ctx.Done():
 			}
 		}(client)
 	}
 
 	var errs error
 	var bestProposal *api.VersionedProposal
-	var bestScore float64
 	var bestClient string
+	var bestScore float64
 
 	startCollect := time.Now()
 	pendingClients := len(gc.clients)
-collect:
+loop:
 	for pendingClients > 0 {
 		select {
 		case res := <-resultCh:
@@ -230,14 +287,11 @@ collect:
 				fields.Slot(slot),
 			)
 
-			if bestProposal == nil ||
-				proposalScore > bestScore ||
-				// this condition prefers the blinded proposal even if same score
-				// as the best we have observed so far
-				(res.proposal.Blinded && proposalScore == bestScore) {
-				bestProposal = res.proposal
-				bestScore = proposalScore
+			bestProposal = gc.selectProposal(bestProposal, res.proposal)
+
+			if bestProposal == res.proposal {
 				bestClient = res.client
+				bestScore = proposalScore
 			}
 
 			if res.proposal.Blinded {
@@ -248,12 +302,12 @@ collect:
 				// see https://github.com/ssvlabs/ssv/pull/2631#issuecomment-3678879204
 				// Note: We may want to add an operator option to disable this behavior
 				// in the future.
-				break collect
+				break loop
 			}
 
-		case <-softCtx.Done():
+		case <-ctx.Done():
 			// we are done collecting;
-			break collect
+			break loop
 		}
 	}
 
@@ -267,44 +321,10 @@ collect:
 			fields.Slot(slot),
 		)
 
-		return bestProposal, nil
+		return bestProposal, bestClient, nil
 	}
 
-	logger.Debug("did not receive any valid proposals during the collection period",
-		zap.Int("clients", len(gc.clients)),
-		zap.Int("pending", pendingClients),
-		fields.Slot(slot),
-	)
-
-	// there are potentially still some collectors running, just return the first valid one
-	for pendingClients > 0 {
-		select {
-		case res := <-resultCh:
-			pendingClients--
-
-			if res.err != nil {
-				errs = errors.Join(errs, res.err)
-				continue
-			}
-
-			// Got a successful response, cancel other requests and return.
-			proposalScore := gc.scoreProposal(res.proposal)
-			logger.Debug("received proposal; selected first proposal",
-				zap.String("client", res.client),
-				zap.Float64("score", proposalScore),
-				zap.Duration("latency", time.Since(startCollect)),
-				zap.Int("pending", pendingClients),
-				zap.Bool("blinded", res.proposal.Blinded),
-				fields.Slot(slot),
-			)
-			return res.proposal, nil
-
-		case <-hardCtx.Done():
-			return nil, hardCtx.Err()
-		}
-	}
-
-	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
+	return nil, "", fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
 // scoreProposal computes a score for a beacon proposal.
@@ -314,6 +334,41 @@ func (gc *GoClient) scoreProposal(
 ) float64 {
 	score, _ := new(big.Int).Add(proposal.ConsensusValue, proposal.ExecutionValue).Float64()
 	return score
+}
+
+// selectProposal selects between two, possibly nil, proposals based on score and blind
+func (gc *GoClient) selectProposal(
+	left *api.VersionedProposal,
+	right *api.VersionedProposal,
+) *api.VersionedProposal {
+	if left == nil {
+		return right
+	}
+
+	if right == nil {
+		return left
+	}
+
+	leftScore := gc.scoreProposal(left)
+	rightScore := gc.scoreProposal(right)
+
+	switch {
+	case leftScore < rightScore:
+		return right
+	case rightScore < leftScore:
+		return left
+	default:
+		// tie, select the blinded one
+		if left.Blinded {
+			return left
+		}
+
+		if right.Blinded {
+			return right
+		}
+
+		return left
+	}
 }
 
 // SubmitBeaconBlock submit the block to the node

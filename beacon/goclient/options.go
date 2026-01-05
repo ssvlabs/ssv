@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -13,8 +12,7 @@ const (
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
 	// Proposal timeouts
-	DefaultProposalSoftTimeout = time.Millisecond * 1600
-	DefaultProposalHardTimeout = time.Millisecond * 2600
+	DefaultProposalTimeout = time.Millisecond * 1600
 )
 
 // Options defines beacon client options
@@ -28,11 +26,10 @@ type Options struct {
 	CommonTimeout time.Duration `yaml:"CommonTimeout" env:"WITH_COMMON_TIMEOUT" env-description:"Specifies the common timeout for network operations"`
 	LongTimeout   time.Duration `yaml:"LongTimeout" env:"WITH_LONG_TIMEOUT" env-description:"Specifies the long timeout for network operations"`
 
-	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout; it will be adjusted for the proposer delay"`
-	ProposalHardTimeout time.Duration `yaml:"ProposalHardTimeout" env:"WITH_PROPOSAL_HARD_TIMEOUT" env-description:"Specifies the beacon proposal collection hard timeout; it will be adjusted for the proposer delay"`
+	ProposalTimeout time.Duration `yaml:"ProposalTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection timeout, after proposer delay has ellapsed"`
 }
 
-func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
+func NewOptions(base Options) (Options, error) {
 	options := base
 
 	if options.CommonTimeout == 0 {
@@ -43,26 +40,8 @@ func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
 		options.LongTimeout = DefaultLongTimeout
 	}
 
-	if options.ProposalSoftTimeout == 0 {
-		options.ProposalSoftTimeout = DefaultProposalSoftTimeout
-	}
-
-	if options.ProposalHardTimeout == 0 {
-		options.ProposalHardTimeout = DefaultProposalHardTimeout
-	}
-
-	if proposerDelay > 0 {
-		options.ProposalSoftTimeout -= proposerDelay
-		options.ProposalHardTimeout -= proposerDelay
-	}
-
-	if options.ProposalSoftTimeout < 0 {
-		return Options{}, fmt.Errorf("invalid proposal soft timeout: %s", options.ProposalSoftTimeout)
-	}
-
-	if options.ProposalHardTimeout < options.ProposalSoftTimeout ||
-		options.ProposalHardTimeout < 0 {
-		return Options{}, fmt.Errorf("invalid proposal hard timeout: %s", options.ProposalHardTimeout)
+	if options.ProposalTimeout == 0 {
+		options.ProposalTimeout = DefaultProposalTimeout
 	}
 
 	return options, nil
