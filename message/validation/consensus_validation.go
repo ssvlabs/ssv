@@ -16,8 +16,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/leader"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
@@ -463,5 +463,5 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 }
 
 func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
-	return leader.For(height, round, committee, mv.netCfg)
+	return qbft.RoundRobinProposer(height, round, committee, mv.netCfg)
 }

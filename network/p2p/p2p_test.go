@@ -23,7 +23,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/leader"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -210,7 +210,7 @@ func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round 
 	}
 	sort.Slice(committee, func(i, j int) bool { return committee[i] < committee[j] })
 
-	return leader.For(height, round, committee, networkconfig.TestNetwork)
+	return qbft.RoundRobinProposer(height, round, committee, networkconfig.TestNetwork)
 }
 
 func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
