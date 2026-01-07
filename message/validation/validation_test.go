@@ -37,8 +37,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/leader"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
@@ -196,7 +196,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		leader := leader.For(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
+		leader := qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
 		leaderIndex := slices.Index(committee, leader)
 		require.GreaterOrEqual(t, leaderIndex, 0)
 
@@ -1263,7 +1263,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		leader := leader.For(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
+		leader := qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, netCfg)
 		leaderIndex := slices.Index(committee, leader)
 		require.GreaterOrEqual(t, leaderIndex, 0)
 		nonLeader := committee[(leaderIndex+1)%len(committee)]
@@ -2001,7 +2001,7 @@ func generateSignedMessage(
 	committee := slices.Collect(maps.Keys(ks.Shares))
 	slices.Sort(committee)
 
-	signer := leader.For(qbftMessage.Height, qbftMessage.Round, committee, networkconfig.TestNetwork)
+	signer := qbft.RoundRobinProposer(qbftMessage.Height, qbftMessage.Round, committee, networkconfig.TestNetwork)
 	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[signer], signer, qbftMessage)
 	signedSSVMessage.FullData = fullData
 
