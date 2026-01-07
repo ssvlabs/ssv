@@ -130,13 +130,11 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// proposalSoftTimeout is the maximum time to wait for multiple block proposals in
-	// order to select the best one from multiple clients.
-	// If no proposal has been received after this time elapses, the first valid proposal
-	// seen is returned
-	// proposalHardTimeout is the hard timeout for retrieving any proposals.
+	// proposalSoftTimeout is the collection period during which we gather proposals
+	// from multiple beacon nodes to select the best one. After this timeout, we return
+	// the best proposal seen so far, or wait for the first valid proposal if none
+	// received yet. The parent context (duty deadline) serves as the hard timeout.
 	proposalSoftTimeout time.Duration
-	proposalHardTimeout time.Duration
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
@@ -187,7 +185,6 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 		weightedAttestationDataSoftTimeout: time.Duration(float64(opt.CommonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: opt.CommonTimeout,
 		proposalSoftTimeout:                opt.ProposalSoftTimeout,
-		proposalHardTimeout:                opt.ProposalHardTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}
