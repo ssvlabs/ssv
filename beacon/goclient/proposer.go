@@ -166,6 +166,10 @@ func (gc *GoClient) GetBeaconBlock(
 // a proposal slot is worse than a nil fee recipient.
 // However, it has been observed that the first proposal is usually not the most
 // profitable, so we added a little slack time to collect proposals.
+//
+// The parent context (from duty runner, bounded by slot timing) serves as the hard
+// deadline. We never give up early on getting a block proposal - missing a proposal
+// is catastrophic, so we wait as long as the slot allows.
 func (gc *GoClient) getProposalParallel(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -173,15 +177,15 @@ func (gc *GoClient) getProposalParallel(
 	sig phase0.BLSSignature,
 	graffiti [32]byte,
 ) (*api.VersionedProposal, error) {
-	// Create a context that we'll use to collect and evaluate proposals for a short time
-	// after this context expires, we will return the current best proposal or the first
-	// on we see if we have none
+	// Create a context for the collection period - during this time we gather
+	// proposals from multiple beacon nodes to select the best one.
+	// After this expires, we return the best seen so far or wait for the first valid one.
 	softCtx, cancelSoft := context.WithTimeout(ctx, gc.proposalSoftTimeout)
 	defer cancelSoft()
 
-	// Create a context for hard proposal timeout; we fail if this timeout expires
-	hardCtx, cancelHard := context.WithTimeout(ctx, gc.proposalHardTimeout)
-	defer cancelHard()
+	// Note: We use the parent context (ctx) as the hard deadline, not a separate timeout.
+	// The parent context is bounded by the duty runner's slot timing, ensuring we never
+	// give up prematurely on getting a block proposal.
 
 	type result struct {
 		proposal *api.VersionedProposal
@@ -193,10 +197,10 @@ func (gc *GoClient) getProposalParallel(
 
 	for _, client := range gc.clients {
 		go func(c Client) {
-			proposal, err := gc.fetchProposal(hardCtx, c, slot, sig, graffiti)
+			proposal, err := gc.fetchProposal(ctx, c, slot, sig, graffiti)
 			select {
 			case resultCh <- result{proposal: proposal, err: err, client: c.Address()}:
-			case <-hardCtx.Done():
+			case <-ctx.Done():
 				// Context canceled, exit without blocking
 			}
 		}(client)
@@ -299,8 +303,9 @@ collect:
 			)
 			return res.proposal, nil
 
-		case <-hardCtx.Done():
-			return nil, hardCtx.Err()
+		case <-ctx.Done():
+			// Parent context canceled (duty deadline reached)
+			return nil, ctx.Err()
 		}
 	}
 

@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -12,9 +11,23 @@ const (
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
 
-	// Proposal timeouts
-	DefaultProposalSoftTimeout = time.Millisecond * 1600
-	DefaultProposalHardTimeout = time.Millisecond * 2600
+	// DefaultProposalSoftTimeout is the base collection period during which we
+	// gather proposals from multiple beacon nodes to select the best one.
+	// This value is reduced by the proposer delay to maintain consistent timing.
+	// After the soft timeout, we return the best proposal seen so far, or wait
+	// for the first valid proposal if none received yet.
+	// The parent context (duty deadline) serves as the hard timeout.
+	//
+	// Note: MEV (blinded) blocks return immediately, so this timeout mainly
+	// affects how long we wait for MEV when we first receive a vanilla block.
+	//
+	// Can be overridden via WITH_PROPOSAL_SOFT_TIMEOUT env var. When explicitly
+	// set, the value is used as-is without proposer delay reduction (power user mode).
+	DefaultProposalSoftTimeout = time.Millisecond * 3000
+
+	// MinProposalSoftTimeout is the minimum collection period, even with maximum
+	// proposer delay. This ensures we always have some time to compare proposals.
+	MinProposalSoftTimeout = time.Millisecond * 500
 )
 
 // Options defines beacon client options
@@ -28,8 +41,7 @@ type Options struct {
 	CommonTimeout time.Duration `yaml:"CommonTimeout" env:"WITH_COMMON_TIMEOUT" env-description:"Specifies the common timeout for network operations"`
 	LongTimeout   time.Duration `yaml:"LongTimeout" env:"WITH_LONG_TIMEOUT" env-description:"Specifies the long timeout for network operations"`
 
-	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout; it will be adjusted for the proposer delay"`
-	ProposalHardTimeout time.Duration `yaml:"ProposalHardTimeout" env:"WITH_PROPOSAL_HARD_TIMEOUT" env-description:"Specifies the beacon proposal collection hard timeout; it will be adjusted for the proposer delay"`
+	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes)"`
 }
 
 func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
@@ -43,27 +55,32 @@ func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
 		options.LongTimeout = DefaultLongTimeout
 	}
 
+	// If user explicitly set ProposalSoftTimeout, use it as-is (power user mode).
+	// Otherwise, use default and reduce by proposer delay.
 	if options.ProposalSoftTimeout == 0 {
 		options.ProposalSoftTimeout = DefaultProposalSoftTimeout
+
+		// Reduce soft timeout by proposer delay to maintain consistent timing.
+		// Users with proposer delay start fetching later, so they get a shorter
+		// collection period. This ensures consensus starts at roughly the same
+		// time regardless of proposer delay configuration.
+		//
+		// Examples (with default 3000ms soft timeout):
+		//   - 0ms delay    → 3000ms collection
+		//   - 500ms delay  → 2500ms collection
+		//   - 1500ms delay → 1500ms collection
+		//   - 2500ms delay → 500ms collection (capped at minimum)
+		if proposerDelay > 0 {
+			options.ProposalSoftTimeout -= proposerDelay
+			if options.ProposalSoftTimeout < MinProposalSoftTimeout {
+				options.ProposalSoftTimeout = MinProposalSoftTimeout
+			}
+		}
 	}
 
-	if options.ProposalHardTimeout == 0 {
-		options.ProposalHardTimeout = DefaultProposalHardTimeout
-	}
-
-	if proposerDelay > 0 {
-		options.ProposalSoftTimeout -= proposerDelay
-		options.ProposalHardTimeout -= proposerDelay
-	}
-
-	if options.ProposalSoftTimeout < 0 {
-		return Options{}, fmt.Errorf("invalid proposal soft timeout: %s", options.ProposalSoftTimeout)
-	}
-
-	if options.ProposalHardTimeout < options.ProposalSoftTimeout ||
-		options.ProposalHardTimeout < 0 {
-		return Options{}, fmt.Errorf("invalid proposal hard timeout: %s", options.ProposalHardTimeout)
-	}
+	// Note: There is no hard timeout for proposals. The parent context from the
+	// duty runner (bounded by slot timing) serves as the ultimate deadline.
+	// This ensures we never give up early on getting a block proposal.
 
 	return options, nil
 }
