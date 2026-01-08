@@ -25,15 +25,10 @@ jobs:
           cache: true
           cache-dependency-path: |
             go.sum
-            tool.sum
             ssvsigner/go.sum
 
-      - name: Download tool deps (pinned in tool.mod/tool.sum)
-        env:
-          GOFLAGS: -mod=readonly
-        run: go mod download -modfile=tool.mod
+      - name: Run tools
+        run: make tools
 
       - name: Run make lint
-        env:
-          GOFLAGS: -mod=readonly
         run: make lint
