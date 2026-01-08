@@ -54,7 +54,6 @@ type CommitteeRunner struct {
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
 	measurements        *dutyMeasurements
-	mfpStrict           bool
 
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
@@ -73,7 +72,6 @@ func NewCommitteeRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	dutyGuard CommitteeDutyGuard,
 	doppelgangerHandler DoppelgangerProvider,
-	mfpStrict bool,
 ) (Runner, error) {
 	if len(share) == 0 {
 		return nil, errors.New("no shares")
@@ -96,7 +94,6 @@ func NewCommitteeRunner(
 		DutyGuard:           dutyGuard,
 		doppelgangerHandler: doppelgangerHandler,
 		measurements:        newMeasurementsStore(),
-		mfpStrict:           mfpStrict,
 	}, nil
 }
 
@@ -1045,9 +1042,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 		r.signer,
 		slot,
 		r.attestingValidators,
-		r.GetNetworkConfig().EstimatedCurrentEpoch(),
 		vote,
-		r.mfpStrict,
 	)
 	if err := r.BaseRunner.decide(ctx, logger, duty.DutySlot(), vote, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)
