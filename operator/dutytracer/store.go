@@ -83,12 +83,12 @@ func (c *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Sl
 }
 
 func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error) {
-	duties := []*exporter.ValidatorDutyTrace{}
 	var errs *multierror.Error
 
 	storeDuties, err := c.store.GetValidatorDuties(role, slot)
 	errs = multierror.Append(errs, err)
 
+	duties := make([]*exporter.ValidatorDutyTrace, 0, len(storeDuties))
 	for _, duty := range storeDuties {
 		duties = append(duties, duty.DeepCopy())
 	}

@@ -123,7 +123,7 @@ func DefaultConverter(addSource bool, replaceAttr func(groups []string, a slog.A
 	// handler formatter
 	fields := AttrsToMap(attrs...)
 
-	output := []zapcore.Field{}
+	output := make([]zapcore.Field, 0, len(fields))
 	for k, v := range fields {
 		output = append(output, zap.Any(k, v))
 	}

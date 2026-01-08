@@ -338,8 +338,9 @@ var ConstructBaseRunnerWithShareMap = func(
 		// Identifier
 		var ownerID []byte
 		if role == spectypes.RoleCommittee {
-			committee := make([]uint64, 0)
-			for _, op := range keySetInstance.Committee() {
+			ops := keySetInstance.Committee()
+			committee := make([]uint64, 0, len(ops))
+			for _, op := range ops {
 				committee = append(committee, op.Signer)
 			}
 			committeeID := spectypes.GetCommitteeID(committee)

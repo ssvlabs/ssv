@@ -307,8 +307,9 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 		panic("no beacon or committee duty")
 	}
 
-	msgs := make([]*spectypes.SignedSSVMessage, 0)
-	for _, msg := range m["Messages"].([]any) {
+	rawMsgs := m["Messages"].([]any)
+	msgs := make([]*spectypes.SignedSSVMessage, 0, len(rawMsgs))
+	for _, msg := range rawMsgs {
 		byts, err := json.Marshal(msg)
 		require.NoError(t, err)
 		typedMsg := &spectypes.SignedSSVMessage{}
