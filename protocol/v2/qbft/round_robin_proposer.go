@@ -1,6 +1,8 @@
 package qbft
 
 import (
+	"sort"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -18,6 +20,13 @@ type networkConfig interface {
 // First height starts with index 0.
 // Boole fork adds an epoch-derived offset (from network config) to introduce additional variability.
 func RoundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID, netCfg networkConfig) spectypes.OperatorID {
+	if !sort.SliceIsSorted(committee, func(i, j int) bool { return committee[i] < committee[j] }) {
+		sorted := make([]spectypes.OperatorID, len(committee))
+		copy(sorted, committee)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+		committee = sorted
+	}
+
 	// compute epoch-derived offset for variability (= 0 in pre-Boole fork), name ethEpoch kept from spec code.
 	ethEpoch := uint64(0)
 	epoch := netCfg.EstimatedEpochAtSlot(phase0.Slot(height))

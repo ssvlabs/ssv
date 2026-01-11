@@ -1,6 +1,7 @@
 package qbft
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,4 +36,16 @@ func TestRoundRobinProposer_BooleFork_OffsetFromSlotsPerEpoch(t *testing.T) {
 
 	// height%4=0 and offset=2 -> index=2 -> third operator.
 	require.Equal(t, spectypes.OperatorID(3), RoundRobinProposer(height, round, committee, netCfg))
+}
+
+func TestRoundRobinProposer_CommitteeOrderDoesNotMatter(t *testing.T) {
+	netCfg := &networkconfig.Network{
+		Beacon: &networkconfig.Beacon{SlotsPerEpoch: 32},
+		SSV:    &networkconfig.SSV{Forks: networkconfig.SSVForks{Boole: math.MaxUint64}},
+	}
+	height := specqbft.Height(2138337) // height%4=1, pre-fork
+	round := specqbft.FirstRound
+
+	require.Equal(t, spectypes.OperatorID(10), RoundRobinProposer(height, round, []spectypes.OperatorID{9, 10, 11, 12}, netCfg))
+	require.Equal(t, spectypes.OperatorID(10), RoundRobinProposer(height, round, []spectypes.OperatorID{12, 9, 10, 11}, netCfg))
 }
