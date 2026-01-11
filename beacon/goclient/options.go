@@ -23,7 +23,7 @@ const (
 	//
 	// Can be overridden via WITH_PROPOSAL_SOFT_TIMEOUT env var. When explicitly
 	// set, the value is used as-is without proposer delay reduction (power user mode).
-	DefaultProposalSoftTimeout = time.Millisecond * 3000
+	DefaultProposalSoftTimeout = time.Millisecond * 1800
 
 	// MinProposalSoftTimeout is the minimum collection period, even with maximum
 	// proposer delay. This ensures we always have some time to compare proposals.
@@ -65,11 +65,11 @@ func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
 		// collection period. This ensures consensus starts at roughly the same
 		// time regardless of proposer delay configuration.
 		//
-		// Examples (with default 3000ms soft timeout):
-		//   - 0ms delay    → 3000ms collection
-		//   - 500ms delay  → 2500ms collection
-		//   - 1500ms delay → 1500ms collection
-		//   - 2500ms delay → 500ms collection (capped at minimum)
+		// Examples (with default 1800ms soft timeout):
+		//   - 0ms delay    → 1800ms collection
+		//   - 500ms delay  → 1300ms collection
+		//   - 1000ms delay → 800ms collection
+		//   - 1300ms delay → 500ms collection (capped at minimum)
 		if proposerDelay > 0 {
 			options.ProposalSoftTimeout -= proposerDelay
 			if options.ProposalSoftTimeout < MinProposalSoftTimeout {
