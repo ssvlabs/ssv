@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -208,7 +207,6 @@ func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round 
 	for _, member := range share.Committee {
 		committee = append(committee, member.Signer)
 	}
-	sort.Slice(committee, func(i, j int) bool { return committee[i] < committee[j] })
 
 	return qbft.RoundRobinProposer(height, round, committee, networkconfig.TestNetwork)
 }
