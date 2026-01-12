@@ -42,6 +42,8 @@ func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
 	// If user explicitly set ProposalSoftTimeout, use it as-is (power user mode).
 	// Otherwise, use the default value and reduce it by proposer delay if needed.
 	if options.ProposalSoftTimeout == 0 {
+		// The default value shouldn't be too high because an operator might not be able to participate
+		// in QBFT round 2 (or finish it in time) if it is roughly > 2000 ms.
 		options.ProposalSoftTimeout = time.Millisecond * 1800
 		// Reduce soft timeout by proposer delay to maintain consistent duty-execution timelines
 		// for different operators in the cluster, ensuring QBFT consensus starts at roughly
