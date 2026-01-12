@@ -19,7 +19,11 @@ type networkConfig interface {
 // Each new height has a different first round proposer which is +1 from the previous height.
 // First height starts with index 0.
 // Boole fork adds an epoch-derived offset (from network config) to introduce additional variability.
-func RoundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID, netCfg networkConfig) spectypes.OperatorID {
+func RoundRobinProposer(
+	height specqbft.Height,
+	round specqbft.Round,
+	committee []spectypes.OperatorID,
+	netCfg networkConfig) spectypes.OperatorID {
 	if !sort.SliceIsSorted(committee, func(i, j int) bool { return committee[i] < committee[j] }) {
 		sorted := make([]spectypes.OperatorID, len(committee))
 		copy(sorted, committee)
