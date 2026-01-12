@@ -25,7 +25,7 @@ type Options struct {
 	CommonTimeout time.Duration `yaml:"CommonTimeout" env:"WITH_COMMON_TIMEOUT" env-description:"Specifies the common timeout for network operations"`
 	LongTimeout   time.Duration `yaml:"LongTimeout" env:"WITH_LONG_TIMEOUT" env-description:"Specifies the long timeout for network operations"`
 
-	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Note: he 1st MEV (blinded) block is accepted immediately, so this timeout mainly affects how long we wait for an MEV block before giving up deciding to use a vanilla block instead (if we got one already). This value cannot be set any lower than 500ms to ensure there is enough time for the Beacon node to serve the block-fetch request"`
+	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Note: the 1st MEV (blinded) block is accepted immediately, so this timeout mainly affects how long we wait for an MEV block before giving up deciding to use a vanilla block instead (if we got one already). This value cannot be set any lower than 500ms to ensure there is enough time for the Beacon node to serve the block-fetch request"`
 }
 
 func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
