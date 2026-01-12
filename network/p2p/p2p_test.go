@@ -22,7 +22,6 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
-	qbft "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -203,12 +202,14 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 
 func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 	share := spectestingutils.TestingShare(ks, 1)
-	committee := make([]spectypes.OperatorID, 0, len(share.Committee))
-	for _, member := range share.Committee {
-		committee = append(committee, member.Signer)
+
+	firstRoundIndex := 0
+	if height != specqbft.FirstHeight {
+		firstRoundIndex += int(height) % len(share.Committee)
 	}
 
-	return qbft.RoundRobinProposer(height, round, committee, networkconfig.TestNetwork)
+	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(share.Committee)
+	return share.Committee[index].Signer
 }
 
 func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
