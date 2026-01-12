@@ -64,7 +64,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextEpoch(ctx, slot)
+				tickCtx, cancel := h.ctxWithDeadlineInOneEpoch(ctx, slot)
 				defer cancel()
 
 				h.processExecution(tickCtx, period, epoch, slot)

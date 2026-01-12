@@ -86,7 +86,7 @@ func (h *baseHandler) ctxWithDeadlineOnNextSlot(ctx context.Context, slot phase0
 	return h.ctxWithDeadlineOnSlot(ctx, slot+1)
 }
 
-func (h *baseHandler) ctxWithDeadlineOnNextEpoch(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
+func (h *baseHandler) ctxWithDeadlineInOneEpoch(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
 	// Attestation and aggregation submissions are rewarded as long as they are included within
 	// SLOTS_PER_EPOCH slots of their target slot (i.e., from target slot up to and including target + SLOTS_PER_EPOCH).
 	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
