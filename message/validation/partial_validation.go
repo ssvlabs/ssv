@@ -150,7 +150,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee { // Rule only for validator runners
+	if !mv.committeeRole(role) { // Rule only for validator runners
 		maxSlot := signerStateBySlot.MaxSlot()
 		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
@@ -171,6 +171,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 RandaoPartialSig and 1 PostConsensusPartialSig for Proposer
 		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Aggregator
 		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Sync committee contribution
+		// - 1 AggregatorCommitteePartialSig and 1 PostConsensusPartialSig for AggregatorCommittee
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
 		if err := signerState.SeenMsgTypes.ValidatePartialSignatureMessage(partialSignatureMessages); err != nil {
@@ -179,16 +180,12 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	}
 
 	// Rule: current slot must be between duty's starting slot and:
-	// - duty's starting slot + 34 (committee and aggregation)
+	// - duty's starting slot + 34 (committee, aggregator, and aggregator committee)
 	// - duty's starting slot + 3 (other duties)
 	if err := mv.validateSlotTime(messageSlot, role, receivedAt); err != nil {
 		return err
 	}
 
-	// Rule: valid number of duties per epoch:
-	// - 2 for aggregation, voluntary exit and validator registration
-	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
-	// - else, accept
 	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeInfo.validatorIndices, signerStateBySlot); err != nil {
 		return err
 	}
@@ -197,13 +194,20 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
 
 	role = signedSSVMessage.SSVMessage.MsgID.GetRoleType()
-	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
-		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster
-		// #nosec G115
-		messageLimit := min(2*clusterValidatorCount, clusterValidatorCount+int(mv.netCfg.SyncCommitteeSize))
+	if mv.committeeRole(role) {
+		maxDutiesForSC := 1
 		if role == spectypes.RoleAggregatorCommittee {
-			messageLimit = clusterValidatorCount * maxSignatures
+			maxDutiesForSC = 4
 		}
+
+		maxDutiesForRole := maxDutiesForSC + 1
+
+		// Rule: The number of signatures must be:
+		// - <= min(2*V, V + SYNC_COMMITTEE_SIZE) for committee,
+		// - <= min(5*V, V + 4*SYNC_COMMITTEE_SIZE) for aggregator committee,
+		// where V is the number of validators assigned to the cluster
+		// #nosec G115
+		messageLimit := min(maxDutiesForRole*clusterValidatorCount, clusterValidatorCount+maxDutiesForSC*int(mv.netCfg.SyncCommitteeSize))
 		if partialSignatureMessageCount > messageLimit {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
@@ -217,15 +221,11 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		validatorIndexCount := make(map[phase0.ValidatorIndex]int)
 		for _, message := range partialSignatureMessages.Messages {
 			validatorIndexCount[message.ValidatorIndex]++
-			if role == spectypes.RoleCommittee {
-				if validatorIndexCount[message.ValidatorIndex] > 2 {
-					return ErrTripleValidatorIndexInPartialSignatures
-				}
-			}
-			if role == spectypes.RoleAggregatorCommittee {
-				if validatorIndexCount[message.ValidatorIndex] > 5 {
-					return ErrSextupleValidatorIndexInPartialSignatures
-				}
+			if cnt := validatorIndexCount[message.ValidatorIndex]; cnt > maxDutiesForRole {
+				e := ErrTooManyEqualValidatorIndicesInPartialSignatures
+				e.got = cnt
+				e.want = fmt.Sprintf("<=%d", maxDutiesForRole)
+				return e
 			}
 		}
 	} else if role == spectypes.RoleSyncCommitteeContribution {

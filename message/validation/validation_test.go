@@ -1825,7 +1825,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorContains(t, err, ErrTripleValidatorIndexInPartialSignatures.Error())
+		require.ErrorContains(t, err, ErrTooManyEqualValidatorIndicesInPartialSignatures.Error())
 	})
 
 	// Receive a partial signature message with validator index mismatch

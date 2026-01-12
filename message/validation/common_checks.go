@@ -72,6 +72,10 @@ func (mv *messageValidator) validateDutyCount(
 		dutyCount++
 	}
 
+	// Rule: valid number of duties per epoch:
+	// - 2 for aggregation, voluntary exit and validator registration
+	// - 2*V for Committee and AggregatorCommittee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
+	// - else, accept
 	if dutyCount > dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
