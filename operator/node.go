@@ -319,21 +319,14 @@ func (n *Node) handleDecidedViaExporter(nm *api.NetworkMessage) {
 	participations := wsParticipationsFromCore(result)
 
 	var unexpectedErr error
-	if errs != nil && errs.ErrorOrNil() != nil {
-		filtered := filterOutDutyNotFoundErrors(errs)
-		if filtered != nil && filtered.ErrorOrNil() != nil {
-			var unexpected *multierror.Error
-			for _, e := range filtered.Errors {
-				if e == nil {
-					continue
-				}
-				// Preserve legacy WS leniency: treat validation errors as "no messages".
-				if isExporterValidationError(e) {
-					continue
-				}
-				unexpected = multierror.Append(unexpected, e)
+	filtered := filterOutDutyNotFoundErrors(errs)
+	if filtered.ErrorOrNil() != nil {
+		for _, e := range filtered.Errors {
+			// Preserve legacy WS leniency: treat validation errors as "no messages".
+			if isExporterValidationError(e) {
+				continue
 			}
-			unexpectedErr = unexpected.ErrorOrNil()
+			unexpectedErr = e
 		}
 	}
 
@@ -403,7 +396,7 @@ func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
 	}
 	var filtered *multierror.Error
 	for _, err := range e.Errors {
-		if !isNotFoundError(err) {
+		if err != nil && !isNotFoundError(err) {
 			filtered = multierror.Append(filtered, err)
 		}
 	}
