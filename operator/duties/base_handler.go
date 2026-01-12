@@ -87,10 +87,10 @@ func (h *baseHandler) ctxWithDeadlineOnNextSlot(ctx context.Context, slot phase0
 }
 
 func (h *baseHandler) ctxWithDeadlineOnNextEpoch(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
-	// Attestation and aggregation submissions are rewarded as long as they are finished within
-	// 1 epoch after the target slot: the target slot itself, plus the next epoch after that
-	// (https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards), hence
-	// we are setting the deadline here to target slot + slots per epoch + 1 (deadline slot is excluded).
+	// Attestation and aggregation submissions are rewarded as long as they are included within
+	// SLOTS_PER_EPOCH slots of their target slot (i.e., from target slot up to and including target + SLOTS_PER_EPOCH).
+	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
+	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
 	slotsPerEpoch := phase0.Slot(h.beaconConfig.SlotsPerEpoch)
 	return h.ctxWithDeadlineOnSlot(ctx, slot+slotsPerEpoch+1)
 }
