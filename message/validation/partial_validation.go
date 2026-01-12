@@ -195,19 +195,19 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 
 	role = signedSSVMessage.SSVMessage.MsgID.GetRoleType()
 	if mv.committeeRole(role) {
-		maxDutiesForSC := 1
+		scSubnets := 1
 		if role == spectypes.RoleAggregatorCommittee {
-			maxDutiesForSC = 4
+			scSubnets = 4
 		}
 
-		maxDutiesForRole := maxDutiesForSC + 1
+		maxDutiesForRole := scSubnets + 1
 
 		// Rule: The number of signatures must be:
 		// - <= min(2*V, V + SYNC_COMMITTEE_SIZE) for committee,
 		// - <= min(5*V, V + 4*SYNC_COMMITTEE_SIZE) for aggregator committee,
 		// where V is the number of validators assigned to the cluster
 		// #nosec G115
-		messageLimit := min(maxDutiesForRole*clusterValidatorCount, clusterValidatorCount+maxDutiesForSC*int(mv.netCfg.SyncCommitteeSize))
+		messageLimit := min(maxDutiesForRole*clusterValidatorCount, clusterValidatorCount+scSubnets*int(mv.netCfg.SyncCommitteeSize))
 		if partialSignatureMessageCount > messageLimit {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
