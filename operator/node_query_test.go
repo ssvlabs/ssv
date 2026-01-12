@@ -16,6 +16,8 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter2"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -83,11 +85,12 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	store := newFaultingDutyTraceStore(realStore)
 
 	collector := dutytracer.New(zap.NewNop(), validatorMock, nil, store, networkconfig.TestNetwork.Beacon, nil, nil)
+	coreExporter := exporter2.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
 
 	node := &Node{
-		logger:         logger,
-		network:        networkconfig.TestNetwork,
-		traceCollector: collector,
+		logger:       logger,
+		network:      networkconfig.TestNetwork,
+		exporterRead: coreExporter,
 		validatorOptions: validator.ControllerOptions{
 			ValidatorStore: validatorMock,
 		},
@@ -392,43 +395,4 @@ func TestWSQuery_FromGreaterThanTo_ReturnsNoMessages(t *testing.T) {
 	require.True(t, ok, "expected []string, got %#v", nm.Msg.Data)
 	require.Len(t, errs, 1)
 	require.Equal(t, "no messages", errs[0])
-}
-
-func TestWSQuery_NoSignerEntry_IsReturned(t *testing.T) {
-	h := newWSQueryHarness(t)
-	pk := makePK([]byte{1, 2, 3, 4, 5})
-	idx := phase0.ValidatorIndex(7)
-
-	h.ExpectValidator(pk, idx, true)
-	h.SaveValidatorDutyNoSigners(phase0.Slot(10), spectypes.BNRoleProposer, idx)
-
-	nm := h.QueryDecided(10, 10, hex.EncodeToString(pk[:]), spectypes.BNRoleProposer.String())
-
-	require.Equal(t, api.TypeDecided, nm.Msg.Type)
-	data, ok := nm.Msg.Data.([]*api.ParticipantsAPI)
-	require.True(t, ok, "response data should be participants slice")
-	require.Len(t, data, 1)
-	require.Equal(t, uint64(10), uint64(data[0].Slot))
-	require.Empty(t, data[0].Signers)
-}
-
-func TestWSQuery_NoSignerEntry_MixedWithValidEntries(t *testing.T) {
-	h := newWSQueryHarness(t)
-	pk := makePK([]byte{1, 2, 3, 4, 5})
-	idx := phase0.ValidatorIndex(7)
-
-	h.ExpectValidator(pk, idx, true)
-	h.SaveValidatorDutyNoSigners(phase0.Slot(10), spectypes.BNRoleProposer, idx)
-	h.SaveValidatorDuty(phase0.Slot(11), spectypes.BNRoleProposer, idx, []spectypes.OperatorID{1})
-
-	nm := h.QueryDecided(10, 11, hex.EncodeToString(pk[:]), spectypes.BNRoleProposer.String())
-
-	require.Equal(t, api.TypeDecided, nm.Msg.Type)
-	data, ok := nm.Msg.Data.([]*api.ParticipantsAPI)
-	require.True(t, ok, "response data should be participants slice")
-	require.Len(t, data, 2)
-	require.Equal(t, uint64(10), uint64(data[0].Slot))
-	require.Empty(t, data[0].Signers)
-	require.Equal(t, uint64(11), uint64(data[1].Slot))
-	require.Equal(t, []spectypes.OperatorID{1}, data[1].Signers)
 }

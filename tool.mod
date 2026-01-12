@@ -8,7 +8,7 @@ toolchain go1.24.10
 tool (
 	github.com/ethereum/go-ethereum/cmd/abigen
 	github.com/ferranbt/fastssz/sszgen
-	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	github.com/golangci/golangci-lint/v2/cmd/golangci-lint v2.4.0
 	github.com/swaggo/swag/cmd/swag
 	go.uber.org/mock/mockgen
 	golang.org/x/tools/cmd/deadcode
