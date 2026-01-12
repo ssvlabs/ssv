@@ -23,7 +23,8 @@ func RoundRobinProposer(
 	height specqbft.Height,
 	round specqbft.Round,
 	committee []spectypes.OperatorID,
-	netCfg networkConfig) spectypes.OperatorID {
+	netCfg networkConfig,
+) spectypes.OperatorID {
 	if !sort.SliceIsSorted(committee, func(i, j int) bool { return committee[i] < committee[j] }) {
 		sorted := make([]spectypes.OperatorID, len(committee))
 		copy(sorted, committee)
