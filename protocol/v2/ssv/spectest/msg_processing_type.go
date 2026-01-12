@@ -320,7 +320,6 @@ var baseCommitteeWithRunner = func(
 				runnerSample.GetOperatorSigner(),
 				committeeDutyGuard,
 				dgHandler,
-				false,
 			)
 			return r, err
 		case *spectypes.AggregatorCommitteeDuty:

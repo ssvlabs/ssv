@@ -29,22 +29,21 @@ type Options struct {
 
 // CommonOptions represents options that all validators share.
 type CommonOptions struct {
-	NetworkConfig                *networkconfig.Network
-	Network                      specqbft.Network
-	Beacon                       beacon.BeaconNode
-	Storage                      *storage.ParticipantStores
-	Signer                       ekm.BeaconSigner
-	OperatorSigner               ssvtypes.OperatorSigner
-	DoppelgangerHandler          runner.DoppelgangerProvider
-	NewDecidedHandler            qbftctrl.NewDecidedHandler
-	FullNode                     bool
-	ExporterOptions              exporter.Options
-	QueueSize                    int
-	GasLimit                     uint64
-	MessageValidator             validation.MessageValidator
-	Graffiti                     []byte
-	ProposerDelay                time.Duration
-	MajorityForkProtectionStrict bool
+	NetworkConfig       *networkconfig.Network
+	Network             specqbft.Network
+	Beacon              beacon.BeaconNode
+	Storage             *storage.ParticipantStores
+	Signer              ekm.BeaconSigner
+	OperatorSigner      ssvtypes.OperatorSigner
+	DoppelgangerHandler runner.DoppelgangerProvider
+	NewDecidedHandler   qbftctrl.NewDecidedHandler
+	FullNode            bool
+	ExporterOptions     exporter.Options
+	QueueSize           int
+	GasLimit            uint64
+	MessageValidator    validation.MessageValidator
+	Graffiti            []byte
+	ProposerDelay       time.Duration
 }
 
 func NewCommonOptions(
@@ -63,25 +62,23 @@ func NewCommonOptions(
 	messageValidator validation.MessageValidator,
 	graffiti []byte,
 	proposerDelay time.Duration,
-	mfpStrict bool,
 ) *CommonOptions {
 	result := &CommonOptions{
-		NetworkConfig:                networkConfig,
-		Network:                      network,
-		Beacon:                       beacon,
-		Storage:                      storage,
-		Signer:                       signer,
-		OperatorSigner:               operatorSigner,
-		DoppelgangerHandler:          doppelgangerHandler,
-		NewDecidedHandler:            newDecidedHandler,
-		FullNode:                     fullNode,
-		ExporterOptions:              exporterOptions,
-		QueueSize:                    1000,
-		GasLimit:                     gasLimit,
-		MessageValidator:             messageValidator,
-		Graffiti:                     graffiti,
-		ProposerDelay:                proposerDelay,
-		MajorityForkProtectionStrict: mfpStrict,
+		NetworkConfig:       networkConfig,
+		Network:             network,
+		Beacon:              beacon,
+		Storage:             storage,
+		Signer:              signer,
+		OperatorSigner:      operatorSigner,
+		DoppelgangerHandler: doppelgangerHandler,
+		NewDecidedHandler:   newDecidedHandler,
+		FullNode:            fullNode,
+		ExporterOptions:     exporterOptions,
+		QueueSize:           1000,
+		GasLimit:            gasLimit,
+		MessageValidator:    messageValidator,
+		Graffiti:            graffiti,
+		ProposerDelay:       proposerDelay,
 	}
 
 	// If full node, increase the queue size to make enough room for history sync batches to be pushed whole.

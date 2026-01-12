@@ -98,7 +98,7 @@ var ConstructBaseRunner = func(
 	switch role {
 	case spectypes.RoleCommittee:
 		valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch, vote, false)
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, vote)
 	case spectypes.RoleAggregatorCommittee:
 		valCheck = ssv.NewAggregatorCommitteeChecker()
 	case spectypes.RoleProposer:
@@ -149,7 +149,6 @@ var ConstructBaseRunner = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
-			false,
 		)
 	case spectypes.RoleAggregatorCommittee:
 		rnr, err := runner.NewAggregatorCommitteeRunner(
@@ -250,7 +249,6 @@ var ConstructBaseRunner = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
-			false,
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
@@ -368,8 +366,9 @@ var ConstructBaseRunnerWithShareMap = func(
 		switch role {
 		case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
 			// Committee-scoped identifiers: use CommitteeID for both committee and aggregator-committee runners
-			committee := make([]uint64, 0)
-			for _, op := range keySetInstance.Committee() {
+			ops := keySetInstance.Committee()
+			committee := make([]uint64, 0, len(ops))
+			for _, op := range ops {
 				committee = append(committee, op.Signer)
 			}
 			committeeID := spectypes.GetCommitteeID(committee)
@@ -389,7 +388,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		switch role {
 		case spectypes.RoleCommittee:
 			valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-				sharePubKeys, spectestingutils.TestingDutyEpoch, vote, false)
+				sharePubKeys, vote)
 		case spectypes.RoleAggregatorCommittee:
 			valCheck = ssv.NewAggregatorCommitteeChecker()
 		case spectypes.RoleProposer:
@@ -435,7 +434,6 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
-			false,
 		)
 	case spectypes.RoleAggregatorCommittee:
 		rnr, err := runner.NewAggregatorCommitteeRunner(
@@ -536,7 +534,6 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			dutyGuard,
 			dgHandler,
-			false,
 		)
 		if r != nil {
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType

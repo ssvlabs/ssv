@@ -102,7 +102,7 @@ func TestSharesStorage(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	var persistedActiveValidatorShares []*ssvtypes.SSVShare
+	persistedActiveValidatorShares := make([]*ssvtypes.SSVShare, 0, 2)
 	persistedActiveValidatorShares = append(persistedActiveValidatorShares,
 		generateRandomShare(splitKeys, v1.ValidatorStateActiveOngoing, true),
 		generateRandomShare(splitKeys, v1.ValidatorStateActiveOngoing, false))

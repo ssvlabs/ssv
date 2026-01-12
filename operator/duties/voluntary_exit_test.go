@@ -179,7 +179,7 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 }
 
 func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.ValidatorDuty {
-	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0, len(descriptors))
 	for _, d := range descriptors {
 		expectedDuties = append(expectedDuties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleVoluntaryExit,

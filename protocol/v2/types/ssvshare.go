@@ -212,7 +212,7 @@ func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	slices.Sort(operatorIds)
 
 	// Encode the address and operator IDs in the same way as Solidity's abi.encodePacked
-	var data []byte
+	data := make([]byte, 0, 20+32*len(operatorIds))
 	data = append(data, address.Bytes()...) // Address is 20 bytes
 	for _, id := range operatorIds {
 		idBytes := make([]byte, 32)                  // Each ID should be 32 bytes

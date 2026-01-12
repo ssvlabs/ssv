@@ -287,7 +287,11 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.NotNil(t, dd)
 	require.Len(t, dd, 2)
 
-	signers := []spectypes.OperatorID{}
+	signersCap := 0
+	for _, decided := range dd {
+		signersCap += len(decided.Signers)
+	}
+	signers := make([]spectypes.OperatorID, 0, signersCap)
 	for _, decided := range dd {
 		signers = append(signers, decided.Signers...)
 	}
