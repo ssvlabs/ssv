@@ -44,7 +44,8 @@ func NewOptions(base Options, proposerDelay time.Duration) (Options, error) {
 	if options.ProposalSoftTimeout == 0 {
 		// The default value shouldn't be too high because an operator might not be able to participate
 		// in QBFT round 2 (or finish it in time) if it is roughly > 2000 ms.
-		options.ProposalSoftTimeout = time.Millisecond * 1800
+		const defaultProposalSoftTimeout = time.Millisecond * 1800
+		options.ProposalSoftTimeout = defaultProposalSoftTimeout
 		// Reduce soft timeout by proposer delay to maintain consistent duty-execution timelines
 		// for different operators in the cluster, ensuring QBFT consensus starts at roughly
 		// the same time (timing out round 1 at roughly the same time) regardless of proposer
