@@ -269,7 +269,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
-		msgSize := maxSignedMsgSize*2 + MessageOffset
+		msgSize := MaxEncodedMsgSize + 1
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -371,7 +371,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadDataSize)
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxEncodedConsensusMsgSize)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
