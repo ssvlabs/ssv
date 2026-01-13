@@ -11,7 +11,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ValueChecker interface {
@@ -85,7 +84,7 @@ func NewAggregatorCommitteeChecker() ValueChecker {
 }
 
 func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
-	cd := &ssvtypes.AggregatorCommitteeConsensusData{}
+	cd := &spectypes.AggregatorCommitteeConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return spectypes.WrapError(
 			spectypes.AggCommConsensusDataDecodeErrorCode,
@@ -193,8 +192,8 @@ func checkValidatorConsensusData(
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) (*spectypes.ValidatorConsensusData, error) {
-	cd := &spectypes.ValidatorConsensusData{}
+) (*spectypes.ProposerConsensusData, error) {
+	cd := &spectypes.ProposerConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}

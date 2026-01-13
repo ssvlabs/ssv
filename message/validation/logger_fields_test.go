@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestBuildLoggerFields(t *testing.T) {
@@ -130,7 +131,7 @@ func TestBuildLoggerFields(t *testing.T) {
 
 	t.Run("partial signature message with valid data", func(t *testing.T) {
 		partialSigMsg := &spectypes.PartialSignatureMessages{
-			Type: spectypes.SelectionProofPartialSig,
+			Type: ssvtypes.SelectionProofPartialSig,
 			Slot: 67890,
 			Messages: []*spectypes.PartialSignatureMessage{
 				{
@@ -253,7 +254,7 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 		// which resulted in logs showing: qbft_message_type: "proposal" (because 0 = proposal)
 
 		partialSigMsg := &spectypes.PartialSignatureMessages{
-			Type: spectypes.SelectionProofPartialSig,
+			Type: ssvtypes.SelectionProofPartialSig,
 			Slot: 12345,
 			Messages: []*spectypes.PartialSignatureMessage{
 				{
@@ -336,7 +337,7 @@ func TestAsZapFields(t *testing.T) {
 	t.Run("with consensus fields", func(t *testing.T) {
 		lf := LoggerFields{
 			DutyExecutorID: []byte{1, 2, 3},
-			Role:           spectypes.RoleAggregator,
+			Role:           ssvtypes.RoleAggregator,
 			SSVMessageType: spectypes.SSVConsensusMsgType,
 			Slot:           12345,
 			Signers:        []spectypes.OperatorID{1, 2, 3, 4},
@@ -356,7 +357,7 @@ func TestAsZapFields(t *testing.T) {
 	t.Run("without consensus fields", func(t *testing.T) {
 		lf := LoggerFields{
 			DutyExecutorID: []byte{1, 2, 3},
-			Role:           spectypes.RoleAggregator,
+			Role:           ssvtypes.RoleAggregator,
 			SSVMessageType: spectypes.SSVPartialSignatureMsgType,
 			Slot:           12345,
 			Signers:        []spectypes.OperatorID{1, 2, 3, 4},

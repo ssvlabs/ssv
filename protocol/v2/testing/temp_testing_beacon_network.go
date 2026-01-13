@@ -86,7 +86,29 @@ func (bn *BeaconNodeWrapped) SubmitSignedContributionAndProof(ctx context.Contex
 	return bn.Bn.SubmitSignedContributionAndProof(contribution)
 }
 func (bn *BeaconNodeWrapped) SubmitSignedAggregateSelectionProof(ctx context.Context, msg *spec.VersionedSignedAggregateAndProof) error {
-	return bn.Bn.SubmitSignedAggregateSelectionProof(msg)
+	var root [32]byte
+
+	switch msg.Version {
+	case spec.DataVersionPhase0:
+		root, _ = msg.Phase0.HashTreeRoot()
+	case spec.DataVersionAltair:
+		root, _ = msg.Altair.HashTreeRoot()
+	case spec.DataVersionBellatrix:
+		root, _ = msg.Bellatrix.HashTreeRoot()
+	case spec.DataVersionCapella:
+		root, _ = msg.Capella.HashTreeRoot()
+	case spec.DataVersionDeneb:
+		root, _ = msg.Deneb.HashTreeRoot()
+	case spec.DataVersionElectra:
+		root, _ = msg.Electra.HashTreeRoot()
+	case spec.DataVersionFulu:
+		root, _ = msg.Fulu.HashTreeRoot()
+	default:
+		panic("unsupported version")
+	}
+
+	bn.Bn.BroadcastedRoots = append(bn.Bn.BroadcastedRoots, root)
+	return nil
 }
 func (bn *BeaconNodeWrapped) SubmitBeaconBlock(ctx context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	return bn.Bn.SubmitBeaconBlock(block, sig)

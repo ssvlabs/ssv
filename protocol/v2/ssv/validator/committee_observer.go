@@ -230,11 +230,11 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		default:
 			return nil
 		}
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		return []spectypes.BeaconRole{spectypes.BNRoleAggregator}
 	case spectypes.RoleProposer:
 		return []spectypes.BeaconRole{spectypes.BNRoleProposer}
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		return []spectypes.BeaconRole{spectypes.BNRoleSyncCommitteeContribution}
 	case spectypes.RoleValidatorRegistration:
 		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
@@ -428,7 +428,7 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 		return nil
 
 	case spectypes.RoleAggregatorCommittee:
-		consData := &ssvtypes.AggregatorCommitteeConsensusData{}
+		consData := &spectypes.AggregatorCommitteeConsensusData{}
 		if err := consData.Decode(msg.SignedSSVMessage.FullData); err != nil {
 			ncv.logger.Debug("❗ failed to decode aggregator committee consensus data from proposal", zap.Error(err))
 			return err
@@ -489,7 +489,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 func (ncv *CommitteeObserver) saveAggregatorRoots(
 	ctx context.Context,
 	epoch phase0.Epoch,
-	data *ssvtypes.AggregatorCommitteeConsensusData,
+	data *spectypes.AggregatorCommitteeConsensusData,
 ) error {
 	aggregateAndProofs, err := data.GetAggregateAndProofs()
 	if err != nil {
@@ -517,7 +517,7 @@ func (ncv *CommitteeObserver) saveAggregatorRoots(
 func (ncv *CommitteeObserver) saveSyncCommContribRoots(
 	ctx context.Context,
 	epoch phase0.Epoch,
-	data *ssvtypes.AggregatorCommitteeConsensusData,
+	data *spectypes.AggregatorCommitteeConsensusData,
 ) error {
 	contribs, err := data.GetSyncCommitteeContributions()
 	if err != nil {

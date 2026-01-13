@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -47,11 +48,11 @@ var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySe
 }
 
 var AggregatorRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleAggregator, keySet)
+	return baseRunner(logger, ssvtypes.RoleAggregator, keySet)
 }
 
 var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleSyncCommitteeContribution, keySet)
+	return baseRunner(logger, ssvtypes.RoleSyncCommitteeContribution, keySet)
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -105,10 +106,10 @@ var ConstructBaseRunner = func(
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
 			phase0.BLSPubKey(share.SharePubKey))
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		valCheck = ssv.NewAggregatorChecker(networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		valCheck = ssv.NewSyncCommitteeContributionChecker(networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
 	default:
@@ -167,7 +168,7 @@ var ConstructBaseRunner = func(
 			return true
 		}
 		r = rnr
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -202,7 +203,7 @@ var ConstructBaseRunner = func(
 			[]byte("graffiti"),
 			0,
 		)
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -270,7 +271,7 @@ var ConstructBaseRunner = func(
 //	return decideRunner(spectestingutils.TestConsensusUnkownDutyTypeData, specqbft.FirstHeight, keySet)
 //}
 //
-//var decideRunner = func(consensusInput *spectypes.ValidatorConsensusData, height specqbft.Height, keySet *spectestingutils.TestKeySet) runner.Runner {
+//var decideRunner = func(consensusInput *spectypes.ProposerConsensusData, height specqbft.Height, keySet *spectestingutils.TestKeySet) runner.Runner {
 //	v := BaseValidator(keySet)
 //	consensusDataByts, _ := consensusInput.Encode()
 //	msgs := DecidingMsgsForHeight(consensusDataByts, []byte{1, 2, 3, 4}, height, keySet)
@@ -394,10 +395,10 @@ var ConstructBaseRunnerWithShareMap = func(
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))
-		case spectypes.RoleAggregator:
+		case ssvtypes.RoleAggregator:
 			valCheck = ssv.NewAggregatorChecker(networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
-		case spectypes.RoleSyncCommitteeContribution:
+		case ssvtypes.RoleSyncCommitteeContribution:
 			valCheck = ssv.NewSyncCommitteeContributionChecker(networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex)
 		default:
@@ -452,7 +453,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			return true
 		}
 		r = rnr
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork,
 			shareMap,
@@ -487,7 +488,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			[]byte("graffiti"),
 			0,
 		)
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
 			networkconfig.TestNetwork,
 			shareMap,

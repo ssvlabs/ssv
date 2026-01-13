@@ -6,6 +6,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +25,7 @@ func TestMessageValidator_maxRound(t *testing.T) {
 		},
 		{
 			name: "Aggregator role",
-			role: spectypes.RoleAggregator,
+			role: ssvtypes.RoleAggregator,
 			want: 12,
 			err:  nil,
 		},
@@ -36,7 +37,7 @@ func TestMessageValidator_maxRound(t *testing.T) {
 		},
 		{
 			name: "SyncCommitteeContribution role",
-			role: spectypes.RoleSyncCommitteeContribution,
+			role: ssvtypes.RoleSyncCommitteeContribution,
 			want: 6,
 			err:  nil,
 		},

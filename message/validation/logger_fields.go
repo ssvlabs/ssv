@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // ConsensusFields provides details about the consensus for a message. It's used for logging and metrics.
@@ -106,7 +107,7 @@ func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 		// get the validator index from the msgid
 		v, ok := mv.validatorStore.Validator(lf.DutyExecutorID)
 		if ok {
-			lf.DutyID = fmt.Sprintf("%v-e%v-s%v-v%v", lf.Role.String(), mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot, v.ValidatorIndex)
+			lf.DutyID = fmt.Sprintf("%v-e%v-s%v-v%v", ssvtypes.RunnerRoleToString(lf.Role), mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot, v.ValidatorIndex)
 		}
 	}
 }

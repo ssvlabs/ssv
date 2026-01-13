@@ -281,7 +281,7 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 	selectionProof phase0.BLSSignature,
 	validatorSyncCommitteeIndex uint64,
 	vDuty *spectypes.ValidatorDuty,
-	aggregatorData *ssvtypes.AggregatorCommitteeConsensusData,
+	aggregatorData *spectypes.AggregatorCommitteeConsensusData,
 ) (bool, error) {
 	if !r.beacon.IsSyncCommitteeAggregator(selectionProof[:]) {
 		return false, nil // Not selected as sync committee aggregator
@@ -293,7 +293,7 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 	for _, contrib := range aggregatorData.SyncCommitteeContributions {
 		if contrib.SubcommitteeIndex == subnetID {
 			// If so, just add to contributors and return
-			aggregatorData.Contributors = append(aggregatorData.Contributors, ssvtypes.AssignedAggregator{
+			aggregatorData.Contributors = append(aggregatorData.Contributors, spectypes.AssignedAggregator{
 				ValidatorIndex: vDuty.ValidatorIndex,
 				SelectionProof: selectionProof,
 				CommitteeIndex: subnetID,
@@ -329,7 +329,7 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 			continue
 		}
 
-		aggregatorData.Contributors = append(aggregatorData.Contributors, ssvtypes.AssignedAggregator{
+		aggregatorData.Contributors = append(aggregatorData.Contributors, spectypes.AssignedAggregator{
 			ValidatorIndex: vDuty.ValidatorIndex,
 			SelectionProof: selectionProof,
 			CommitteeIndex: subnetID,
@@ -369,7 +369,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	duty := r.state().CurrentDuty.(*spectypes.AggregatorCommitteeDuty)
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 	dataVersion, _ := r.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
-	consensusData := &ssvtypes.AggregatorCommitteeConsensusData{
+	consensusData := &spectypes.AggregatorCommitteeConsensusData{
 		Version: dataVersion,
 	}
 	hasAnyAggregator := false
@@ -505,7 +505,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			for _, idx := range consensusData.AggregatorsCommitteeIndexes {
 				if idx == uint64(selection.duty.CommitteeIndex) {
 					// If so, just add to aggregators and return
-					consensusData.Aggregators = append(consensusData.Aggregators, ssvtypes.AssignedAggregator{
+					consensusData.Aggregators = append(consensusData.Aggregators, spectypes.AssignedAggregator{
 						ValidatorIndex: selection.duty.ValidatorIndex,
 						SelectionProof: selection.selectionProof,
 						CommitteeIndex: uint64(selection.duty.CommitteeIndex),
@@ -527,7 +527,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				continue
 			}
 
-			consensusData.Aggregators = append(consensusData.Aggregators, ssvtypes.AssignedAggregator{
+			consensusData.Aggregators = append(consensusData.Aggregators, spectypes.AssignedAggregator{
 				ValidatorIndex: selection.duty.ValidatorIndex,
 				SelectionProof: selection.selectionProof,
 				CommitteeIndex: uint64(selection.duty.CommitteeIndex),
@@ -583,7 +583,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		logger,
 		r.ValCheck.CheckValue,
 		msg,
-		&ssvtypes.AggregatorCommitteeConsensusData{},
+		&spectypes.AggregatorCommitteeConsensusData{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
@@ -604,7 +604,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		return fmt.Errorf("duty is not an AggregatorCommitteeDuty: %T", duty)
 	}
 
-	consensusData := decidedValue.(*ssvtypes.AggregatorCommitteeConsensusData)
+	consensusData := decidedValue.(*spectypes.AggregatorCommitteeConsensusData)
 
 	aggProofs, err := consensusData.GetAggregateAndProofs()
 	if err != nil {
@@ -1224,7 +1224,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(c
 	contributionMap = make(map[phase0.ValidatorIndex][][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
 
-	consensusData := &ssvtypes.AggregatorCommitteeConsensusData{}
+	consensusData := &spectypes.AggregatorCommitteeConsensusData{}
 	if err := consensusData.Decode(r.state().DecidedValue); err != nil {
 		return nil, nil, nil,
 			errors.Wrap(err, "could not decode consensus data")

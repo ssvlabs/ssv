@@ -32,6 +32,7 @@ import (
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -470,7 +471,7 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 		ret := ssvtesting.CommitteeRunner(logger, ks)
 		ret.(*runner.CommitteeRunner).BaseRunner = base
 		return ret
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		ret := ssvtesting.AggregatorRunner(logger, ks)
 		ret.(*runner.AggregatorRunner).BaseRunner = base
 		return ret
@@ -478,7 +479,7 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 		ret := ssvtesting.ProposerRunner(logger, ks)
 		ret.(*runner.ProposerRunner).BaseRunner = base
 		return ret
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		ret := ssvtesting.SyncCommitteeContributionRunner(logger, ks)
 		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret

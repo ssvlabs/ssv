@@ -12,6 +12,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -104,7 +105,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	case spectypes.RoleCommittee:
 		// third of the slot time
 		baseDuration = t.beaconConfig.SlotDuration / 3
-	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution, spectypes.RoleAggregatorCommittee:
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution, spectypes.RoleAggregatorCommittee:
 		// two-third of the slot time
 		baseDuration = t.beaconConfig.SlotDuration / 3 * 2
 	default:
