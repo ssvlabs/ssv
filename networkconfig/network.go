@@ -33,10 +33,6 @@ func (n Network) GasLimit36Fork() bool {
 	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.GasLimit36
 }
 
-func (n Network) BooleFork() bool {
-	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.Boole
-}
-
 func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
 	return epoch >= n.SSV.Forks.Boole
 }

@@ -94,7 +94,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
 				defer cancel()
 
-				if h.netCfg.BooleFork() {
+				if h.netCfg.BooleForkAtSlot(slot) {
 					// After fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
 					// but skip legacy execution, as the aggregator committee handler will be responsible for executing them.
 					h.processFetching(tickCtx, epoch, period, true)

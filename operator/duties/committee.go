@@ -77,7 +77,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			if h.isAggregator && !h.netCfg.BooleFork() {
+			if h.isAggregator && !h.netCfg.BooleForkAtSlot(slot) {
 				continue
 			}
 			epoch := h.netCfg.EstimatedEpochAtSlot(slot)

@@ -92,7 +92,7 @@ func (h *baseHandler) ctxWithDeadlineInOneEpoch(ctx context.Context, slot phase0
 	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
 	// Sync committee duties have to use the same deadline because they are part of the committee role.
 	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
-	slotsPerEpoch := phase0.Slot(h.beaconConfig.SlotsPerEpoch)
+	slotsPerEpoch := phase0.Slot(h.netCfg.SlotsPerEpoch)
 	return h.ctxWithDeadlineOnSlot(ctx, slot+slotsPerEpoch+1)
 }
 
