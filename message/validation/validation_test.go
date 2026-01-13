@@ -37,6 +37,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -85,6 +86,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committee := slices.Collect(maps.Keys(ks.Shares))
 	slices.Sort(committee)
+
+	leaderCtx := &leaderTestCtx{
+		netCfg:    netCfg,
+		committee: committee,
+	}
 
 	committeeID := shares.active.CommitteeID()
 
@@ -159,7 +165,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -184,7 +190,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NotNil(t, signerState)
 		}
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 
@@ -195,7 +201,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.Signer(0)
+		signerIdx := slices.Index(committee, signedSSVMessage.OperatorIDs[0])
+		require.GreaterOrEqual(t, signerIdx, 0)
+
+		stateBySlot := state.Signer(signerIdx)
 		require.NotNil(t, stateBySlot)
 
 		storedState := stateBySlot.GetSignerState(slot)
@@ -207,7 +216,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NotNil(t, state.Signer(i))
 		}
 
-		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.Round = 2
 			message.MsgType = specqbft.PrepareMsgType
 		})
@@ -215,6 +224,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
+
+		signerIdx = slices.Index(committee, signedSSVMessage.OperatorIDs[0])
+		require.GreaterOrEqual(t, signerIdx, 0)
+		stateBySlot = state.Signer(signerIdx)
 
 		storedState = stateBySlot.GetSignerState(slot)
 		require.NotNil(t, storedState)
@@ -225,12 +238,16 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot+1, func(message *specqbft.Message) {
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot+1, func(message *specqbft.Message) {
 			message.MsgType = specqbft.CommitMsgType
 		})
 		signedSSVMessage.FullData = nil
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
+
+		signerIdx = slices.Index(committee, signedSSVMessage.OperatorIDs[0])
+		require.GreaterOrEqual(t, signerIdx, 0)
+		stateBySlot = state.Signer(signerIdx)
 
 		storedState = stateBySlot.GetSignerState(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
@@ -314,7 +331,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, 500)
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -330,7 +347,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.SSVMessage.Data = []byte{}
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -349,7 +366,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 
 		tooBigMsgSize := maxPayloadDataSize * 2
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, tooBigMsgSize)
@@ -370,7 +387,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadDataSize)
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -386,7 +403,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.SSVMessage.MsgType = math.MaxUint64
 
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -404,7 +421,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		unknown := spectypes.NewMsgID(netCfg.DomainType, sk.PublicKey().Marshal(), nonCommitteeRole)
-		signedSSVMessage := generateSignedMessage(ks, unknown, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, unknown, slot)
 
 		_, exists := validatorStore.Validator(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())
 		require.False(t, exists)
@@ -424,7 +441,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		unknownCommitteeID := bytes.Repeat([]byte{1}, 48)
 		unknownIdentifier := spectypes.NewMsgID(netCfg.DomainType, unknownCommitteeID, committeeRole)
-		signedSSVMessage := generateSignedMessage(ks, unknownIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, unknownIdentifier, slot)
 
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, time.Now())
@@ -441,7 +458,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		wrongDomain := spectypes.DomainType{math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8}
 		badIdentifier := spectypes.NewMsgID(wrongDomain, encodedCommitteeID, committeeRole)
-		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
 
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -460,7 +477,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, math.MaxInt32)
-		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
 
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -475,7 +492,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleValidatorRegistration)
-		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
 
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -485,7 +502,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 
 		badIdentifier = spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleVoluntaryExit)
-		signedSSVMessage = generateSignedMessage(ks, badIdentifier, slot)
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr.got = spectypes.RoleVoluntaryExit
@@ -499,7 +516,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		liquidatedIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.liquidated.ValidatorPubKey[:], nonCommitteeRole)
-		signedSSVMessage := generateSignedMessage(ks, liquidatedIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, liquidatedIdentifier, slot)
 
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -515,7 +532,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		inactiveIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.inactive.ValidatorPubKey[:], nonCommitteeRole)
-		signedSSVMessage := generateSignedMessage(ks, inactiveIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, inactiveIdentifier, slot)
 
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -531,7 +548,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		nonUpdatedMetadataNextEpochIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.nonUpdatedMetadataNextEpoch.ValidatorPubKey[:], nonCommitteeRole)
-		signedSSVMessage := generateSignedMessage(ks, nonUpdatedMetadataNextEpochIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, nonUpdatedMetadataNextEpochIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -560,7 +577,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			PrepareJustification:     [][]byte{},
 		}
 
-		leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
+		leader := leaderForTest(leaderCtx, specqbft.Height(slot), specqbft.FirstRound)
 		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
@@ -577,7 +594,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		noMetadataIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.noMetadata.ValidatorPubKey[:], nonCommitteeRole)
-		signedSSVMessage := generateSignedMessage(ks, noMetadataIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, noMetadataIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -600,7 +617,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		role := spectypes.RoleAggregator
 		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), role)
-		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, identifier, slot)
 
 		// First duty.
 		topicID := commons.CommitteeTopicID(committeeID)[0]
@@ -608,12 +625,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		// Second duty.
-		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4)
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, identifier, slot+4)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.SlotStartTime(slot+4))
 		require.NoError(t, err)
 
 		// Third duty (exceeds the limit).
-		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8)
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, identifier, slot+8)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.SlotStartTime(slot+8))
 		require.ErrorIs(t, err, ErrTooManyDutiesPerEpoch)
 	})
@@ -630,7 +647,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), spectypes.RoleProposer)
-		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, identifier, slot)
 
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.SlotStartTime(slot))
@@ -956,7 +973,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.MsgType = math.MaxUint64
 		})
 
@@ -972,7 +989,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.Signatures = [][]byte{{0x1}}
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -986,7 +1003,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.OperatorIDs = nil
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1001,7 +1018,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 3, 4, 5}
 		signedSSVMessage.Signatures = [][]byte{
 			signedSSVMessage.Signatures[0],
@@ -1022,7 +1039,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{0}
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1227,7 +1244,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				}
 
 				msgID := spectypes.NewMsgID(netCfg.DomainType, dutyExecutorID, role)
-				signedSSVMessage := generateSignedMessage(ks, msgID, slot)
+				signedSSVMessage := generateSignedMessage(leaderCtx, ks, msgID, slot)
 
 				topicID := commons.CommitteeTopicID(committeeID)[0]
 				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
@@ -1241,7 +1258,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot - 1)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -1255,8 +1272,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
+		leader := leaderForTest(leaderCtx, specqbft.Height(slot), specqbft.FirstRound)
+		wrongLeader := committee[0]
+		if wrongLeader == leader {
+			wrongLeader = committee[1]
+		}
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{wrongLeader}
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -1269,7 +1291,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.FirstSlotAtEpoch(1)
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.PrepareJustification = [][]byte{{1}}
 		})
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
@@ -1287,9 +1309,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.PrepareJustification = spectestingutils.MarshalJustifications([]*spectypes.SignedSSVMessage{
-				generateSignedMessage(ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
+				generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
 					justMsg.MsgType = specqbft.RoundChangeMsgType
 				}),
 			})
@@ -1310,9 +1332,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.RoundChangeJustification = spectestingutils.MarshalJustifications([]*spectypes.SignedSSVMessage{
-				generateSignedMessage(ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
+				generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
 					justMsg.MsgType = specqbft.PrepareMsgType
 				}),
 			})
@@ -1333,7 +1355,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.RoundChangeJustification = [][]byte{{1}}
 		})
 		signedSSVMessage.FullData = nil
@@ -1351,7 +1373,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.FullData = []byte{1}
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1368,7 +1390,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -1376,7 +1398,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		anotherFullData := []byte{1}
-		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.Root, err = specqbft.HashDataRoot(anotherFullData)
 			require.NoError(t, err)
 		})
@@ -1394,7 +1416,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), spectypes.RoleProposer)
-		signedSSVMessage := generateSignedMessage(ks, identifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, identifier, slot, func(message *specqbft.Message) {
 			message.MsgType = specqbft.PrepareMsgType
 		})
 		signedSSVMessage.FullData = nil
@@ -1416,7 +1438,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.MsgType = specqbft.CommitMsgType
 		})
 		signedSSVMessage.FullData = nil
@@ -1438,7 +1460,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.MsgType = specqbft.RoundChangeMsgType
 		})
 		signedSSVMessage.FullData = nil
@@ -1481,7 +1503,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
 			message.Height = 8
 		})
 
@@ -1490,7 +1512,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		signedSSVMessage = generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
 			message.Height = 4
 		})
 
@@ -1504,7 +1526,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.Round = 5
 		})
 
@@ -1513,7 +1535,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.Round = 1
 		})
 
@@ -1551,7 +1573,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				}
 
 				msgID := spectypes.NewMsgID(netCfg.DomainType, dutyExecutorID, role)
-				signedSSVMessage := generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
+				signedSSVMessage := generateSignedMessage(leaderCtx, ks, msgID, slot, func(message *specqbft.Message) {
 					message.MsgType = specqbft.PrepareMsgType
 					message.Round = round
 				})
@@ -1582,7 +1604,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.SSVMessage.MsgType = message.SSVEventMsgType
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1598,7 +1620,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		unknownType := spectypes.MsgType(12345)
 		signedSSVMessage.SSVMessage.MsgType = unknownType
 
@@ -1615,7 +1637,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -1630,7 +1652,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := "incorrect"
@@ -1657,7 +1679,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.SSVMessage = nil
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1672,7 +1694,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.Round = specqbft.NoRound
 		})
 
@@ -1688,7 +1710,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot)
 		signedSSVMessage.Signatures = [][]byte{}
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1703,7 +1725,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			wrongID := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID[:], nonCommitteeRole)
 			message.Identifier = wrongID[:]
 		})
@@ -1721,7 +1743,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.MsgType = specqbft.PrepareMsgType
 		})
 
@@ -1730,7 +1752,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrPrepareOrCommitWithFullData.Error())
 
-		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+		signedSSVMessage = generateSignedMessage(leaderCtx, ks, committeeIdentifier, slot, func(message *specqbft.Message) {
 			message.MsgType = specqbft.CommitMsgType
 		})
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
@@ -1963,7 +1985,13 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	}
 }
 
+type leaderTestCtx struct {
+	netCfg    *networkconfig.Network
+	committee []spectypes.OperatorID
+}
+
 func generateSignedMessage(
+	ctx *leaderTestCtx,
 	ks *spectestingutils.TestKeySet,
 	identifier spectypes.MessageID,
 	slot phase0.Slot,
@@ -1987,10 +2015,25 @@ func generateSignedMessage(
 		opt(qbftMessage)
 	}
 
-	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
+	leader := leaderForTest(ctx, qbftMessage.Height, qbftMessage.Round)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 	signedSSVMessage.FullData = fullData
 
 	return signedSSVMessage
+}
+
+func leaderForTest(ctx *leaderTestCtx, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
+	if ctx.netCfg.BooleForkAtSlot(phase0.Slot(height)) {
+		return qbft.RoundRobinProposer(height, round, ctx.committee, ctx.netCfg)
+	}
+
+	firstRoundIndex := uint64(0)
+	if height != specqbft.FirstHeight {
+		firstRoundIndex += uint64(height) % uint64(len(ctx.committee))
+	}
+
+	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(ctx.committee))
+	return ctx.committee[index]
 }
 
 func generateMultiSignedMessage(

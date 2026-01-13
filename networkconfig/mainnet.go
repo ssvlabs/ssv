@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -31,5 +32,6 @@ var MainnetSSV = &SSV{
 	Forks: SSVForks{
 		Alan:       0,      // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
 		GasLimit36: 385150, // Aug-09-2025 06:40:23 AM UTC
+		Boole:      math.MaxUint64,
 	},
 }

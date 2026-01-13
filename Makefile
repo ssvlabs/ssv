@@ -53,9 +53,13 @@ full-test:
 
 .PHONY: unit-test
 unit-test:
+	@$(MAKE) unit-test-ssv
+	@$(MAKE) ssvsigner-test
+
+.PHONY: unit-test-ssv
+unit-test-ssv:
 	@echo "Running unit tests"
 	@go test -tags "blst_enabled lfs" -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
-	@$(MAKE) ssvsigner-test
 
 .PHONY: ssvsigner-test
 ssvsigner-test:
