@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestRoundRobinProposerPreBooleFork_MatchesStageLogic(t *testing.T) {
@@ -25,8 +26,10 @@ func TestRoundRobinProposerPreBooleFork_MatchesStageLogic(t *testing.T) {
 		},
 	}
 
+	committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
+
 	// height%4=0 so leader should be the first operator for FirstRound.
-	require.Equal(t, spectypes.OperatorID(1), RoundRobinProposerPreBooleFork(state, specqbft.FirstRound))
+	require.Equal(t, spectypes.OperatorID(1), RoundRobinProposerPreBooleFork(state.Height, specqbft.FirstRound, committee))
 }
 
 func TestRoundRobinProposer_PostBooleFork_OffsetFromSlotsPerEpoch(t *testing.T) {

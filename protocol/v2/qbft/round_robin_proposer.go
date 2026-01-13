@@ -10,14 +10,18 @@ import (
 )
 
 // Deprecated - only for pre-Boole fork
-func RoundRobinProposerPreBooleFork(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+func RoundRobinProposerPreBooleFork(
+	height specqbft.Height,
+	round specqbft.Round,
+	committee []spectypes.OperatorID,
+) spectypes.OperatorID {
 	firstRoundIndex := uint64(0)
-	if state.Height != specqbft.FirstHeight {
-		firstRoundIndex += uint64(state.Height) % uint64(len(state.CommitteeMember.Committee))
+	if height != specqbft.FirstHeight {
+		firstRoundIndex += uint64(height) % uint64(len(committee))
 	}
 
-	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(state.CommitteeMember.Committee))
-	return state.CommitteeMember.Committee[index].OperatorID
+	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(committee))
+	return committee[index]
 }
 
 type networkConfig interface {
