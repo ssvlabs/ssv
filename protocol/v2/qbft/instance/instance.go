@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -24,6 +25,8 @@ import (
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
+	logger *zap.Logger
+
 	State  *specqbft.State
 	config qbft.IConfig
 	signer ssvtypes.OperatorSigner
@@ -38,6 +41,7 @@ type Instance struct {
 }
 
 func NewInstance(
+	logger *zap.Logger,
 	config qbft.IConfig,
 	committeeMember *spectypes.CommitteeMember,
 	identifier []byte,
@@ -49,7 +53,10 @@ func NewInstance(
 		runnerRole = spectypes.MessageID(identifier).GetRoleType()
 	}
 
+	logger = logger.Named(log.NameQBFTInstance)
+
 	return &Instance{
+		logger: logger,
 		State: &specqbft.State{
 			CommitteeMember:      committeeMember,
 			ID:                   identifier,
@@ -64,7 +71,7 @@ func NewInstance(
 		config:      config,
 		signer:      signer,
 		processMsgF: spectypes.NewThreadSafeF(),
-		metrics:     newMetrics(runnerRole),
+		metrics:     newMetrics(logger, runnerRole),
 	}
 }
 
@@ -75,7 +82,6 @@ func (i *Instance) ForceStop() {
 // Start is an interface implementation
 func (i *Instance) Start(
 	ctx context.Context,
-	logger *zap.Logger,
 	value []byte,
 	height specqbft.Height,
 	valueChecker ssv.ValueChecker,
@@ -85,7 +91,7 @@ func (i *Instance) Start(
 		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
-	logger = logger.With(fields.QBFTRound(specqbft.FirstRound), fields.QBFTHeight(height))
+	logger := i.logger.With(fields.QBFTRound(specqbft.FirstRound), fields.QBFTHeight(height))
 
 	proposerID := i.ProposerForRound(specqbft.FirstRound)
 
@@ -101,8 +107,8 @@ func (i *Instance) Start(
 	i.bumpToRound(specqbft.FirstRound)
 	i.State.Height = height
 	i.ValueChecker = valueChecker
-	i.metrics.Start()
 	i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
+	i.metrics.StartStage(stageProposal)
 
 	// propose if this node is the proposer
 	if proposerID == i.State.CommitteeMember.OperatorID {

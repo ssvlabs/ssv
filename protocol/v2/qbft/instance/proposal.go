@@ -30,15 +30,16 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 
 	i.State.ProposalAcceptedForCurrentRound = msg
 
-	newRound := msg.QBFTMessage.Round
+	msgRound := msg.QBFTMessage.Round
 
 	// A future justified proposal should bump us into future round and reset timer
-	if newRound > i.State.Round {
-		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, newRound)
+	if msgRound > i.State.Round {
+		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, msgRound)
 	}
-	i.bumpToRound(newRound)
+	i.bumpToRound(msgRound)
 
-	i.metrics.EndStage(ctx, newRound, stageProposal)
+	i.metrics.EndStage(ctx, msgRound)
+	i.metrics.StartStage(stagePrepare)
 
 	// value root
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
@@ -46,7 +47,7 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 		return errors.Wrap(err, "could not hash input data")
 	}
 
-	prepare, err := i.CreatePrepare(newRound, r)
+	prepare, err := i.CreatePrepare(msgRound, r)
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}

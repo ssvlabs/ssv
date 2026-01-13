@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -1085,11 +1086,8 @@ func TestCollector_processPartialSigCommittee_UnknownRootBuffers(t *testing.T) {
 	require.True(t, ok)
 	found := false
 	for _, idxs := range byTs {
-		for _, idx := range idxs {
-			if idx == 55 {
-				found = true
-				break
-			}
+		if slices.Contains(idxs, 55) {
+			found = true
 		}
 	}
 	require.True(t, found, "expected buffered index for unknown root")
@@ -1160,11 +1158,8 @@ func TestCollector_FlushPending_Timestamps(t *testing.T) {
 	var times []uint64
 	for _, sd := range duty.SyncCommittee {
 		if sd.Signer == 99 {
-			for _, idx := range sd.ValidatorIdx {
-				if idx == 77 {
-					times = append(times, sd.ReceivedTime)
-					break
-				}
+			if slices.Contains(sd.ValidatorIdx, 77) {
+				times = append(times, sd.ReceivedTime)
 			}
 		}
 	}

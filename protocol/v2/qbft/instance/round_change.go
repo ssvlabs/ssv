@@ -36,8 +36,10 @@ func (i *Instance) uponRoundChange(
 		return nil // already changed round
 	}
 
+	prevRound := i.State.Round
+
 	logger = logger.With(
-		zap.Uint64("qbft_instance_round", uint64(i.State.Round)),
+		zap.Uint64("qbft_instance_round", uint64(prevRound)),
 		zap.Uint64("qbft_instance_height", uint64(i.State.Height)),
 	)
 
@@ -65,7 +67,7 @@ func (i *Instance) uponRoundChange(
 
 		proposal, err := i.CreateProposal(
 			valueToPropose,
-			i.State.RoundChangeContainer.MessagesForRound(i.State.Round), // TODO - might be optimized to include only necessary quorum
+			i.State.RoundChangeContainer.MessagesForRound(prevRound), // TODO - might be optimized to include only necessary quorum
 			roundChangeJustification,
 		)
 		if err != nil {
@@ -78,10 +80,13 @@ func (i *Instance) uponRoundChange(
 		}
 		logger = logger.With(zap.String("qbft_value_to_propose_root", hex.EncodeToString(valueToProposeRoot[:])))
 
-		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonJustified)
+		i.metrics.EndStage(ctx, prevRound)
+		i.metrics.StartStage(stageProposal)
+
+		i.metrics.RecordRoundChange(ctx, prevRound, reasonJustified)
 
 		logger.Debug("🔄 got justified round change, leader broadcasting proposal message",
-			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(i.State.Round))),
+			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(prevRound))),
 		)
 
 		if err := i.Broadcast(proposal); err != nil {
@@ -89,11 +94,15 @@ func (i *Instance) uponRoundChange(
 		}
 	} else if partialQuorum, rcs := i.hasReceivedPartialQuorum(); partialQuorum {
 		newRound := minRound(rcs)
-		if newRound <= i.State.Round {
-			return nil // no need to advance round
+		if newRound <= prevRound {
+			// No need to advance round, we've already changed it.
+			return nil
 		}
 
-		i.metrics.RecordRoundChange(ctx, newRound, reasonPartialQuorum)
+		i.metrics.EndStage(ctx, prevRound)
+		i.metrics.StartStage(stageRoundChange)
+
+		i.metrics.RecordRoundChange(ctx, prevRound, reasonPartialQuorum)
 
 		err := i.uponChangeRoundPartialQuorum(logger, newRound)
 		if err != nil {

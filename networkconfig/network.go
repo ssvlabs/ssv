@@ -3,6 +3,8 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 type Network struct {
@@ -33,4 +35,12 @@ func (n Network) GasLimit36Fork() bool {
 
 func (n Network) BooleFork() bool {
 	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.Boole
+}
+
+func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
+	return epoch >= n.SSV.Forks.Boole
+}
+
+func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
+	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
 }
