@@ -303,6 +303,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		return fmt.Errorf("couldn't get message slot: %w", err)
 	}
 
+	role := msg.GetID().GetRoleType()
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		span.AddEvent("process committee message = consensus message")
@@ -316,7 +317,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		c.mtx.RLock()
-		r, ok := c.runnerForRole(msg.GetID().GetRoleType(), slot)
+		r, ok := c.runnerForRole(role, slot)
 		c.mtx.RUnlock()
 		if !ok {
 			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
@@ -340,7 +341,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 		// Locate the runner for this slot once and route by message subtype.
 		c.mtx.RLock()
-		r, ok := c.runnerForRole(msg.GetID().GetRoleType(), slot)
+		r, ok := c.runnerForRole(role, slot)
 		c.mtx.RUnlock()
 		if !ok {
 			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
@@ -352,6 +353,10 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 				return fmt.Errorf("process post-consensus message: %w", err)
 			}
 			return nil
+		}
+
+		if role != spectypes.RoleAggregatorCommittee {
+			return fmt.Errorf("invalid aggregator partial sig msg for commmittee role")
 		}
 
 		// Handle all non-post consensus partial signatures via pre-consensus path
@@ -374,7 +379,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			span.AddEvent("process committee message = event(timeout)")
 
 			c.mtx.RLock()
-			r, ok := c.runnerForRole(msg.GetID().GetRoleType(), slot)
+			r, ok := c.runnerForRole(role, slot)
 			c.mtx.RUnlock()
 			if !ok {
 				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
@@ -496,8 +501,15 @@ func (c *Committee) UnmarshalJSON(data []byte) error {
 }
 
 func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
+	const CommitteeWrongRoleErrorCode = 85 // TODO: use it from spec after fork
+
 	if !(c.CommitteeMember.CommitteeID.MessageIDBelongs(msg.GetID())) {
 		return spectypes.NewError(spectypes.MessageIDCommitteeIDMismatchErrorCode, "msg ID doesn't match committee ID")
+	}
+
+	role := msg.GetID().GetRoleType()
+	if role != spectypes.RoleCommittee && role != spectypes.RoleAggregatorCommittee {
+		return spectypes.NewError(CommitteeWrongRoleErrorCode, "msg role is invalid")
 	}
 
 	if len(msg.GetData()) == 0 {

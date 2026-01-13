@@ -428,7 +428,7 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 		return nil
 
 	case spectypes.RoleAggregatorCommittee:
-		consData := &spectypes.AggregatorCommitteeConsensusData{}
+		consData := &ssvtypes.AggregatorCommitteeConsensusData{}
 		if err := consData.Decode(msg.SignedSSVMessage.FullData); err != nil {
 			ncv.logger.Debug("❗ failed to decode aggregator committee consensus data from proposal", zap.Error(err))
 			return err
@@ -489,7 +489,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 func (ncv *CommitteeObserver) saveAggregatorRoots(
 	ctx context.Context,
 	epoch phase0.Epoch,
-	data *spectypes.AggregatorCommitteeConsensusData,
+	data *ssvtypes.AggregatorCommitteeConsensusData,
 ) error {
 	aggregateAndProofs, err := data.GetAggregateAndProofs()
 	if err != nil {
@@ -517,7 +517,7 @@ func (ncv *CommitteeObserver) saveAggregatorRoots(
 func (ncv *CommitteeObserver) saveSyncCommContribRoots(
 	ctx context.Context,
 	epoch phase0.Epoch,
-	data *spectypes.AggregatorCommitteeConsensusData,
+	data *ssvtypes.AggregatorCommitteeConsensusData,
 ) error {
 	contribs, err := data.GetSyncCommitteeContributions()
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(
@@ -151,7 +152,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
 		validateMsg = func() error {
-			decidedValue := &spectypes.AggregatorCommitteeConsensusData{}
+			decidedValue := &ssvtypes.AggregatorCommitteeConsensusData{}
 			if err := decidedValue.Decode(decidedValueBytes); err != nil {
 				return errors.Wrap(err, "failed to parse decided value to AggregatorCommitteeConsensusData")
 			}
