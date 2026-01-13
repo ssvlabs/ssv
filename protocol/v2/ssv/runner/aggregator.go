@@ -153,18 +153,36 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return nil
 	}
 
+	// We must submit aggregate data before a certain deadline is reached to be able to participate and
+	// complete QBFT round 1 in time before QBFT round-change happens, that deadline is defined as:
+	//
+	// `slot_start_time + round1_timeout - qbft_consensus_duration - misc_time`
+	//
+	// plugging in the following estimates we get the deadline of `slot_start_time + 9.5s`:
+	// - round1_timeout = 10s (https://github.com/ssvlabs/ssv/blob/stage/protocol/v2/qbft/roundtimer/timer.go#L77-L135)
+	// - qbft_consensus_duration = 350ms (as per previous estimates in https://github.com/ssvlabs/ssv/blob/stage/docs/MEV_CONSIDERATIONS.md)
+	// - misc_time = 150ms (to account for miscellaneous delays in code execution)
+	deadline := r.BaseRunner.NetworkConfig.SlotStartTime(duty.DutySlot()).Add(9500 * time.Millisecond)
+	reqCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
 	span.AddEvent("submitting aggregate and proof",
 		trace.WithAttributes(
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex)),
 	)
-	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
+	reqStart := time.Now()
+	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(reqCtx, duty.DutySlot(), duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return fmt.Errorf("failed to submit aggregate and proof: %w", err)
 	}
 	const submittedAggregateAndProofEvent = "submitted aggregate and proof"
-	logger.Debug(submittedAggregateAndProofEvent)
-	span.AddEvent(submittedAggregateAndProofEvent)
+	logger.Debug(submittedAggregateAndProofEvent, fields.Took(time.Since(reqStart)))
+	span.AddEvent(submittedAggregateAndProofEvent,
+		trace.WithAttributes(
+			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
+			observability.ValidatorIndexAttribute(duty.ValidatorIndex)),
+	)
 
 	byts, err := res.MarshalSSZ()
 	if err != nil {
@@ -177,7 +195,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	}
 
 	r.measurements.StartConsensus()
-	if err := r.BaseRunner.decide(ctx, logger, duty.Slot, input, r.ValCheck); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, duty.DutySlot(), input, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)
 	}
 

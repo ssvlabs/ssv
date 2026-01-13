@@ -130,14 +130,10 @@ type GoClient struct {
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
-	attestationDataCache               *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
-	weightedAttestationDataSoftTimeout time.Duration
-	weightedAttestationDataHardTimeout time.Duration
+	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
 
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
-	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
-	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
-	// intended for cases where some objects within the application may need to fetch attestation data for more than one slot.
+	// the cache helps reduce the number of calls we issue to CLs.
 	blockRootToSlotCache *ttlcache.Cache[phase0.Root, phase0.Slot]
 
 	// committeesCache caches Beacon committees by epoch to avoid repeated fetching
@@ -182,17 +178,15 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	}
 
 	client := &GoClient{
-		log:                                logger.Named(log.NameConsensusClient),
-		beaconConfigInit:                   make(chan struct{}),
-		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		commonTimeout:                      commonTimeout,
-		longTimeout:                        longTimeout,
-		withWeightedAttestationData:        opt.WithWeightedAttestationData,
-		withParallelSubmissions:            opt.WithParallelSubmissions,
-		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
-		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
-		activatedClients:                   hashmap.New[string, struct{}](),
+		log:                         logger.Named(log.NameConsensusClient),
+		beaconConfigInit:            make(chan struct{}),
+		syncDistanceTolerance:       phase0.Slot(opt.SyncDistanceTolerance),
+		commonTimeout:               commonTimeout,
+		longTimeout:                 longTimeout,
+		withWeightedAttestationData: opt.WithWeightedAttestationData,
+		withParallelSubmissions:     opt.WithParallelSubmissions,
+		supportedTopics:             []eventTopic{eventTopicHead, eventTopicBlock},
+		activatedClients:            hashmap.New[string, struct{}](),
 	}
 
 	for _, beaconAddr := range beaconAddrList {
@@ -231,7 +225,7 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	client.attestationDataCache = ttlcache.New(
 		// we only fetch attestation data during the slot of the relevant duty (and never later),
-		// hence caching it for 2 slots is sufficient
+		// hence caching it for 2 slots should be good enough
 		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * config.SlotDuration),
 	)
 
