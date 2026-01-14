@@ -131,7 +131,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 
 	defer func() {
-		role := spectypes.RunnerRole(spectypes.RoleUnknown)
+		role := spectypes.RoleUnknown
 		if decodedMessage != nil {
 			role = decodedMessage.GetID().GetRoleType()
 		}

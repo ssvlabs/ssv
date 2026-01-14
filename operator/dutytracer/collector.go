@@ -815,6 +815,8 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 		bnRole = spectypes.BNRoleValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		bnRole = spectypes.BNRoleVoluntaryExit
+	default:
+		return spectypes.BNRoleUnknown, fmt.Errorf("unexpected runner role %d", r)
 	}
 
 	return
