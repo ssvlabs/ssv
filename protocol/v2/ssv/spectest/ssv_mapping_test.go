@@ -73,10 +73,6 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 	testName := strings.Split(name, "_")[1]
 	testType := strings.Split(name, "_")[0]
 
-	if testType != reflect.TypeOf(&valcheck.SpecTest{}).String() {
-		return nil
-	}
-
 	switch testType {
 	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
 		typedTest := msgProcessingSpecTestFromMap(t, test.(map[string]interface{}))
