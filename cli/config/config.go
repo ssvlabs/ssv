@@ -24,6 +24,7 @@ type Global struct {
 	LogFilePath    string `yaml:"LogFilePath" env:"LOG_FILE_PATH" env-default:"./data/debug.log" env-description:"File path to write logs to"`
 	LogFileSize    int    `yaml:"LogFileSize" env:"LOG_FILE_SIZE" env-default:"500" env-description:"Maximum log file size in megabytes before rotation"`
 	LogFileBackups int    `yaml:"LogFileBackups" env:"LOG_FILE_BACKUPS" env-default:"3" env-description:"Number of rotated log files to keep"`
+	DisableFileLog bool   `yaml:"DisableFileLog" env:"DISABLE_FILE_LOG" env-default:"false" env-description:"Disable file log output"`
 }
 
 // ProcessArgs processes and handles CLI arguments
