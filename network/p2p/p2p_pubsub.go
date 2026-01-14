@@ -57,7 +57,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
 		// we don't expect post-fork messages to be sent before the fork.
-		if n.cfg.NetworkConfig.NetworkTopologyFork() {
+		if n.cfg.NetworkConfig.BooleFork() {
 			val, exists := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 			if !exists {
 				return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
@@ -71,7 +71,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		if !exists {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
-		if n.cfg.NetworkConfig.NetworkTopologyFork() {
+		if n.cfg.NetworkConfig.BooleFork() {
 			topics = val.CommitteeTopicID()
 		} else {
 			topics = val.CommitteeTopicIDAlan()
@@ -154,7 +154,7 @@ func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 		updatedSubnets.Set(statusAndSubnet.subnet)
 		// We use both pre-fork and post-fork subnets before fork to make sure we have everything ready when fork happens.
 		// Afterwards, we just need the post-fork algorithm.
-		if !n.cfg.NetworkConfig.NetworkTopologyFork() {
+		if !n.cfg.NetworkConfig.BooleFork() {
 			updatedSubnets.Set(statusAndSubnet.subnetAlan)
 		}
 		return true
@@ -203,7 +203,7 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 
 	// We use both pre-fork and post-fork subnets before fork to make sure we have everything ready when fork happens.
 	// Afterwards, we just need the post-fork algorithm.
-	if !n.cfg.NetworkConfig.NetworkTopologyFork() {
+	if !n.cfg.NetworkConfig.BooleFork() {
 		for _, topic := range share.CommitteeTopicIDAlan() {
 			topicSet[topic] = struct{}{}
 		}
@@ -253,7 +253,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 		topicSet[topic] = struct{}{}
 	}
 
-	if !n.cfg.NetworkConfig.NetworkTopologyFork() {
+	if !n.cfg.NetworkConfig.BooleFork() {
 		topics = share.CommitteeTopicIDAlan()
 		for _, topic := range topics {
 			topicSet[topic] = struct{}{}
