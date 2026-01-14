@@ -142,18 +142,16 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 
-		var observabilityOptions []observability.Option
-		if !cfg.DisableFileLog {
-			observabilityOptions = append(observabilityOptions,
-				observability.WithLogger(
-					cfg.LogLevel,
-					cfg.LogLevelFormat,
-					cfg.LogFormat,
-					cfg.LogFilePath,
-					cfg.LogFileSize,
-					cfg.LogFileBackups,
-				),
-			)
+		observabilityOptions := []observability.Option{
+			observability.WithLogger(
+				cfg.LogLevel,
+				cfg.LogLevelFormat,
+				cfg.LogFormat,
+				cfg.LogFilePath,
+				cfg.LogFileSize,
+				cfg.LogFileBackups,
+				!cfg.DisableFileLog,
+			),
 		}
 		if cfg.MetricsAPIPort > 0 {
 			observabilityOptions = append(observabilityOptions, observability.WithMetrics())

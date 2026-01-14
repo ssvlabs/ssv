@@ -54,16 +54,21 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 		option(&config)
 	}
 
+	var logFileOptions *log.LogFileOptions
+	if config.logger.enableFileLog {
+		logFileOptions = &log.LogFileOptions{
+			FilePath:   config.logger.filePath,
+			MaxSize:    config.logger.fileSize,
+			MaxBackups: config.logger.fileBackups,
+		}
+	}
+
 	if config.logger.enabled {
 		err = log.SetGlobal(
 			config.logger.level,
 			config.logger.levelFormat,
 			config.logger.format,
-			&log.LogFileOptions{
-				FilePath:   config.logger.filePath,
-				MaxSize:    config.logger.fileSize,
-				MaxBackups: config.logger.fileBackups,
-			},
+			logFileOptions,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("could not setup global logger: %w", err)
