@@ -95,6 +95,9 @@ type BaseRunner struct {
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
+
+	preConsensusMsgLogMu sync.Mutex
+	preConsensusMsgLog   preConsensusMsgLogStats
 }
 
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
@@ -203,6 +206,8 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	b.mtx.Lock() // writes to b.State
 	b.State = state
 	b.mtx.Unlock()
+
+	b.resetPreConsensusMsgLog()
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -237,23 +242,16 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 		return false, nil, fmt.Errorf("invalid pre-consensus message: %w", err)
 	}
 
-	vIndices := make([]uint64, 0, len(signedMsg.Messages))
-	for _, msg := range signedMsg.Messages {
-		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
-	}
-	const gotPreConsensusMsgEvent = "📬 got pre-consensus message"
-	logger.Debug(
-		gotPreConsensusMsgEvent,
-		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
-		zap.Uint64s("validators", vIndices),
-	)
-	span.AddEvent(gotPreConsensusMsgEvent)
+	signer := ssvtypes.PartialSigMsgSigner(signedMsg)
+	b.observePreConsensusMsg(signer)
 
 	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
-		logger.Debug(gotPreConsensusQuorumEvent, fields.QuorumRoots(quorumRoots))
+		summaryFields := b.preConsensusMsgLogSummaryFieldsOnce()
+		summaryFields = append(summaryFields, zap.Uint64("quorum_reached_by", signer), fields.QuorumRoots(quorumRoots))
+		logger.Debug(gotPreConsensusQuorumEvent, summaryFields...)
 		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
 
