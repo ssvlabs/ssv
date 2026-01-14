@@ -37,6 +37,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -85,6 +86,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committee := slices.Collect(maps.Keys(ks.Shares))
 	slices.Sort(committee)
+
+	testLeaderNetCfg = netCfg
+	testLeaderCommittee = committee
 
 	committeeID := shares.active.CommitteeID()
 
@@ -195,7 +199,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.Signer(0)
+		signerIdx := slices.Index(committee, signedSSVMessage.OperatorIDs[0])
+		require.GreaterOrEqual(t, signerIdx, 0)
+
+		stateBySlot := state.Signer(signerIdx)
 		require.NotNil(t, stateBySlot)
 
 		storedState := stateBySlot.GetSignerState(slot)
@@ -216,6 +223,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		signerIdx = slices.Index(committee, signedSSVMessage.OperatorIDs[0])
+		require.GreaterOrEqual(t, signerIdx, 0)
+		stateBySlot = state.Signer(signerIdx)
+
 		storedState = stateBySlot.GetSignerState(slot)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
@@ -231,6 +242,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
+
+		signerIdx = slices.Index(committee, signedSSVMessage.OperatorIDs[0])
+		require.GreaterOrEqual(t, signerIdx, 0)
+		stateBySlot = state.Signer(signerIdx)
 
 		storedState = stateBySlot.GetSignerState(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
@@ -560,7 +575,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			PrepareJustification:     [][]byte{},
 		}
 
-		leader := validator.roundRobinProposerPreBooleFork(specqbft.Height(slot), specqbft.FirstRound, committee)
+		leader := leaderForTest(specqbft.Height(slot), specqbft.FirstRound)
 		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
@@ -1256,7 +1271,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
+		leader := leaderForTest(specqbft.Height(slot), specqbft.FirstRound)
+		wrongLeader := committee[0]
+		if wrongLeader == leader {
+			wrongLeader = committee[1]
+		}
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{wrongLeader}
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -1987,10 +2007,28 @@ func generateSignedMessage(
 		opt(qbftMessage)
 	}
 
-	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
+	leader := leaderForTest(qbftMessage.Height, qbftMessage.Round)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 	signedSSVMessage.FullData = fullData
 
 	return signedSSVMessage
+}
+
+var testLeaderNetCfg *networkconfig.Network
+var testLeaderCommittee []spectypes.OperatorID
+
+func leaderForTest(height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
+	if testLeaderNetCfg.BooleForkAtSlot(phase0.Slot(height)) {
+		return qbft.RoundRobinProposer(height, round, testLeaderCommittee, testLeaderNetCfg)
+	}
+
+	firstRoundIndex := uint64(0)
+	if height != specqbft.FirstHeight {
+		firstRoundIndex += uint64(height) % uint64(len(testLeaderCommittee))
+	}
+
+	index := (firstRoundIndex + uint64(round) - uint64(specqbft.FirstRound)) % uint64(len(testLeaderCommittee))
+	return testLeaderCommittee[index]
 }
 
 func generateMultiSignedMessage(
