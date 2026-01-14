@@ -403,9 +403,14 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		for _, metadata := range metadataList {
 			validatorIndex := metadata.ValidatorIndex
 			share := r.BaseRunner.Share[validatorIndex]
+			// Explanation on why we need this check: https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658117698
+			if share == nil {
+				continue
+			}
 			pubKey := share.ValidatorPubKey
 
 			gotQuorum, quorumSigners := r.state().PreConsensusContainer.HasQuorum(validatorIndex, root)
+			// Explanation on why we need this check: https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658112575
 			if !gotQuorum {
 				continue
 			}
@@ -818,6 +823,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
+				if share == nil {
+					return
+				}
 				pubKey := share.ValidatorPubKey
 
 				vlogger := logger.With(
@@ -1443,7 +1451,10 @@ func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
 // - BeaconRole is either BNRoleAggregator or BNRoleSyncCommitteeContribution
 // - Validator indexes exist in the provided map
 // TODO: use (*AggregatorCommitteeDuty).Validate from spec after fork
-func ValidateAggregatorCommitteeDuty(acd *spectypes.AggregatorCommitteeDuty, validatorIndex map[phase0.ValidatorIndex]struct{}) error {
+func ValidateAggregatorCommitteeDuty(
+	acd *spectypes.AggregatorCommitteeDuty,
+	validatorIndex map[phase0.ValidatorIndex]struct{},
+) error {
 	const InvalidAggregatorCommitteeDutyErrorCode = 82
 
 	slot := acd.Slot

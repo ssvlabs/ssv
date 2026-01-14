@@ -609,6 +609,9 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
+				if share == nil {
+					return
+				}
 				pubKey := share.ValidatorPubKey
 
 				vLogger := logger.With(
