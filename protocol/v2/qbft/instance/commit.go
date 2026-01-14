@@ -46,7 +46,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 
 		logger.Debug("🎯 got commit quorum", zap.Any("agg_signers", agg.OperatorIDs))
 
-		i.metrics.EndStage(ctx, i.State.Round, stageCommit)
+		i.metrics.EndStage(ctx, i.State.Round)
 
 		return true, fullData, agg, nil
 	}

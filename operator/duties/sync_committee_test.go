@@ -90,7 +90,7 @@ func setupSyncCommitteeDutiesMock(
 }
 
 func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties []*v1.SyncCommitteeDuty, slot phase0.Slot) []*spectypes.ValidatorDuty {
-	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 	}
@@ -593,8 +593,6 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 }
 
 func eligibleShares() []*ssvtypes.SSVShare {
-	var result []*ssvtypes.SSVShare
-
 	participationShares := []*ssvtypes.SSVShare{
 		{
 			// share that is participating
@@ -671,6 +669,7 @@ func eligibleShares() []*ssvtypes.SSVShare {
 		},
 	}
 
+	result := make([]*ssvtypes.SSVShare, 0, len(participationShares)+len(exitingShares))
 	result = append(result, participationShares...)
 	result = append(result, exitingShares...)
 

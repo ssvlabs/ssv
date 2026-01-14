@@ -85,9 +85,9 @@ func (c *Controller) StartNewInstance(
 
 	c.Height = height
 
-	newInstance := instance.NewInstance(c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
 	c.StoredInstances.addNewInstance(newInstance)
-	newInstance.Start(ctx, logger, value, height, valueChecker)
+	newInstance.Start(ctx, value, height, valueChecker)
 	c.forceStopAllInstanceExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")

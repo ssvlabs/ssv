@@ -54,8 +54,17 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	lastErr := test.runPreTesting(logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
-	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
-	broadcastedRoots := make([]phase0.Root, 0)
+	broadcastedMsgsCap := 0
+	broadcastedRootsCap := 0
+	for _, runner := range test.Committee.Runners {
+		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgsCap += len(network.BroadcastedMsgs)
+		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
+	}
+
+	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0, broadcastedMsgsCap)
+	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)

@@ -415,7 +415,7 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 		var pk spectypes.ValidatorPK
 		binary.LittleEndian.PutUint64(pk[:], uint64(index))
 
-		var committee []*spectypes.ShareMember
+		committee := make([]*spectypes.ShareMember, 0, len(operators))
 		for _, signer := range operators {
 			committee = append(committee, &spectypes.ShareMember{Signer: signer})
 		}
@@ -503,7 +503,7 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 		var pk spectypes.ValidatorPK
 		binary.LittleEndian.PutUint64(pk[:], uint64(index))
 
-		var committee []*spectypes.ShareMember
+		committee := make([]*spectypes.ShareMember, 0, len(operators))
 		for _, signer := range operators {
 			committee = append(committee, &spectypes.ShareMember{Signer: signer})
 		}

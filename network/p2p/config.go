@@ -111,11 +111,12 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 		return nil, errors.Wrap(err, "could not convert to interface priv key")
 	}
 
-	opts := []libp2p.Option{
+	opts := make([]libp2p.Option, 0, 7)
+	opts = append(opts,
 		libp2p.Identity(sk),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
 		libp2p.UserAgent(c.UserAgent),
-	}
+	)
 
 	opts, err = c.configureAddrs(logger, opts)
 	if err != nil {

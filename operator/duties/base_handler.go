@@ -82,8 +82,22 @@ func (h *baseHandler) HandleInitialDuties(context.Context) {
 	// Do nothing
 }
 
-// ctxWithDeadlineOnNextSlot returns the derived context with deadline set to next slot (+ some safety margin
-// to account for clock skews).
 func (h *baseHandler) ctxWithDeadlineOnNextSlot(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
-	return context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
+	return h.ctxWithDeadlineOnSlot(ctx, slot+1)
+}
+
+func (h *baseHandler) ctxWithDeadlineInOneEpoch(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
+	// Attestation and aggregation submissions are rewarded as long as they are included within
+	// SLOTS_PER_EPOCH slots of their target slot (i.e., from target slot up to and including target + SLOTS_PER_EPOCH).
+	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
+	// Sync committee duties have to use the same deadline because they are part of the committee role.
+	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
+	slotsPerEpoch := phase0.Slot(h.beaconConfig.SlotsPerEpoch)
+	return h.ctxWithDeadlineOnSlot(ctx, slot+slotsPerEpoch+1)
+}
+
+// ctxWithDeadlineOnSlot returns the derived context with a deadline set to the beginning of the passed slot
+// with some safety margin to account for clock skews.
+func (h *baseHandler) ctxWithDeadlineOnSlot(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
+	return context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot).Add(100*time.Millisecond))
 }

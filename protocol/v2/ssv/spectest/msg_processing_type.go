@@ -280,7 +280,6 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetOperatorSigner(),
 			committeeDutyGuard,
 			runnerSample.GetDoppelgangerHandler(),
-			false,
 		)
 		return r.(*runner.CommitteeRunner), err
 	}

@@ -28,9 +28,9 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:            0,
-			GasLimit36:      0,
-			NetworkTopology: 0,
+			Alan:       0,
+			GasLimit36: 0,
+			Boole:      0,
 		},
 	}
 
@@ -71,9 +71,9 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:            0,
-			GasLimit36:      0,
-			NetworkTopology: 0,
+			Alan:       0,
+			GasLimit36: 0,
+			Boole:      0,
 		},
 	}
 
@@ -168,9 +168,9 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:            0,
-				GasLimit36:      0,
-				NetworkTopology: 0,
+				Alan:       0,
+				GasLimit36: 0,
+				Boole:      0,
 			},
 		}
 
@@ -193,7 +193,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "a9f3f796c0604208c25e9e0caa6960c44a318cc57a6b32d20a0e8bc1433cc6a3"
+		expectedJSONHash := "25861a78c7a7335b913061e6d792731a2f47e29ec46c68c5a512748bb940ada2"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -208,9 +208,9 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:            0,
-				GasLimit36:      0,
-				NetworkTopology: 0,
+				Alan:       0,
+				GasLimit36: 0,
+				Boole:      0,
 			},
 		}
 

@@ -173,7 +173,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 			return nil, errors.Wrap(err, "could not get pre consensus root domain")
 		}
 
-		ret := make([][32]byte, 0)
+		ret := make([][32]byte, 0, len(expectedRootObjs))
 		for _, rootI := range expectedRootObjs {
 			r, err := spectypes.ComputeETHSigningRoot(rootI, d)
 			if err != nil {
@@ -192,7 +192,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 	}
 
 	sortedRoots := func(msgs spectypes.PartialSignatureMessages) [][32]byte {
-		ret := make([][32]byte, 0)
+		ret := make([][32]byte, 0, len(msgs.Messages))
 		for _, msg := range msgs.Messages {
 			ret = append(ret, msg.SigningRoot)
 		}

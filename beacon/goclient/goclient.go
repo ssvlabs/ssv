@@ -34,10 +34,6 @@ const (
 	// Don't check for it, check for errors or nil data instead.
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
-	// Client timeouts.
-	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 60 // For long requests.
-
 	BlockRootToSlotCacheCapacityEpochs = 64
 
 	// ProposalPreparationBatchSize is the maximum number of preparations to submit in a single request
@@ -134,6 +130,12 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
+	// proposalSoftTimeout is the collection period during which we gather proposals
+	// from multiple beacon nodes to select the best one. After this timeout, we return
+	// the best proposal seen so far, or wait for the first valid proposal if none
+	// received yet. The parent context (duty deadline) serves as the hard timeout.
+	proposalSoftTimeout time.Duration
+
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
 	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
@@ -172,25 +174,17 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";")
 
-	commonTimeout := opt.CommonTimeout
-	if commonTimeout == 0 {
-		commonTimeout = DefaultCommonTimeout
-	}
-	longTimeout := opt.LongTimeout
-	if longTimeout == 0 {
-		longTimeout = DefaultLongTimeout
-	}
-
 	client := &GoClient{
 		log:                                logger.Named(log.NameConsensusClient),
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		commonTimeout:                      commonTimeout,
-		longTimeout:                        longTimeout,
+		commonTimeout:                      opt.CommonTimeout,
+		longTimeout:                        opt.LongTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		withParallelSubmissions:            opt.WithParallelSubmissions,
-		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
-		weightedAttestationDataHardTimeout: commonTimeout,
+		weightedAttestationDataSoftTimeout: time.Duration(float64(opt.CommonTimeout) / 2.5),
+		weightedAttestationDataHardTimeout: opt.CommonTimeout,
+		proposalSoftTimeout:                opt.ProposalSoftTimeout,
 		supportedTopics:                    []eventTopic{eventTopicHead, eventTopicBlock},
 		activatedClients:                   hashmap.New[string, struct{}](),
 	}

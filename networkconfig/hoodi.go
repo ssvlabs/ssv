@@ -21,8 +21,8 @@ var HoodiSSV = &SSV{
 	},
 	TotalEthereumValidators: 1107955, // active_validators from https://hoodi.beaconcha.in/index/data on Apr 18, 2025
 	Forks: SSVForks{
-		Alan:            0,
-		GasLimit36:      29000, // Jul-24-2025 09:30:00 AM UTC
-		NetworkTopology: math.MaxUint64,
+		Alan:       0,
+		GasLimit36: 29000, // Jul-24-2025 09:30:00 AM UTC
+		Boole:      math.MaxUint64,
 	},
 }

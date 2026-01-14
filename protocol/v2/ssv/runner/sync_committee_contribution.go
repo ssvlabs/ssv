@@ -426,8 +426,9 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 }
 
 func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	sszIndexes := make([]ssz.HashRoot, 0)
-	for _, index := range r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
+	indices := r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices
+	sszIndexes := make([]ssz.HashRoot, 0, len(indices))
+	for _, index := range indices {
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              r.state().CurrentDuty.DutySlot(),
