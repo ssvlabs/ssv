@@ -101,9 +101,18 @@ type BaseRunner struct {
 	preConsensusMsgLog   preConsensusMsgLogStats
 }
 
-func isAggregatorDuty(duty spectypes.Duty) bool {
+func isTimingSummaryPreConsensusDuty(duty spectypes.Duty) bool {
 	validatorDuty, ok := duty.(*spectypes.ValidatorDuty)
-	return ok && validatorDuty.Type == spectypes.BNRoleAggregator
+	if !ok {
+		return false
+	}
+
+	switch validatorDuty.Type {
+	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+		return true
+	default:
+		return false
+	}
 }
 
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
@@ -213,7 +222,7 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	b.State = state
 	b.mtx.Unlock()
 
-	if isAggregatorDuty(duty) {
+	if isTimingSummaryPreConsensusDuty(duty) {
 		var slotStartTime time.Time
 		if b.NetworkConfig != nil {
 			slotStartTime = b.NetworkConfig.SlotStartTime(duty.DutySlot())
@@ -256,7 +265,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 
 	signer := ssvtypes.PartialSigMsgSigner(signedMsg)
 
-	if isAggregatorDuty(b.State.CurrentDuty) {
+	if isTimingSummaryPreConsensusDuty(b.State.CurrentDuty) {
 		b.observePreConsensusMsg(signer)
 
 		hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
