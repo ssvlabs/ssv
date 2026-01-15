@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -207,7 +208,11 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	b.State = state
 	b.mtx.Unlock()
 
-	b.resetPreConsensusMsgLog()
+	var slotStartTime time.Time
+	if b.NetworkConfig != nil {
+		slotStartTime = b.NetworkConfig.SlotStartTime(duty.DutySlot())
+	}
+	b.resetPreConsensusMsgLog(slotStartTime)
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -249,10 +254,12 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
-		summaryFields := b.preConsensusMsgLogSummaryFieldsOnce()
-		summaryFields = append(summaryFields, zap.Uint64("quorum_reached_by", signer), fields.QuorumRoots(quorumRoots))
-		logger.Debug(gotPreConsensusQuorumEvent, summaryFields...)
-		span.AddEvent(gotPreConsensusQuorumEvent)
+		summaryFields := b.preConsensusMsgLogSummaryFieldsOnce(signer)
+		if summaryFields != nil {
+			summaryFields = append(summaryFields, fields.QuorumRoots(quorumRoots))
+			logger.Debug(gotPreConsensusQuorumEvent, summaryFields...)
+			span.AddEvent(gotPreConsensusQuorumEvent)
+		}
 	}
 
 	return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil

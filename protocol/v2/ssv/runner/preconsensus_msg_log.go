@@ -2,43 +2,58 @@ package runner
 
 import (
 	"sort"
+	"strconv"
+	"time"
 
 	"go.uber.org/zap"
 )
 
 type preConsensusMsgLogStats struct {
-	totalMessages uint64
-	messagesBySig map[uint64]uint64
+	slotStartTime time.Time
+	signerAt      map[uint64]time.Duration
 	summaryLogged bool
 }
 
-type preConsensusSignerMsgCount struct {
-	Signer   uint64 `json:"signer"`
-	Messages uint64 `json:"messages"`
+type preConsensusSignerTiming struct {
+	Signer uint64 `json:"signer"`
+	At     string `json:"at"`
+
+	atDur time.Duration
 }
 
-func (b *BaseRunner) resetPreConsensusMsgLog() {
+func (b *BaseRunner) resetPreConsensusMsgLog(slotStartTime time.Time) {
 	b.preConsensusMsgLogMu.Lock()
 	defer b.preConsensusMsgLogMu.Unlock()
 
-	b.preConsensusMsgLog.totalMessages = 0
-	b.preConsensusMsgLog.messagesBySig = make(map[uint64]uint64)
+	b.preConsensusMsgLog.slotStartTime = slotStartTime
+	b.preConsensusMsgLog.signerAt = make(map[uint64]time.Duration)
 	b.preConsensusMsgLog.summaryLogged = false
 }
 
 func (b *BaseRunner) observePreConsensusMsg(signer uint64) {
+	now := time.Now()
+
 	b.preConsensusMsgLogMu.Lock()
 	defer b.preConsensusMsgLogMu.Unlock()
 
-	if b.preConsensusMsgLog.messagesBySig == nil {
-		b.preConsensusMsgLog.messagesBySig = make(map[uint64]uint64)
+	if b.preConsensusMsgLog.signerAt == nil {
+		b.preConsensusMsgLog.signerAt = make(map[uint64]time.Duration)
 	}
 
-	b.preConsensusMsgLog.totalMessages++
-	b.preConsensusMsgLog.messagesBySig[signer]++
+	if b.preConsensusMsgLog.slotStartTime.IsZero() {
+		b.preConsensusMsgLog.slotStartTime = now
+	}
+
+	if _, seen := b.preConsensusMsgLog.signerAt[signer]; seen {
+		return
+	}
+
+	b.preConsensusMsgLog.signerAt[signer] = now.Sub(b.preConsensusMsgLog.slotStartTime)
 }
 
-func (b *BaseRunner) preConsensusMsgLogSummaryFieldsOnce() []zap.Field {
+func (b *BaseRunner) preConsensusMsgLogSummaryFieldsOnce(quorumReachedBySigner uint64) []zap.Field {
+	now := time.Now()
+
 	b.preConsensusMsgLogMu.Lock()
 	defer b.preConsensusMsgLogMu.Unlock()
 
@@ -47,25 +62,46 @@ func (b *BaseRunner) preConsensusMsgLogSummaryFieldsOnce() []zap.Field {
 	}
 	b.preConsensusMsgLog.summaryLogged = true
 
-	if len(b.preConsensusMsgLog.messagesBySig) == 0 {
-		return []zap.Field{
-			zap.Uint64("pre_consensus_msgs_total", b.preConsensusMsgLog.totalMessages),
-			zap.Uint64("pre_consensus_msgs_unique_signers", 0),
-		}
+	if b.preConsensusMsgLog.slotStartTime.IsZero() {
+		b.preConsensusMsgLog.slotStartTime = now
 	}
 
-	signers := make([]preConsensusSignerMsgCount, 0, len(b.preConsensusMsgLog.messagesBySig))
-	for signer, count := range b.preConsensusMsgLog.messagesBySig {
-		signers = append(signers, preConsensusSignerMsgCount{
-			Signer:   signer,
-			Messages: count,
+	timeToQuorum := now.Sub(b.preConsensusMsgLog.slotStartTime)
+	if at, ok := b.preConsensusMsgLog.signerAt[quorumReachedBySigner]; ok {
+		timeToQuorum = at
+	}
+
+	signers := make([]preConsensusSignerTiming, 0, len(b.preConsensusMsgLog.signerAt))
+	for signer, at := range b.preConsensusMsgLog.signerAt {
+		signers = append(signers, preConsensusSignerTiming{
+			Signer: signer,
+			At:     signedDurationToSecondsStr(at),
+			atDur:  at,
 		})
 	}
-	sort.Slice(signers, func(i, j int) bool { return signers[i].Signer < signers[j].Signer })
+	sort.Slice(signers, func(i, j int) bool {
+		if signers[i].atDur == signers[j].atDur {
+			return signers[i].Signer < signers[j].Signer
+		}
+		return signers[i].atDur < signers[j].atDur
+	})
 
 	return []zap.Field{
-		zap.Uint64("pre_consensus_msgs_total", b.preConsensusMsgLog.totalMessages),
-		zap.Uint64("pre_consensus_msgs_unique_signers", uint64(len(b.preConsensusMsgLog.messagesBySig))),
-		zap.Any("pre_consensus_msgs_by_signer", signers),
+		zap.String("time_to_quorum", durationToSecondsStr(timeToQuorum)),
+		zap.Any("signer_timings", signers),
+		zap.Uint64("quorum_reached_by", quorumReachedBySigner),
 	}
+}
+
+func durationToSecondsStr(val time.Duration) string {
+	valStr := strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
+	return valStr + "s"
+}
+
+func signedDurationToSecondsStr(val time.Duration) string {
+	valStr := strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
+	if val >= 0 {
+		valStr = "+" + valStr
+	}
+	return valStr + "s"
 }
