@@ -97,8 +97,7 @@ type BaseRunner struct {
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
 
-	preConsensusMsgLogMu sync.Mutex
-	preConsensusMsgLog   preConsensusMsgLogStats
+	preConsensusMsgLog preConsensusMsgLogStats
 }
 
 func isTimingSummaryPreConsensusDuty(duty spectypes.Duty) bool {

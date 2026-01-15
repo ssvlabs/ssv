@@ -22,9 +22,6 @@ type preConsensusSignerTiming struct {
 }
 
 func (b *BaseRunner) resetPreConsensusMsgLog(slotStartTime time.Time) {
-	b.preConsensusMsgLogMu.Lock()
-	defer b.preConsensusMsgLogMu.Unlock()
-
 	b.preConsensusMsgLog.slotStartTime = slotStartTime
 	b.preConsensusMsgLog.signerAt = make(map[uint64]time.Duration)
 	b.preConsensusMsgLog.summaryLogged = false
@@ -32,9 +29,6 @@ func (b *BaseRunner) resetPreConsensusMsgLog(slotStartTime time.Time) {
 
 func (b *BaseRunner) observePreConsensusMsg(signer uint64) {
 	now := time.Now()
-
-	b.preConsensusMsgLogMu.Lock()
-	defer b.preConsensusMsgLogMu.Unlock()
 
 	if b.preConsensusMsgLog.signerAt == nil {
 		b.preConsensusMsgLog.signerAt = make(map[uint64]time.Duration)
@@ -53,9 +47,6 @@ func (b *BaseRunner) observePreConsensusMsg(signer uint64) {
 
 func (b *BaseRunner) preConsensusMsgLogSummaryFieldsOnce(quorumReachedBySigner uint64) []zap.Field {
 	now := time.Now()
-
-	b.preConsensusMsgLogMu.Lock()
-	defer b.preConsensusMsgLogMu.Unlock()
 
 	if b.preConsensusMsgLog.summaryLogged {
 		return nil
