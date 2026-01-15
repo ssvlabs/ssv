@@ -106,7 +106,6 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 			signer,
 			test.DutySlot,
 			sharePubKeys,
-			beaconConfig.EstimatedEpochAtSlot(test.DutySlot),
 			expectedVote,
 		)
 		return checker.CheckValue
@@ -245,7 +244,6 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 			signer,
 			slot,
 			sharePubKeys,
-			beaconConfig.EstimatedEpochAtSlot(slot),
 			expectedVote,
 		)
 
