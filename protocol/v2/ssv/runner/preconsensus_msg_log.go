@@ -5,81 +5,59 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 )
 
 type preConsensusMsgLogStats struct {
-	slotStartTime time.Time
-	signerAt      map[uint64]time.Duration
-	summaryLogged bool
+	slotStartTime      time.Time
+	signerTimeIntoSlot map[uint64]time.Duration
 }
 
-type preConsensusSignerTiming struct {
-	Signer uint64 `json:"signer"`
-	At     string `json:"at"`
-
-	atDur time.Duration
-}
-
-func (b *BaseRunner) resetPreConsensusMsgLog(slotStartTime time.Time) {
-	b.preConsensusMsgLog.slotStartTime = slotStartTime
-	b.preConsensusMsgLog.signerAt = make(map[uint64]time.Duration)
-	b.preConsensusMsgLog.summaryLogged = false
+func (b *BaseRunner) resetPreConsensusLogSummary(nextSlot phase0.Slot) {
+	b.preConsensusMsgLog.slotStartTime = b.NetworkConfig.SlotStartTime(nextSlot)
+	b.preConsensusMsgLog.signerTimeIntoSlot = make(map[uint64]time.Duration)
 }
 
 func (b *BaseRunner) observePreConsensusMsg(signer uint64) {
-	now := time.Now()
-
-	if b.preConsensusMsgLog.signerAt == nil {
-		b.preConsensusMsgLog.signerAt = make(map[uint64]time.Duration)
-	}
-
-	if b.preConsensusMsgLog.slotStartTime.IsZero() {
-		b.preConsensusMsgLog.slotStartTime = now
-	}
-
-	if _, seen := b.preConsensusMsgLog.signerAt[signer]; seen {
+	// Duplicate message from the same signer should never arrive here, but handle it just in case.
+	if _, seen := b.preConsensusMsgLog.signerTimeIntoSlot[signer]; seen {
 		return
 	}
 
-	b.preConsensusMsgLog.signerAt[signer] = now.Sub(b.preConsensusMsgLog.slotStartTime)
+	b.preConsensusMsgLog.signerTimeIntoSlot[signer] = time.Since(b.preConsensusMsgLog.slotStartTime)
 }
 
-func (b *BaseRunner) preConsensusMsgLogSummaryFieldsOnce(quorumReachedBySigner uint64) []zap.Field {
-	now := time.Now()
-
-	if b.preConsensusMsgLog.summaryLogged {
-		return nil
-	}
-	b.preConsensusMsgLog.summaryLogged = true
-
-	if b.preConsensusMsgLog.slotStartTime.IsZero() {
-		b.preConsensusMsgLog.slotStartTime = now
-	}
-
-	timeToQuorum := now.Sub(b.preConsensusMsgLog.slotStartTime)
-	if at, ok := b.preConsensusMsgLog.signerAt[quorumReachedBySigner]; ok {
+func (b *BaseRunner) preConsensusMsgLogSummaryFields(quorumReachedBySigner uint64) []zap.Field {
+	timeToQuorum := time.Since(b.preConsensusMsgLog.slotStartTime)
+	if at, ok := b.preConsensusMsgLog.signerTimeIntoSlot[quorumReachedBySigner]; ok {
 		timeToQuorum = at
 	}
 
-	signers := make([]preConsensusSignerTiming, 0, len(b.preConsensusMsgLog.signerAt))
-	for signer, at := range b.preConsensusMsgLog.signerAt {
-		signers = append(signers, preConsensusSignerTiming{
-			Signer: signer,
-			At:     signedDurationToSecondsStr(at),
-			atDur:  at,
+	type preConsensusSignerTiming struct {
+		Signer       uint64 `json:"signer"`
+		TimeIntoSlot string `json:"time_into_slot"`
+
+		atDur time.Duration
+	}
+	signerTimings := make([]preConsensusSignerTiming, 0, len(b.preConsensusMsgLog.signerTimeIntoSlot))
+	for signer, at := range b.preConsensusMsgLog.signerTimeIntoSlot {
+		signerTimings = append(signerTimings, preConsensusSignerTiming{
+			Signer:       signer,
+			TimeIntoSlot: signedDurationToSecondsStr(at),
+			atDur:        at,
 		})
 	}
-	sort.Slice(signers, func(i, j int) bool {
-		if signers[i].atDur == signers[j].atDur {
-			return signers[i].Signer < signers[j].Signer
+	sort.Slice(signerTimings, func(i, j int) bool {
+		if signerTimings[i].atDur == signerTimings[j].atDur {
+			return signerTimings[i].Signer < signerTimings[j].Signer
 		}
-		return signers[i].atDur < signers[j].atDur
+		return signerTimings[i].atDur < signerTimings[j].atDur
 	})
 
 	return []zap.Field{
 		zap.String("time_to_quorum", durationToSecondsStr(timeToQuorum)),
-		zap.Any("signer_timings", signers),
+		zap.Any("signer_timings", signerTimings),
 		zap.Uint64("quorum_reached_by", quorumReachedBySigner),
 	}
 }
