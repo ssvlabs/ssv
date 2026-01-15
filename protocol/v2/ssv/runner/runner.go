@@ -101,6 +101,11 @@ type BaseRunner struct {
 	preConsensusMsgLog   preConsensusMsgLogStats
 }
 
+func isAggregatorDuty(duty spectypes.Duty) bool {
+	validatorDuty, ok := duty.(*spectypes.ValidatorDuty)
+	return ok && validatorDuty.Type == spectypes.BNRoleAggregator
+}
+
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
 	var runningInstance *instance.Instance
 	if b.hasRunningDuty() {
@@ -208,11 +213,13 @@ func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	b.State = state
 	b.mtx.Unlock()
 
-	var slotStartTime time.Time
-	if b.NetworkConfig != nil {
-		slotStartTime = b.NetworkConfig.SlotStartTime(duty.DutySlot())
+	if isAggregatorDuty(duty) {
+		var slotStartTime time.Time
+		if b.NetworkConfig != nil {
+			slotStartTime = b.NetworkConfig.SlotStartTime(duty.DutySlot())
+		}
+		b.resetPreConsensusMsgLog(slotStartTime)
 	}
-	b.resetPreConsensusMsgLog(slotStartTime)
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -248,18 +255,42 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 	}
 
 	signer := ssvtypes.PartialSigMsgSigner(signedMsg)
-	b.observePreConsensusMsg(signer)
+
+	if isAggregatorDuty(b.State.CurrentDuty) {
+		b.observePreConsensusMsg(signer)
+
+		hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+		if hasQuorum {
+			const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
+			summaryFields := b.preConsensusMsgLogSummaryFieldsOnce(signer)
+			if summaryFields != nil {
+				summaryFields = append(summaryFields, fields.QuorumRoots(quorumRoots))
+				logger.Debug(gotPreConsensusQuorumEvent, summaryFields...)
+				span.AddEvent(gotPreConsensusQuorumEvent)
+			}
+		}
+
+		return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil
+	}
+
+	vIndices := make([]uint64, 0, len(signedMsg.Messages))
+	for _, msg := range signedMsg.Messages {
+		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
+	}
+	const gotPreConsensusMsgEvent = "📬 got pre-consensus message"
+	logger.Debug(
+		gotPreConsensusMsgEvent,
+		zap.Uint64("signer", signer),
+		zap.Uint64s("validators", vIndices),
+	)
+	span.AddEvent(gotPreConsensusMsgEvent)
 
 	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
-		summaryFields := b.preConsensusMsgLogSummaryFieldsOnce(signer)
-		if summaryFields != nil {
-			summaryFields = append(summaryFields, fields.QuorumRoots(quorumRoots))
-			logger.Debug(gotPreConsensusQuorumEvent, summaryFields...)
-			span.AddEvent(gotPreConsensusQuorumEvent)
-		}
+		logger.Debug(gotPreConsensusQuorumEvent, fields.QuorumRoots(quorumRoots))
+		span.AddEvent(gotPreConsensusQuorumEvent)
 	}
 
 	return hasQuorum, slices.Collect(maps.Keys(quorumRoots)), nil
