@@ -15,7 +15,10 @@ type preConsensusMsgLogStats struct {
 }
 
 func (b *BaseRunner) resetPreConsensusLogSummary(nextSlot phase0.Slot) {
-	b.preConsensusMsgLog.slotStartTime = b.NetworkConfig.SlotStartTime(nextSlot)
+	// b.NetworkConfig can only be nil in tests, this is fast & dirty work-around for it.
+	if b.NetworkConfig != nil {
+		b.preConsensusMsgLog.slotStartTime = b.NetworkConfig.SlotStartTime(nextSlot)
+	}
 	b.preConsensusMsgLog.signerTimeIntoSlot = make(map[uint64]time.Duration)
 }
 
