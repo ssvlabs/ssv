@@ -66,7 +66,7 @@ func TestExecuteTask(t *testing.T) {
 	})
 
 	t.Run("test LiquidateCluster task execution", func(t *testing.T) {
-		var shares []*ssvtypes.SSVShare
+		shares := make([]*ssvtypes.SSVShare, 0, 1)
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)),
@@ -80,7 +80,7 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 	})
 	t.Run("test ReactivateCluster task execution", func(t *testing.T) {
-		var shares []*ssvtypes.SSVShare
+		shares := make([]*ssvtypes.SSVShare, 0, 1)
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)),

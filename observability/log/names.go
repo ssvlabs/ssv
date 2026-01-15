@@ -32,6 +32,7 @@ const (
 	NameDoppelganger           = "Doppelganger"
 	NameObservability          = "Observability"
 	NameConsensusClient        = "ConsensusClient"
+	NameQBFTInstance           = "QBFTInstance"
 	NameMigrations             = "Migrations"
 	NameControllerTaskExecutor = "ControllerTaskExecutor"
 	NameSSVMessageQueue        = "SSVMessageQueue"

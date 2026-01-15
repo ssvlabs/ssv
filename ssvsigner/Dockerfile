@@ -37,7 +37,7 @@ COPY .. .
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
   COMMIT=$(git rev-parse HEAD) && \
-  VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
+  VERSION=$(git describe --tags --exact-match HEAD 2>/dev/null || echo "untagged") && \
   CGO_ENABLED=1 GOOS=linux go install -C ./ssvsigner/cmd/ssv-signer \
   -tags="blst_enabled" \
   -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" 

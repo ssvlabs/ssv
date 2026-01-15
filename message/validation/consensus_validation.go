@@ -16,6 +16,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	qbft "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
@@ -184,7 +185,12 @@ func (mv *messageValidator) validateQBFTLogic(
 ) error {
 	if consensusMessage.MsgType == specqbft.ProposalMsgType {
 		// Rule: Signer must be the leader
-		leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee)
+		var leader spectypes.OperatorID
+		if mv.netCfg.BooleForkAtSlot(phase0.Slot(consensusMessage.Height)) {
+			leader = qbft.RoundRobinProposer(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee, mv.netCfg)
+		} else {
+			leader = mv.roundRobinProposerPreBooleFork(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee)
+		}
 		if signedSSVMessage.OperatorIDs[0] != leader {
 			err := ErrSignerNotLeader
 			err.got = signedSSVMessage.OperatorIDs[0]
@@ -461,7 +467,8 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	return nil
 }
 
-func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
+// Deprecated - only for pre-Boole fork
+func (mv *messageValidator) roundRobinProposerPreBooleFork(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
 	firstRoundIndex := uint64(0)
 	if height != specqbft.FirstHeight {
 		firstRoundIndex += uint64(height) % uint64(len(committee))

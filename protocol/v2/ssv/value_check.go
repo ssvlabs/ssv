@@ -18,26 +18,23 @@ type ValueChecker interface {
 }
 
 type voteChecker struct {
-	signer                ekm.BeaconSigner
-	slot                  phase0.Slot
-	sharePublicKeys       []phase0.BLSPubKey
-	estimatedCurrentEpoch phase0.Epoch
-	expectedVote          *spectypes.BeaconVote
+	signer          ekm.BeaconSigner
+	slot            phase0.Slot
+	sharePublicKeys []phase0.BLSPubKey
+	expectedVote    *spectypes.BeaconVote
 }
 
 func NewVoteChecker(
 	signer ekm.BeaconSigner,
 	slot phase0.Slot,
 	sharePublicKeys []phase0.BLSPubKey,
-	estimatedCurrentEpoch phase0.Epoch,
 	expectedVote *spectypes.BeaconVote,
 ) ValueChecker {
 	return &voteChecker{
-		signer:                signer,
-		slot:                  slot,
-		sharePublicKeys:       sharePublicKeys,
-		estimatedCurrentEpoch: estimatedCurrentEpoch,
-		expectedVote:          expectedVote,
+		signer:          signer,
+		slot:            slot,
+		sharePublicKeys: sharePublicKeys,
+		expectedVote:    expectedVote,
 	}
 }
 
@@ -68,21 +65,13 @@ func (v *voteChecker) CheckValue(value []byte) error {
 		}
 	}
 
-	// Implemented according to https://github.com/ssvlabs/SIPs/pull/69
+	// Implemented according to sips/majority_fork_protection.md: compare epochs only.
 	if bv.Source.Epoch != v.expectedVote.Source.Epoch {
 		return fmt.Errorf("unexpected source epoch %v, expected %v", bv.Source.Epoch, v.expectedVote.Source.Epoch)
 	}
 
 	if bv.Target.Epoch != v.expectedVote.Target.Epoch {
 		return fmt.Errorf("unexpected target epoch %v, expected %v", bv.Target.Epoch, v.expectedVote.Target.Epoch)
-	}
-
-	if bv.Source.Root != v.expectedVote.Source.Root {
-		return fmt.Errorf("unexpected source root %x, expected %x", bv.Source.Root, v.expectedVote.Source.Root)
-	}
-
-	if bv.Target.Root != v.expectedVote.Target.Root {
-		return fmt.Errorf("unexpected target root %x, expected %x", bv.Target.Root, v.expectedVote.Target.Root)
 	}
 
 	return nil

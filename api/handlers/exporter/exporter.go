@@ -2,37 +2,32 @@ package exporter
 
 import (
 	"errors"
-	"fmt"
-	"slices"
+	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/exporter/store"
+	exporter2 "github.com/ssvlabs/ssv/exporter2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 )
 
 type Exporter struct {
-	participantStores *ibftstorage.ParticipantStores
-	traceStore        dutyTraceStore
-	validators        registrystorage.ValidatorStore
-	logger            *zap.Logger
+	logger *zap.Logger
+	svc    *exporter2.Exporter
 }
 
 func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
 	return &Exporter{
-		participantStores: participantStores,
-		traceStore:        traceStore,
-		validators:        validators,
-		logger:            logger,
+		logger: logger,
+		svc:    exporter2.NewExporter(logger, participantStores, traceStore, validators),
 	}
 }
 
@@ -51,11 +46,40 @@ type dutyTraceStore interface {
 }
 
 // Common helpers shared across handlers
-func toApiError(errs *multierror.Error) *api.ErrorResponse {
-	if len(errs.Errors) == 1 {
-		return api.Error(errs.Errors[0])
+// toApiError produces a rendered API error response, logs it with context, and
+// allows callers to choose the HTTP status code. It should be the only
+// function used by exporter handlers to return errors so logging remains
+// consistent.
+func toApiError(logger *zap.Logger, r *http.Request, endpoint string, status int, req any, err error) *api.ErrorResponse {
+	if err == nil {
+		err = errors.New("unknown error")
 	}
-	return api.Error(errs)
+
+	// Wrap the error into the standard response shape with the desired status.
+	var apiErr *api.ErrorResponse
+	if status == http.StatusBadRequest {
+		apiErr = api.BadRequestError(err)
+	} else {
+		apiErr = &api.ErrorResponse{
+			Err:     err,
+			Code:    status,
+			Status:  http.StatusText(status),
+			Message: err.Error(),
+		}
+	}
+
+	if logger != nil {
+		logger.Error("exporter API request failed",
+			zap.String("endpoint", endpoint),
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+			zap.Int("status", status),
+			zap.String("error", apiErr.Message),
+			zap.Any("request", req),
+		)
+	}
+
+	return apiErr
 }
 
 func toStrings(err *multierror.Error) []string {
@@ -72,23 +96,6 @@ func toStrings(err *multierror.Error) []string {
 	return result
 }
 
-func isNotFoundError(e error) bool {
-	return errors.Is(e, store.ErrNotFound) || errors.Is(e, dutytracer.ErrNotFound)
-}
-
-func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
-	if e == nil || e.ErrorOrNil() == nil {
-		return nil
-	}
-	var filteredErrs *multierror.Error
-	for _, err := range e.Errors {
-		if !isNotFoundError(err) {
-			filteredErrs = multierror.Append(filteredErrs, err)
-		}
-	}
-	return filteredErrs
-}
-
 func parsePubkeysSlice(hexSlice api.HexSlice) []spectypes.ValidatorPK {
 	pubkeys := make([]spectypes.ValidatorPK, 0, len(hexSlice))
 	for _, pk := range hexSlice {
@@ -97,29 +104,4 @@ func parsePubkeysSlice(hexSlice api.HexSlice) []spectypes.ValidatorPK {
 		pubkeys = append(pubkeys, key)
 	}
 	return pubkeys
-}
-
-func (e *Exporter) extractIndices(req filterRequest) ([]phase0.ValidatorIndex, error) {
-	reqIdxs := req.indices()
-	reqPks := req.pubKeys()
-
-	indices := make([]phase0.ValidatorIndex, 0, len(reqIdxs)+len(reqPks))
-	var errs *multierror.Error
-
-	for _, idx := range reqIdxs {
-		indices = append(indices, phase0.ValidatorIndex(idx))
-	}
-	for _, pk := range reqPks {
-		idx, ok := e.validators.ValidatorIndex(pk)
-		if !ok {
-			errs = multierror.Append(errs, fmt.Errorf("validator not found for pubkey: %x", pk))
-			continue
-		}
-		indices = append(indices, idx)
-	}
-
-	slices.Sort(indices)
-	indices = slices.Compact(indices)
-
-	return indices, errs.ErrorOrNil()
 }

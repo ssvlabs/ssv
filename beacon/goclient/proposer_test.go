@@ -140,7 +140,7 @@ func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.Executi
 		block.Body.ExecutionPayloadHeader.FeeRecipient = feeRecipient
 
 		// Wrap in response structure
-		response := map[string]interface{}{
+		response := map[string]any{
 			"data": block,
 		}
 		data, _ := json.Marshal(response)
@@ -156,7 +156,7 @@ func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.Executi
 	blockContents.Block.Body.ExecutionPayload.FeeRecipient = feeRecipient
 
 	// Wrap in response structure
-	response := map[string]interface{}{
+	response := map[string]any{
 		"data": blockContents,
 	}
 	data, _ := json.Marshal(response)
@@ -502,12 +502,9 @@ func TestProposalPreparationReconnectLogic_SkipsOnProviderError(t *testing.T) {
 		origHandler.ServeHTTP(w, r)
 	})
 
-	client, err := New(t.Context(), log.TestLogger(t), Options{
-		BeaconNodeAddr: server.URL,
-		CommonTimeout:  time.Second * 2,
-		LongTimeout:    time.Second * 5,
-	})
+	client, err := createClientForProposerTest(t, server.URL)
 	require.NoError(t, err)
+
 	var providerCalled atomic.Bool
 	client.SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error) {
 		providerCalled.Store(true)
@@ -537,12 +534,9 @@ func TestProposalPreparationReconnectLogic_SkipsOnEmptyPreparations(t *testing.T
 		origHandler.ServeHTTP(w, r)
 	})
 
-	client, err := New(t.Context(), log.TestLogger(t), Options{
-		BeaconNodeAddr: server.URL,
-		CommonTimeout:  time.Second * 2,
-		LongTimeout:    time.Second * 5,
-	})
+	client, err := createClientForProposerTest(t, server.URL)
 	require.NoError(t, err)
+
 	var providerCalled atomic.Bool
 	client.SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error) {
 		providerCalled.Store(true)
@@ -595,11 +589,7 @@ func TestProposalPreparationReconnectLogic_SubmitsSuccessfully(t *testing.T) {
 	})
 
 	// First create client without provider - OnActive will skip
-	client, err := New(t.Context(), log.TestLogger(t), Options{
-		BeaconNodeAddr: server.URL,
-		CommonTimeout:  time.Second * 2,
-		LongTimeout:    time.Second * 5,
-	})
+	client, err := createClientForProposerTest(t, server.URL)
 	require.NoError(t, err)
 
 	// Set the provider for testing
@@ -638,11 +628,7 @@ func TestProposalPreparationReconnectLogic_HandlesSubmissionError(t *testing.T) 
 		origHandler.ServeHTTP(w, r)
 	})
 
-	client, err := New(t.Context(), log.TestLogger(t), Options{
-		BeaconNodeAddr: server.URL,
-		CommonTimeout:  time.Second * 2,
-		LongTimeout:    time.Second * 5,
-	})
+	client, err := createClientForProposerTest(t, server.URL)
 	require.NoError(t, err)
 
 	client.SetProposalPreparationsProvider(func() ([]*eth2apiv1.ProposalPreparation, error) {
@@ -690,4 +676,18 @@ func TestProposalPreparationReconnectLogic_SkipsOnNilProvider(t *testing.T) {
 
 	// Should not have made any requests since provider is nil
 	require.Equal(t, 0, requestCounter, "should not have made any requests when provider is nil")
+}
+
+func createClientForProposerTest(t *testing.T, serverURL string) (*GoClient, error) {
+	opt, err := NewOptions(
+		Options{
+			BeaconNodeAddr: serverURL,
+			CommonTimeout:  time.Second * 2,
+			LongTimeout:    time.Second * 5,
+		}, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return New(t.Context(), log.TestLogger(t), opt)
 }

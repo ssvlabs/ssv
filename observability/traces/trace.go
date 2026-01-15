@@ -16,14 +16,27 @@ var logger *zap.Logger
 
 const traceIDByteLen = 16
 
+// dutyIDKey is the context key for storing the duty ID string.
+type dutyIDKey struct{}
+
 func InitLogger(l *zap.Logger) {
 	logger = l
 }
 
+// DutyIDFromContext retrieves the duty ID string from the context if present.
+func DutyIDFromContext(ctx context.Context) (string, bool) {
+	dutyID, ok := ctx.Value(dutyIDKey{}).(string)
+	return dutyID, ok
+}
+
 // Context returns a new context with a deterministic trace ID based on the input string.
+// It also stores the original string (typically a duty ID) for later retrieval via DutyIDFromContext.
 // Useful for generating consistent trace IDs for the same logical operation (e.g., by duty ID),
 // which helps in correlating spans across distributed by network components.
 func Context(ctx context.Context, str string) context.Context {
+	// Store the original string for later retrieval (e.g., for logging with duty ID).
+	ctx = context.WithValue(ctx, dutyIDKey{}, str)
+
 	traceStrSha := sha256.Sum256([]byte(str))
 
 	var traceID trace.TraceID

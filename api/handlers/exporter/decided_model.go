@@ -3,11 +3,17 @@ package exporter
 import (
 	"encoding/hex"
 
+	"github.com/hashicorp/go-multierror"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
+	exporter2 "github.com/ssvlabs/ssv/exporter2"
 	"github.com/ssvlabs/ssv/ibft/storage"
 )
+
+type PubKeyLengthError struct {
+	PubKey api.Hex
+}
 
 // DecidedParticipant describes a decided duty participant entry.
 type DecidedParticipant struct {
@@ -20,12 +26,46 @@ type DecidedParticipant struct {
 	} `json:"message"`
 }
 
+func toParticipantResponse(role spectypes.BeaconRole, entry storage.ParticipantsRangeEntry) *DecidedParticipant {
+	response := &DecidedParticipant{
+		Role:      role.String(),
+		Slot:      uint64(entry.Slot),
+		PublicKey: hex.EncodeToString(entry.PubKey[:]),
+	}
+	response.Message.Signers = entry.Signers
+
+	return response
+}
+
 // TraceDecidedsResponse represents the payload returned by the TraceDecideds endpoint.
 type TraceDecidedsResponse struct {
 	// Data contains the decided duty participant entries matching the request.
 	Data []*DecidedParticipant `json:"data"`
 	// Errors lists non-fatal issues encountered while building the response (e.g., entries with empty signer sets).
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"omitting entry with no signers (index=deadbeef, slot=123456, role=ATTESTER)"`
+}
+
+// TraceDecidedsResponseFromParticipants builds a TraceDecidedsResponse from the core result and aggregated errors.
+func TraceDecidedsResponseFromParticipants(result *exporter2.TraceDecidedsResult, errs *multierror.Error) TraceDecidedsResponse {
+	resp := TraceDecidedsResponse{
+		Data:   make([]*DecidedParticipant, 0),
+		Errors: toStrings(errs),
+	}
+
+	if result == nil {
+		return resp
+	}
+
+	for _, rec := range result.Participants {
+		entry := storage.ParticipantsRangeEntry{
+			Slot:    rec.Slot,
+			PubKey:  rec.PubKey,
+			Signers: rec.Signers,
+		}
+		resp.Data = append(resp.Data, toParticipantResponse(rec.Role, entry))
+	}
+
+	return resp
 }
 
 // DecidedsResponse represents the payload returned by the backward-compatible Decideds endpoint.
@@ -36,12 +76,25 @@ type DecidedsResponse struct {
 	Errors []string `json:"errors,omitempty" swaggertype:"array,string" example:"error getting participants: timeout"`
 }
 
-// TraceDecidedsResponseFromParticipants builds a TraceDecidedsResponse from the given participants and errors slice.
-func TraceDecidedsResponseFromParticipants(participants []*DecidedParticipant, errors []string) TraceDecidedsResponse {
-	return TraceDecidedsResponse{
-		Data:   participants,
-		Errors: errors,
+func DecidedsResponseFromResult(result *exporter2.TraceDecidedsResult) *DecidedsResponse {
+	resp := &DecidedsResponse{
+		Data: make([]*DecidedParticipant, 0),
 	}
+
+	if result == nil {
+		return resp
+	}
+
+	for _, rec := range result.Participants {
+		entry := storage.ParticipantsRangeEntry{
+			Slot:    rec.Slot,
+			PubKey:  rec.PubKey,
+			Signers: rec.Signers,
+		}
+		resp.Data = append(resp.Data, toParticipantResponse(rec.Role, entry))
+	}
+
+	return resp
 }
 
 type DecidedsRequest struct {
@@ -57,28 +110,27 @@ type DecidedsRequest struct {
 	Indices api.Uint64Slice `json:"indices" swaggertype:"array,integer" format:"int64" minimum:"0"`
 }
 
-// implements filterRequest interface
 func (r *DecidedsRequest) pubKeys() []spectypes.ValidatorPK {
 	return parsePubkeysSlice(r.PubKeys)
 }
 
-// implements filterRequest interface
-func (r *DecidedsRequest) indices() []uint64 {
-	return r.Indices
-}
-
-// implements filterRequest interface
-func (r *DecidedsRequest) hasFilters() bool {
-	return len(r.PubKeys) > 0 || len(r.Indices) > 0
-}
-
-func toParticipantResponse(role spectypes.BeaconRole, entry storage.ParticipantsRangeEntry) *DecidedParticipant {
-	response := &DecidedParticipant{
-		Role:      role.String(),
-		Slot:      uint64(entry.Slot),
-		PublicKey: hex.EncodeToString(entry.PubKey[:]),
+func toDecidedsQuery(r *DecidedsRequest) (*exporter2.DecidedsQuery, *PubKeyLengthError) {
+	q := &exporter2.DecidedsQuery{
+		From:  r.From,
+		To:    r.To,
+		Roles: toBeaconRoles(r.Roles),
 	}
-	response.Message.Signers = entry.Signers
 
-	return response
+	// Then perform HTTP-level type validation (pubkey hex length).
+	requiredLength := len(spectypes.ValidatorPK{})
+	for _, req := range r.PubKeys {
+		if len(req) != requiredLength {
+			return nil, &PubKeyLengthError{PubKey: req}
+		}
+	}
+
+	q.PubKeys = r.pubKeys()
+	q.Indices = toValidatorIndices(r.Indices)
+
+	return q, nil
 }

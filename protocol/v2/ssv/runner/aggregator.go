@@ -137,16 +137,11 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
-	signer := ssvtypes.PartialSigMsgSigner(signedMsg)
 	duty := r.state().CurrentDuty.(*spectypes.ValidatorDuty)
 	span.SetAttributes(
 		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 		observability.ValidatorIndexAttribute(duty.ValidatorIndex),
 	)
-
-	const gotPartialSignaturesEvent = "🧩 got partial aggregator selection proof signatures"
-	span.AddEvent(gotPartialSignaturesEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
-	logger.Debug(gotPartialSignaturesEvent, zap.Any("signer", signer))
 
 	// this is the earliest in aggregator runner flow where we get to know whether we are meant
 	// to perform this aggregation duty or not
@@ -155,9 +150,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, 0)
-		const aggDutyWontBeNeededEvent = "aggregation duty won't be needed from this validator for this slot"
-		span.AddEvent(aggDutyWontBeNeededEvent, trace.WithAttributes(observability.ValidatorSignerAttribute(signer)))
-		logger.Debug(aggDutyWontBeNeededEvent, zap.Any("signer", signer))
 		return nil
 	}
 
@@ -170,7 +162,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	if err != nil {
 		return fmt.Errorf("failed to submit aggregate and proof: %w", err)
 	}
-
 	const submittedAggregateAndProofEvent = "submitted aggregate and proof"
 	logger.Debug(submittedAggregateAndProofEvent)
 	span.AddEvent(submittedAggregateAndProofEvent)
@@ -415,10 +406,6 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		return fmt.Errorf("could not sign aggregator selection proof: %w", err)
 	}
 
-	const signedSelectionProofEvent = "signed aggregator selection proof"
-	logger.Debug(signedSelectionProofEvent)
-	span.AddEvent(signedSelectionProofEvent)
-
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.SelectionProofPartialSig,
 		Slot:     duty.DutySlot(),
@@ -614,7 +601,7 @@ type hasher struct {
 func newHasher() *hasher {
 	return &hasher{
 		sha256Pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return sha256.New()
 			},
 		},

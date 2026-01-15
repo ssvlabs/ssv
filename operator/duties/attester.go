@@ -24,10 +24,16 @@ import (
 type AttesterHandler struct {
 	baseHandler
 
-	duties            *dutystore.Duties[eth2apiv1.AttesterDuty]
+	duties *dutystore.Duties[eth2apiv1.AttesterDuty]
+
+	// fetchCurrentEpoch stores the intent to fetch duties for the current epoch, while
+	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchCurrentEpoch bool
-	fetchNextEpoch    bool
-	exporterMode      bool
+	// fetchNextEpoch stores the intent to fetch duties for the next epoch, while
+	// processFetching func uses this value to decide on whether the fetch is needed.
+	fetchNextEpoch bool
+
+	exporterMode bool
 }
 
 func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], exporterMode bool) *AttesterHandler {
@@ -35,7 +41,6 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], export
 		duties:       duties,
 		exporterMode: exporterMode,
 	}
-	h.fetchCurrentEpoch = true
 	return h
 }
 
@@ -72,8 +77,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
-	h.fetchNextEpoch = true
-
 	next := h.ticker.Next()
 	for {
 		select {
@@ -88,10 +91,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			func() {
-				// Aggregates submissions are rewarded as long as they are finished within 2 slots after the target slot
-				// (the target slot itself, plus the next slot after that), hence we are setting the deadline here to
-				// target slot + 2.
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				tickCtx, cancel := h.ctxWithDeadlineInOneEpoch(ctx, slot)
 				defer cancel()
 
 				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
@@ -117,7 +117,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, reorgEvent.Slot)
+				tickCtx, cancel := h.ctxWithDeadlineInOneEpoch(ctx, reorgEvent.Slot)
 				defer cancel()
 
 				// reset current epoch duties
@@ -156,9 +156,15 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+// HandleInitialDuties fetches duties for the current and next epochs.
+// Fetching duties for the next epoch is necessary if we are starting close to epoch-boundary because
+// our ticker might "miss" that rollover otherwise.
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
 	defer cancel()
+
+	h.fetchCurrentEpoch = true
+	h.fetchNextEpoch = true
 
 	slot := h.beaconConfig.EstimatedCurrentSlot()
 	epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
@@ -185,6 +191,9 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 		h.fetchCurrentEpoch = false
 	}
 
+	// This additional shouldFetchNexEpoch check here is an optimization that prevents
+	// unnecessary(duplicate) fetches in some cases + also delays the fetch until we
+	// cannot delay it much further.
 	if h.fetchNextEpoch && h.shouldFetchNexEpoch(slot) {
 		span.AddEvent("fetching next epoch duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch+1, slot); err != nil {

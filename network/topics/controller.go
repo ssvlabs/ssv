@@ -188,26 +188,28 @@ func (ctrl *topicsCtrl) Subscribe(name string) error {
 	return nil
 }
 
-// Broadcast publishes the message on the given topic
-func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duration) error {
-	name = commons.GetTopicFullName(name)
-
-	topic, err := ctrl.container.Join(name)
+// Broadcast publishes the message on the given topic in a non-blocking manner.
+func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
+	topicNameFull := commons.GetTopicFullName(topicName)
+	topic, err := ctrl.container.Join(topicNameFull)
 	if err != nil {
 		return err
 	}
 
 	go func() {
-		ctx, done := context.WithTimeout(ctrl.ctx, timeout)
-		defer done()
+		ctx, cancel := context.WithTimeout(ctrl.ctx, timeout)
+		defer cancel()
 
 		err := topic.Publish(ctx, data)
-		if err == nil {
-			outboundMessageCounter.Add(ctrl.ctx, 1)
+		if err != nil {
+			ctrl.logger.Error("could not publish p2p message", zap.String("topic", topicName), zap.Error(err))
+			return
 		}
+
+		outboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(messageTopicAttribute(topicNameFull)))
 	}()
 
-	return err
+	return nil
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
@@ -256,9 +258,9 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	ctx, cancel := context.WithCancel(ctrl.ctx)
 	defer cancel()
 
-	topicName := sub.Topic()
+	topicNameFull := sub.Topic()
 
-	logger := ctrl.logger.With(zap.String("topic", topicName))
+	logger := ctrl.logger.With(zap.String("topic", topicNameFull))
 	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
 		msg, err := sub.Next(ctx)
@@ -280,13 +282,15 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
-			inboundMessageCounter.Add(ctrl.ctx, 1,
-				metric.WithAttributes(messageTypeAttribute(uint64(m.MsgType))))
+			inboundMessageCounter.Add(ctrl.ctx, 1, metric.WithAttributes(
+				messageTopicAttribute(topicNameFull),
+				messageTypeAttribute(uint64(m.MsgType)),
+			))
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}
 
-		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
+		if err := ctrl.msgHandler(ctx, topicNameFull, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
 	}

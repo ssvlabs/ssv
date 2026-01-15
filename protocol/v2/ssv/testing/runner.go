@@ -89,7 +89,7 @@ var ConstructBaseRunner = func(
 	switch role {
 	case spectypes.RoleCommittee:
 		valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch, vote)
+			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, vote)
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
@@ -336,8 +336,9 @@ var ConstructBaseRunnerWithShareMap = func(
 		// Identifier
 		var ownerID []byte
 		if role == spectypes.RoleCommittee {
-			committee := make([]uint64, 0)
-			for _, op := range keySetInstance.Committee() {
+			ops := keySetInstance.Committee()
+			committee := make([]uint64, 0, len(ops))
+			for _, op := range ops {
 				committee = append(committee, op.Signer)
 			}
 			committeeID := spectypes.GetCommitteeID(committee)
@@ -356,7 +357,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		switch role {
 		case spectypes.RoleCommittee:
 			valCheck = ssv.NewVoteChecker(km, spectestingutils.TestingDutySlot,
-				sharePubKeys, spectestingutils.TestingDutyEpoch, vote)
+				sharePubKeys, vote)
 		case spectypes.RoleProposer:
 			valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
 				shareInstance.ValidatorPubKey, shareInstance.ValidatorIndex, phase0.BLSPubKey(shareInstance.SharePubKey))

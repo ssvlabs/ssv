@@ -181,7 +181,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.NoError(t, err)
 
 		// Fetch all logs history starting from block 0
-		var fetchedLogs []ethtypes.Log
+		fetchedLogs := make([]ethtypes.Log, 0, blocksWithLogsLength)
 		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
 		require.NoError(t, err)
 
@@ -346,7 +346,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 
 			wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, _ := io.ReadAll(r.Body)
-				var req map[string]interface{}
+				var req map[string]any
 				_ = json.Unmarshal(raw, &req)
 
 				if req["method"] == "eth_getLogs" {
@@ -357,15 +357,15 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 						return
 					}
 
-					flt := req["params"].([]interface{})[0].(map[string]interface{})
+					flt := req["params"].([]any)[0].(map[string]any)
 					from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
 					to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
 					if uint64(to-from) > tc.threshold {
 						w.Header().Set("Content-Type", "application/json")
-						_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						_ = json.NewEncoder(w).Encode(map[string]any{
 							"jsonrpc": "2.0",
 							"id":      req["id"],
-							"error": map[string]interface{}{
+							"error": map[string]any{
 								"code":    -32005,
 								"message": "query limit exceeded",
 							},
@@ -393,7 +393,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			logsCh, errCh, err := client.FetchHistoricalLogs(t.Context(), 0)
 			require.NoError(t, err)
 
-			var all []ethtypes.Log
+			all := make([]ethtypes.Log, 0, tc.wantLogs)
 			for blk := range logsCh {
 				all = append(all, blk.Logs...)
 			}
@@ -593,7 +593,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	})
 
 	t.Run("startBlock is same as endBlock", func(t *testing.T) {
-		var blockNumbers []uint64
+		blockNumbers := make([]uint64, 0, 1)
 
 		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 5, 5)
 		select {
@@ -609,13 +609,17 @@ func TestFetchLogsInBatches(t *testing.T) {
 	})
 
 	t.Run("startBlock is less than endBlock", func(t *testing.T) {
-		var blockNumbers []uint64
+		const (
+			fromBlock uint64 = 3
+			toBlock   uint64 = 11
+		)
+		blockNumbers := make([]uint64, 0, int(toBlock-fromBlock+1))
 
-		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 3, 11)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, fromBlock, toBlock)
 		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
-		require.Equal(t, []uint64{3, 4, 5, 6, 7, 8, 9, 10, 11}, blockNumbers)
+		require.Equal(t, []uint64{fromBlock, 4, 5, 6, 7, 8, 9, 10, toBlock}, blockNumbers)
 
 		select {
 		case err := <-errChan:

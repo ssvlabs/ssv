@@ -19,14 +19,9 @@ import (
 // Server represents the HTTP API server for SSV.
 type Server struct {
 	logger *zap.Logger
-	addr   string
 
-	node       *nodeHandlers.Node
-	validators *validatorsHandlers.Validators
-	exporter   *exporterHandlers.Exporter
+	addr       string
 	httpServer *http.Server
-
-	fullExporter bool
 }
 
 // New creates a new Server instance.
@@ -38,19 +33,20 @@ func New(
 	exporter *exporterHandlers.Exporter,
 	fullExporter bool,
 ) *Server {
-	return &Server{
-		logger:       logger,
-		addr:         addr,
-		node:         node,
-		validators:   validators,
-		exporter:     exporter,
-		fullExporter: fullExporter,
-	}
-}
-
-// Run starts the server and blocks until it's shut down.
-func (s *Server) Run() error {
 	router := chi.NewRouter()
+
+	s := &Server{
+		logger: logger,
+		addr:   addr,
+		httpServer: &http.Server{
+			Addr:              addr,
+			Handler:           router,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       12 * time.Second,
+			WriteTimeout:      12 * time.Second,
+		},
+	}
+
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
@@ -63,7 +59,7 @@ func (s *Server) Run() error {
 	// @Produce json
 	// @Success 200 {object} handlers.NodeIdentityResponse
 	// @Router /v1/node/identity [get]
-	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
+	router.Get("/v1/node/identity", api.Handler(node.Identity))
 
 	// @Summary Get connected peers
 	// @Description Returns the list of peers connected to the SSV node
@@ -71,7 +67,7 @@ func (s *Server) Run() error {
 	// @Produce json
 	// @Success 200 {object} handlers.PeersResponse
 	// @Router /v1/node/peers [get]
-	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
+	router.Get("/v1/node/peers", api.Handler(node.Peers))
 
 	// @Summary Get subscribed topics
 	// @Description Returns the list of topics the SSV node is subscribed to
@@ -79,7 +75,7 @@ func (s *Server) Run() error {
 	// @Produce json
 	// @Success 200 {object} handlers.TopicsResponse
 	// @Router /v1/node/topics [get]
-	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
+	router.Get("/v1/node/topics", api.Handler(node.Topics))
 
 	// @Summary Get node health status
 	// @Description Returns the health status of the SSV node
@@ -87,7 +83,7 @@ func (s *Server) Run() error {
 	// @Produce json
 	// @Success 200 {object} handlers.HealthResponse
 	// @Router /v1/node/health [get]
-	router.Get("/v1/node/health", api.Handler(s.node.Health))
+	router.Get("/v1/node/health", api.Handler(node.Health))
 
 	// @Summary Get validators
 	// @Description Returns the list of validators managed by the SSV node
@@ -95,35 +91,33 @@ func (s *Server) Run() error {
 	// @Produce json
 	// @Success 200 {object} handlers.ValidatorsResponse
 	// @Router /v1/validators [get]
-	router.Get("/v1/validators", api.Handler(s.validators.List))
+	router.Get("/v1/validators", api.Handler(validators.List))
 
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
-	if s.fullExporter {
-		router.Post("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
-		router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
+	if fullExporter {
+		router.Post("/v1/exporter/traces/validator", api.Handler(exporter.ValidatorTraces))
+		router.Get("/v1/exporter/traces/validator", api.Handler(exporter.ValidatorTraces))
 
-		router.Post("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
+		router.Post("/v1/exporter/traces/committee", api.Handler(exporter.CommitteeTraces))
 
-		router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
+		router.Get("/v1/exporter/traces/committee", api.Handler(exporter.CommitteeTraces))
 
-		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+		router.Get("/v1/exporter/decideds", api.Handler(exporter.TraceDecideds))
 
-		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+		router.Post("/v1/exporter/decideds", api.Handler(exporter.TraceDecideds))
 	} else {
-		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+		router.Get("/v1/exporter/decideds", api.Handler(exporter.Decideds))
 
-		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+		router.Post("/v1/exporter/decideds", api.Handler(exporter.Decideds))
 	}
 
+	return s
+}
+
+// Run starts the server and blocks until it's shut down.
+func (s *Server) Run() error {
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
-	s.httpServer = &http.Server{
-		Addr:              s.addr,
-		Handler:           router,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       12 * time.Second,
-		WriteTimeout:      12 * time.Second,
-	}
 	return s.httpServer.ListenAndServe()
 }
 

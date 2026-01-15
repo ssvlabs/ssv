@@ -23,7 +23,7 @@ func TestQBFTMapping(t *testing.T) {
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
 
-	untypedTests := map[string]interface{}{}
+	untypedTests := map[string]any{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
@@ -99,6 +99,7 @@ func TestQBFTMapping(t *testing.T) {
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
+				logger,
 				protocoltesting.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember)),
 				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,

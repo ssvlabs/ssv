@@ -24,7 +24,7 @@ type IConfig interface {
 	GetNetwork() specqbft.Network
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
-	// GetRoundCutOff returns the round cut off
+	// GetCutOffRound returns the round cut off
 	GetCutOffRound() specqbft.Round
 }
 
