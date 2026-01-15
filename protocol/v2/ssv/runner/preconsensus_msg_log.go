@@ -28,6 +28,11 @@ func (b *BaseRunner) observePreConsensusMsg(signer uint64) {
 		return
 	}
 
+	// b.preConsensusMsgLog.signerTimeIntoSlot can only be nil in tests, this is fast & dirty work-around for it.
+	if b.preConsensusMsgLog.signerTimeIntoSlot == nil {
+		b.preConsensusMsgLog.signerTimeIntoSlot = make(map[uint64]time.Duration)
+	}
+
 	b.preConsensusMsgLog.signerTimeIntoSlot[signer] = time.Since(b.preConsensusMsgLog.slotStartTime)
 }
 
