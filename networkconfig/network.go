@@ -60,3 +60,7 @@ func (n Network) BooleForkInPriorWindow(epoch phase0.Epoch) bool {
 	}
 	return epoch >= n.BoolePriorWindowStartEpoch()
 }
+
+func (n Network) BooleForkInUnsubscriptionWindow(epoch phase0.Epoch) bool {
+	return epoch == n.SSV.Forks.Boole
+}

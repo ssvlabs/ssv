@@ -211,6 +211,31 @@ func (mv *messageValidator) handleValidationErrorWarmup(
 	return pubsub.ValidationIgnore
 }
 
+func (mv *messageValidator) handleValidationErrorUnsubscriptionWindow(
+	ctx context.Context,
+	peerID peer.ID,
+	decodedMessage *queue.SSVMessage,
+	err error,
+) pubsub.ValidationResult {
+	loggerFields := mv.buildLoggerFields(decodedMessage)
+
+	logger := mv.logger.
+		With(loggerFields.AsZapFields()...).
+		With(fields.PeerID(peerID))
+
+	var valErr Error
+	if errors.As(err, &valErr) {
+		if !valErr.Silent() {
+			logger.Debug("accepting message on Alan topic during Boole unsubscription window", zap.Error(valErr))
+		}
+	} else {
+		logger.Debug("accepting message on Alan topic during Boole unsubscription window", zap.Error(err))
+	}
+
+	recordAcceptedMessage(ctx, mv.decodedMessageRole(decodedMessage))
+	return pubsub.ValidationAccept
+}
+
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
 	return pubsub.ValidationAccept
