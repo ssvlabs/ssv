@@ -136,10 +136,10 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}()
 
 	if err != nil {
-		if mv.isWarmingUp(decodedMessage, pmsg.GetTopic()) {
-			return mv.handleValidationErrorWarmup(ctx, peerID, decodedMessage, err)
+		if mv.isInWindow(decodedMessage, pmsg.GetTopic(), mv.netCfg.BooleForkInPriorWindow, true) {
+			return mv.handleValidationErrorPriorWindow(ctx, peerID, decodedMessage, err)
 		}
-		if mv.isInUnsubscriptionWindow(decodedMessage, pmsg.GetTopic()) {
+		if mv.isInWindow(decodedMessage, pmsg.GetTopic(), mv.netCfg.BooleForkInUnsubscriptionWindow, false) {
 			return mv.handleValidationErrorUnsubscriptionWindow(ctx, peerID, decodedMessage, err)
 		}
 		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
@@ -241,12 +241,10 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 		unionTopics = append(unionTopics, booleTopic)
 	}
 	switch {
-	case currentEpoch == mv.netCfg.SSV.Forks.Boole:
+	case mv.netCfg.BooleForkInPriorWindow(currentEpoch), mv.netCfg.BooleForkInUnsubscriptionWindow(currentEpoch):
 		messageTopics = unionTopics
 	case mv.netCfg.BooleForkAtEpoch(currentEpoch):
 		messageTopics = []string{booleTopic}
-	case mv.netCfg.BooleForkInPriorWindow(currentEpoch):
-		messageTopics = unionTopics
 	default:
 		messageTopics = []string{alanTopic}
 	}
@@ -358,11 +356,16 @@ func (mv *messageValidator) decodedMessageRole(decodedMessage *queue.SSVMessage)
 	return role
 }
 
-func (mv *messageValidator) isWarmingUp(decodedMessage *queue.SSVMessage, topic string) bool {
+func (mv *messageValidator) isInWindow(
+	decodedMessage *queue.SSVMessage,
+	topic string,
+	inWindowF func(epoch phase0.Epoch) bool,
+	wantBoole bool,
+) bool {
 	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
 		return false
 	}
-	if !mv.netCfg.BooleForkInPriorWindow(mv.netCfg.EstimatedCurrentEpoch()) {
+	if !inWindowF(mv.netCfg.EstimatedCurrentEpoch()) {
 		return false
 	}
 
@@ -376,28 +379,9 @@ func (mv *messageValidator) isWarmingUp(decodedMessage *queue.SSVMessage, topic 
 	if alanTopic == booleTopic {
 		return false
 	}
-
-	return commons.GetTopicBaseName(topic) == booleTopic
-}
-
-func (mv *messageValidator) isInUnsubscriptionWindow(decodedMessage *queue.SSVMessage, topic string) bool {
-	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
-		return false
+	expected := alanTopic
+	if wantBoole {
+		expected = booleTopic
 	}
-	if !mv.netCfg.BooleForkInUnsubscriptionWindow(mv.netCfg.EstimatedCurrentEpoch()) {
-		return false
-	}
-
-	committeeInfo, err := mv.getCommitteeAndValidatorIndices(decodedMessage.SSVMessage.GetID())
-	if err != nil {
-		return false
-	}
-
-	alanTopic := commons.SubnetTopicID(committeeInfo.subnetAlan)
-	booleTopic := commons.SubnetTopicID(committeeInfo.subnet)
-	if alanTopic == booleTopic {
-		return false
-	}
-
-	return commons.GetTopicBaseName(topic) == alanTopic
+	return commons.GetTopicBaseName(topic) == expected
 }
