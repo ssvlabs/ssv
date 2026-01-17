@@ -333,13 +333,17 @@ func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 func (s *Syncer) selfSubnets() networkcommons.Subnets {
 	// Start off with a copy of the fixed subnets (e.g., exporter subscribed to all subnets).
 	mySubnets := s.fixedSubnets
-
+	currentEpoch := s.netCfg.EstimatedCurrentEpoch()
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
-		mySubnets.Set(v.CommitteeSubnet())
-
-		if !s.netCfg.BooleFork() {
+		switch {
+		case s.netCfg.BooleForkAtEpoch(currentEpoch):
+			mySubnets.Set(v.CommitteeSubnet())
+		case s.netCfg.BooleForkInPriorWindow(currentEpoch):
+			mySubnets.Set(v.CommitteeSubnetAlan())
+			mySubnets.Set(v.CommitteeSubnet())
+		default:
 			mySubnets.Set(v.CommitteeSubnetAlan())
 		}
 	}
@@ -348,13 +352,13 @@ func (s *Syncer) selfSubnets() networkcommons.Subnets {
 }
 
 func (s *Syncer) shareInOwnSubnets(share *ssvtypes.SSVShare, ownSubnets networkcommons.Subnets) bool {
-	if ownSubnets.IsSet(share.CommitteeSubnet()) {
-		return true
-	}
-
-	if !s.netCfg.BooleFork() {
+	currentEpoch := s.netCfg.EstimatedCurrentEpoch()
+	switch {
+	case s.netCfg.BooleForkAtEpoch(currentEpoch):
+		return ownSubnets.IsSet(share.CommitteeSubnet())
+	case s.netCfg.BooleForkInPriorWindow(currentEpoch):
+		return ownSubnets.IsSet(share.CommitteeSubnetAlan()) || ownSubnets.IsSet(share.CommitteeSubnet())
+	default:
 		return ownSubnets.IsSet(share.CommitteeSubnetAlan())
 	}
-
-	return false
 }
