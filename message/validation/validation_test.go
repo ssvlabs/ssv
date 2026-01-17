@@ -1587,7 +1587,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Receive a message with Alan and network topology fork topics.
 	t.Run("network topology fork topic", func(t *testing.T) {
 		alanSSVCfg := *netCfg.SSV
-		alanSSVCfg.Forks.NetworkTopology = math.MaxUint64
+		alanSSVCfg.Forks.Boole = math.MaxUint64
 
 		alanNetCfg := &networkconfig.Network{
 			Beacon: netCfg.Beacon,
@@ -1595,7 +1595,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		networkTopologySSVConfig := *netCfg.SSV
-		networkTopologySSVConfig.Forks.NetworkTopology = 0
+		networkTopologySSVConfig.Forks.Boole = 0
 
 		networkTopologyNetCfg := &networkconfig.Network{
 			Beacon: netCfg.Beacon,
