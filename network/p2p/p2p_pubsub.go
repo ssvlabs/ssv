@@ -3,13 +3,12 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -53,10 +52,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	}
 
 	var topics []string
-
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
-		// we don't expect post-fork messages to be sent before the fork.
 		if n.cfg.NetworkConfig.BooleFork() {
 			val, exists := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 			if !exists {
@@ -93,8 +89,7 @@ func (n *p2pNetwork) SubscribeAll() error {
 	}
 	n.persistentSubnets = commons.AllSubnets
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
-		err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(subnet))
-		if err != nil {
+		if err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(subnet)); err != nil {
 			return err
 		}
 	}
@@ -131,8 +126,7 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 	}
 
 	for _, subnet := range randomSubnets {
-		err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(uint64(subnet)))
-		if err != nil {
+		if err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(uint64(subnet))); err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
 	}
@@ -149,12 +143,16 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	updatedSubnets := n.persistentSubnets
+	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
 
 	n.subscribedCommittees.Range(func(encodedCommittee string, statusAndSubnet statusWithSubnet) bool {
-		updatedSubnets.Set(statusAndSubnet.subnet)
-		// We use both pre-fork and post-fork subnets before fork to make sure we have everything ready when fork happens.
-		// Afterwards, we just need the post-fork algorithm.
-		if !n.cfg.NetworkConfig.BooleFork() {
+		switch {
+		case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
+			updatedSubnets.Set(statusAndSubnet.subnet)
+		case n.cfg.NetworkConfig.BooleForkInPriorWindow(currentEpoch):
+			updatedSubnets.Set(statusAndSubnet.subnetAlan)
+			updatedSubnets.Set(statusAndSubnet.subnet)
+		default:
 			updatedSubnets.Set(statusAndSubnet.subnetAlan)
 		}
 		return true
@@ -175,7 +173,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	}
 
 	if err := n.subscribeCommittee(share); err != nil {
-		return fmt.Errorf("could not subscribe to committee (post-fork): %w", err)
+		return fmt.Errorf("could not subscribe to committee: %w", err)
 	}
 
 	return nil
@@ -196,18 +194,7 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 		return nil
 	}
 
-	topicSet := make(map[string]struct{})
-	for _, topic := range share.CommitteeTopicID() {
-		topicSet[topic] = struct{}{}
-	}
-
-	// We use both pre-fork and post-fork subnets before fork to make sure we have everything ready when fork happens.
-	// Afterwards, we just need the post-fork algorithm.
-	if !n.cfg.NetworkConfig.BooleFork() {
-		for _, topic := range share.CommitteeTopicIDAlan() {
-			topicSet[topic] = struct{}{}
-		}
-	}
+	topicSet := n.committeeTopicSetForCurrentEpoch(share)
 
 	n.logger.Debug("subscribing to a topic corresponding to a newly activated committee", fields.CommitteeID(cid))
 
@@ -220,6 +207,19 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 	statusToSet.status = committeeSubscriptionStatusSubscribed
 	n.subscribedCommittees.Set(string(cid[:]), statusToSet)
 
+	return nil
+}
+
+func (n *p2pNetwork) subscribeSubnet(subnet uint64) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+	if subnet >= commons.SubnetsCount {
+		return fmt.Errorf("invalid subnet %d", subnet)
+	}
+	if err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(subnet)); err != nil {
+		return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
+	}
 	return nil
 }
 
@@ -247,20 +247,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	topicSet := make(map[string]struct{})
-	topics := share.CommitteeTopicID()
-	for _, topic := range topics {
-		topicSet[topic] = struct{}{}
-	}
-
-	if !n.cfg.NetworkConfig.BooleFork() {
-		topics = share.CommitteeTopicIDAlan()
-		for _, topic := range topics {
-			topicSet[topic] = struct{}{}
-		}
-	}
-
-	for topic := range topicSet {
+	for topic := range n.committeeTopicSetForCurrentEpoch(share) {
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			return err
 		}
@@ -269,6 +256,33 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	cid := share.CommitteeID()
 	n.subscribedCommittees.Delete(string(cid[:]))
 	return nil
+}
+
+func (n *p2pNetwork) committeeTopicSetForCurrentEpoch(share *ssvtypes.SSVShare) map[string]struct{} {
+	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
+	alanTopics := share.CommitteeTopicIDAlan()
+	booleTopics := share.CommitteeTopicID()
+	topicSet := make(map[string]struct{})
+
+	switch {
+	case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
+		for _, topic := range booleTopics {
+			topicSet[topic] = struct{}{}
+		}
+	case n.cfg.NetworkConfig.BooleForkInPriorWindow(currentEpoch):
+		for _, topic := range alanTopics {
+			topicSet[topic] = struct{}{}
+		}
+		for _, topic := range booleTopics {
+			topicSet[topic] = struct{}{}
+		}
+	default:
+		for _, topic := range alanTopics {
+			topicSet[topic] = struct{}{}
+		}
+	}
+
+	return topicSet
 }
 
 // handlePubsubMessages reads messages from the given channel and calls the router, note that this function blocks.
@@ -307,7 +321,7 @@ func (n *p2pNetwork) subscribeToFixedSubnets() {
 	n.logger.Debug("subscribing to fixed subnets", zap.String("persistent_subnets", n.persistentSubnets.StringHumanReadable()))
 
 	for _, subnet := range n.persistentSubnets.SubnetList() {
-		if err := n.topicsCtrl.Subscribe(strconv.FormatUint(subnet, 10)); err != nil {
+		if err := n.topicsCtrl.Subscribe(commons.SubnetTopicID(subnet)); err != nil {
 			n.logger.Error("could not subscribe to subnet", zap.Uint64("subnet", subnet), zap.Error(err))
 		}
 	}

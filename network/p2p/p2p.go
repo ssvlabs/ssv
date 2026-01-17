@@ -467,8 +467,7 @@ func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
 }
 
-// UpdateSubnets will update the registered subnets according to active validators
-// NOTE: it won't subscribe to the subnets (use subscribeToFixedSubnets for that)
+// UpdateSubnets will update the registered subnets according to active validators.
 func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
@@ -519,6 +518,14 @@ func (n *p2pNetwork) UpdateSubnets() {
 			if err != nil {
 				n.logger.Debug("could not register subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
+			}
+			for _, addedSubnet := range addedSubnets {
+				if err := n.subscribeSubnet(addedSubnet); err != nil {
+					n.logger.Debug("could not subscribe to subnet", zap.Uint64("subnet", addedSubnet), zap.Error(err))
+					errs = errors.Join(errs, err)
+				} else {
+					n.logger.Debug("subscribed to subnet", zap.Uint64("subnet", addedSubnet))
+				}
 			}
 		}
 		if len(removedSubnets) > 0 {
