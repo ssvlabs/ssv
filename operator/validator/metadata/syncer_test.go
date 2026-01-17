@@ -259,6 +259,7 @@ func TestSyncer_SyncAll(t *testing.T) {
 
 		syncer := &Syncer{
 			logger:         logger,
+			netCfg:         networkconfig.TestNetwork,
 			shareStorage:   mockShareStorage,
 			validatorStore: mockValidatorStore,
 		}

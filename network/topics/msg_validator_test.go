@@ -95,7 +95,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := share.CommitteeTopicID()[0]
+		topicID := share.CommitteeTopicIDAlan()[0]
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -157,7 +157,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := share.CommitteeTopicID()[0]
+		topicID := share.CommitteeTopicIDAlan()[0]
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
