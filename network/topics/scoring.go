@@ -218,23 +218,27 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 // Returns a new committee list with only the committees that belong to the given topic
 func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, committees []*storage.Committee) []*storage.Committee {
 	topicCommittees := make([]*storage.Committee, 0)
+	currentEpoch := netCfg.EstimatedCurrentEpoch()
 
 	for _, committee := range committees {
-		// Get topic
-		committeeTopic := commons.SubnetTopicID(committee.Subnet)
-		committeeTopicFullName := commons.GetTopicFullName(committeeTopic)
+		booleTopic := commons.GetTopicFullName(commons.SubnetTopicID(committee.Subnet))
+		alanTopic := commons.GetTopicFullName(commons.SubnetTopicID(committee.SubnetAlan))
 
-		// If it belongs to the topic, add it
-		if topic == committeeTopicFullName {
-			topicCommittees = append(topicCommittees, committee)
-		}
-
-		// Same for pre-fork topic logic
-		if !netCfg.BooleFork() {
-			alanCommitteeTopic := commons.SubnetTopicID(committee.SubnetAlan)
-			alanCommitteeTopicFullName := commons.GetTopicFullName(alanCommitteeTopic)
-
-			if topic == alanCommitteeTopicFullName && committee.SubnetAlan != committee.Subnet {
+		switch {
+		case netCfg.BooleForkAtEpoch(currentEpoch):
+			if topic == booleTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
+		case netCfg.BooleForkInPriorWindow(currentEpoch):
+			if topic == alanTopic {
+				topicCommittees = append(topicCommittees, committee)
+				continue
+			}
+			if committee.SubnetAlan != committee.Subnet && topic == booleTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
+		default:
+			if topic == alanTopic {
 				topicCommittees = append(topicCommittees, committee)
 			}
 		}
