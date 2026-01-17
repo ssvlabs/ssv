@@ -62,7 +62,7 @@ func TestCommitteeSubnet(t *testing.T) {
 
 		actual := CommitteeSubnet(operators)
 
-		var hashes [][32]byte
+		hashes := make([][32]byte, 0, len(operators))
 		for _, operator := range operators {
 			var operatorBytes [8]byte
 			binary.LittleEndian.PutUint64(operatorBytes[:], operator)

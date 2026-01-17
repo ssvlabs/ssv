@@ -369,7 +369,7 @@ func (mv *messageValidator) isInWindow(
 		return false
 	}
 
-	committeeInfo, err := mv.getCommitteeAndValidatorIndices(decodedMessage.SSVMessage.GetID())
+	committeeInfo, err := mv.getCommitteeAndValidatorIndices(decodedMessage.GetID())
 	if err != nil {
 		return false
 	}
