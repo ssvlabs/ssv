@@ -38,6 +38,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -88,7 +89,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	slices.Sort(committee)
 
 	committeeID := shares.active.CommitteeID()
-	topicID := shares.active.CommitteeTopicID()[0]
+	topicID := shares.active.CommitteeTopicIDAlan()[0]
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
@@ -1642,7 +1643,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
 
-				signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+				var leader spectypes.OperatorID
+				if validator.netCfg.BooleForkAtSlot(slot) {
+					leader = qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, validator.netCfg)
+				} else {
+					leader = validator.roundRobinProposerPreBooleFork(specqbft.Height(slot), specqbft.FirstRound, committee)
+				}
+				signedSSVMessage := generateSignedMessageWithSigner(ks, leader, committeeIdentifier, slot)
 
 				receivedAt := netCfg.SlotStartTime(slot)
 
@@ -1977,6 +1984,16 @@ func generateSignedMessage(
 	slot phase0.Slot,
 	opts ...func(message *specqbft.Message),
 ) *spectypes.SignedSSVMessage {
+	return generateSignedMessageWithSigner(ks, 1, identifier, slot, opts...)
+}
+
+func generateSignedMessageWithSigner(
+	ks *spectestingutils.TestKeySet,
+	signer spectypes.OperatorID,
+	identifier spectypes.MessageID,
+	slot phase0.Slot,
+	opts ...func(message *specqbft.Message),
+) *spectypes.SignedSSVMessage {
 	fullData := spectestingutils.TestingQBFTFullData
 	height := specqbft.Height(slot)
 
@@ -1995,7 +2012,7 @@ func generateSignedMessage(
 		opt(qbftMessage)
 	}
 
-	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[signer], signer, qbftMessage)
 	signedSSVMessage.FullData = fullData
 
 	return signedSSVMessage
