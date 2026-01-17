@@ -131,14 +131,14 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 
 	defer func() {
-		role := spectypes.RunnerRole(spectypes.RoleUnknown)
-		if decodedMessage != nil {
-			role = decodedMessage.GetID().GetRoleType()
-		}
+		role := mv.decodedMessageRole(decodedMessage)
 		recordMessageDuration(ctx, role, time.Since(validationStart))
 	}()
 
 	if err != nil {
+		if mv.isWarmingUp(decodedMessage, pmsg.GetTopic()) {
+			return mv.handleValidationErrorWarmup(ctx, peerID, decodedMessage, err)
+		}
 		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
@@ -228,12 +228,13 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 
 	// Rule: Check if message was sent in the correct topic
 	var messageTopics []string
-
-	// Unlike the logic in p2p, where we subscribe the post-fork subnets before fork to be ready at the fork,
-	// we don't expect post-fork messages to be received before the fork.
-	if mv.netCfg.BooleFork() { // TODO: need to extract a slot from the message?
+	currentEpoch := mv.netCfg.EstimatedCurrentEpoch()
+	switch {
+	case mv.netCfg.BooleForkAtEpoch(currentEpoch):
 		messageTopics = []string{commons.SubnetTopicID(committeeInfo.subnet)}
-	} else {
+	case mv.netCfg.BooleForkInPriorWindow(currentEpoch):
+		messageTopics = []string{commons.SubnetTopicID(committeeInfo.subnetAlan), commons.SubnetTopicID(committeeInfo.subnet)}
+	default:
 		messageTopics = []string{commons.SubnetTopicID(committeeInfo.subnetAlan)}
 	}
 	topicBaseName := commons.GetTopicBaseName(topic)
@@ -334,4 +335,34 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 // maxStoredSlots stores max amount of slots message validation stores.
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
+}
+
+func (mv *messageValidator) decodedMessageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
+	role := spectypes.RunnerRole(spectypes.RoleUnknown)
+	if decodedMessage != nil {
+		role = decodedMessage.GetID().GetRoleType()
+	}
+	return role
+}
+
+func (mv *messageValidator) isWarmingUp(decodedMessage *queue.SSVMessage, topic string) bool {
+	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
+		return false
+	}
+	if !mv.netCfg.BooleForkInPriorWindow(mv.netCfg.EstimatedCurrentEpoch()) {
+		return false
+	}
+
+	committeeInfo, err := mv.getCommitteeAndValidatorIndices(decodedMessage.SSVMessage.GetID())
+	if err != nil {
+		return false
+	}
+
+	alanTopic := commons.SubnetTopicID(committeeInfo.subnetAlan)
+	booleTopic := commons.SubnetTopicID(committeeInfo.subnet)
+	if alanTopic == booleTopic {
+		return false
+	}
+
+	return commons.GetTopicBaseName(topic) == booleTopic
 }

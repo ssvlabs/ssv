@@ -138,7 +138,12 @@ var (
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(
+	ctx context.Context,
+	peerID peer.ID,
+	decodedMessage *queue.SSVMessage,
+	err error,
+) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -166,6 +171,44 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
+}
+
+// handleValidationErrorWarmup applies warmup period rules:
+// - any incoming non-rejectable message can be accepted and propagated
+// - rejectable ones can be ignored to avoid score degradation
+func (mv *messageValidator) handleValidationErrorWarmup(
+	ctx context.Context,
+	peerID peer.ID,
+	decodedMessage *queue.SSVMessage,
+	err error,
+) pubsub.ValidationResult {
+	loggerFields := mv.buildLoggerFields(decodedMessage)
+
+	logger := mv.logger.
+		With(loggerFields.AsZapFields()...).
+		With(fields.PeerID(peerID))
+
+	var valErr Error
+	if !errors.As(err, &valErr) {
+		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
+		logger.Debug("ignoring invalid message", zap.Error(err))
+		return pubsub.ValidationIgnore
+	}
+
+	if !valErr.Reject() {
+		if !valErr.Silent() {
+			logger.Debug("accepting non-rejectable message during boole warmup", zap.Error(valErr))
+		}
+		recordAcceptedMessage(ctx, mv.decodedMessageRole(decodedMessage))
+		return pubsub.ValidationAccept
+	}
+
+	if !valErr.Silent() {
+		logger.Debug("ignoring rejectable message during boole warmup", zap.Error(valErr))
+	}
+
+	recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
+	return pubsub.ValidationIgnore
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
