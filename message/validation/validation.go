@@ -232,27 +232,25 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	}
 
 	// Rule: Check if message was sent in the correct topic
-	var messageTopics []string
+	var messageTopicNames []string
 	currentEpoch := mv.netCfg.EstimatedCurrentEpoch()
 	alanTopic := commons.SubnetTopicID(committeeInfo.subnetAlan)
 	booleTopic := commons.SubnetTopicID(committeeInfo.subnet)
-	unionTopics := []string{alanTopic}
-	if booleTopic != alanTopic {
-		unionTopics = append(unionTopics, booleTopic)
-	}
+	alanTopicFullName := commons.AlanTopicFullName(alanTopic)
+	booleTopicFullName := commons.TopicFullName(mv.netCfg.Beacon.Name, booleTopic)
+	unionTopicNames := []string{alanTopicFullName, booleTopicFullName}
 	switch {
 	case mv.netCfg.BooleForkInPriorWindow(currentEpoch), mv.netCfg.BooleForkInUnsubscriptionWindow(currentEpoch):
-		messageTopics = unionTopics
+		messageTopicNames = unionTopicNames
 	case mv.netCfg.BooleForkAtEpoch(currentEpoch):
-		messageTopics = []string{booleTopic}
+		messageTopicNames = []string{booleTopicFullName}
 	default:
-		messageTopics = []string{alanTopic}
+		messageTopicNames = []string{alanTopicFullName}
 	}
-	topicBaseName := commons.GetTopicBaseName(topic)
-	if !slices.Contains(messageTopics, topicBaseName) {
+	if !slices.Contains(messageTopicNames, topic) {
 		e := ErrIncorrectTopic
-		e.got = fmt.Sprintf("topic %v / base name %v", topic, topicBaseName)
-		e.want = messageTopics
+		e.got = fmt.Sprintf("topic %v", topic)
+		e.want = messageTopicNames
 		return e
 	}
 
@@ -374,14 +372,11 @@ func (mv *messageValidator) isInWindow(
 		return false
 	}
 
-	alanTopic := commons.SubnetTopicID(committeeInfo.subnetAlan)
-	booleTopic := commons.SubnetTopicID(committeeInfo.subnet)
-	if alanTopic == booleTopic {
-		return false
-	}
+	alanTopic := commons.AlanTopicFullName(commons.SubnetTopicID(committeeInfo.subnetAlan))
+	booleTopic := commons.TopicFullName(mv.netCfg.Beacon.Name, commons.SubnetTopicID(committeeInfo.subnet))
 	expected := alanTopic
 	if wantBoole {
 		expected = booleTopic
 	}
-	return commons.GetTopicBaseName(topic) == expected
+	return topic == expected
 }
