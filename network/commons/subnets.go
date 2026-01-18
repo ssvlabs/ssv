@@ -42,12 +42,6 @@ func SubnetTopicID(subnet uint64) string {
 	return fmt.Sprintf("%d", subnet)
 }
 
-// CommitteeTopicIDAlan returns topics for given committee ID.
-// There's no similar post-fork function because post-fork requires operator IDs for calculation.
-func CommitteeTopicIDAlan(cid spectypes.CommitteeID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnetAlan(cid))}
-}
-
 // AlanTopicFullName returns the Alan topic full name, including prefix.
 func AlanTopicFullName(baseName string) string {
 	return fmt.Sprintf("%s.%s", alanTopicPrefix, baseName)

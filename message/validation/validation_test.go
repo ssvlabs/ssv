@@ -271,7 +271,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		topic := commons.AlanTopicFullName(commons.CommitteeTopicIDAlan(committeeID)[0])
+		topic := commons.AlanTopicFullName(commons.SubnetTopicID(commons.CommitteeSubnetAlan(committeeID)))
 		msgSize := maxSignedMsgSize*2 + MessageOffset
 
 		pmsg := &pubsub.Message{
@@ -296,7 +296,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		topic := commons.AlanTopicFullName(commons.CommitteeTopicIDAlan(committeeID)[0])
+		topic := commons.AlanTopicFullName(commons.SubnetTopicID(commons.CommitteeSubnetAlan(committeeID)))
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
 				Data:  bytes.Repeat([]byte{1}, 1+MessageOffset),
