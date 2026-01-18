@@ -200,17 +200,17 @@ func (n *p2pNetwork) Peers() []peer.ID {
 
 // PeersByTopic returns topic->peers mapping for all peers we are connected to
 func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
-	tpcs := n.topicsCtrl.Topics()
-	peerz := make(map[string][]peer.ID, len(tpcs))
-	for _, tpc := range tpcs {
+	topics := n.topicsCtrl.Topics()
+	peersByTopic := make(map[string][]peer.ID, len(topics))
+	for _, tpc := range topics {
 		peers, err := n.topicsCtrl.Peers(tpc)
 		if err != nil {
 			n.logger.Error("Cant get peers for specified topic", zap.String("topic", tpc), zap.Error(err))
 			return nil
 		}
-		peerz[tpc] = peers
+		peersByTopic[tpc] = peers
 	}
-	return peerz
+	return peersByTopic
 }
 
 // Close implements io.Closer
@@ -473,13 +473,16 @@ func (n *p2pNetwork) UpdateSubnets() {
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	ticker := time.NewTicker(time.Second)
 	registeredSubnets := commons.Subnets{}
+	registeredAlanSubnets := commons.Subnets{}
+	registeredBooleSubnets := commons.Subnets{}
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		updatedSubnets := n.SubscribedSubnets()
+		alanSubnets, booleSubnets := n.subscribedSubnetsWithFormats()
+		updatedSubnets := unionSubnets(alanSubnets, booleSubnets)
 		n.currentSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
@@ -498,9 +501,17 @@ func (n *p2pNetwork) UpdateSubnets() {
 			}
 		}
 
-		registeredSubnets = updatedSubnets
+		addedAlanSubnets, removedAlanSubnets := registeredAlanSubnets.DiffSubnets(alanSubnets)
+		addedBooleSubnets, removedBooleSubnets := registeredBooleSubnets.DiffSubnets(booleSubnets)
 
-		if len(addedSubnets) == 0 && len(removedSubnets) == 0 {
+		registeredSubnets = updatedSubnets
+		registeredAlanSubnets = alanSubnets
+		registeredBooleSubnets = booleSubnets
+
+		hasSubnetChanges := len(addedSubnets) > 0 || len(removedSubnets) > 0
+		hasAlanChanges := addedAlanSubnets.HasActive() || removedAlanSubnets.HasActive()
+		hasBooleChanges := addedBooleSubnets.HasActive() || removedBooleSubnets.HasActive()
+		if !hasSubnetChanges && !hasAlanChanges && !hasBooleChanges {
 			continue
 		}
 
@@ -519,8 +530,20 @@ func (n *p2pNetwork) UpdateSubnets() {
 				n.logger.Debug("could not register subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
-			for _, addedSubnet := range addedSubnets {
-				if err := n.subscribeSubnet(addedSubnet); err != nil {
+		}
+		if addedAlanSubnets.HasActive() {
+			for _, addedSubnet := range addedAlanSubnets.SubnetList() {
+				if err := n.subscribeSubnet(addedSubnet, false); err != nil {
+					n.logger.Debug("could not subscribe to subnet", zap.Uint64("subnet", addedSubnet), zap.Error(err))
+					errs = errors.Join(errs, err)
+				} else {
+					n.logger.Debug("subscribed to subnet", zap.Uint64("subnet", addedSubnet))
+				}
+			}
+		}
+		if addedBooleSubnets.HasActive() {
+			for _, addedSubnet := range addedBooleSubnets.SubnetList() {
+				if err := n.subscribeSubnet(addedSubnet, true); err != nil {
 					n.logger.Debug("could not subscribe to subnet", zap.Uint64("subnet", addedSubnet), zap.Error(err))
 					errs = errors.Join(errs, err)
 				} else {
@@ -535,10 +558,20 @@ func (n *p2pNetwork) UpdateSubnets() {
 				n.logger.Debug("could not unregister subnets", zap.Error(err))
 				errs = errors.Join(errs, err)
 			}
-
-			// Unsubscribe from the removed subnets.
-			for _, removedSubnet := range removedSubnets {
-				if err := n.unsubscribeSubnet(removedSubnet); err != nil {
+		}
+		if removedAlanSubnets.HasActive() {
+			for _, removedSubnet := range removedAlanSubnets.SubnetList() {
+				if err := n.unsubscribeSubnet(removedSubnet, false); err != nil {
+					n.logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
+					errs = errors.Join(errs, err)
+				} else {
+					n.logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
+				}
+			}
+		}
+		if removedBooleSubnets.HasActive() {
+			for _, removedSubnet := range removedBooleSubnets.SubnetList() {
+				if err := n.unsubscribeSubnet(removedSubnet, true); err != nil {
 					n.logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
 					errs = errors.Join(errs, err)
 				} else {

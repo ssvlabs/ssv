@@ -221,8 +221,8 @@ func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, commi
 	currentEpoch := netCfg.EstimatedCurrentEpoch()
 
 	for _, committee := range committees {
-		booleTopic := commons.GetTopicFullName(commons.SubnetTopicID(committee.Subnet))
-		alanTopic := commons.GetTopicFullName(commons.SubnetTopicID(committee.SubnetAlan))
+		booleTopic := commons.TopicFullName(netCfg.Beacon.Name, commons.SubnetTopicID(committee.Subnet))
+		alanTopic := commons.AlanTopicFullName(commons.SubnetTopicID(committee.SubnetAlan))
 
 		switch {
 		case netCfg.BooleForkAtEpoch(currentEpoch):
@@ -234,7 +234,7 @@ func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, commi
 				topicCommittees = append(topicCommittees, committee)
 				continue
 			}
-			if committee.SubnetAlan != committee.Subnet && topic == booleTopic {
+			if topic == booleTopic {
 				topicCommittees = append(topicCommittees, committee)
 			}
 		default:

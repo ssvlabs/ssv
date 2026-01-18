@@ -26,7 +26,9 @@ const (
 	// UnknownSubnet is used when a validator public key is invalid
 	UnknownSubnet = "unknown"
 
-	topicPrefix = "ssv.v2"
+	alanTopicPrefix = "ssv.v2"
+	topicRoot       = "/ssv"
+	booleTopicFork  = "boole"
 )
 
 // BigIntSubnetsCount is the big.Int representation of SubnetsCount
@@ -46,14 +48,29 @@ func CommitteeTopicIDAlan(cid spectypes.CommitteeID) []string {
 	return []string{fmt.Sprintf("%d", CommitteeSubnetAlan(cid))}
 }
 
-// GetTopicFullName returns the topic full name, including prefix
-func GetTopicFullName(baseName string) string {
-	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
+// AlanTopicFullName returns the Alan topic full name, including prefix.
+func AlanTopicFullName(baseName string) string {
+	return fmt.Sprintf("%s.%s", alanTopicPrefix, baseName)
 }
 
-// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
+// TopicFullName returns the topic full name, including prefix.
+func TopicFullName(networkName, baseName string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", topicRoot, networkName, booleTopicFork, baseName)
+}
+
+// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix.
 func GetTopicBaseName(topicName string) string {
-	return strings.TrimPrefix(topicName, topicPrefix+".")
+	if strings.HasPrefix(topicName, alanTopicPrefix+".") {
+		return strings.TrimPrefix(topicName, alanTopicPrefix+".")
+	}
+	if strings.HasPrefix(topicName, topicRoot+"/") {
+		remainder := strings.TrimPrefix(topicName, topicRoot+"/")
+		parts := strings.SplitN(remainder, "/", 3)
+		if len(parts) == 3 && parts[1] == booleTopicFork && parts[2] != "" {
+			return parts[2]
+		}
+	}
+	return topicName
 }
 
 var bigIntPool = sync.Pool{
@@ -105,11 +122,13 @@ func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
 	return bi.Uint64()
 }
 
-// Topics returns the available topics for this fork.
-func Topics() []string {
-	topics := make([]string, SubnetsCount)
+// Topics returns the available Alan and Boole topics for the given network.
+func Topics(networkName string) []string {
+	topics := make([]string, 0, SubnetsCount*2)
 	for i := uint64(0); i < SubnetsCount; i++ {
-		topics[i] = GetTopicFullName(SubnetTopicID(i))
+		baseName := SubnetTopicID(i)
+		topics = append(topics, AlanTopicFullName(baseName))
+		topics = append(topics, TopicFullName(networkName, baseName))
 	}
 	return topics
 }
