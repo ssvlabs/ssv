@@ -81,6 +81,15 @@ type DoppelgangerProvider interface {
 var _ Runner = new(CommitteeRunner)
 
 type BaseRunner struct {
+	// State stores the current runner state, this state corresponds to 1 particular duty the runner is
+	// currently busy with at the moment. The BaseRunner is not responsible for synchronizing any updates
+	// State might need to record - the caller is responsible to ensure the updates/reads (these can happen
+	// whenever runner's method is called to process a p2p message, or an event) are applied sequentially,
+	// plus the caller is also responsible for ensuring there is no race with moving on to the next duty
+	// (the baseSetupForNewDuty call).
+	// Note, the current implementation achieves concurrent safety by making sure every State read/update
+	// is done by the same go-routing, handling all the messages in queue.SSVMessage (p2p messages and events)
+	// sequentially.
 	State *State
 
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
