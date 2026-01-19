@@ -427,6 +427,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	defer span.End()
 
 	for _, duty := range duties {
+		role := types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
 		logger := s.loggerWithDutyContext(duty)
 
 		const eventMsg = "🔧 executing validator duty"
@@ -440,10 +441,10 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 			span.AddEvent(eventMsg, trace.WithAttributes(
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
 				observability.BeaconRoleAttribute(duty.Type),
-				observability.RunnerRoleAttribute(duty.RunnerRole())))
+				observability.RunnerRoleAttribute(role)))
 		}
 
-		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+		recordDutyScheduled(ctx, role, slotDelay)
 
 		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
@@ -480,7 +481,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		const eventMsg = "🔧 executing committee duty"
 		dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1))
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties, -1, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+			return types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
+		}))
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.CommitteeIDAttribute(committee.id),
@@ -520,10 +523,11 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
 	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
+	role := types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
+	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, role, duty.ValidatorIndex)
 
 	return s.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.RunnerRole(role)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.DutyID(dutyID)).
 		With(fields.PubKey(duty.PubKey[:])).

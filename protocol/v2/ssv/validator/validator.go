@@ -95,10 +95,11 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	role := ssvtypes.RunnerRoleForDuty(duty, v.NetworkConfig.BooleForkAtSlot(duty.DutySlot()))
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "start_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.BeaconSlotAttribute(duty.DutySlot())),
 	)
 	defer span.End()
