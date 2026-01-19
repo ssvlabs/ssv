@@ -32,6 +32,7 @@ import (
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -230,6 +231,17 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]any) *StartNewRunne
 			panic("cant unmarshal committee duty")
 		}
 		testDuty = committeeDuty
+	} else if _, ok := m["AggregatorCommitteeDuty"]; ok {
+		byts, err := json.Marshal(m["AggregatorCommitteeDuty"])
+		if err != nil {
+			panic("cant marshal aggregator committee duty")
+		}
+		aggCommDuty := &spectypes.AggregatorCommitteeDuty{}
+		err = json.Unmarshal(byts, aggCommDuty)
+		if err != nil {
+			panic("cant unmarshal aggregator committee duty")
+		}
+		testDuty = aggCommDuty
 	} else if _, ok := m["ValidatorDuty"]; ok {
 		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
@@ -300,6 +312,17 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 			panic("cant unmarshal committee duty")
 		}
 		duty = committeeDuty
+	} else if _, ok := m["AggregatorCommitteeDuty"]; ok {
+		byts, err := json.Marshal(m["AggregatorCommitteeDuty"])
+		if err != nil {
+			panic("cant marshal aggregator committee duty")
+		}
+		aggCommDuty := &spectypes.AggregatorCommitteeDuty{}
+		err = json.Unmarshal(byts, aggCommDuty)
+		if err != nil {
+			panic("cant unmarshal aggregator committee duty")
+		}
+		duty = aggCommDuty
 	} else if _, ok := m["ValidatorDuty"]; ok {
 		byts, err := json.Marshal(m["ValidatorDuty"])
 		if err != nil {
@@ -463,7 +486,7 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 		ret := ssvtesting.CommitteeRunner(logger, ks)
 		ret.(*runner.CommitteeRunner).BaseRunner = base
 		return ret
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		ret := ssvtesting.AggregatorRunner(logger, ks)
 		ret.(*runner.AggregatorRunner).BaseRunner = base
 		return ret
@@ -471,13 +494,17 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 		ret := ssvtesting.ProposerRunner(logger, ks)
 		ret.(*runner.ProposerRunner).BaseRunner = base
 		return ret
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		ret := ssvtesting.SyncCommitteeContributionRunner(logger, ks)
 		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
+		return ret
+	case spectypes.RoleAggregatorCommittee:
+		ret := ssvtesting.AggregatorCommitteeRunner(logger, ks)
+		ret.(*runner.AggregatorCommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleVoluntaryExit:
 		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
@@ -511,6 +538,17 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		committeeDuty := &spectypes.CommitteeDuty{}
 		err = getDecoder().Decode(&committeeDuty)
 		if err == nil {
+			if len(committeeDuty.ValidatorDuties) > 0 {
+				firstDuty := committeeDuty.ValidatorDuties[0]
+				if firstDuty.Type == spectypes.BNRoleAggregator || firstDuty.Type == spectypes.BNRoleSyncCommitteeContribution {
+					aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{}
+					err = json.Unmarshal(byts, &aggregatorCommitteeDuty)
+					if err == nil {
+						inputs = append(inputs, aggregatorCommitteeDuty)
+						continue
+					}
+				}
+			}
 			inputs = append(inputs, committeeDuty)
 			continue
 		}
@@ -564,7 +602,11 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]any) *validator.Committee {
+func fixCommitteeForRun(
+	t *testing.T,
+	logger *zap.Logger,
+	committeeMap map[string]any,
+) *validator.Committee {
 	byts, err := json.Marshal(committeeMap)
 	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
@@ -574,9 +616,22 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 		logger,
 		networkconfig.TestNetwork,
 		&specCommittee.CommitteeMember,
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
-			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
-			return r.(*runner.CommitteeRunner), nil
+		func(
+			duty spectypes.Duty,
+			shareMap map[phase0.ValidatorIndex]*spectypes.Share,
+			_ []phase0.BLSPubKey,
+			_ runner.CommitteeDutyGuard,
+		) (runner.Runner, error) {
+			switch duty.(type) {
+			case *spectypes.CommitteeDuty:
+				r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
+				return r, nil
+			case *spectypes.AggregatorCommitteeDuty:
+				r := ssvtesting.AggregatorCommitteeRunnerWithShareMap(logger, shareMap)
+				return r, nil
+			default:
+				return nil, fmt.Errorf("unknown duty type: %T", duty)
+			}
 		},
 		specCommittee.Share,
 		validator.NewCommitteeDutyGuard(),
@@ -585,6 +640,7 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
 
 	c.Runners = tmpSsvCommittee.Runners
+	c.AggregatorRunners = tmpSsvCommittee.AggregatorRunners
 
 	for slot := range c.Runners {
 		var shareInstance *spectypes.Share
@@ -595,6 +651,19 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 
 		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]any)[fmt.Sprintf("%v", slot)].(map[string]any), spectestingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
+	}
+
+	for slot := range c.AggregatorRunners {
+		var shareInstance *spectypes.Share
+		for _, share := range c.AggregatorRunners[slot].BaseRunner.Share {
+			shareInstance = share
+			break
+		}
+
+		fixedRunner := fixRunnerForRun(t, committeeMap["AggregatorRunners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), spectestingutils.KeySetForShare(shareInstance))
+		if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
+			c.AggregatorRunners[slot] = acr
+		}
 	}
 
 	return c

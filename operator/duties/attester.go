@@ -86,7 +86,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
@@ -94,11 +94,19 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				tickCtx, cancel := h.ctxWithDeadlineInOneEpoch(ctx, slot)
 				defer cancel()
 
+				if h.netCfg.BooleForkAtSlot(slot) {
+					// After fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
+					// but skip legacy execution, as the aggregator committee handler will be responsible for executing them.
+					h.processFetching(tickCtx, currentEpoch, slot)
+					return
+				}
+
+				// Pre-fork: execute legacy sync-committee contribution flow and fetch duties.
 				h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
 				h.processFetching(tickCtx, currentEpoch, slot)
 			}()
 
-			slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+			slotsPerEpoch := h.netCfg.SlotsPerEpoch
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
@@ -112,7 +120,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
@@ -141,8 +149,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			}()
 
 		case <-h.indicesChange:
-			slot := h.beaconConfig.EstimatedCurrentSlot()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			slot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
@@ -160,14 +168,14 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 // Fetching duties for the next epoch is necessary if we are starting close to epoch-boundary because
 // our ticker might "miss" that rollover otherwise.
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
+	ctx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration)
 	defer cancel()
 
 	h.fetchCurrentEpoch = true
 	h.fetchNextEpoch = true
 
-	slot := h.beaconConfig.EstimatedCurrentSlot()
-	epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+	slot := h.netCfg.EstimatedCurrentSlot()
+	epoch := h.netCfg.EstimatedEpochAtSlot(slot)
 	h.processFetching(ctx, epoch, slot)
 }
 
@@ -207,7 +215,6 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	span.SetStatus(codes.Ok, "")
 }
 
-// executeAggregatorDuties is only processing aggregator-duties after Alan fork.
 func (h *AttesterHandler) executeAggregatorDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	if h.exporterMode {
 		return
@@ -362,8 +369,8 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 }
 
 func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
+	currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {
@@ -381,7 +388,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	maxAttestationPropagationDelay := h.netCfg.SlotsPerEpoch
 	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
@@ -418,6 +425,6 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 }
 
 func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
-	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	slotsPerEpoch := h.netCfg.SlotsPerEpoch
 	return uint64(slot)%slotsPerEpoch > slotsPerEpoch/2-2
 }

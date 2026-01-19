@@ -39,18 +39,13 @@ func (bn *BeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch,
 	return bn.Bn.DomainData(epoch, domain)
 }
 func (bn *BeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	v, err := bn.Bn.SyncCommitteeSubnetID(index)
-	if err != nil {
-		panic("unexpected error from SyncCommitteeSubnetID")
-	}
-	return v
+	return bn.Bn.SyncCommitteeSubnetID(index)
 }
 func (bn *BeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
-	v, err := bn.Bn.IsSyncCommitteeAggregator(proof)
-	if err != nil {
-		panic("unexpected error from IsSyncCommitteeAggregator")
-	}
-	return v
+	return bn.Bn.IsSyncCommitteeAggregator(proof)
+}
+func (bn *BeaconNodeWrapped) IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+	return bn.Bn.IsAggregator(slot, committeeIndex, committeeLength, slotSig)
 }
 func (bn *BeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)
@@ -62,7 +57,12 @@ func (bn *BeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 	return bn.Bn.GetBeaconNetwork()
 }
 func (bn *BeaconNodeWrapped) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
-	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
+	_, p, err := bn.Bn.GetBeaconBlock(slot, graffiti, randao)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return spectestingutils.TestingBeaconBlockV(spectestingutils.VersionBySlot(slot)), p, nil // workaround to get *api.VersionedProposal
 }
 func (bn *BeaconNodeWrapped) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
 	for _, registration := range registrations {
@@ -86,10 +86,45 @@ func (bn *BeaconNodeWrapped) SubmitSignedContributionAndProof(ctx context.Contex
 	return bn.Bn.SubmitSignedContributionAndProof(contribution)
 }
 func (bn *BeaconNodeWrapped) SubmitSignedAggregateSelectionProof(ctx context.Context, msg *spec.VersionedSignedAggregateAndProof) error {
-	return bn.Bn.SubmitSignedAggregateSelectionProof(msg)
+	var root [32]byte
+
+	switch msg.Version {
+	case spec.DataVersionPhase0:
+		root, _ = msg.Phase0.HashTreeRoot()
+	case spec.DataVersionAltair:
+		root, _ = msg.Altair.HashTreeRoot()
+	case spec.DataVersionBellatrix:
+		root, _ = msg.Bellatrix.HashTreeRoot()
+	case spec.DataVersionCapella:
+		root, _ = msg.Capella.HashTreeRoot()
+	case spec.DataVersionDeneb:
+		root, _ = msg.Deneb.HashTreeRoot()
+	case spec.DataVersionElectra:
+		root, _ = msg.Electra.HashTreeRoot()
+	case spec.DataVersionFulu:
+		root, _ = msg.Fulu.HashTreeRoot()
+	default:
+		panic("unsupported version")
+	}
+
+	bn.Bn.BroadcastedRoots = append(bn.Bn.BroadcastedRoots, root)
+	return nil
 }
 func (bn *BeaconNodeWrapped) SubmitBeaconBlock(ctx context.Context, block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	return bn.Bn.SubmitBeaconBlock(block, sig)
+}
+
+func (bn *BeaconNodeWrapped) GetAggregateAttestation(
+	ctx context.Context,
+	slot phase0.Slot,
+	committeeIndex phase0.CommitteeIndex,
+) (ssz.Marshaler, spec.DataVersion, error) {
+	att, err := bn.Bn.GetAggregateAttestation(slot, committeeIndex)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return att, spectestingutils.VersionBySlot(slot), nil
 }
 
 func NewTestingBeaconNodeWrapped() beacon.BeaconNode {

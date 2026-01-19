@@ -154,6 +154,36 @@ func (m *MockAggregatorCalls) EXPECT() *MockAggregatorCallsMockRecorder {
 	return m.recorder
 }
 
+// GetAggregateAttestation mocks base method.
+func (m *MockAggregatorCalls) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAggregateAttestation", ctx, slot, committeeIndex)
+	ret0, _ := ret[0].(ssz.Marshaler)
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetAggregateAttestation indicates an expected call of GetAggregateAttestation.
+func (mr *MockAggregatorCallsMockRecorder) GetAggregateAttestation(ctx, slot, committeeIndex any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAggregateAttestation", reflect.TypeOf((*MockAggregatorCalls)(nil).GetAggregateAttestation), ctx, slot, committeeIndex)
+}
+
+// IsAggregator mocks base method.
+func (m *MockAggregatorCalls) IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsAggregator", ctx, slot, committeeIndex, committeeLength, slotSig)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsAggregator indicates an expected call of IsAggregator.
+func (mr *MockAggregatorCallsMockRecorder) IsAggregator(ctx, slot, committeeIndex, committeeLength, slotSig any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAggregator", reflect.TypeOf((*MockAggregatorCalls)(nil).IsAggregator), ctx, slot, committeeIndex, committeeLength, slotSig)
+}
+
 // SubmitAggregateSelectionProof mocks base method.
 func (m *MockAggregatorCalls) SubmitAggregateSelectionProof(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
@@ -751,6 +781,22 @@ func (mr *MockBeaconNodeMockRecorder) DomainData(ctx, epoch, domain any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainData", reflect.TypeOf((*MockBeaconNode)(nil).DomainData), ctx, epoch, domain)
 }
 
+// GetAggregateAttestation mocks base method.
+func (m *MockBeaconNode) GetAggregateAttestation(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAggregateAttestation", ctx, slot, committeeIndex)
+	ret0, _ := ret[0].(ssz.Marshaler)
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetAggregateAttestation indicates an expected call of GetAggregateAttestation.
+func (mr *MockBeaconNodeMockRecorder) GetAggregateAttestation(ctx, slot, committeeIndex any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAggregateAttestation", reflect.TypeOf((*MockBeaconNode)(nil).GetAggregateAttestation), ctx, slot, committeeIndex)
+}
+
 // GetAttestationData mocks base method.
 func (m *MockBeaconNode) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
@@ -812,6 +858,20 @@ func (m *MockBeaconNode) GetValidatorData(ctx context.Context, validatorPubKeys 
 func (mr *MockBeaconNodeMockRecorder) GetValidatorData(ctx, validatorPubKeys any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorData", reflect.TypeOf((*MockBeaconNode)(nil).GetValidatorData), ctx, validatorPubKeys)
+}
+
+// IsAggregator mocks base method.
+func (m *MockBeaconNode) IsAggregator(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsAggregator", ctx, slot, committeeIndex, committeeLength, slotSig)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsAggregator indicates an expected call of IsAggregator.
+func (mr *MockBeaconNodeMockRecorder) IsAggregator(ctx, slot, committeeIndex, committeeLength, slotSig any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAggregator", reflect.TypeOf((*MockBeaconNode)(nil).IsAggregator), ctx, slot, committeeIndex, committeeLength, slotSig)
 }
 
 // IsSyncCommitteeAggregator mocks base method.

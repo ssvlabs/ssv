@@ -52,7 +52,8 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	}
 
 	var topics []string
-	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+	role := msg.SSVMessage.MsgID.GetRoleType()
+	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
 		if n.cfg.NetworkConfig.BooleFork() {
 			val, exists := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 			if !exists {

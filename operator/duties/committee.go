@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/utils"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -24,6 +25,8 @@ type CommitteeHandler struct {
 
 	attDuties  *dutystore.Duties[eth2apiv1.AttesterDuty]
 	syncDuties *dutystore.SyncCommitteeDuties
+
+	isAggregator bool
 }
 
 type committeeDuty struct {
@@ -32,17 +35,33 @@ type committeeDuty struct {
 	operatorIDs []spectypes.OperatorID
 }
 
-func NewCommitteeHandler(attDuties *dutystore.Duties[eth2apiv1.AttesterDuty], syncDuties *dutystore.SyncCommitteeDuties) *CommitteeHandler {
-	h := &CommitteeHandler{
-		attDuties:  attDuties,
-		syncDuties: syncDuties,
+func NewCommitteeHandler(
+	attDuties *dutystore.Duties[eth2apiv1.AttesterDuty],
+	syncDuties *dutystore.SyncCommitteeDuties,
+) *CommitteeHandler {
+	return &CommitteeHandler{
+		isAggregator: false,
+		attDuties:    attDuties,
+		syncDuties:   syncDuties,
 	}
+}
 
-	return h
+func NewAggregatorCommitteeHandler(
+	attDuties *dutystore.Duties[eth2apiv1.AttesterDuty],
+	syncDuties *dutystore.SyncCommitteeDuties,
+) *CommitteeHandler {
+	return &CommitteeHandler{
+		isAggregator: true,
+		attDuties:    attDuties,
+		syncDuties:   syncDuties,
+	}
 }
 
 func (h *CommitteeHandler) Name() string {
-	return "CLUSTER"
+	if h.isAggregator {
+		return utils.FormatRunnerRole(spectypes.RoleAggregatorCommittee)
+	}
+	return utils.FormatRunnerRole(spectypes.RoleCommittee)
 }
 
 func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
@@ -58,9 +77,13 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			if h.isAggregator && !h.netCfg.BooleForkAtSlot(slot) {
+				continue
+			}
+			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
+			period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			slotsPerEpoch := phase0.Slot(h.netCfg.SlotsPerEpoch)
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%slotsPerEpoch+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
@@ -80,8 +103,12 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+	spanName := "committee.execute"
+	if h.isAggregator {
+		spanName = "aggregator_committee.execute"
+	}
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "committee.execute"),
+		observability.InstrumentName(observabilityNamespace, spanName),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconEpochAttribute(epoch),
@@ -115,6 +142,13 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 	epoch phase0.Epoch,
 	slot phase0.Slot,
 ) committeeDutiesMap {
+	attRole := spectypes.BNRoleAttester
+	syncRole := spectypes.BNRoleSyncCommittee
+	if h.isAggregator {
+		attRole = spectypes.BNRoleAggregator
+		syncRole = spectypes.BNRoleSyncCommitteeContribution
+	}
+
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	selfValidators := h.validatorProvider.SelfParticipatingValidators(epoch)
@@ -131,12 +165,12 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 	resultCommitteeMap := make(committeeDutiesMap)
 	for _, duty := range attDuties {
 		if h.shouldExecuteAtt(duty, epoch) {
-			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecAttDuty(duty, attRole))
 		}
 	}
 	for _, duty := range syncDuties {
 		if h.shouldExecuteSync(duty, slot, epoch) {
-			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
+			h.addToCommitteeMap(resultCommitteeMap, validatorCommittees, h.toSpecSyncDuty(duty, slot, syncRole))
 		}
 	}
 
@@ -204,14 +238,14 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 		return false
 	}
 
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
 
 	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	maxAttestationPropagationDelay := h.beaconConfig.SlotsPerEpoch
+	maxAttestationPropagationDelay := h.netCfg.SlotsPerEpoch
 	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= maxAttestationPropagationDelay {
 		return true
 	}
@@ -225,11 +259,11 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 
 func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
 	share, found := h.validatorProvider.Validator(duty.PubKey[:])
-	if !found || !share.IsParticipating(h.beaconConfig, epoch) {
+	if !found || !share.IsParticipating(h.netCfg.Beacon, epoch) {
 		return false
 	}
 
-	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+	currentSlot := h.netCfg.EstimatedCurrentSlot()
 
 	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
@@ -248,7 +282,7 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 }
 
 func (h *CommitteeHandler) canParticipate(share *types.SSVShare, currentSlot phase0.Slot) bool {
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 
 	if share.MinParticipationEpoch() > currentEpoch {
 		h.logger.Debug("validator not yet participating",

@@ -347,7 +347,7 @@ func (mv *messageValidator) maxStoredSlots() uint64 {
 }
 
 func (mv *messageValidator) decodedMessageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
-	role := spectypes.RunnerRole(spectypes.RoleUnknown)
+	role := spectypes.RoleUnknown
 	if decodedMessage != nil {
 		role = decodedMessage.GetID().GetRoleType()
 	}

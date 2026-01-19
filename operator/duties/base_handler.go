@@ -19,7 +19,7 @@ type dutyHandler interface {
 		logger *zap.Logger,
 		beaconNode BeaconNode,
 		executionClient ExecutionClient,
-		beaconConfig *networkconfig.Beacon,
+		netCfg *networkconfig.Network,
 		validatorProvider ValidatorProvider,
 		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
@@ -36,7 +36,7 @@ type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        *networkconfig.Beacon
+	netCfg              *networkconfig.Network
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	dutiesExecutor      DutiesExecutor
@@ -53,7 +53,7 @@ func (h *baseHandler) Setup(
 	logger *zap.Logger,
 	beaconNode BeaconNode,
 	executionClient ExecutionClient,
-	beaconConfig *networkconfig.Beacon,
+	netCfg *networkconfig.Network,
 	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,
@@ -64,7 +64,7 @@ func (h *baseHandler) Setup(
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient
-	h.beaconConfig = beaconConfig
+	h.netCfg = netCfg
 	h.validatorProvider = validatorProvider
 	h.validatorController = validatorController
 	h.dutiesExecutor = dutiesExecutor
@@ -92,12 +92,12 @@ func (h *baseHandler) ctxWithDeadlineInOneEpoch(ctx context.Context, slot phase0
 	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
 	// Sync committee duties have to use the same deadline because they are part of the committee role.
 	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
-	slotsPerEpoch := phase0.Slot(h.beaconConfig.SlotsPerEpoch)
+	slotsPerEpoch := phase0.Slot(h.netCfg.SlotsPerEpoch)
 	return h.ctxWithDeadlineOnSlot(ctx, slot+slotsPerEpoch+1)
 }
 
 // ctxWithDeadlineOnSlot returns the derived context with a deadline set to the beginning of the passed slot
 // with some safety margin to account for clock skews.
 func (h *baseHandler) ctxWithDeadlineOnSlot(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
-	return context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot).Add(100*time.Millisecond))
+	return context.WithDeadline(ctx, h.netCfg.SlotStartTime(slot).Add(100*time.Millisecond))
 }

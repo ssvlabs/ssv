@@ -33,7 +33,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv v1.2.1-0.20251110161756-cd931098ea44
-	github.com/ssvlabs/ssv-spec v1.2.2
+	github.com/ssvlabs/ssv-spec v1.2.3-0.20260114130355-62da4f7b67c9
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/valyala/fasthttp v1.58.0
@@ -81,6 +81,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
 	github.com/google/flatbuffers v1.12.1 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/ipfs/go-cid v0.5.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
@@ -141,6 +142,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
+	go.uber.org/mock v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect

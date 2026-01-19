@@ -74,7 +74,6 @@ var TestNetwork = &Network{
 		},
 		TotalEthereumValidators: 1_000_000, // just some high enough value, so we never accidentally reach the message-limits derived from it while testing something with local testnet
 		Forks: SSVForks{
-			Alan:       0,
 			GasLimit36: 0,
 			Boole:      math.MaxUint64,
 		},

@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -146,11 +147,18 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
+	ssvCfg := *networkconfig.TestNetwork.SSV
+	ssvCfg.Forks.Boole = math.MaxUint64
+
+	netCfg := *networkconfig.TestNetwork
+	netCfg.Beacon = &beaconCfg
+	netCfg.SSV = &ssvCfg
+
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		BeaconConfig:        &beaconCfg,
+		NetworkConfig:       &netCfg,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
@@ -241,6 +249,8 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 			}
 		},
 	)
+
+	// TODO: mock for aggregator committee duties
 }
 
 func waitForDutiesFetch(
@@ -421,7 +431,7 @@ func TestScheduler_Run(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.Beacon,
+		NetworkConfig:     networkconfig.TestNetwork,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
@@ -471,7 +481,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.Beacon,
+		NetworkConfig:     networkconfig.TestNetwork,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker

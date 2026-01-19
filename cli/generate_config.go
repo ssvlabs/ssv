@@ -109,6 +109,10 @@ var generateConfigCmd = &cobra.Command{
 			RegistryContractAddr: ethcommon.HexToAddress(ssvRegistryContractAddr),
 			Bootnodes:            bootnodes,
 			DiscoveryProtocolID:  parsedDiscoveryProtocolIDArr,
+			Forks: networkconfig.SSVForks{
+				GasLimit36: 0,
+				Boole:      0,
+			},
 		}
 
 		data, err := yaml.Marshal(&config)
