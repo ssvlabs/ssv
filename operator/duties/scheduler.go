@@ -476,6 +476,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 	for _, committee := range duties {
 		duty := committee.duty
+		role := types.RunnerRoleForDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
 
 		logger := s.loggerWithCommitteeDutyContext(committee)
 
@@ -485,7 +486,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 			return types.RunnerRoleForValidatorDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
 		}))
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.CommitteeIDAttribute(committee.id),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
 		))
@@ -499,7 +500,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
 		}
 
-		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+		recordDutyScheduled(ctx, role, slotDelay)
 
 		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
@@ -510,7 +511,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 				logger.Warn("parent-context has no deadline set")
 			}
 
-			if duty.RunnerRole() == spectypes.RoleCommittee {
+			if role == spectypes.RoleCommittee {
 				s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			}
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
@@ -541,10 +542,11 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty)
 	duty := committeeDuty.duty
 
 	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(duty.Slot)
-	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot, duty.RunnerRole())
+	role := types.RunnerRoleForDuty(duty, s.netCfg.BooleForkAtSlot(duty.Slot))
+	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot, role)
 
 	return s.logger.
-		With(fields.RunnerRole(duty.RunnerRole())).
+		With(fields.RunnerRole(role)).
 		With(fields.Slot(duty.Slot)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.CommitteeID(committeeDuty.id)).
