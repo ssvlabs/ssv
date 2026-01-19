@@ -619,11 +619,12 @@ func (c *Controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 
 func (c *Controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.Slot)
-	dutyID := fields.BuildDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.RunnerRole(), duty.ValidatorIndex)
+	role := ssvtypes.RunnerRoleForValidatorDuty(duty, c.networkConfig.BooleForkAtSlot(duty.Slot))
+	dutyID := fields.BuildDutyID(dutyEpoch, duty.Slot, role, duty.ValidatorIndex)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.BeaconRoleAttribute(duty.Type),
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.BeaconEpochAttribute(dutyEpoch),

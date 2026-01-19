@@ -313,7 +313,9 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	h.logger.Debug("🗂 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.Duties(epoch, specDuties, truncate),
+		fields.Duties(epoch, specDuties, truncate, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+			return types.RunnerRoleForValidatorDuty(duty, h.netCfg.BooleForkAtSlot(duty.Slot))
+		}),
 		fields.Took(time.Since(start)),
 	)
 

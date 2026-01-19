@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerHandler struct {
@@ -246,7 +247,9 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	h.logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.Duties(epoch, specDuties, truncate),
+		fields.Duties(epoch, specDuties, truncate, func(duty *spectypes.ValidatorDuty) spectypes.RunnerRole {
+			return types.RunnerRoleForValidatorDuty(duty, h.netCfg.BooleForkAtSlot(duty.Slot))
+		}),
 		fields.Took(time.Since(start)),
 	)
 
