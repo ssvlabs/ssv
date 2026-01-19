@@ -32,7 +32,7 @@ require (
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/sourcegraph/conc v0.3.0
 	github.com/ssvlabs/eth2-key-manager v1.5.6
-	github.com/ssvlabs/ssv v1.2.1-0.20251110161756-cd931098ea44
+	github.com/ssvlabs/ssv v1.2.1-0.20260119104222-3fd934546fa3
 	github.com/ssvlabs/ssv-spec v1.2.3-0.20260114130355-62da4f7b67c9
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.37.0
