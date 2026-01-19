@@ -674,11 +674,12 @@ func (c *Controller) ExecuteCommitteeDuty(
 	}
 
 	dutyEpoch := c.networkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.DutySlot(), duty.RunnerRole())
+	role := ssvtypes.RunnerRoleForDuty(duty, c.networkConfig.BooleForkAtSlot(duty.DutySlot()))
+	dutyID := fields.BuildCommitteeDutyID(committee, dutyEpoch, duty.DutySlot(), role)
 	ctx, span := tracer.Start(traces.Context(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.BeaconEpochAttribute(dutyEpoch),
 			observability.BeaconSlotAttribute(duty.DutySlot()),
 			observability.CommitteeIDAttribute(committeeID),

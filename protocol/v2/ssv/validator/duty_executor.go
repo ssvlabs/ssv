@@ -31,7 +31,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *s
 		return fmt.Errorf("decode duty execute msg: %w", err)
 	}
 
-	if pushed := v.Queues[duty.RunnerRole()].TryPush(dec); !pushed {
+	if pushed := v.Queues[role].TryPush(dec); !pushed {
 		return fmt.Errorf("dropping ExecuteDuty message for validator %s because the queue is full", duty.PubKey.String())
 	}
 

@@ -106,10 +106,11 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	queueContainer,
 	error,
 ) {
+	role := types.RunnerRoleForDuty(duty, c.networkConfig.BooleForkAtSlot(duty.DutySlot()))
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.DutyCountAttribute(len(c.extractValidatorDuties(duty))),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
@@ -137,11 +138,12 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	err error,
 ) {
 	validatorDuties := c.extractValidatorDuties(duty)
+	role := types.RunnerRoleForDuty(duty, c.networkConfig.BooleForkAtSlot(duty.DutySlot()))
 
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
 		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.RunnerRoleAttribute(role),
 			observability.DutyCountAttribute(len(validatorDuties)),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
 	defer span.End()
@@ -164,7 +166,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	}
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
-	q = c.getQueueForRole(logger, duty.DutySlot(), duty.RunnerRole())
+	q = c.getQueueForRole(logger, duty.DutySlot(), role)
 
 	// Prunes all expired committee runners opportunistically (when a new runner is created).
 	c.unsafePruneExpiredRunners(logger, duty.DutySlot())
