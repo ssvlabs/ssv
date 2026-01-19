@@ -18,6 +18,11 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 )
 
+const (
+	commonTimeout = 200 * time.Millisecond
+	longTimeout   = 500 * time.Millisecond
+)
+
 func TestHealthy(t *testing.T) {
 	t.Parallel()
 
@@ -134,11 +139,6 @@ func runHealthyTest(
 	syncResponseList []syncResponse,
 	syncDistanceTolerance uint64,
 ) error {
-	const (
-		commonTimeout = 200 * time.Millisecond
-		longTimeout   = 500 * time.Millisecond
-	)
-
 	mockResponses := mocks.ServerResponses()
 	replaceSyncing := atomic.Bool{}
 	urls := make([]string, 0, len(syncResponseList))
@@ -186,8 +186,6 @@ func runHealthyTest(
 
 func TestTimeouts(t *testing.T) {
 	const (
-		commonTimeout = 200 * time.Millisecond
-		longTimeout   = 500 * time.Millisecond
 		// mockServerEpoch is the epoch to use in requests to the mock server.
 		mockServerEpoch = 132502
 	)
