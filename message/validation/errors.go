@@ -138,7 +138,12 @@ var (
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(
+	ctx context.Context,
+	peerID peer.ID,
+	decodedMessage *queue.SSVMessage,
+	err error,
+) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -166,6 +171,69 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
+}
+
+// handleValidationErrorPriorWindow applies prior (warmup) period rules:
+// - any incoming non-rejectable message can be accepted and propagated
+// - rejectable ones can be ignored to avoid score degradation
+func (mv *messageValidator) handleValidationErrorPriorWindow(
+	ctx context.Context,
+	peerID peer.ID,
+	decodedMessage *queue.SSVMessage,
+	err error,
+) pubsub.ValidationResult {
+	loggerFields := mv.buildLoggerFields(decodedMessage)
+
+	logger := mv.logger.
+		With(loggerFields.AsZapFields()...).
+		With(fields.PeerID(peerID))
+
+	var valErr Error
+	if !errors.As(err, &valErr) {
+		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
+		logger.Debug("ignoring invalid message", zap.Error(err))
+		return pubsub.ValidationIgnore
+	}
+
+	if !valErr.Reject() {
+		if !valErr.Silent() {
+			logger.Debug("accepting non-rejectable message during boole prior (warmup) window", zap.Error(valErr))
+		}
+		recordAcceptedMessage(ctx, mv.decodedMessageRole(decodedMessage))
+		return pubsub.ValidationAccept
+	}
+
+	if !valErr.Silent() {
+		logger.Debug("ignoring rejectable message during boole prior (warmup) window", zap.Error(valErr))
+	}
+
+	recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
+	return pubsub.ValidationIgnore
+}
+
+func (mv *messageValidator) handleValidationErrorUnsubscriptionWindow(
+	ctx context.Context,
+	peerID peer.ID,
+	decodedMessage *queue.SSVMessage,
+	err error,
+) pubsub.ValidationResult {
+	loggerFields := mv.buildLoggerFields(decodedMessage)
+
+	logger := mv.logger.
+		With(loggerFields.AsZapFields()...).
+		With(fields.PeerID(peerID))
+
+	var valErr Error
+	if errors.As(err, &valErr) {
+		if !valErr.Silent() {
+			logger.Debug("accepting message on Alan topic during Boole unsubscription window", zap.Error(valErr))
+		}
+	} else {
+		logger.Debug("accepting message on Alan topic during Boole unsubscription window", zap.Error(err))
+	}
+
+	recordAcceptedMessage(ctx, mv.decodedMessageRole(decodedMessage))
+	return pubsub.ValidationAccept
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {

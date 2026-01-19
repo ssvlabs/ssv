@@ -36,7 +36,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 
 	// Explicitly set Index field as beacon nodes may return inconsistent values.
 	// EIP-7549: For Electra and later, index must always be 0, pre-Electra uses committee index.
-	dataVersion, _ := gc.beaconConfig.ForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
+	dataVersion, _ := gc.beaconConfig.BeaconForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
 	attData.Index = 0
 	if dataVersion < spec.DataVersionElectra {
 		attData.Index = committeeIndex

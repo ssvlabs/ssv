@@ -131,14 +131,17 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 
 	defer func() {
-		role := spectypes.RunnerRole(spectypes.RoleUnknown)
-		if decodedMessage != nil {
-			role = decodedMessage.GetID().GetRoleType()
-		}
+		role := mv.decodedMessageRole(decodedMessage)
 		recordMessageDuration(ctx, role, time.Since(validationStart))
 	}()
 
 	if err != nil {
+		if mv.isInWindow(decodedMessage, pmsg.GetTopic(), mv.netCfg.BooleForkInPriorWindow, true) {
+			return mv.handleValidationErrorPriorWindow(ctx, peerID, decodedMessage, err)
+		}
+		if mv.isInWindow(decodedMessage, pmsg.GetTopic(), mv.netCfg.BooleForkInUnsubscriptionWindow, false) {
+			return mv.handleValidationErrorUnsubscriptionWindow(ctx, peerID, decodedMessage, err)
+		}
 		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
@@ -170,11 +173,13 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		SignedSSVMessage: signedSSVMessage,
 	}
 
+	if signedSSVMessage != nil {
+		decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
+	}
+
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
 		return decodedMessage, err
 	}
-
-	decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
 
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
 		return decodedMessage, err
@@ -227,12 +232,25 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	}
 
 	// Rule: Check if message was sent in the correct topic
-	messageTopics := commons.CommitteeTopicID(committeeInfo.committeeID)
-	topicBaseName := commons.GetTopicBaseName(topic)
-	if !slices.Contains(messageTopics, topicBaseName) {
+	var messageTopicNames []string
+	currentEpoch := mv.netCfg.EstimatedCurrentEpoch()
+	alanTopic := commons.SubnetTopicID(committeeInfo.subnetAlan)
+	booleTopic := commons.SubnetTopicID(committeeInfo.subnet)
+	alanTopicFullName := commons.AlanTopicFullName(alanTopic)
+	booleTopicFullName := commons.TopicFullName(mv.netCfg.Beacon.Name, booleTopic)
+	unionTopicNames := []string{alanTopicFullName, booleTopicFullName}
+	switch {
+	case mv.netCfg.BooleForkInPriorWindow(currentEpoch), mv.netCfg.BooleForkInUnsubscriptionWindow(currentEpoch):
+		messageTopicNames = unionTopicNames
+	case mv.netCfg.BooleForkAtEpoch(currentEpoch):
+		messageTopicNames = []string{booleTopicFullName}
+	default:
+		messageTopicNames = []string{alanTopicFullName}
+	}
+	if !slices.Contains(messageTopicNames, topic) {
 		e := ErrIncorrectTopic
-		e.got = fmt.Sprintf("topic %v / base name %v", topic, topicBaseName)
-		e.want = messageTopics
+		e.got = fmt.Sprintf("topic %v", topic)
+		e.want = messageTopicNames
 		return e
 	}
 
@@ -280,7 +298,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
+		return committeeInfoFromCommittee(committee), nil
 	}
 
 	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
@@ -306,13 +324,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeInfo{}, e
 	}
 
-	operators := make([]spectypes.OperatorID, 0, len(share.Committee))
-	for _, c := range share.Committee {
-		operators = append(operators, c.Signer)
-	}
-
 	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
-	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
+	return committeeInfoFromShare(share, indices), nil
 }
 
 func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {
@@ -331,4 +344,39 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 // maxStoredSlots stores max amount of slots message validation stores.
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
+}
+
+func (mv *messageValidator) decodedMessageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
+	role := spectypes.RunnerRole(spectypes.RoleUnknown)
+	if decodedMessage != nil {
+		role = decodedMessage.GetID().GetRoleType()
+	}
+	return role
+}
+
+func (mv *messageValidator) isInWindow(
+	decodedMessage *queue.SSVMessage,
+	topic string,
+	inWindowF func(epoch phase0.Epoch) bool,
+	wantBoole bool,
+) bool {
+	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
+		return false
+	}
+	if !inWindowF(mv.netCfg.EstimatedCurrentEpoch()) {
+		return false
+	}
+
+	committeeInfo, err := mv.getCommitteeAndValidatorIndices(decodedMessage.GetID())
+	if err != nil {
+		return false
+	}
+
+	alanTopic := commons.AlanTopicFullName(commons.SubnetTopicID(committeeInfo.subnetAlan))
+	booleTopic := commons.TopicFullName(mv.netCfg.Beacon.Name, commons.SubnetTopicID(committeeInfo.subnet))
+	expected := alanTopic
+	if wantBoole {
+		expected = booleTopic
+	}
+	return topic == expected
 }

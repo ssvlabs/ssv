@@ -2,12 +2,15 @@ package commons
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
 	"math/bits"
 	"strings"
+	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -23,7 +26,9 @@ const (
 	// UnknownSubnet is used when a validator public key is invalid
 	UnknownSubnet = "unknown"
 
-	topicPrefix = "ssv.v2"
+	alanTopicPrefix = "ssv.v2"
+	topicRoot       = "/ssv"
+	booleTopicFork  = "boole"
 )
 
 // BigIntSubnetsCount is the big.Int representation of SubnetsCount
@@ -37,37 +42,87 @@ func SubnetTopicID(subnet uint64) string {
 	return fmt.Sprintf("%d", subnet)
 }
 
-func CommitteeTopicID(cid spectypes.CommitteeID) []string {
-	return []string{fmt.Sprintf("%d", CommitteeSubnet(cid))}
+// AlanTopicFullName returns the Alan topic full name, including prefix.
+func AlanTopicFullName(baseName string) string {
+	return fmt.Sprintf("%s.%s", alanTopicPrefix, baseName)
 }
 
-// GetTopicFullName returns the topic full name, including prefix
-func GetTopicFullName(baseName string) string {
-	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
+// TopicFullName returns the topic full name, including prefix.
+func TopicFullName(networkName, baseName string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", topicRoot, networkName, booleTopicFork, baseName)
 }
 
-// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
+// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix.
 func GetTopicBaseName(topicName string) string {
-	return strings.TrimPrefix(topicName, topicPrefix+".")
+	if strings.HasPrefix(topicName, alanTopicPrefix+".") {
+		return strings.TrimPrefix(topicName, alanTopicPrefix+".")
+	}
+	if strings.HasPrefix(topicName, topicRoot+"/") {
+		remainder := strings.TrimPrefix(topicName, topicRoot+"/")
+		parts := strings.SplitN(remainder, "/", 3)
+		if len(parts) == 3 && parts[1] == booleTopicFork && parts[2] != "" {
+			return parts[2]
+		}
+	}
+	return topicName
 }
 
-// CommitteeSubnet returns the subnet for the given committee
-func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
-	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
-	return subnet.Uint64()
+var bigIntPool = sync.Pool{
+	New: func() any { return new(big.Int) },
 }
 
-// SetCommitteeSubnet returns the subnet for the given committee, it doesn't allocate memory but uses the passed in big.Int
-func SetCommitteeSubnet(bigInt *big.Int, cid spectypes.CommitteeID) {
-	bigInt.SetBytes(cid[:])
-	bigInt.Mod(bigInt, bigIntSubnetsCount)
+// CommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).
+// It requires committee to be valid and have length >=1.
+// It uses sync.Pool to reduce heap allocations.
+func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
+	var operatorBytes [8]byte
+	var hash [32]byte
+
+	lowest := bigIntPool.Get().(*big.Int)
+	hashNum := bigIntPool.Get().(*big.Int)
+	result := bigIntPool.Get().(*big.Int)
+
+	defer bigIntPool.Put(lowest)
+	defer bigIntPool.Put(hashNum)
+	defer bigIntPool.Put(result)
+
+	binary.LittleEndian.PutUint64(operatorBytes[:], committee[0])
+	hash = sha256.Sum256(operatorBytes[:])
+	lowest.SetBytes(hash[:])
+
+	for i := 1; i < len(committee); i++ {
+		binary.LittleEndian.PutUint64(operatorBytes[:], committee[i])
+		hash = sha256.Sum256(operatorBytes[:])
+		hashNum.SetBytes(hash[:])
+
+		if hashNum.Cmp(lowest) < 0 {
+			lowest.Set(hashNum)
+		}
+	}
+
+	result.Mod(lowest, bigIntSubnetsCount)
+	subnet := result.Uint64()
+
+	return subnet
 }
 
-// Topics returns the available topics for this fork.
-func Topics() []string {
-	topics := make([]string, SubnetsCount)
+// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
+func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
+	bi := bigIntPool.Get().(*big.Int)
+	defer bigIntPool.Put(bi)
+
+	bi.SetBytes(cid[:])
+	bi.Mod(bi, bigIntSubnetsCount)
+	return bi.Uint64()
+}
+
+// Topics returns the available Alan and Boole topics for the given network.
+func Topics(networkName string) []string {
+	topics := make([]string, 0, SubnetsCount*2)
 	for i := uint64(0); i < SubnetsCount; i++ {
-		topics[i] = GetTopicFullName(SubnetTopicID(i))
+		baseName := SubnetTopicID(i)
+		topics = append(topics, AlanTopicFullName(baseName))
+		topics = append(topics, TopicFullName(networkName, baseName))
 	}
 	return topics
 }

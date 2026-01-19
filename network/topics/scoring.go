@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
@@ -190,7 +191,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 
 		// Get committees
 		committees := committeesProvider.Committees()
-		topicCommittees := filterCommitteesForTopic(t, committees)
+		topicCommittees := filterCommitteesForTopic(cfg.NetworkConfig, t, committees)
 
 		// Log
 		validatorsInTopic := 0
@@ -215,18 +216,31 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 }
 
 // Returns a new committee list with only the committees that belong to the given topic
-func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
+func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, committees []*storage.Committee) []*storage.Committee {
 	topicCommittees := make([]*storage.Committee, 0)
+	currentEpoch := netCfg.EstimatedCurrentEpoch()
 
 	for _, committee := range committees {
-		// Get topic
-		subnet := commons.CommitteeSubnet(committee.ID)
-		committeeTopic := commons.SubnetTopicID(subnet)
-		committeeTopicFullName := commons.GetTopicFullName(committeeTopic)
+		booleTopic := commons.TopicFullName(netCfg.Beacon.Name, commons.SubnetTopicID(committee.Subnet))
+		alanTopic := commons.AlanTopicFullName(commons.SubnetTopicID(committee.SubnetAlan))
 
-		// If it belongs to the topic, add it
-		if topic == committeeTopicFullName {
-			topicCommittees = append(topicCommittees, committee)
+		switch {
+		case netCfg.BooleForkAtEpoch(currentEpoch):
+			if topic == booleTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
+		case netCfg.BooleForkInPriorWindow(currentEpoch):
+			if topic == alanTopic {
+				topicCommittees = append(topicCommittees, committee)
+				continue
+			}
+			if topic == booleTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
+		default:
+			if topic == alanTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
 		}
 	}
 	return topicCommittees

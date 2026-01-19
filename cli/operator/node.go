@@ -518,6 +518,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metadataSyncer := metadata.NewSyncer(
 			logger,
+			networkConfig,
 			nodeStorage.Shares(),
 			validatorProvider,
 			consensusClient,
@@ -623,11 +624,17 @@ var StartNodeCmd = &cobra.Command{
 			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
+			booleFork := networkConfig.BooleForkAtEpoch(networkConfig.EstimatedCurrentEpoch())
 			for _, v := range myValidators {
-				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-				if !mySubnets.IsSet(subnet) {
+				if subnet := v.CommitteeSubnet(); !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
+				}
+				if !booleFork {
+					if alanSubnet := v.CommitteeSubnetAlan(); !mySubnets.IsSet(alanSubnet) {
+						mySubnets.Set(alanSubnet)
+						myActiveSubnets++
+					}
 				}
 			}
 			idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
