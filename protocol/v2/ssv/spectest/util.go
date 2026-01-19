@@ -47,8 +47,8 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range cr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if cr.BaseRunner.State != nil && cr.BaseRunner.State.RunningInstance != nil {
-			cr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
+		if cr.BaseRunner.State.Load() != nil && cr.BaseRunner.State.Load().RunningInstance != nil {
+			cr.BaseRunner.State.Load().RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.AggregatorRunner:
 		ar := r.(*runner.AggregatorRunner)
@@ -58,8 +58,8 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range ar.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if ar.BaseRunner.State != nil && ar.BaseRunner.State.RunningInstance != nil {
-			ar.BaseRunner.State.RunningInstance.ValueChecker = valCheck
+		if ar.BaseRunner.State.Load() != nil && ar.BaseRunner.State.Load().RunningInstance != nil {
+			ar.BaseRunner.State.Load().RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ProposerRunner:
 		pr := r.(*runner.ProposerRunner)
@@ -69,8 +69,8 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range pr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if pr.BaseRunner.State != nil && pr.BaseRunner.State.RunningInstance != nil {
-			pr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
+		if pr.BaseRunner.State.Load() != nil && pr.BaseRunner.State.Load().RunningInstance != nil {
+			pr.BaseRunner.State.Load().RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
 		scr := r.(*runner.SyncCommitteeAggregatorRunner)
@@ -80,8 +80,8 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range scr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if scr.BaseRunner.State != nil && scr.BaseRunner.State.RunningInstance != nil {
-			scr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
+		if scr.BaseRunner.State.Load() != nil && scr.BaseRunner.State.Load().RunningInstance != nil {
+			scr.BaseRunner.State.Load().RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ValidatorRegistrationRunner:
 		r.(*runner.ValidatorRegistrationRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork

@@ -262,18 +262,17 @@ func TestConsumeQueueBasic(t *testing.T) {
 	}
 
 	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: proposalMsg,
-						Round:                           1,
-					},
-				},
+		BaseRunner: &runner.BaseRunner{},
+	}
+	committeeRunner.BaseRunner.State.Store(&runner.State{
+		RunningInstance: &instance.Instance{
+			State: &specqbft.State{
+				Decided:                         false,
+				ProposalAcceptedForCurrentRound: proposalMsg,
+				Round:                           1,
 			},
 		},
-	}
+	})
 
 	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -367,18 +366,17 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	}
 
 	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: nil,
-						Round:                           currentRound,
-					},
-				},
+		BaseRunner: &runner.BaseRunner{},
+	}
+	committeeRunner.BaseRunner.State.Store(&runner.State{
+		RunningInstance: &instance.Instance{
+			State: &specqbft.State{
+				Decided:                         false,
+				ProposalAcceptedForCurrentRound: nil,
+				Round:                           currentRound,
 			},
 		},
-	}
+	})
 
 	msgChannel, handler := setupMessageCollection(4)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -476,18 +474,17 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	}
 
 	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: proposalMsg,
-						Round:                           1,
-					},
-				},
+		BaseRunner: &runner.BaseRunner{},
+	}
+	committeeRunner.BaseRunner.State.Store(&runner.State{
+		RunningInstance: &instance.Instance{
+			State: &specqbft.State{
+				Decided:                         false,
+				ProposalAcceptedForCurrentRound: proposalMsg,
+				Round:                           1,
 			},
 		},
-	}
+	})
 
 	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -556,18 +553,17 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	}
 
 	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         true,
-						ProposalAcceptedForCurrentRound: proposalMsg,
-						Round:                           1,
-					},
-				},
+		BaseRunner: &runner.BaseRunner{},
+	}
+	committeeRunner.BaseRunner.State.Store(&runner.State{
+		RunningInstance: &instance.Instance{
+			State: &specqbft.State{
+				Decided:                         true,
+				ProposalAcceptedForCurrentRound: proposalMsg,
+				Round:                           1,
 			},
 		},
-	}
+	})
 
 	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -640,35 +636,33 @@ func TestChangingFilterState(t *testing.T) {
 
 	// 1) No proposal accepted => Prepare should be filtered out
 	r1 := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: nil,
-						Round:                           round,
-					},
-				},
+		BaseRunner: &runner.BaseRunner{},
+	}
+	r1.BaseRunner.State.Store(&runner.State{
+		RunningInstance: &instance.Instance{
+			State: &specqbft.State{
+				Decided:                         false,
+				ProposalAcceptedForCurrentRound: nil,
+				Round:                           round,
 			},
 		},
-	}
+	})
 	seen1 := runOnce(r1)
 	assert.Nil(t, seen1)
 
 	// 2) Proposal accepted => now we should see exactly one Prepare
 	r2 := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: &specqbft.ProcessingMessage{QBFTMessage: prepareBody},
-						Round:                           round,
-					},
-				},
+		BaseRunner: &runner.BaseRunner{},
+	}
+	r2.BaseRunner.State.Store(&runner.State{
+		RunningInstance: &instance.Instance{
+			State: &specqbft.State{
+				Decided:                         false,
+				ProposalAcceptedForCurrentRound: &specqbft.ProcessingMessage{QBFTMessage: prepareBody},
+				Round:                           round,
 			},
 		},
-	}
+	})
 	seen2 := runOnce(r2)
 
 	require.NotNil(t, seen2)
@@ -765,22 +759,21 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			}
 
 			committeeRunner := &runner.CommitteeRunner{
-				BaseRunner: &runner.BaseRunner{
-					State: &runner.State{
-						RunningInstance: &instance.Instance{
-							State: &specqbft.State{
-								Decided:                         tc.decided,
-								ProposalAcceptedForCurrentRound: proposalMsg,
-								Round:                           1,
-							},
-						},
+				BaseRunner: &runner.BaseRunner{},
+			}
+			committeeRunner.BaseRunner.State.Store(&runner.State{
+				RunningInstance: &instance.Instance{
+					State: &specqbft.State{
+						Decided:                         tc.decided,
+						ProposalAcceptedForCurrentRound: proposalMsg,
+						Round:                           1,
 					},
 				},
-			}
+			})
 
 			// Set runner state based on hasRunningDuty parameter
 			if !tc.hasRunningDuty {
-				committeeRunner.BaseRunner.State.Finished = true // This makes HasRunningDuty() return false
+				committeeRunner.BaseRunner.State.Load().Finished = true // This makes HasRunningDuty() return false
 			}
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
@@ -920,18 +913,17 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			}
 
 			committeeRunner := &runner.CommitteeRunner{
-				BaseRunner: &runner.BaseRunner{
-					State: &runner.State{
-						RunningInstance: &instance.Instance{
-							State: &specqbft.State{
-								Decided:                         tc.decided,
-								ProposalAcceptedForCurrentRound: &specqbft.ProcessingMessage{},
-								Round:                           1,
-							},
-						},
+				BaseRunner: &runner.BaseRunner{},
+			}
+			committeeRunner.BaseRunner.State.Store(&runner.State{
+				RunningInstance: &instance.Instance{
+					State: &specqbft.State{
+						Decided:                         tc.decided,
+						ProposalAcceptedForCurrentRound: &specqbft.ProcessingMessage{},
+						Round:                           1,
 					},
 				},
-			}
+			})
 
 			msgID := spectypes.MessageID{0x10}
 			partialSigMsg := &spectypes.PartialSignatureMessages{
@@ -1034,14 +1026,13 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	// Runner with a proposal already accepted, not yet decided
 	acceptedProposal := &specqbft.ProcessingMessage{QBFTMessage: proposalMsgBody}
 	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{
-				Decided:                         false,
-				ProposalAcceptedForCurrentRound: acceptedProposal,
-				Round:                           currentRound,
-			}}},
-		},
+		BaseRunner: &runner.BaseRunner{},
 	}
+	committeeRunner.BaseRunner.State.Store(&runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{
+		Decided:                         false,
+		ProposalAcceptedForCurrentRound: acceptedProposal,
+		Round:                           currentRound,
+	}}})
 
 	msgChannel := make(chan *queue.SSVMessage, len(testMessages))
 
@@ -1239,8 +1230,9 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	q.Q.TryPush(msg3)
 
 	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{State: &runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{}}}},
+		BaseRunner: &runner.BaseRunner{},
 	}
+	committeeRunner.BaseRunner.State.Store(&runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{}}})
 
 	var processedMessagesCount int32
 	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
@@ -1306,19 +1298,19 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 			MsgType: specqbft.ProposalMsgType,
 		},
 	}
-	committee.Runners[slot] = &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         true,
-						ProposalAcceptedForCurrentRound: acceptedProposal,
-						Round:                           1,
-					},
-				},
+	committeeRunner := &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{},
+	}
+	committeeRunner.BaseRunner.State.Store(&runner.State{
+		RunningInstance: &instance.Instance{
+			State: &specqbft.State{
+				Decided:                         true,
+				ProposalAcceptedForCurrentRound: acceptedProposal,
+				Round:                           1,
 			},
 		},
-	}
+	})
+	committee.Runners[slot] = committeeRunner
 
 	// --- Build 200 randomized messages and count expected per priority bucket ---
 	var (
@@ -1676,18 +1668,17 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		currentRound := specqbft.Round(1)
 
 		committeeRunner := &runner.CommitteeRunner{
-			BaseRunner: &runner.BaseRunner{
-				State: &runner.State{
-					RunningInstance: &instance.Instance{
-						State: &specqbft.State{
-							Decided:                         false,
-							ProposalAcceptedForCurrentRound: nil,
-							Round:                           currentRound,
-						},
-					},
+			BaseRunner: &runner.BaseRunner{},
+		}
+		committeeRunner.BaseRunner.State.Store(&runner.State{
+			RunningInstance: &instance.Instance{
+				State: &specqbft.State{
+					Decided:                         false,
+					ProposalAcceptedForCurrentRound: nil,
+					Round:                           currentRound,
 				},
 			},
-		}
+		})
 
 		slot := phase0.Slot(456)
 
@@ -1766,7 +1757,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		ctx2, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
 
-		committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
+		committeeRunner.BaseRunner.State.Load().RunningInstance.State.ProposalAcceptedForCurrentRound =
 			&specqbft.ProcessingMessage{QBFTMessage: proposal}
 
 		// Restart consumption

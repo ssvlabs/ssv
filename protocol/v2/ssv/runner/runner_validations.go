@@ -28,7 +28,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
 	}
 
-	if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
+	if err := b.validatePartialSigMsg(psigMsgs, b.State.Load().CurrentDuty.DutySlot()); err != nil {
 		return err
 	}
 
@@ -66,8 +66,8 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	// messages as soon as possible (so we can drop non-retryable messages ASAP), the exact slot validation
 	// occurs below.
 	slotIsRelevant := func(slot phase0.Slot) error {
-		minSlot := b.State.CurrentDuty.DutySlot() - 1
-		maxSlot := b.State.CurrentDuty.DutySlot()
+		minSlot := b.State.Load().CurrentDuty.DutySlot() - 1
+		maxSlot := b.State.Load().CurrentDuty.DutySlot()
 		if psigMsgs.Slot < minSlot {
 			// This message is targeting a slot that's already too far in the past to matter.
 			return spectypes.WrapError(spectypes.PartialSigMessageInvalidSlotErrorCode, fmt.Errorf(
@@ -90,13 +90,13 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		return err
 	}
 
-	if b.State.RunningInstance == nil {
+	if b.State.Load().RunningInstance == nil {
 		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningConsensusInstanceErrorCode, ErrInstanceNotFound))
 	}
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
-	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
-	if !decided || len(b.State.DecidedValue) == 0 {
+	decided, decidedValueBytes := b.State.Load().RunningInstance.IsDecided()
+	if !decided || len(b.State.Load().DecidedValue) == 0 {
 		return NewRetryableError(spectypes.WrapError(spectypes.NoDecidedValueErrorCode, ErrNoDecidedValue))
 	}
 
@@ -134,7 +134,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 
 			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for CommitteeRunner
 			// by design, hence there is no need to store slot number on decidedValue for CommitteeRunner.
-			expectedSlot := b.State.CurrentDuty.DutySlot()
+			expectedSlot := b.State.Load().CurrentDuty.DutySlot()
 			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
@@ -167,7 +167,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 
 	// convert expected roots to map and mark unique roots when verified
 	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
-		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.CurrentDuty.DutySlot())
+		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.Load().CurrentDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get pre consensus root domain")

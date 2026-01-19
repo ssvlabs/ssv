@@ -218,7 +218,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	msg, err := signBeaconObject(
 		ctx,
 		r,
-		r.BaseRunner.State.CurrentDuty.(*spectypes.ValidatorDuty),
+		r.BaseRunner.State.Load().CurrentDuty.(*spectypes.ValidatorDuty),
 		aggregateAndProofHashRoot,
 		decidedValue.Duty.Slot,
 		spectypes.DomainAggregateAndProof,
@@ -466,7 +466,7 @@ func (r *AggregatorRunner) GetShare() *spectypes.Share {
 }
 
 func (r *AggregatorRunner) state() *State {
-	return r.BaseRunner.State
+	return r.BaseRunner.State.Load()
 }
 
 func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {

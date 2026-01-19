@@ -15,30 +15,36 @@ type preConsensusMsgLogStats struct {
 }
 
 func (b *BaseRunner) resetPreConsensusLogSummary(nextSlot phase0.Slot) {
+	summary := &preConsensusMsgLogStats{
+		slotStartTime:      time.Time{},
+		signerTimeIntoSlot: make(map[uint64]time.Duration),
+	}
+
 	// b.NetworkConfig can only be nil in tests, this is fast & dirty work-around for it.
 	if b.NetworkConfig != nil {
-		b.preConsensusMsgLog.slotStartTime = b.NetworkConfig.SlotStartTime(nextSlot)
+		summary.slotStartTime = b.NetworkConfig.SlotStartTime(nextSlot)
 	}
-	b.preConsensusMsgLog.signerTimeIntoSlot = make(map[uint64]time.Duration)
+
+	b.preConsensusMsgLog.Store(summary)
 }
 
 func (b *BaseRunner) observePreConsensusMsg(signer uint64) {
 	// Duplicate message from the same signer should never arrive here, but handle it just in case.
-	if _, seen := b.preConsensusMsgLog.signerTimeIntoSlot[signer]; seen {
+	if _, seen := b.preConsensusMsgLog.Load().signerTimeIntoSlot[signer]; seen {
 		return
 	}
 
-	// b.preConsensusMsgLog.signerTimeIntoSlot can only be nil in tests, this is fast & dirty work-around for it.
-	if b.preConsensusMsgLog.signerTimeIntoSlot == nil {
-		b.preConsensusMsgLog.signerTimeIntoSlot = make(map[uint64]time.Duration)
+	// b.preConsensusMsgLog.Load().signerTimeIntoSlot can only be nil in tests, this is fast & dirty work-around for it.
+	if b.preConsensusMsgLog.Load().signerTimeIntoSlot == nil {
+		b.preConsensusMsgLog.Load().signerTimeIntoSlot = make(map[uint64]time.Duration)
 	}
 
-	b.preConsensusMsgLog.signerTimeIntoSlot[signer] = time.Since(b.preConsensusMsgLog.slotStartTime)
+	b.preConsensusMsgLog.Load().signerTimeIntoSlot[signer] = time.Since(b.preConsensusMsgLog.Load().slotStartTime)
 }
 
 func (b *BaseRunner) preConsensusMsgLogSummaryFields(quorumReachedBySigner uint64) []zap.Field {
-	timeToQuorum := time.Since(b.preConsensusMsgLog.slotStartTime)
-	if at, ok := b.preConsensusMsgLog.signerTimeIntoSlot[quorumReachedBySigner]; ok {
+	timeToQuorum := time.Since(b.preConsensusMsgLog.Load().slotStartTime)
+	if at, ok := b.preConsensusMsgLog.Load().signerTimeIntoSlot[quorumReachedBySigner]; ok {
 		timeToQuorum = at
 	}
 
@@ -48,8 +54,8 @@ func (b *BaseRunner) preConsensusMsgLogSummaryFields(quorumReachedBySigner uint6
 
 		atDur time.Duration
 	}
-	signerTimings := make([]preConsensusSignerTiming, 0, len(b.preConsensusMsgLog.signerTimeIntoSlot))
-	for signer, at := range b.preConsensusMsgLog.signerTimeIntoSlot {
+	signerTimings := make([]preConsensusSignerTiming, 0, len(b.preConsensusMsgLog.Load().signerTimeIntoSlot))
+	for signer, at := range b.preConsensusMsgLog.Load().signerTimeIntoSlot {
 		signerTimings = append(signerTimings, preConsensusSignerTiming{
 			Signer:       signer,
 			TimeIntoSlot: signedDurationToSecondsStr(at),

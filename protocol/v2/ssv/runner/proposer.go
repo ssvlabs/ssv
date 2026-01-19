@@ -265,7 +265,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		span.AddEvent("decided has a vanilla block")
 	}
 
-	duty := r.BaseRunner.State.CurrentDuty.(*spectypes.ValidatorDuty)
+	duty := r.BaseRunner.State.Load().CurrentDuty.(*spectypes.ValidatorDuty)
 	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
@@ -420,8 +420,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()), spectypes.BNRoleProposer)
 	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(
-		observability.BeaconSlotAttribute(r.BaseRunner.State.CurrentDuty.DutySlot()),
-		observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
+		observability.BeaconSlotAttribute(r.BaseRunner.State.Load().CurrentDuty.DutySlot()),
+		observability.DutyRoundAttribute(r.BaseRunner.State.Load().RunningInstance.State.Round),
 		observability.BeaconBlockHashAttribute(blockHash),
 		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
 	))
@@ -595,7 +595,7 @@ func (r *ProposerRunner) GetShare() *spectypes.Share {
 }
 
 func (r *ProposerRunner) state() *State {
-	return r.BaseRunner.State
+	return r.BaseRunner.State.Load()
 }
 
 func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {

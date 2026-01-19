@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"sync"
+	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -82,8 +82,14 @@ type DoppelgangerProvider interface {
 var _ Runner = new(CommitteeRunner)
 
 type BaseRunner struct {
-	mtx            sync.RWMutex
-	State          *State
+	// State stores the current runner state, this state corresponds to 1 particular duty the runner is
+	// currently busy with at the moment.
+	// It is an atomic pointer because it needs to be re-initialized (reset) whenever new duty starts,
+	// and stay accessible to other go-routines. Importantly, BaseRunner doesn't make any effort
+	// to synchronize the updates to the State value itself (the value atomic pointer is referencing),
+	// so it's the caller's responsibility to make sure those updates are applied sequentially.
+	State atomic.Pointer[State]
+
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	NetworkConfig  *networkconfig.Network
@@ -96,7 +102,13 @@ type BaseRunner struct {
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
 
-	preConsensusMsgLog preConsensusMsgLogStats
+	// preConsensusMsgLog can be used to reduce the logs volume a runner emits by aggregating the data to log
+	// it all with a single log-call.
+	// It is an atomic pointer because similar to State it needs to be re-initialized (reset) whenever new
+	// duty starts, and stay accessible to other go-routines. Importantly, BaseRunner doesn't make any effort
+	// to synchronize the updates to the preConsensusMsgLogStats value itself (the value atomic pointer is
+	// referencing), so it's the caller's responsibility to make sure those updates are applied sequentially.
+	preConsensusMsgLog atomic.Pointer[preConsensusMsgLogStats]
 }
 
 func logSummaryOnly(duty spectypes.Duty) bool {
@@ -116,7 +128,7 @@ func logSummaryOnly(duty spectypes.Duty) bool {
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
 	var runningInstance *instance.Instance
 	if b.hasRunningDuty() {
-		runningInstance = b.State.RunningInstance
+		runningInstance = b.State.Load().RunningInstance
 		if runningInstance != nil {
 			decided, _ := runningInstance.IsDecided()
 			return !decided
@@ -128,7 +140,7 @@ func (b *BaseRunner) HasRunningQBFTInstance() bool {
 func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 	var runningInstance *instance.Instance
 	if b.hasRunningDuty() {
-		runningInstance = b.State.RunningInstance
+		runningInstance = b.State.Load().RunningInstance
 		if runningInstance != nil {
 			return runningInstance.State.ProposalAcceptedForCurrentRound != nil
 		}
@@ -153,7 +165,7 @@ func (b *BaseRunner) GetLastHeight() specqbft.Height {
 
 func (b *BaseRunner) GetLastRound() specqbft.Round {
 	if b.hasRunningDuty() {
-		inst := b.State.RunningInstance
+		inst := b.State.Load().RunningInstance
 		if inst != nil {
 			return inst.State.Round
 		}
@@ -162,7 +174,7 @@ func (b *BaseRunner) GetLastRound() specqbft.Round {
 }
 
 func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
-	return b.State.GetRoot()
+	return b.State.Load().GetRoot()
 }
 
 func (b *BaseRunner) SetTimeoutFunc(fn TimeoutF) {
@@ -189,7 +201,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 
 	// Create object and marshal
 	alias := &BaseRunnerAlias{
-		State:              b.State,
+		State:              b.State.Load(),
 		Share:              b.Share,
 		QBFTController:     b.QBFTController,
 		BeaconConfig:       b.NetworkConfig.Beacon,
@@ -209,16 +221,7 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
 
 // baseSetupForNewDuty is sets the runner for a new duty
 func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
-	// start new state
-	// start new state
-	// TODO nicer way to get quorum
-	state := NewRunnerState(quorum, duty)
-
-	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
-	// b.State but currently does not write to it
-	b.mtx.Lock() // writes to b.State
-	b.State = state
-	b.mtx.Unlock()
+	b.State.Store(NewRunnerState(quorum, duty))
 
 	if logSummaryOnly(duty) {
 		b.resetPreConsensusLogSummary(duty.DutySlot())
@@ -259,10 +262,10 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 
 	signer := ssvtypes.PartialSigMsgSigner(signedMsg)
 
-	if logSummaryOnly(b.State.CurrentDuty) {
+	if logSummaryOnly(b.State.Load().CurrentDuty) {
 		b.observePreConsensusMsg(signer)
 
-		hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+		hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.Load().PreConsensusContainer)
 		if hasQuorum {
 			const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
 			summaryFields := b.preConsensusMsgLogSummaryFields(signer)
@@ -286,7 +289,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 	)
 	span.AddEvent(gotPreConsensusMsgEvent)
 
-	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.Load().PreConsensusContainer)
 
 	if hasQuorum {
 		const gotPreConsensusQuorumEvent = "🎯 got pre-consensus quorum"
@@ -303,8 +306,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
-		prevDecided, _ = b.State.RunningInstance.IsDecided()
+	if b.hasRunningDuty() && b.State.Load() != nil && b.State.Load().RunningInstance != nil {
+		prevDecided, _ = b.State.Load().RunningInstance.IsDecided()
 	}
 	if prevDecided {
 		return true, nil, spectypes.NewError(spectypes.SkipConsensusMessageAsConsensusHasFinishedErrorCode, "not processing consensus message since consensus has already finished")
@@ -350,8 +353,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span.AddEvent(qbftInstanceIsDecidedEvent)
 
 	// update the decided and the highest decided slot
-	b.State.DecidedValue = decidedValueEncoded
-	b.highestDecidedSlot = b.State.CurrentDuty.DutySlot()
+	b.State.Load().DecidedValue = decidedValueEncoded
+	b.highestDecidedSlot = b.State.Load().CurrentDuty.DutySlot()
 
 	return true, decidedValue, nil
 }
@@ -382,7 +385,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(
 	)
 	span.AddEvent(gotPostConsensusMsgEvent)
 
-	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+	hasQuorum, quorumRoots := b.basePartialSigMsgProcessing(signedMsg, b.State.Load().PostConsensusContainer)
 
 	if hasQuorum {
 		const gotPostConsensusQuorumEvent = "🎯 got post-consensus quorum"
@@ -439,15 +442,15 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 		return false, nil
 	}
 
-	if b.State.RunningInstance == nil {
+	if b.State.Load().RunningInstance == nil {
 		return false, spectypes.NewError(spectypes.DecidedWrongInstanceErrorCode, "decided wrong instance (running instance is nil)")
 	}
 
-	if decidedMessage.Height != b.State.RunningInstance.GetHeight() {
+	if decidedMessage.Height != b.State.Load().RunningInstance.GetHeight() {
 		return false, spectypes.WrapError(spectypes.DecidedWrongInstanceErrorCode, fmt.Errorf(
 			"decided wrong instance (msg_height = %d, running_instance_height = %d)",
 			decidedMessage.Height,
-			b.State.RunningInstance.GetHeight(),
+			b.State.Load().RunningInstance.GetHeight(),
 		))
 	}
 
@@ -492,7 +495,7 @@ func (b *BaseRunner) decide(
 		return fmt.Errorf("could not start new QBFT instance: instance is nil")
 	}
 
-	b.State.RunningInstance = newInstance
+	b.State.Load().RunningInstance = newInstance
 
 	span.AddEvent("register timeout handler")
 	b.registerTimeoutHandler(ctx, logger, newInstance, b.QBFTController.Height)
@@ -502,32 +505,23 @@ func (b *BaseRunner) decide(
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
-	if b.State == nil {
+	if b.State.Load() == nil {
 		return false
 	}
 
-	return !b.State.Finished
+	return !b.State.Load().Finished
 }
 
 func (b *BaseRunner) hasDutyAssigned() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
-	return b.State != nil
+	return b.State.Load() != nil
 }
 
 func (b *BaseRunner) hasDutyFinished() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
-	if b.State == nil {
+	if b.State.Load() == nil {
 		return false
 	}
 
-	return b.State.Finished
+	return b.State.Load().Finished
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
@@ -542,10 +536,10 @@ func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 
 func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	// assume CurrentDuty is not nil if state is not nil
-	if b.State != nil && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
+	if b.State.Load() != nil && b.State.Load().CurrentDuty.DutySlot() >= duty.DutySlot() {
 		return spectypes.NewError(
 			spectypes.DutyAlreadyPassedErrorCode,
-			fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), b.State.CurrentDuty.DutySlot()),
+			fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), b.State.Load().CurrentDuty.DutySlot()),
 		)
 	}
 	return nil

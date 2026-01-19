@@ -230,7 +230,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.CurrentDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.Load().CurrentDuty.DutySlot())
 	validatorIndex := r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
@@ -290,7 +290,7 @@ func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
 }
 
 func (r *VoluntaryExitRunner) state() *State {
-	return r.BaseRunner.State
+	return r.BaseRunner.State.Load()
 }
 
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
