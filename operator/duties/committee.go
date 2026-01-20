@@ -30,9 +30,42 @@ type CommitteeHandler struct {
 }
 
 type committeeDuty struct {
-	duty        *spectypes.CommitteeDuty
+	duty        spectypes.Duty
 	id          spectypes.CommitteeID
 	operatorIDs []spectypes.OperatorID
+}
+
+func (cd *committeeDuty) validatorDuties() []*spectypes.ValidatorDuty {
+	switch duty := cd.duty.(type) {
+	case *spectypes.CommitteeDuty:
+		return duty.ValidatorDuties
+	case *spectypes.AggregatorCommitteeDuty:
+		return duty.ValidatorDuties
+	default:
+		return nil
+	}
+}
+
+func (cd *committeeDuty) appendValidatorDuty(duty *spectypes.ValidatorDuty) {
+	switch target := cd.duty.(type) {
+	case *spectypes.CommitteeDuty:
+		target.ValidatorDuties = append(target.ValidatorDuties, duty)
+	case *spectypes.AggregatorCommitteeDuty:
+		target.ValidatorDuties = append(target.ValidatorDuties, duty)
+	}
+}
+
+func (h *CommitteeHandler) newCommitteeDuty(slot phase0.Slot) spectypes.Duty {
+	if h.isAggregator {
+		return &spectypes.AggregatorCommitteeDuty{
+			Slot:            slot,
+			ValidatorDuties: []*spectypes.ValidatorDuty{},
+		}
+	}
+	return &spectypes.CommitteeDuty{
+		Slot:            slot,
+		ValidatorDuties: []*spectypes.ValidatorDuty{},
+	}
 }
 
 func NewCommitteeHandler(
@@ -193,16 +226,13 @@ func (h *CommitteeHandler) addToCommitteeMap(
 		cd = &committeeDuty{
 			id:          committee.id,
 			operatorIDs: committee.operatorIDs,
-			duty: &spectypes.CommitteeDuty{
-				Slot:            specDuty.Slot,
-				ValidatorDuties: []*spectypes.ValidatorDuty{},
-			},
+			duty:        h.newCommitteeDuty(specDuty.Slot),
 		}
 
 		committeeDutyMap[committee.id] = cd
 	}
 
-	cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
+	cd.appendValidatorDuty(specDuty)
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {

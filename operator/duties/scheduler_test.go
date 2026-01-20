@@ -228,7 +228,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 	)
 
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
-		func(ctx context.Context, _ *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+		func(ctx context.Context, _ *zap.Logger, committeeID spectypes.CommitteeID, duty spectypes.Duty) {
 			s.logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
 			executeDutiesBuffer <- &committeeDuty{id: committeeID, duty: duty}
 
@@ -370,11 +370,11 @@ func waitForDutiesExecutionCommittee(
 			if !ok {
 				require.FailNow(t, "missing cluster id")
 			}
-			require.Len(t, aCommDuty.duty.ValidatorDuties, len(eCommDuty.duty.ValidatorDuties))
+			require.Len(t, aCommDuty.validatorDuties(), len(eCommDuty.validatorDuties()))
 
-			for _, e := range eCommDuty.duty.ValidatorDuties {
+			for _, e := range eCommDuty.validatorDuties() {
 				found := false
-				for _, d := range aCommDuty.duty.ValidatorDuties {
+				for _, d := range aCommDuty.validatorDuties() {
 					if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
 						found = true
 						break
