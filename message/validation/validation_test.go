@@ -38,7 +38,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -1643,12 +1642,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
 
-				var leader spectypes.OperatorID
-				if validator.netCfg.BooleForkAtSlot(slot) {
-					leader = qbft.RoundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee, validator.netCfg)
-				} else {
-					leader = validator.roundRobinProposerPreBooleFork(specqbft.Height(slot), specqbft.FirstRound, committee)
-				}
+				leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
 				signedSSVMessage := generateSignedMessageWithSigner(ks, leader, committeeIdentifier, slot)
 
 				receivedAt := netCfg.SlotStartTime(slot)
