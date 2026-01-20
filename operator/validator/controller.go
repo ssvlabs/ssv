@@ -1020,12 +1020,8 @@ func SetupCommitteeRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				if options.NetworkConfig.BooleForkAtSlot(phase0.Slot(state.Height)) {
-					committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
-					return qbft.RoundRobinProposer(state.Height, round, committee, options.NetworkConfig)
-				}
-
-				return qbft.RoundRobinProposerPreBooleFork(state, round)
+				leader := qbft.RoundRobinProposer(state, round)
+				return leader
 			},
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
@@ -1085,12 +1081,8 @@ func SetupRunners(
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				if options.NetworkConfig.BooleForkAtSlot(phase0.Slot(state.Height)) {
-					committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
-					return qbft.RoundRobinProposer(state.Height, round, committee, options.NetworkConfig)
-				}
-
-				return qbft.RoundRobinProposerPreBooleFork(state, round)
+				leader := qbft.RoundRobinProposer(state, round)
+				return leader
 			},
 			Network:     options.Network,
 			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),

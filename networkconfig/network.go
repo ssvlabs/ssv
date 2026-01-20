@@ -3,8 +3,6 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 type Network struct {

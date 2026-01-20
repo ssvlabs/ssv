@@ -51,7 +51,6 @@ type SSVForks struct {
 	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
 	// to 36_000_000.
 	GasLimit36 phase0.Epoch
-	Boole      phase0.Epoch
 }
 
 func (s *SSV) String() string {

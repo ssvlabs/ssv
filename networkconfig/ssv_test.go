@@ -30,7 +30,6 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		Forks: SSVForks{
 			Alan:       0,
 			GasLimit36: 0,
-			Boole:      0,
 		},
 	}
 
@@ -73,7 +72,6 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		Forks: SSVForks{
 			Alan:       0,
 			GasLimit36: 0,
-			Boole:      0,
 		},
 	}
 
@@ -170,7 +168,6 @@ func TestFieldPreservation(t *testing.T) {
 			Forks: SSVForks{
 				Alan:       0,
 				GasLimit36: 0,
-				Boole:      0,
 			},
 		}
 
@@ -193,7 +190,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "25861a78c7a7335b913061e6d792731a2f47e29ec46c68c5a512748bb940ada2"
+		expectedJSONHash := "407e3b49376168be772a54bb921d99703ae5acc294c6b4260f51553c2c86f875"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -210,7 +207,6 @@ func TestFieldPreservation(t *testing.T) {
 			Forks: SSVForks{
 				Alan:       0,
 				GasLimit36: 0,
-				Boole:      0,
 			},
 		}
 

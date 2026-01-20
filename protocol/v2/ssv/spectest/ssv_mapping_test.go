@@ -98,11 +98,13 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.SpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+	case reflect.TypeOf(&valcheck.SpecTest{}).String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &valcheck.SpecTest{}
-		require.NoError(t, json.Unmarshal(byts, &typedTest))
+		specTest := &valcheck.SpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &specTest))
+		// Wrap with our implementation's value checkers
+		typedTest := &ValCheckSpecTest{SpecTest: specTest}
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -110,11 +112,17 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.MultiSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+	case reflect.TypeOf(&valcheck.MultiSpecTest{}).String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &valcheck.MultiSpecTest{}
-		require.NoError(t, json.Unmarshal(byts, &typedTest))
+		specTest := &valcheck.MultiSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &specTest))
+		// Wrap with our implementation's value checkers
+		tests := make([]*ValCheckSpecTest, len(specTest.Tests))
+		for i, t := range specTest.Tests {
+			tests[i] = &ValCheckSpecTest{SpecTest: t}
+		}
+		typedTest := &MultiValCheckSpecTest{Name: specTest.Name, Tests: tests}
 
 		return &runnable{
 			name: typedTest.TestName(),
