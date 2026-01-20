@@ -19,6 +19,6 @@ var HoodiStageSSV = &SSV{
 	TotalEthereumValidators: HoodiSSV.TotalEthereumValidators,
 	Forks: SSVForks{
 		GasLimit36: 0,
-		Boole:      69375,
+		Boole:      69545,
 	},
 }
