@@ -88,7 +88,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	slices.Sort(committee)
 
 	committeeID := shares.active.CommitteeID()
-	topicID := commons.AlanTopicFullName(shares.active.CommitteeTopicIDAlan()[0])
+	topicID := commons.TopicFullName(netCfg.Beacon.Name, shares.active.CommitteeTopicID()[0])
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
