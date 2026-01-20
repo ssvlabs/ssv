@@ -96,7 +96,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.AlanTopicFullName(share.CommitteeTopicIDAlan()[0])
+		topicID := commons.TopicFullName(networkconfig.TestNetwork.Beacon.Name, share.CommitteeTopicID()[0])
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
