@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -31,6 +30,5 @@ var MainnetSSV = &SSV{
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
 	Forks: SSVForks{
 		GasLimit36: 385150, // Aug-09-2025 06:40:23 AM UTC
-		Boole:      math.MaxUint64,
 	},
 }

@@ -71,7 +71,6 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
 			GasLimit36: 0,
-			Boole:      0,
 		},
 	}
 
@@ -206,7 +205,6 @@ func TestFieldPreservation(t *testing.T) {
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
 				GasLimit36: 0,
-				Boole:      0,
 			},
 		}
 

@@ -51,7 +51,6 @@ type SSVForks struct {
 	// to 36_000_000.
 	// Deprecated
 	GasLimit36 phase0.Epoch
-	Boole      phase0.Epoch
 }
 
 func (s *SSV) String() string {
