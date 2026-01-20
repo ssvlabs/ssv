@@ -173,7 +173,7 @@ func (mv *messageValidator) handleValidationError(
 	return pubsub.ValidationReject
 }
 
-// handleValidationErrorPriorWindow applies prior (warmup) period rules:
+// handleValidationErrorPriorWindow applies prior (warmup) period rules on Boole topics:
 // - any incoming non-rejectable message can be accepted and propagated
 // - rejectable ones can be ignored to avoid score degradation
 func (mv *messageValidator) handleValidationErrorPriorWindow(
@@ -197,14 +197,14 @@ func (mv *messageValidator) handleValidationErrorPriorWindow(
 
 	if !valErr.Reject() {
 		if !valErr.Silent() {
-			logger.Debug("accepting non-rejectable message during boole prior (warmup) window", zap.Error(valErr))
+			logger.Debug("accepting non-rejectable message on Boole topic during prior (warmup) window", zap.Error(valErr))
 		}
 		recordAcceptedMessage(ctx, mv.decodedMessageRole(decodedMessage))
 		return pubsub.ValidationAccept
 	}
 
 	if !valErr.Silent() {
-		logger.Debug("ignoring rejectable message during boole prior (warmup) window", zap.Error(valErr))
+		logger.Debug("ignoring rejectable message on Boole topic during prior (warmup) window", zap.Error(valErr))
 	}
 
 	recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
