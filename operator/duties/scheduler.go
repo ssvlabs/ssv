@@ -540,11 +540,10 @@ func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Lo
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
-	duty := committeeDuty.duty
-	slot := phase0.Slot(duty.DutySlot())
+	slot := committeeDuty.duty.DutySlot()
 
 	dutyEpoch := s.netCfg.EstimatedEpochAtSlot(slot)
-	role := types.RunnerRoleForDuty(duty, s.netCfg.BooleForkAtSlot(slot))
+	role := types.RunnerRoleForDuty(committeeDuty.duty, s.netCfg.BooleForkAtSlot(slot))
 	committeeDutyID := fields.BuildCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, slot, role)
 
 	return s.logger.
