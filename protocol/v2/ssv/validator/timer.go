@@ -14,7 +14,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -90,21 +89,38 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		c.mtx.RLock() // read-lock for c.Queues, c.Runners
 		defer c.mtx.RUnlock()
 
-		var dr runner.Runner
 		if identifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
-			dr = c.AggregatorRunners[phase0.Slot(height)]
+			dr := c.AggregatorRunners[phase0.Slot(height)]
+			if dr == nil { // only happens when we prune expired runners
+				logger.Debug("❗no committee runner found for slot")
+				return
+			}
+			if dr.BaseRunner == nil {
+				logger.Debug("❗committee runner has nil base runner",
+					fields.RunnerRole(identifier.GetRoleType()),
+					zap.Uint64("slot", uint64(height)),
+				)
+				return
+			}
+			if !dr.HasRunningDuty() {
+				return
+			}
 		} else {
-			dr = c.Runners[phase0.Slot(height)]
-		}
-
-		if dr == nil { // only happens when we prune expired runners
-			logger.Debug("❗no committee runner found for slot")
-			return
-		}
-
-		hasDuty := dr.HasRunningDuty()
-		if !hasDuty {
-			return
+			dr := c.Runners[phase0.Slot(height)]
+			if dr == nil { // only happens when we prune expired runners
+				logger.Debug("❗no committee runner found for slot")
+				return
+			}
+			if dr.BaseRunner == nil {
+				logger.Debug("❗committee runner has nil base runner",
+					fields.RunnerRole(identifier.GetRoleType()),
+					zap.Uint64("slot", uint64(height)),
+				)
+				return
+			}
+			if !dr.HasRunningDuty() {
+				return
+			}
 		}
 
 		msg, err := c.createTimerMessage(identifier, height, round)
