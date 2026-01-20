@@ -234,7 +234,7 @@ func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, commi
 				topicCommittees = append(topicCommittees, committee)
 				continue
 			}
-			if topic == booleTopic {
+			if committee.SubnetAlan != committee.Subnet && topic == booleTopic {
 				topicCommittees = append(topicCommittees, committee)
 			}
 		default:
