@@ -505,6 +505,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			return err
 		}
 
+	selectionLoop:
 		for _, selection := range aggregatorSelections {
 			// Check if attestation for committee index was already included
 			for _, idx := range consensusData.AggregatorsCommitteeIndexes {
@@ -515,7 +516,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 						SelectionProof: selection.selectionProof,
 						CommitteeIndex: uint64(selection.duty.CommitteeIndex),
 					})
-					continue
+					continue selectionLoop
 				}
 			}
 
