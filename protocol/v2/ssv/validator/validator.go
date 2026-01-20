@@ -109,7 +109,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 		return traces.Errorf(span, "expected ValidatorDuty, got %T", duty)
 	}
 
-	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(vDuty.Type)]
+	dutyRunner := v.DutyRunners[role]
 	if dutyRunner == nil {
 		return traces.Errorf(span, "no duty runner for role %s", vDuty.Type.String())
 	}
