@@ -612,6 +612,9 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
+				// Operators might have diverging views on which validators they have in a committee
+				// (e.g., an operator might have not yet seen an ValidatorAdded event,
+				// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
 				if share == nil {
 					return
 				}

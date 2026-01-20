@@ -27,13 +27,13 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+// AggregatorCommitteeRunner has no DutyGuard because AggregatorCommitteeRunner's duties aren't slashable.
 type AggregatorCommitteeRunner struct {
 	BaseRunner     *BaseRunner
 	network        specqbft.Network
@@ -43,8 +43,6 @@ type AggregatorCommitteeRunner struct {
 
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
-
-	// No DutyGuard because AggregatorCommitteeRunner's duties aren't slashable.
 
 	measurements *dutyMeasurements
 
@@ -111,7 +109,7 @@ func (r *AggregatorCommitteeRunner) StartNewDuty(
 	span.SetAttributes(observability.DutyCountAttribute(len(d.ValidatorDuties)))
 	err := r.BaseRunner.baseStartNewDuty(ctx, logger, r, duty, quorum)
 	if err != nil {
-		return traces.Error(span, err)
+		return err
 	}
 
 	r.submittedDuties[spectypes.BNRoleAggregator] = make(map[phase0.ValidatorIndex]map[[32]byte]struct{})
@@ -387,7 +385,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	var aggregatorSelections []aggregatorSelection
 	var anyErr error
-	for _, root := range roots {
+	for i, root := range roots {
 		metadataList, found := r.findValidatorsForPreConsensusRoot(root, aggregatorMap, contributionMap)
 		if !found {
 			// Edge case: since operators may have divergent sets of validators,
@@ -403,12 +401,18 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		for _, metadata := range metadataList {
 			validatorIndex := metadata.ValidatorIndex
 			share := r.BaseRunner.Share[validatorIndex]
-			// Explanation on why we need this check: https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658117698
+			// Operators might have diverging views on which validators they have in a committee
+			// (e.g., an operator might have not yet seen an ValidatorAdded event,
+			// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
 			if share == nil {
 				continue
 			}
 			pubKey := share.ValidatorPubKey
 
+			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
+			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
+			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
+			// still has quorum.
 			gotQuorum, quorumSigners := r.state().PreConsensusContainer.HasQuorum(validatorIndex, root)
 			// Explanation on why we need this check: https://github.com/ssvlabs/ssv/pull/2503#discussion_r2658112575
 			if !gotQuorum {
@@ -430,8 +434,21 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 				validatorIndex,
 			)
 			if err != nil {
-				// Fallback: verify each signature individually for all roots
-				for _, root := range roots {
+				// If the reconstructed signature verification failed, fall back to verifying each individual
+				// partial signature + discarding the invalid ones. This should not happen often in practice,
+				// but it's a very desirable optimization to have because when it does happen - we wouldn't
+				// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
+				// Notes:
+				// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
+				//    in PostConsensusContainer not having quorum anymore since it previously was computed
+				//    optimistically.
+				// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
+				//    signatures for (hence roots[i:])
+				// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
+				//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
+				//    this is why we are parallelizing by validators only (and not by root+validator), processing
+				//    each root sequentially
+				for _, root := range roots[i:] {
 					r.BaseRunner.FallBackAndVerifyEachSignature(
 						r.state().PreConsensusContainer,
 						root,
@@ -490,7 +507,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		}
 	}
 
-	// Early exit if no error and no aggregators is selected (really no operator is aggregator or sync committee contributor)
+	// Early exit if no error and no aggregators is selected (really no validator is aggregator or sync committee contributor)
 	if !hasAnyAggregator && anyErr == nil {
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
@@ -553,7 +570,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	// Else, if some aggregators or contributors were selected (even with an error for others), proceed to consensus
 	if err := consensusData.Validate(); err != nil {
-		return fmt.Errorf("invalid aggregator consensus data: %w", err)
+		return fmt.Errorf("invalid aggregator committee consensus data: %w", err)
 	}
 
 	r.measurements.StartConsensus()
@@ -622,6 +639,9 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 
 		_, exists := r.BaseRunner.Share[validatorIndex]
+		// Operators might have diverging views on which validators they have in a committee
+		// (e.g., an operator might have not yet seen an ValidatorAdded event,
+		// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
 		if !exists {
 			continue
 		}
@@ -659,6 +679,9 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		validatorIndex := consensusData.Contributors[i].ValidatorIndex
 
 		_, exists := r.BaseRunner.Share[validatorIndex]
+		// Operators might have diverging views on which validators they have in a committee
+		// (e.g., an operator might have not yet seen an ValidatorAdded event,
+		// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
 		if !exists {
 			continue
 		}
@@ -827,6 +850,9 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
+				// Operators might have diverging views on which validators they have in a committee
+				// (e.g., an operator might have not yet seen an ValidatorAdded event,
+				// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
 				if share == nil {
 					return
 				}
@@ -1017,8 +1043,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	if r.HasSubmittedAllDuties(ctx) {
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee,
-			r.state().RunningInstance.State.Round)
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, r.state().RunningInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
 		logger.Info(dutyFinishedEvent,
 			fields.ConsensusTime(r.measurements.ConsensusTime()),
@@ -1567,7 +1592,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 			}
 
 		default:
-			return traces.Error(span, fmt.Errorf("invalid validator duty type for aggregator committee: %v", vDuty.Type))
+			return fmt.Errorf("invalid validator duty type for aggregator committee: %v", vDuty.Type)
 		}
 	}
 
