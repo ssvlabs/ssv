@@ -131,23 +131,22 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 
 	defer func() {
-		role := mv.decodedMessageRole(decodedMessage)
+		role := spectypes.RunnerRole(spectypes.RoleUnknown)
+		if decodedMessage != nil {
+			role = decodedMessage.GetID().GetRoleType()
+		}
 		recordMessageDuration(ctx, role, time.Since(validationStart))
 	}()
 
 	if err != nil {
-		if mv.isInWindow(decodedMessage, pmsg.GetTopic(), mv.netCfg.BooleForkInPriorWindow, true) {
-			return mv.handleValidationErrorPriorWindow(ctx, peerID, decodedMessage, err)
+		if !mv.shouldAcceptUnsubscriptionError(decodedMessage, pmsg.GetTopic()) {
+			return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 		}
-		if mv.isInWindow(decodedMessage, pmsg.GetTopic(), mv.netCfg.BooleForkInUnsubscriptionWindow, false) {
-			return mv.handleValidationErrorUnsubscriptionWindow(ctx, peerID, decodedMessage, err)
-		}
-		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage
-
-	return mv.handleValidationSuccess(ctx, decodedMessage)
+	recordAcceptedMessage(ctx, mv.decodedMessageRole(decodedMessage))
+	return pubsub.ValidationAccept
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
@@ -346,24 +345,15 @@ func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
 }
 
-func (mv *messageValidator) decodedMessageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
-	role := spectypes.RunnerRole(spectypes.RoleUnknown)
-	if decodedMessage != nil {
-		role = decodedMessage.GetID().GetRoleType()
-	}
-	return role
-}
-
-func (mv *messageValidator) isInWindow(
+func (mv *messageValidator) shouldAcceptUnsubscriptionError(
 	decodedMessage *queue.SSVMessage,
 	topic string,
-	inWindowF func(epoch phase0.Epoch) bool,
-	wantBoole bool,
 ) bool {
 	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
 		return false
 	}
-	if !inWindowF(mv.netCfg.EstimatedCurrentEpoch()) {
+
+	if !mv.netCfg.BooleForkInUnsubscriptionWindow(mv.netCfg.EstimatedCurrentEpoch()) {
 		return false
 	}
 
@@ -372,11 +362,13 @@ func (mv *messageValidator) isInWindow(
 		return false
 	}
 
-	alanTopic := commons.AlanTopicFullName(commons.SubnetTopicID(committeeInfo.subnetAlan))
-	booleTopic := commons.TopicFullName(mv.netCfg.Beacon.Name, commons.SubnetTopicID(committeeInfo.subnet))
-	expected := alanTopic
-	if wantBoole {
-		expected = booleTopic
+	return topic == commons.AlanTopicFullName(commons.SubnetTopicID(committeeInfo.subnetAlan))
+}
+
+func (mv *messageValidator) decodedMessageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
+	role := spectypes.RunnerRole(spectypes.RoleUnknown)
+	if decodedMessage != nil {
+		role = decodedMessage.GetID().GetRoleType()
 	}
-	return topic == expected
+	return role
 }
