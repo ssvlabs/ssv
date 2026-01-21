@@ -1540,8 +1540,6 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	seenSigs := make(map[string]struct{})
-
 	// Generate selection proofs for all validators and duties
 	for _, vDuty := range aggCommitteeDuty.ValidatorDuties {
 		switch vDuty.Type {
@@ -1585,10 +1583,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 					return fmt.Errorf("failed to sign sync committee selection proof: %w", err)
 				}
 
-				if _, ok := seenSigs[string(partialSig.PartialSignature)]; !ok {
-					msg.Messages = append(msg.Messages, partialSig)
-					seenSigs[string(partialSig.PartialSignature)] = struct{}{}
-				}
+				msg.Messages = append(msg.Messages, partialSig)
 			}
 
 		default:
