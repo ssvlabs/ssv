@@ -10,7 +10,7 @@ const (
 )
 
 // RunnerRoleForValidatorDuty resolves the runner role for validator duties,
-// mapping pre-fork aggregator duties back to legacy runner roles.
+// mapping Alan fork aggregator duties to Alan runner roles.
 func RunnerRoleForValidatorDuty(duty *spectypes.ValidatorDuty, isBooleFork bool) spectypes.RunnerRole {
 	if duty == nil {
 		return spectypes.RoleUnknown

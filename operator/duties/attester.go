@@ -95,11 +95,11 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				defer cancel()
 
 				if !h.netCfg.BooleForkAtSlot(slot) {
-					// Pre-fork: execute Alan sync-committee contribution flow and fetch duties.
+					// Before Boole fork: execute Alan sync-committee contribution flow and fetch duties.
 					h.executeAggregatorDuties(tickCtx, currentEpoch, slot)
 				}
 
-				// After fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
+				// After Boole fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
 				// but skip Alan execution, as the aggregator committee handler will be responsible for executing them.
 				h.processFetching(tickCtx, currentEpoch, slot)
 			}()
