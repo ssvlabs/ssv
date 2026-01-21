@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
 	exporterstore "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter2"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -50,15 +51,9 @@ type Options struct {
 	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
+	ExporterRead        *exporter2.Exporter
 	WS                  api.WebSocketServer
 	WsAPIPort           int
-}
-
-// dutyTraceDecidedsProvider is the minimal interface used from the duty trace collector
-// to serve websocket /query decided lookups.
-type dutyTraceDecidedsProvider interface {
-	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error)
-	GetCommitteeDecideds(slot phase0.Slot, index phase0.ValidatorIndex, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 }
 
 type Node struct {
@@ -79,7 +74,7 @@ type Node struct {
 	ws        api.WebSocketServer
 	wsAPIPort int
 
-	traceCollector dutyTraceDecidedsProvider
+	exporterRead *exporter2.Exporter
 }
 
 // New is the constructor of Node
@@ -136,9 +131,9 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		}),
 		feeRecipientCtrl: feeRecipientCtrl,
 
-		ws:             opts.WS,
-		wsAPIPort:      opts.WsAPIPort,
-		traceCollector: opts.ValidatorOptions.DutyTraceCollector,
+		ws:           opts.WS,
+		wsAPIPort:    opts.WsAPIPort,
+		exporterRead: opts.ExporterRead,
 	}
 
 	// Wire the beacon client to the fee recipient controller
@@ -266,15 +261,13 @@ func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
 
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		// In exporter v2 (archive) mode we collect decided data via the duty trace collector
-		// instead of the legacy qbft storage. When the collector is available, serve queries
-		// from it to avoid empty responses while no validators are running locally.
-		// The check for `nil` allows backward compatibility when running without exporter v2.
-		if n.traceCollector != nil {
-			n.handleDecidedFromTraceCollector(nm)
-		} else {
-			h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
+		// In exporter v2 (archive) mode we serve decided queries via exporter2 core.
+		// Fall back to legacy qbft storage when exporter2 isn't wired.
+		if n.exporterRead != nil {
+			n.handleDecidedViaExporter(nm)
+			break
 		}
+		h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
 	case api.TypeError:
 		h.HandleErrorQuery(nm)
 	default:
@@ -282,8 +275,7 @@ func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
 	}
 }
 
-// handleDecidedFromTraceCollector responds to /query requests using duty trace data when available.
-func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
+func (n *Node) handleDecidedViaExporter(nm *api.NetworkMessage) {
 	res := api.Message{Type: nm.Msg.Type, Filter: nm.Msg.Filter}
 
 	pkBytes, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
@@ -316,53 +308,33 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 		return
 	}
 
-	participations := make([]qbftstorage.Participation, 0)
-	var hasUnexpectedError bool
-	var lastUnexpectedErr error
+	coreQuery := &exporter2.DecidedsQuery{
+		From:    nm.Msg.Filter.From,
+		To:      nm.Msg.Filter.To,
+		Roles:   []spectypes.BeaconRole{role},
+		Indices: []phase0.ValidatorIndex{idx},
+	}
 
-	for slot := phase0.Slot(nm.Msg.Filter.From); slot <= phase0.Slot(nm.Msg.Filter.To); slot++ {
-		var entries []dutytracer.ParticipantsRangeIndexEntry
-		if role == spectypes.BNRoleAttester || role == spectypes.BNRoleSyncCommittee {
-			entries, err = n.traceCollector.GetCommitteeDecideds(slot, idx, role)
-		} else {
-			entries, err = n.traceCollector.GetValidatorDecideds(role, slot, []phase0.ValidatorIndex{idx})
-		}
+	result, errs := n.exporterRead.TraceDecidedsCore(coreQuery)
+	participations := wsParticipationsFromCore(result)
 
-		if err != nil {
-			var merr *multierror.Error
-			if errors.As(err, &merr) {
-				merr = filterOutDutyNotFoundErrors(merr)
-				if merr != nil && merr.ErrorOrNil() != nil {
-					hasUnexpectedError = true
-					lastUnexpectedErr = merr
-					n.logger.Warn("failed to get decided entries from collector", zap.Error(merr), fields.Slot(slot), fields.ValidatorIndex(idx), fields.BeaconRole(role))
-				}
-			} else if !isNotFoundError(err) {
-				hasUnexpectedError = true
-				lastUnexpectedErr = err
-				n.logger.Warn("failed to get decided entries from collector", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(idx), fields.BeaconRole(role))
+	var unexpectedErr error
+	filtered := filterOutDutyNotFoundErrors(errs)
+	if filtered.ErrorOrNil() != nil {
+		for _, e := range filtered.Errors {
+			// Preserve legacy WS leniency: treat validation errors as "no messages".
+			if isExporterValidationError(e) {
+				continue
 			}
-			continue
-		}
-
-		for _, e := range entries {
-			participations = append(participations, qbftstorage.Participation{
-				ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
-					Slot:    e.Slot,
-					PubKey:  pk,
-					Signers: e.Signers,
-				},
-				Role:   role,
-				PubKey: pk,
-			})
+			unexpectedErr = e
 		}
 	}
 
 	if len(participations) == 0 {
-		if hasUnexpectedError {
-			n.logger.Warn("failed to build participants api data due to collector errors", zap.Error(lastUnexpectedErr), fields.ValidatorIndex(idx))
+		if unexpectedErr != nil {
+			n.logger.Warn("failed to build participants api data due to exporter errors", zap.Error(unexpectedErr), fields.ValidatorIndex(idx))
 			res.Type = api.TypeError
-			res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", lastUnexpectedErr)}
+			res.Data = []string{fmt.Sprintf("internal error - could not build response: %v", unexpectedErr)}
 		} else {
 			// Mirror legacy exporter behavior: empty range returns "no messages" as a decided response.
 			res.Data = []string{"no messages"}
@@ -384,6 +356,30 @@ func (n *Node) handleDecidedFromTraceCollector(nm *api.NetworkMessage) {
 	nm.Msg = res
 }
 
+func wsParticipationsFromCore(result *exporter2.TraceDecidedsResult) []qbftstorage.Participation {
+	out := make([]qbftstorage.Participation, 0)
+	if result == nil {
+		return out
+	}
+	for _, p := range result.Participants {
+		out = append(out, qbftstorage.Participation{
+			ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
+				Slot:    p.Slot,
+				PubKey:  p.PubKey,
+				Signers: p.Signers,
+			},
+			Role:   p.Role,
+			PubKey: p.PubKey,
+		})
+	}
+	return out
+}
+
+func isExporterValidationError(err error) bool {
+	var ve *exporter2.ValidationError
+	return errors.As(err, &ve)
+}
+
 // isNotFoundError returns true if the error represents an expected "no duty"
 // condition, either from the duty tracer or the underlying exporter store.
 // It mirrors the semantics in exporter2 helpers to ease future refactoring.
@@ -400,7 +396,7 @@ func filterOutDutyNotFoundErrors(e *multierror.Error) *multierror.Error {
 	}
 	var filtered *multierror.Error
 	for _, err := range e.Errors {
-		if !isNotFoundError(err) {
+		if err != nil && !isNotFoundError(err) {
 			filtered = multierror.Append(filtered, err)
 		}
 	}

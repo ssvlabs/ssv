@@ -551,7 +551,7 @@ func ByNotLiquidated() SharesFilter {
 // ByClusterIDHash filters by cluster id.
 func ByClusterIDHash(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {
-		var operatorIDs []uint64
+		operatorIDs := make([]uint64, 0, len(share.Committee))
 		for _, op := range share.Committee {
 			operatorIDs = append(operatorIDs, op.Signer)
 		}

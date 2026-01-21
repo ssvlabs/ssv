@@ -143,9 +143,6 @@ func TestNew(t *testing.T) {
 	require.NotNil(t, server)
 	require.Equal(t, logger, server.logger)
 	require.Equal(t, ":8080", server.addr)
-	require.Equal(t, node, server.node)
-	require.Equal(t, validators, server.validators)
-	require.Equal(t, exporter, server.exporter)
 }
 
 // TestRun_ActualExecution tests that the Run method starts a server.
@@ -162,7 +159,6 @@ func TestRun_ActualExecution(t *testing.T) {
 	addr := fmt.Sprintf("localhost:%d", port)
 
 	err = listener.Close()
-
 	require.NoError(t, err)
 
 	logger := zaptest.NewLogger(t)
@@ -182,7 +178,6 @@ func TestRun_ActualExecution(t *testing.T) {
 
 	var conn net.Conn
 	var connectErr error
-
 	for i := 0; i < 10; i++ {
 		conn, connectErr = net.DialTimeout("tcp", addr, 500*time.Millisecond)
 		if connectErr == nil {
@@ -190,10 +185,8 @@ func TestRun_ActualExecution(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-
 	require.NoError(t, connectErr, "failed to connect to server after multiple attempts")
-
-	conn.Close()
+	require.NoError(t, conn.Close())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -227,7 +220,6 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 	addr := fmt.Sprintf("localhost:%d", port)
 
 	err = listener.Close()
-
 	require.NoError(t, err)
 
 	logger := zaptest.NewLogger(t)

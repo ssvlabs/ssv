@@ -103,7 +103,7 @@ func setupAttesterDutiesMock(
 }
 
 func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv1.AttesterDuty) []*spectypes.ValidatorDuty {
-	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
+	expectedDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleAggregator))
 	}

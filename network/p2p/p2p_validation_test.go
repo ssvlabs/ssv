@@ -239,8 +239,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			index NodeIndex
 			score float64
 		}
-		peers := make([]peerScore, 0)
-		for index, snapshot := range *node.PeerScores.Load() {
+		peerScores := *node.PeerScores.Load()
+		peers := make([]peerScore, 0, len(peerScores))
+		for index, snapshot := range peerScores {
 			peers = append(peers, peerScore{index, snapshot.Score})
 		}
 		sort.Slice(peers, func(i, j int) bool {

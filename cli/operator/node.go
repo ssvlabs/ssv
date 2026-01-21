@@ -48,6 +48,7 @@ import (
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
 	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/exporter2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
@@ -189,7 +190,14 @@ var StartNodeCmd = &cobra.Command{
 			zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
 		)
 
-		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
+		cliopt, err := goclient.NewOptions(cfg.ConsensusClient, cfg.ProposerDelay)
+		if err != nil {
+			logger.Fatal("failed to create beacon client options",
+				zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
+			)
+		}
+		consensusClient, err := goclient.New(cmd.Context(), logger, cliopt)
 		if err != nil {
 			logger.Fatal("failed to create beacon go-client",
 				zap.Error(err),
@@ -534,6 +542,7 @@ var StartNodeCmd = &cobra.Command{
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
+				cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
 			case exporter.ModeStandard:
 				logger.Info("exporter mode: standard")
 			default:

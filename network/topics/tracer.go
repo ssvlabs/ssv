@@ -157,8 +157,8 @@ func appendIHave(fields []zap.Field, ihave []*ps_pb.TraceEvent_ControlIHaveMeta)
 	if len(ihave) > 0 {
 		fields = append(fields, zap.Int("ihaveCount", len(ihave)))
 		for _, im := range ihave {
-			var mids []string
 			msgids := im.GetMessageIDs()
+			mids := make([]string, 0, len(msgids))
 			for _, mid := range msgids {
 				mids = append(mids, hex.EncodeToString(mid))
 			}
@@ -172,8 +172,8 @@ func appendIWant(fields []zap.Field, iwant []*ps_pb.TraceEvent_ControlIWantMeta)
 	if len(iwant) > 0 {
 		fields = append(fields, zap.Int("iwantCount", len(iwant)))
 		for _, im := range iwant {
-			var mids []string
 			msgids := im.GetMessageIDs()
+			mids := make([]string, 0, len(msgids))
 			for _, mid := range msgids {
 				mids = append(mids, hex.EncodeToString(mid))
 			}

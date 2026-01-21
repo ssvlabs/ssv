@@ -227,7 +227,7 @@ func TestTimeouts(t *testing.T) {
 		validators, err := client.GetValidatorData(t.Context(), nil) // Should call BeaconState internally.
 		require.NoError(t, err)
 
-		var validatorKeys []phase0.BLSPubKey
+		validatorKeys := make([]phase0.BLSPubKey, 0, len(validators))
 		for _, v := range validators {
 			validatorKeys = append(validatorKeys, v.Validator.PublicKey)
 		}

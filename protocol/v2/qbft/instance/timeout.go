@@ -21,6 +21,9 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		return types.WrapError(types.TimeoutInstanceErrorCode, traces.Errorf(span, "instance stopped processing timeouts"))
 	}
 
+	i.metrics.EndStage(ctx, i.State.Round)
+	i.metrics.StartStage(stageRoundChange)
+
 	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
 		return traces.Errorf(span, "failed to hash instance start value: %w", err)

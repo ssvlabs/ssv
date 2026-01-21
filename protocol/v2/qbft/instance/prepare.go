@@ -41,14 +41,15 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 		return nil // no quorum yet
 	}
 
-	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData
-	i.State.LastPreparedRound = i.State.Round
-
-	i.metrics.EndStage(ctx, i.State.Round, stagePrepare)
+	i.metrics.EndStage(ctx, i.State.Round)
+	i.metrics.StartStage(stageCommit)
 
 	logger.Debug("🎯 got prepare quorum",
 		zap.Any("prepare_signers", allSigners(i.State.PrepareContainer.MessagesForRound(i.State.Round))),
 	)
+
+	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData
+	i.State.LastPreparedRound = i.State.Round
 
 	commitMsg, err := i.CreateCommit(proposedRoot)
 	if err != nil {

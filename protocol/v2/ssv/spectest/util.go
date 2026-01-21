@@ -10,7 +10,6 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType string) runner.Runner {
@@ -38,42 +37,51 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 	require.NoError(t, err)
 
 	// override base-runner NetworkConfig now
+	// Pass runnerType as signerSource since it has the signer (r was deserialized and lacks one)
 	switch runnerType.(type) {
 	case *runner.CommitteeRunner:
-		r.(*runner.CommitteeRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-		r.(*runner.CommitteeRunner).ValCheck = protocoltesting.TestingValueChecker{}
-		for _, inst := range r.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
+		cr := r.(*runner.CommitteeRunner)
+		cr.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		valCheck := createValueChecker(r, runnerType)
+		cr.ValCheck = valCheck
+		for _, inst := range cr.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = valCheck
 		}
-		if r.(*runner.CommitteeRunner).BaseRunner.State != nil && r.(*runner.CommitteeRunner).BaseRunner.State.RunningInstance != nil {
-			r.(*runner.CommitteeRunner).BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if cr.BaseRunner.State != nil && cr.BaseRunner.State.RunningInstance != nil {
+			cr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.AggregatorRunner:
-		r.(*runner.AggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-		r.(*runner.AggregatorRunner).ValCheck = protocoltesting.TestingValueChecker{}
-		for _, inst := range r.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
+		ar := r.(*runner.AggregatorRunner)
+		ar.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		valCheck := createValueChecker(r, runnerType)
+		ar.ValCheck = valCheck
+		for _, inst := range ar.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = valCheck
 		}
-		if r.(*runner.AggregatorRunner).BaseRunner.State != nil && r.(*runner.AggregatorRunner).BaseRunner.State.RunningInstance != nil {
-			r.(*runner.AggregatorRunner).BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if ar.BaseRunner.State != nil && ar.BaseRunner.State.RunningInstance != nil {
+			ar.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ProposerRunner:
-		r.(*runner.ProposerRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-		r.(*runner.ProposerRunner).ValCheck = protocoltesting.TestingValueChecker{}
-		for _, inst := range r.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
+		pr := r.(*runner.ProposerRunner)
+		pr.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		valCheck := createValueChecker(r, runnerType)
+		pr.ValCheck = valCheck
+		for _, inst := range pr.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = valCheck
 		}
-		if r.(*runner.ProposerRunner).BaseRunner.State != nil && r.(*runner.ProposerRunner).BaseRunner.State.RunningInstance != nil {
-			r.(*runner.ProposerRunner).BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if pr.BaseRunner.State != nil && pr.BaseRunner.State.RunningInstance != nil {
+			pr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
-		r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
-		r.(*runner.SyncCommitteeAggregatorRunner).ValCheck = protocoltesting.TestingValueChecker{}
-		for _, inst := range r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
+		scr := r.(*runner.SyncCommitteeAggregatorRunner)
+		scr.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		valCheck := createValueChecker(r, runnerType)
+		scr.ValCheck = valCheck
+		for _, inst := range scr.BaseRunner.QBFTController.StoredInstances {
+			inst.ValueChecker = valCheck
 		}
-		if r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.State != nil && r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.State.RunningInstance != nil {
-			r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
+		if scr.BaseRunner.State != nil && scr.BaseRunner.State.RunningInstance != nil {
+			scr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ValidatorRegistrationRunner:
 		r.(*runner.ValidatorRegistrationRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
