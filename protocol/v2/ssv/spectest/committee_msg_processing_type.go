@@ -41,6 +41,7 @@ type CommitteeSpecTest struct {
 	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
 	ExpectedErrorCode      int
+	NeedsAggRunners        bool
 }
 
 func (test *CommitteeSpecTest) TestName() string {
@@ -57,30 +58,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	lastErr := test.runPreTesting(logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
-	broadcastedMsgsCap := 0
-	broadcastedRootsCap := 0
-	for _, runner := range test.Committee.Runners {
-		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
-		broadcastedMsgsCap += len(network.BroadcastedMsgs)
-		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
-	}
-
-	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0, broadcastedMsgsCap)
-	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
-	for _, r := range test.Committee.Runners {
-		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
-		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
-		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
-	}
-
-	for _, r := range test.Committee.AggregatorRunners {
-		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
-		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
-		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
-	}
+	broadcastedMsgs, broadcastedRoots := collectCommitteeBroadcasts(test.Committee)
 
 	// test output message (in asynchronous order)
 	spectestingutils.ComparePartialSignatureOutputMessagesInAsynchronousOrder(t, test.OutputMessages, broadcastedMsgs, test.Committee.CommitteeMember.Committee)
@@ -209,6 +187,8 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
 
+	netCfg := testNetworkConfig(test.NeedsAggRunners)
+
 	stateMap, err := readStateComparisonMap(specDir, name, testType)
 	require.NoError(t, err)
 
@@ -229,7 +209,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 				slot, err := strconv.ParseUint(slotStr, 10, 64)
 				require.NoError(t, err)
 
-				fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+				fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
 				if cr, ok := fixedRunner.(*runner.CommitteeRunner); ok {
 					committee.Runners[phase0.Slot(slot)] = cr
 				}
@@ -247,7 +227,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 				slot, err := strconv.ParseUint(slotStr, 10, 64)
 				require.NoError(t, err)
 
-				fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+				fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
 				if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
 					committee.AggregatorRunners[phase0.Slot(slot)] = acr
 				}
@@ -255,57 +235,36 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 		}
 	}
 
-	needsAggRunners := false
-	for _, in := range test.Input {
-		switch v := in.(type) {
-		case *spectypes.AggregatorCommitteeDuty:
-			needsAggRunners = true
-		case *spectypes.SignedSSVMessage:
-			if v.SSVMessage != nil && v.SSVMessage.MsgID.GetRoleType() == spectypes.RoleAggregatorCommittee {
-				needsAggRunners = true
-			}
-		}
-		if needsAggRunners {
-			break
-		}
-	}
-
-	netCfg := testNetworkConfig(needsAggRunners)
-
 	for slot, cr := range committee.Runners {
 		if cr == nil || cr.BaseRunner == nil {
 			continue
 		}
-		cr.BaseRunner.NetworkConfig = netCfg
+		applyRunnerNetworkConfig(cr, netCfg)
 		var signerSource runner.Runner
 		if testRunner, ok := test.Committee.Runners[slot]; ok {
 			signerSource = testRunner
 		}
-		cr.ValCheck = createValueChecker(cr, signerSource)
+		setRunnerValCheck(cr, createValueChecker(cr, signerSource))
 	}
 	for _, ar := range committee.AggregatorRunners {
 		if ar == nil || ar.BaseRunner == nil {
 			continue
 		}
-		ar.BaseRunner.NetworkConfig = netCfg
+		applyRunnerNetworkConfig(ar, netCfg)
 		ar.ValCheck = createValueChecker(ar)
 	}
 	for _, cr := range test.Committee.Runners {
 		if cr == nil {
 			continue
 		}
-		if cr.BaseRunner != nil {
-			cr.BaseRunner.NetworkConfig = netCfg
-		}
-		cr.ValCheck = createValueChecker(cr)
+		applyRunnerNetworkConfig(cr, netCfg)
+		setRunnerValCheck(cr, createValueChecker(cr))
 	}
 	for _, ar := range test.Committee.AggregatorRunners {
 		if ar == nil {
 			continue
 		}
-		if ar.BaseRunner != nil {
-			ar.BaseRunner.NetworkConfig = netCfg
-		}
+		applyRunnerNetworkConfig(ar, netCfg)
 		ar.ValCheck = createValueChecker(ar)
 	}
 
@@ -329,4 +288,39 @@ func readStateComparisonMap(specDir, testName, testType string) (map[string]any,
 		return nil, err
 	}
 	return result, nil
+}
+
+func collectCommitteeBroadcasts(committee *validator.Committee) ([]*spectypes.SignedSSVMessage, []phase0.Root) {
+	broadcastedMsgsCap := 0
+	broadcastedRootsCap := 0
+
+	for _, runner := range committee.Runners {
+		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgsCap += len(network.BroadcastedMsgs)
+		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
+	}
+	for _, runner := range committee.AggregatorRunners {
+		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgsCap += len(network.BroadcastedMsgs)
+		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
+	}
+
+	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0, broadcastedMsgsCap)
+	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
+	for _, r := range committee.Runners {
+		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
+		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
+	}
+	for _, r := range committee.AggregatorRunners {
+		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
+		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
+	}
+
+	return broadcastedMsgs, broadcastedRoots
 }

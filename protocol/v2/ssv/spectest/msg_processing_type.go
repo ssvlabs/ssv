@@ -76,32 +76,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	}
 
 	valCheck := createValueChecker(test.Runner)
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.AggregatorRunner:
-		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.ProposerRunner:
-		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	}
+	setRunnerValueCheckersIfNil(test.Runner, valCheck)
 
 	var v *validator.Validator
 	var c *validator.Committee

@@ -21,17 +21,6 @@ func keySetFromShares(shares map[phase0.ValidatorIndex]*spectypes.Share) *specte
 	return nil
 }
 
-func mapForKeys(m map[string]any, keys ...string) map[string]any {
-	for _, key := range keys {
-		if value, ok := m[key]; ok {
-			if cast, ok := value.(map[string]any); ok {
-				return cast
-			}
-		}
-	}
-	return nil
-}
-
 func testNetworkConfig(needsAggregator bool) *networkconfig.Network {
 	if !needsAggregator {
 		return networkconfig.TestNetwork

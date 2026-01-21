@@ -242,7 +242,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]any) *StartNewRunne
 
 	ks := spectestingutils.KeySetForShare(shareInstance)
 
-	r := fixRunnerForRun(t, runnerMap, ks)
+	r := fixRunnerForRun(t, runnerMap, ks, networkconfig.TestNetwork)
 
 	return &StartNewRunnerDutySpecTest{
 		Name:                    m["Name"].(string),
@@ -295,7 +295,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 	ks := spectestingutils.KeySetForShare(shareInstance)
 
 	// runner
-	r := fixRunnerForRun(t, runnerMap, ks)
+	r := fixRunnerForRun(t, runnerMap, ks, networkconfig.TestNetwork)
 
 	return &MsgProcessingSpecTest{
 		Name:                    m["Name"].(string),
@@ -311,7 +311,12 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 	}
 }
 
-func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutils.TestKeySet) runner.Runner {
+func fixRunnerForRun(
+	t *testing.T,
+	runnerMap map[string]any,
+	ks *spectestingutils.TestKeySet,
+	netCfg *networkconfig.Network,
+) runner.Runner {
 	logger := log.TestLogger(t)
 
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
@@ -320,7 +325,10 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutil
 	byts, err := json.Marshal(baseRunnerMap)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(byts, &baseRunner))
-	baseRunner.NetworkConfig = networkconfig.TestNetwork
+	if netCfg == nil {
+		netCfg = networkconfig.TestNetwork
+	}
+	baseRunner.NetworkConfig = netCfg
 
 	ret := createRunnerWithBaseRunner(logger, baseRunner.RunnerRoleType, baseRunner, ks)
 
@@ -504,6 +512,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		OutputMessages:         outputMsgs,
 		BeaconBroadcastedRoots: beaconBroadcastedRoots,
 		ExpectedErrorCode:      int(m["ExpectedErrorCode"].(float64)),
+		NeedsAggRunners:        needsAggRunners,
 	}
 }
 
@@ -559,22 +568,6 @@ func fixCommitteeForRun(
 	tmpSsvCommittee := &validator.Committee{}
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
 
-	c.Runners = tmpSsvCommittee.Runners
-	c.AggregatorRunners = tmpSsvCommittee.AggregatorRunners
-
-	for _, cr := range c.Runners {
-		if cr == nil || cr.BaseRunner == nil {
-			continue
-		}
-		cr.BaseRunner.NetworkConfig = netCfg
-	}
-	for _, ar := range c.AggregatorRunners {
-		if ar == nil || ar.BaseRunner == nil {
-			continue
-		}
-		ar.BaseRunner.NetworkConfig = netCfg
-	}
-
 	committeeRunnersMap, _ := committeeMap["CommitteeRunners"].(map[string]any)
 	aggregatorRunnersMap, _ := committeeMap["AggregatorCommitteeRunners"].(map[string]any)
 	ks := keySetFromShares(c.Shares)
@@ -583,9 +576,7 @@ func fixCommitteeForRun(
 	}
 
 	if committeeRunnersMap != nil {
-		if c.Runners == nil {
-			c.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(committeeRunnersMap))
-		}
+		c.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(committeeRunnersMap))
 		for slotStr, rawRunner := range committeeRunnersMap {
 			runnerMap, ok := rawRunner.(map[string]any)
 			require.True(t, ok, "committee runner entry is not a map")
@@ -593,17 +584,17 @@ func fixCommitteeForRun(
 			slot, err := strconv.ParseUint(slotStr, 10, 64)
 			require.NoError(t, err)
 
-			fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+			fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
 			if cr, ok := fixedRunner.(*runner.CommitteeRunner); ok {
 				c.Runners[phase0.Slot(slot)] = cr
 			}
 		}
+	} else {
+		c.Runners = tmpSsvCommittee.Runners
 	}
 
 	if aggregatorRunnersMap != nil {
-		if c.AggregatorRunners == nil {
-			c.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(aggregatorRunnersMap))
-		}
+		c.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(aggregatorRunnersMap))
 		for slotStr, rawRunner := range aggregatorRunnersMap {
 			runnerMap, ok := rawRunner.(map[string]any)
 			require.True(t, ok, "aggregator committee runner entry is not a map")
@@ -611,11 +602,20 @@ func fixCommitteeForRun(
 			slot, err := strconv.ParseUint(slotStr, 10, 64)
 			require.NoError(t, err)
 
-			fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+			fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
 			if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
 				c.AggregatorRunners[phase0.Slot(slot)] = acr
 			}
 		}
+	} else {
+		c.AggregatorRunners = tmpSsvCommittee.AggregatorRunners
+	}
+
+	for _, cr := range c.Runners {
+		applyRunnerNetworkConfig(cr, netCfg)
+	}
+	for _, ar := range c.AggregatorRunners {
+		applyRunnerNetworkConfig(ar, netCfg)
 	}
 
 	return c
