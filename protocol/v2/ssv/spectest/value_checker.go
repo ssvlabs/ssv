@@ -250,6 +250,8 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 			sharePubKeys,
 			expectedVote,
 		)
+	case *runner.AggregatorCommitteeRunner:
+		return ssv.NewAggregatorCommitteeChecker()
 
 	default:
 		return nil

@@ -524,6 +524,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 	committeeMap := m["Committee"].(map[string]any)
 
 	inputs := make([]any, 0)
+	needsAggRunners := false
 	for _, input := range m["Input"].([]any) {
 		byts, err := json.Marshal(input)
 		if err != nil {
@@ -545,6 +546,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 					aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{}
 					err = json.Unmarshal(byts, &aggregatorCommitteeDuty)
 					if err == nil {
+						needsAggRunners = true
 						inputs = append(inputs, aggregatorCommitteeDuty)
 						continue
 					}
@@ -564,6 +566,9 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		msg := &spectypes.SignedSSVMessage{}
 		err = getDecoder().Decode(&msg)
 		if err == nil {
+			if msg.SSVMessage != nil && msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleAggregatorCommittee {
+				needsAggRunners = true
+			}
 			inputs = append(inputs, msg)
 			continue
 		}
@@ -590,7 +595,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		}
 	}
 
-	c := fixCommitteeForRun(t, logger, committeeMap)
+	c := fixCommitteeForRun(t, logger, committeeMap, needsAggRunners)
 
 	return &CommitteeSpecTest{
 		Name:                   m["Name"].(string),
@@ -607,15 +612,17 @@ func fixCommitteeForRun(
 	t *testing.T,
 	logger *zap.Logger,
 	committeeMap map[string]any,
+	needsAggRunners bool,
 ) *validator.Committee {
 	byts, err := json.Marshal(committeeMap)
 	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
+	netCfg := testNetworkConfig(needsAggRunners)
 	c := validator.NewCommittee(
 		logger,
-		networkconfig.TestNetwork,
+		netCfg,
 		&specCommittee.CommitteeMember,
 		func(
 			duty spectypes.Duty,
@@ -623,13 +630,26 @@ func fixCommitteeForRun(
 			_ []phase0.BLSPubKey,
 			_ runner.CommitteeDutyGuard,
 		) (runner.Runner, error) {
+			setRunnerNetworkConfig := func(r runner.Runner) runner.Runner {
+				switch typed := r.(type) {
+				case *runner.CommitteeRunner:
+					if typed.BaseRunner != nil {
+						typed.BaseRunner.NetworkConfig = netCfg
+					}
+				case *runner.AggregatorCommitteeRunner:
+					if typed.BaseRunner != nil {
+						typed.BaseRunner.NetworkConfig = netCfg
+					}
+				}
+				return r
+			}
 			switch duty.(type) {
 			case *spectypes.CommitteeDuty:
 				r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
-				return r, nil
+				return setRunnerNetworkConfig(r), nil
 			case *spectypes.AggregatorCommitteeDuty:
 				r := ssvtesting.AggregatorCommitteeRunnerWithShareMap(logger, shareMap)
-				return r, nil
+				return setRunnerNetworkConfig(r), nil
 			default:
 				return nil, fmt.Errorf("unknown duty type: %T", duty)
 			}
@@ -643,8 +663,21 @@ func fixCommitteeForRun(
 	c.Runners = tmpSsvCommittee.Runners
 	c.AggregatorRunners = tmpSsvCommittee.AggregatorRunners
 
-	committeeRunnersMap := mapForKeys(committeeMap, "Runners", "CommitteeRunners")
-	aggregatorRunnersMap := mapForKeys(committeeMap, "AggregatorRunners", "AggregatorCommitteeRunners")
+	for _, cr := range c.Runners {
+		if cr == nil || cr.BaseRunner == nil {
+			continue
+		}
+		cr.BaseRunner.NetworkConfig = netCfg
+	}
+	for _, ar := range c.AggregatorRunners {
+		if ar == nil || ar.BaseRunner == nil {
+			continue
+		}
+		ar.BaseRunner.NetworkConfig = netCfg
+	}
+
+	committeeRunnersMap, _ := committeeMap["CommitteeRunners"].(map[string]any)
+	aggregatorRunnersMap, _ := committeeMap["AggregatorCommitteeRunners"].(map[string]any)
 	ks := keySetFromShares(c.Shares)
 	if (committeeRunnersMap != nil || aggregatorRunnersMap != nil) && ks == nil {
 		require.Fail(t, "no shares for runner keyset")

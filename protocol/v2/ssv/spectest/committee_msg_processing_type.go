@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	eth2clientspec "github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
@@ -24,10 +22,8 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -216,8 +212,8 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	stateMap, err := readStateComparisonMap(specDir, name, testType)
 	require.NoError(t, err)
 
-	committeeRunnersMap := mapForKeys(stateMap, "Runners", "CommitteeRunners")
-	aggregatorRunnersMap := mapForKeys(stateMap, "AggregatorRunners", "AggregatorCommitteeRunners")
+	committeeRunnersMap, _ := stateMap["CommitteeRunners"].(map[string]any)
+	aggregatorRunnersMap, _ := stateMap["AggregatorCommitteeRunners"].(map[string]any)
 	if committeeRunnersMap != nil || aggregatorRunnersMap != nil {
 		ks := keySetFromShares(committee.Shares)
 		require.NotNil(t, ks, "no shares for runner keyset")
@@ -259,30 +255,6 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 		}
 	}
 
-	// Normalize: move any aggregator committee runners that may have been encoded under Runners into AggregatorRunners
-	// to align with the current code structure.
-	if committee.AggregatorRunners == nil {
-		committee.AggregatorRunners = map[phase0.Slot]*runner.AggregatorCommitteeRunner{}
-	}
-	for slot, cr := range committee.Runners {
-		if cr != nil && cr.BaseRunner != nil && cr.BaseRunner.RunnerRoleType == spectypes.RoleAggregatorCommittee {
-			committee.AggregatorRunners[slot] = &runner.AggregatorCommitteeRunner{BaseRunner: cr.BaseRunner}
-			delete(committee.Runners, slot)
-		}
-	}
-	if test.Committee != nil {
-		if test.Committee.AggregatorRunners == nil {
-			test.Committee.AggregatorRunners = map[phase0.Slot]*runner.AggregatorCommitteeRunner{}
-		}
-		for slot, cr := range test.Committee.Runners {
-			if cr != nil && cr.BaseRunner != nil && cr.BaseRunner.RunnerRoleType == spectypes.RoleAggregatorCommittee {
-				test.Committee.AggregatorRunners[slot] = &runner.AggregatorCommitteeRunner{BaseRunner: cr.BaseRunner}
-				delete(test.Committee.Runners, slot)
-			}
-		}
-	}
-
-	// Determine if this test involves aggregator committee duties/messages.
 	needsAggRunners := false
 	for _, in := range test.Input {
 		switch v := in.(type) {
@@ -298,116 +270,43 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 		}
 	}
 
-	beaconCfg := *networkconfig.TestNetwork.Beacon
-	beaconCfg.Forks = maps.Clone(beaconCfg.Forks)
-	fuluFork := beaconCfg.Forks[eth2clientspec.DataVersionFulu]
-	fuluFork.Epoch = math.MaxUint64 // aggregator committee spec tests are implemented for Electra
-	beaconCfg.Forks[eth2clientspec.DataVersionFulu] = fuluFork
+	netCfg := testNetworkConfig(needsAggRunners)
 
-	netCfg := *networkconfig.TestNetwork
-	netCfg.Beacon = &beaconCfg
-
-	// Normalize runners/networks and set value checkers for both expected and actual committee runners.
-	normalizeBaseRunner := func(base *runner.BaseRunner) {
-		if base == nil {
-			return
-		}
-		base.NetworkConfig = &netCfg
-		// Ensure controller instances have a value checker.
-		if base.QBFTController != nil {
-			for _, inst := range base.QBFTController.StoredInstances {
-				if inst.ValueChecker == nil {
-					inst.ValueChecker = protocoltesting.TestingValueChecker{}
-				}
-			}
-		}
-		if base.State != nil && base.State.RunningInstance != nil && base.State.RunningInstance.ValueChecker == nil {
-			base.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
-	}
-	normalizeCommitteeRunner := func(cr *runner.CommitteeRunner) {
+	for slot, cr := range committee.Runners {
 		if cr == nil || cr.BaseRunner == nil {
-			return
+			continue
 		}
-		normalizeBaseRunner(cr.BaseRunner)
-		cr.ValCheck = protocoltesting.TestingValueChecker{}
+		cr.BaseRunner.NetworkConfig = netCfg
+		var signerSource runner.Runner
+		if testRunner, ok := test.Committee.Runners[slot]; ok {
+			signerSource = testRunner
+		}
+		cr.ValCheck = createValueChecker(cr, signerSource)
 	}
-	normalizeAggregatorRunner := func(ar *runner.AggregatorCommitteeRunner) {
+	for _, ar := range committee.AggregatorRunners {
 		if ar == nil || ar.BaseRunner == nil {
-			return
+			continue
 		}
-		normalizeBaseRunner(ar.BaseRunner)
-		ar.ValCheck = protocoltesting.TestingValueChecker{}
+		ar.BaseRunner.NetworkConfig = netCfg
+		ar.ValCheck = createValueChecker(ar)
 	}
-
-	for i := range committee.Runners {
-		normalizeCommitteeRunner(committee.Runners[i])
-	}
-	for i := range test.Committee.Runners {
-		normalizeCommitteeRunner(test.Committee.Runners[i])
-	}
-
-	if needsAggRunners {
-		// Normalize existing aggregator runners on both sides without synthesizing new ones.
-		for i := range committee.AggregatorRunners {
-			normalizeAggregatorRunner(committee.AggregatorRunners[i])
+	for _, cr := range test.Committee.Runners {
+		if cr == nil {
+			continue
 		}
-		for i := range test.Committee.AggregatorRunners {
-			normalizeAggregatorRunner(test.Committee.AggregatorRunners[i])
+		if cr.BaseRunner != nil {
+			cr.BaseRunner.NetworkConfig = netCfg
 		}
+		cr.ValCheck = createValueChecker(cr)
 	}
-
-	if test.Committee != nil && test.Committee.CreateRunnerFn != nil {
-		origCreateRunner := test.Committee.CreateRunnerFn
-		test.Committee.CreateRunnerFn = func(
-			duty spectypes.Duty,
-			shareMap map[phase0.ValidatorIndex]*spectypes.Share,
-			attestingValidators []phase0.BLSPubKey,
-			dutyGuard runner.CommitteeDutyGuard,
-		) (runner.Runner, error) {
-			r, err := origCreateRunner(duty, shareMap, attestingValidators, dutyGuard)
-			if err != nil {
-				return nil, err
-			}
-			switch created := r.(type) {
-			case *runner.CommitteeRunner:
-				normalizeCommitteeRunner(created)
-			case *runner.AggregatorCommitteeRunner:
-				normalizeAggregatorRunner(created)
-			}
-			return r, nil
+	for _, ar := range test.Committee.AggregatorRunners {
+		if ar == nil {
+			continue
 		}
-	}
-
-	// Final normalization: ensure Runners contains only RoleCommittee runners on both sides.
-	// Move any stray RoleAggregatorCommittee entries into AggregatorRunners.
-	{
-		filtered := make(map[phase0.Slot]*runner.CommitteeRunner, len(committee.Runners))
-		for slot, cr := range committee.Runners {
-			if cr != nil && cr.BaseRunner != nil && cr.BaseRunner.RunnerRoleType == spectypes.RoleAggregatorCommittee {
-				if committee.AggregatorRunners == nil {
-					committee.AggregatorRunners = map[phase0.Slot]*runner.AggregatorCommitteeRunner{}
-				}
-				committee.AggregatorRunners[slot] = &runner.AggregatorCommitteeRunner{BaseRunner: cr.BaseRunner}
-				continue
-			}
-			filtered[slot] = cr
+		if ar.BaseRunner != nil {
+			ar.BaseRunner.NetworkConfig = netCfg
 		}
-		committee.Runners = filtered
-	}
-	if test.Committee != nil {
-		filtered := make(map[phase0.Slot]*runner.CommitteeRunner, len(test.Committee.Runners))
-		for slot, cr := range test.Committee.Runners {
-			if cr != nil && cr.BaseRunner != nil && cr.BaseRunner.RunnerRoleType == spectypes.RoleAggregatorCommittee {
-				if test.Committee.AggregatorRunners == nil {
-					test.Committee.AggregatorRunners = map[phase0.Slot]*runner.AggregatorCommitteeRunner{}
-				}
-				test.Committee.AggregatorRunners[slot] = &runner.AggregatorCommitteeRunner{BaseRunner: cr.BaseRunner}
-				continue
-			}
-			filtered[slot] = cr
-		}
-		test.Committee.Runners = filtered
+		ar.ValCheck = createValueChecker(ar)
 	}
 
 	root, err := committee.GetRoot()
