@@ -139,13 +139,11 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}()
 
 	if err != nil {
-		if !mv.shouldAcceptUnsubscriptionError(decodedMessage, pmsg.GetTopic()) {
-			return mv.handleValidationError(ctx, peerID, decodedMessage, err)
-		}
+		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage
-	recordAcceptedMessage(ctx, mv.decodedMessageRole(decodedMessage))
+	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
 	return pubsub.ValidationAccept
 }
 
@@ -343,32 +341,4 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 // maxStoredSlots stores max amount of slots message validation stores.
 func (mv *messageValidator) maxStoredSlots() uint64 {
 	return mv.netCfg.SlotsPerEpoch + LateSlotAllowance
-}
-
-func (mv *messageValidator) shouldAcceptUnsubscriptionError(
-	decodedMessage *queue.SSVMessage,
-	topic string,
-) bool {
-	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
-		return false
-	}
-
-	if !mv.netCfg.BooleForkInUnsubscriptionWindow(mv.netCfg.EstimatedCurrentEpoch()) {
-		return false
-	}
-
-	committeeInfo, err := mv.getCommitteeAndValidatorIndices(decodedMessage.GetID())
-	if err != nil {
-		return false
-	}
-
-	return topic == commons.AlanTopicFullName(commons.SubnetTopicID(committeeInfo.subnetAlan))
-}
-
-func (mv *messageValidator) decodedMessageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
-	role := spectypes.RunnerRole(spectypes.RoleUnknown)
-	if decodedMessage != nil {
-		role = decodedMessage.GetID().GetRoleType()
-	}
-	return role
 }
