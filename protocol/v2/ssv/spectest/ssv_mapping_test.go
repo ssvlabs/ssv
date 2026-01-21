@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -642,27 +643,46 @@ func fixCommitteeForRun(
 	c.Runners = tmpSsvCommittee.Runners
 	c.AggregatorRunners = tmpSsvCommittee.AggregatorRunners
 
-	for slot := range c.Runners {
-		var shareInstance *spectypes.Share
-		for _, share := range c.Runners[slot].BaseRunner.Share {
-			shareInstance = share
-			break
-		}
-
-		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]any)[fmt.Sprintf("%v", slot)].(map[string]any), spectestingutils.KeySetForShare(shareInstance))
-		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
+	committeeRunnersMap := mapForKeys(committeeMap, "Runners", "CommitteeRunners")
+	aggregatorRunnersMap := mapForKeys(committeeMap, "AggregatorRunners", "AggregatorCommitteeRunners")
+	ks := keySetFromShares(c.Shares)
+	if (committeeRunnersMap != nil || aggregatorRunnersMap != nil) && ks == nil {
+		require.Fail(t, "no shares for runner keyset")
 	}
 
-	for slot := range c.AggregatorRunners {
-		var shareInstance *spectypes.Share
-		for _, share := range c.AggregatorRunners[slot].BaseRunner.Share {
-			shareInstance = share
-			break
+	if committeeRunnersMap != nil {
+		if c.Runners == nil {
+			c.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(committeeRunnersMap))
 		}
+		for slotStr, rawRunner := range committeeRunnersMap {
+			runnerMap, ok := rawRunner.(map[string]any)
+			require.True(t, ok, "committee runner entry is not a map")
 
-		fixedRunner := fixRunnerForRun(t, committeeMap["AggregatorRunners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), spectestingutils.KeySetForShare(shareInstance))
-		if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
-			c.AggregatorRunners[slot] = acr
+			slot, err := strconv.ParseUint(slotStr, 10, 64)
+			require.NoError(t, err)
+
+			fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+			if cr, ok := fixedRunner.(*runner.CommitteeRunner); ok {
+				c.Runners[phase0.Slot(slot)] = cr
+			}
+		}
+	}
+
+	if aggregatorRunnersMap != nil {
+		if c.AggregatorRunners == nil {
+			c.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(aggregatorRunnersMap))
+		}
+		for slotStr, rawRunner := range aggregatorRunnersMap {
+			runnerMap, ok := rawRunner.(map[string]any)
+			require.True(t, ok, "aggregator committee runner entry is not a map")
+
+			slot, err := strconv.ParseUint(slotStr, 10, 64)
+			require.NoError(t, err)
+
+			fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+			if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
+				c.AggregatorRunners[phase0.Slot(slot)] = acr
+			}
 		}
 	}
 

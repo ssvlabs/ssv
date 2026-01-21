@@ -3,10 +3,13 @@ package spectest
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -210,6 +213,52 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
 
+	stateMap, err := readStateComparisonMap(specDir, name, testType)
+	require.NoError(t, err)
+
+	committeeRunnersMap := mapForKeys(stateMap, "Runners", "CommitteeRunners")
+	aggregatorRunnersMap := mapForKeys(stateMap, "AggregatorRunners", "AggregatorCommitteeRunners")
+	if committeeRunnersMap != nil || aggregatorRunnersMap != nil {
+		ks := keySetFromShares(committee.Shares)
+		require.NotNil(t, ks, "no shares for runner keyset")
+
+		if committeeRunnersMap != nil {
+			if committee.Runners == nil {
+				committee.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(committeeRunnersMap))
+			}
+			for slotStr, rawRunner := range committeeRunnersMap {
+				runnerMap, ok := rawRunner.(map[string]any)
+				require.True(t, ok, "committee runner entry is not a map")
+
+				slot, err := strconv.ParseUint(slotStr, 10, 64)
+				require.NoError(t, err)
+
+				fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+				if cr, ok := fixedRunner.(*runner.CommitteeRunner); ok {
+					committee.Runners[phase0.Slot(slot)] = cr
+				}
+			}
+		}
+
+		if aggregatorRunnersMap != nil {
+			if committee.AggregatorRunners == nil {
+				committee.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(aggregatorRunnersMap))
+			}
+			for slotStr, rawRunner := range aggregatorRunnersMap {
+				runnerMap, ok := rawRunner.(map[string]any)
+				require.True(t, ok, "aggregator committee runner entry is not a map")
+
+				slot, err := strconv.ParseUint(slotStr, 10, 64)
+				require.NoError(t, err)
+
+				fixedRunner := fixRunnerForRun(t, runnerMap, ks)
+				if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
+					committee.AggregatorRunners[phase0.Slot(slot)] = acr
+				}
+			}
+		}
+	}
+
 	// Normalize: move any aggregator committee runners that may have been encoded under Runners into AggregatorRunners
 	// to align with the current code structure.
 	if committee.AggregatorRunners == nil {
@@ -367,4 +416,18 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	test.PostDutyCommitteeRoot = hex.EncodeToString(root[:])
 
 	test.PostDutyCommittee = committee
+}
+
+func readStateComparisonMap(specDir, testName, testType string) (map[string]any, error) {
+	scDir := typescomparable.GetSCDir(filepath.Join(specDir, "generate"), testType)
+	path := filepath.Join(scDir, fmt.Sprintf("%s.json", testName))
+	byteValue, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]any
+	if err := json.Unmarshal(byteValue, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
