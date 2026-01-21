@@ -133,6 +133,9 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 			spectestingutils.TestingValidatorIndex,
 		)
 		return checker.CheckValue
+	case spectypes.RoleAggregatorCommittee:
+		checker := ssv.NewAggregatorCommitteeChecker()
+		return checker.CheckValue
 	default:
 		return nil
 	}
