@@ -7,10 +7,10 @@ import (
 
 	eth2clientspec "github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"golang.org/x/exp/maps"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"golang.org/x/exp/maps"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
