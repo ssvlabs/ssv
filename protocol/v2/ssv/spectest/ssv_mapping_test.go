@@ -538,26 +538,15 @@ func fixCommitteeForRun(
 			_ []phase0.BLSPubKey,
 			_ runner.CommitteeDutyGuard,
 		) (runner.Runner, error) {
-			setRunnerNetworkConfig := func(r runner.Runner) runner.Runner {
-				switch typed := r.(type) {
-				case *runner.CommitteeRunner:
-					if typed.BaseRunner != nil {
-						typed.BaseRunner.NetworkConfig = netCfg
-					}
-				case *runner.AggregatorCommitteeRunner:
-					if typed.BaseRunner != nil {
-						typed.BaseRunner.NetworkConfig = netCfg
-					}
-				}
-				return r
-			}
 			switch duty.(type) {
 			case *spectypes.CommitteeDuty:
 				r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
-				return setRunnerNetworkConfig(r), nil
+				applyRunnerNetworkConfig(r, netCfg)
+				return r, nil
 			case *spectypes.AggregatorCommitteeDuty:
 				r := ssvtesting.AggregatorCommitteeRunnerWithShareMap(logger, shareMap)
-				return setRunnerNetworkConfig(r), nil
+				applyRunnerNetworkConfig(r, netCfg)
+				return r, nil
 			default:
 				return nil, fmt.Errorf("unknown duty type: %T", duty)
 			}
