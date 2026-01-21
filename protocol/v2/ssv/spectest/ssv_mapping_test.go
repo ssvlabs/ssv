@@ -220,55 +220,13 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]any) *StartNewRunne
 	runnerMap := m["Runner"].(map[string]any)
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
-	var testDuty spectypes.Duty
-	if _, ok := m["CommitteeDuty"]; ok {
-		byts, err := json.Marshal(m["CommitteeDuty"])
-		if err != nil {
-			panic("cant marshal committee duty")
-		}
-		committeeDuty := &spectypes.CommitteeDuty{}
-		err = json.Unmarshal(byts, committeeDuty)
-		if err != nil {
-			panic("cant unmarshal committee duty")
-		}
-		testDuty = committeeDuty
-	} else if _, ok := m["AggregatorCommitteeDuty"]; ok {
-		byts, err := json.Marshal(m["AggregatorCommitteeDuty"])
-		if err != nil {
-			panic("cant marshal aggregator committee duty")
-		}
-		aggCommDuty := &spectypes.AggregatorCommitteeDuty{}
-		err = json.Unmarshal(byts, aggCommDuty)
-		if err != nil {
-			panic("cant unmarshal aggregator committee duty")
-		}
-		testDuty = aggCommDuty
-	} else if _, ok := m["ValidatorDuty"]; ok {
-		byts, err := json.Marshal(m["ValidatorDuty"])
-		if err != nil {
-			panic("cant marshal beacon duty")
-		}
-		validatorDuty := &spectypes.ValidatorDuty{}
-		err = json.Unmarshal(byts, validatorDuty)
-		if err != nil {
-			panic("cant unmarshal beacon duty")
-		}
-		testDuty = validatorDuty
-	} else {
+	testDuty, err := decodeDutyFromMap(m)
+	if err != nil {
 		panic("no beacon or committee duty")
 	}
 
-	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
-	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]any) {
-			byts, err := json.Marshal(msg)
-			require.NoError(t, err)
-			typedMsg := &spectypes.PartialSignatureMessages{}
-			require.NoError(t, json.Unmarshal(byts, typedMsg))
-			outputMsgs = append(outputMsgs, typedMsg)
-		}
-	}
+	outputMsgs, err := decodeOutputMessages(m["OutputMessages"])
+	require.NoError(t, err)
 
 	shareInstance := &spectypes.Share{}
 	for _, share := range baseRunnerMap["Share"].(map[string]any) {
@@ -301,41 +259,8 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 	runnerMap := m["Runner"].(map[string]any)
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
-	var duty spectypes.Duty
-	if _, ok := m["CommitteeDuty"]; ok {
-		byts, err := json.Marshal(m["CommitteeDuty"])
-		if err != nil {
-			panic("cant marshal committee duty")
-		}
-		committeeDuty := &spectypes.CommitteeDuty{}
-		err = json.Unmarshal(byts, committeeDuty)
-		if err != nil {
-			panic("cant unmarshal committee duty")
-		}
-		duty = committeeDuty
-	} else if _, ok := m["AggregatorCommitteeDuty"]; ok {
-		byts, err := json.Marshal(m["AggregatorCommitteeDuty"])
-		if err != nil {
-			panic("cant marshal aggregator committee duty")
-		}
-		aggCommDuty := &spectypes.AggregatorCommitteeDuty{}
-		err = json.Unmarshal(byts, aggCommDuty)
-		if err != nil {
-			panic("cant unmarshal aggregator committee duty")
-		}
-		duty = aggCommDuty
-	} else if _, ok := m["ValidatorDuty"]; ok {
-		byts, err := json.Marshal(m["ValidatorDuty"])
-		if err != nil {
-			panic("cant marshal validator duty")
-		}
-		beaconDuty := &spectypes.ValidatorDuty{}
-		err = json.Unmarshal(byts, beaconDuty)
-		if err != nil {
-			panic("cant unmarshal validator duty")
-		}
-		duty = beaconDuty
-	} else {
+	duty, err := decodeDutyFromMap(m)
+	if err != nil {
 		panic("no beacon or committee duty")
 	}
 
@@ -349,24 +274,11 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 		msgs = append(msgs, typedMsg)
 	}
 
-	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
-	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]any) {
-			byts, err := json.Marshal(msg)
-			require.NoError(t, err)
-			typedMsg := &spectypes.PartialSignatureMessages{}
-			require.NoError(t, json.Unmarshal(byts, typedMsg))
-			outputMsgs = append(outputMsgs, typedMsg)
-		}
-	}
+	outputMsgs, err := decodeOutputMessages(m["OutputMessages"])
+	require.NoError(t, err)
 
-	beaconBroadcastedRoots := make([]string, 0)
-	if m["BeaconBroadcastedRoots"] != nil {
-		for _, r := range m["BeaconBroadcastedRoots"].([]any) {
-			beaconBroadcastedRoots = append(beaconBroadcastedRoots, r.(string))
-		}
-	}
+	beaconBroadcastedRoots, err := decodeBeaconRoots(m["BeaconBroadcastedRoots"])
+	require.NoError(t, err)
 
 	shareInstance := &spectypes.Share{}
 	for _, share := range baseRunnerMap["Share"].(map[string]any) {
@@ -576,24 +488,11 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		panic(fmt.Sprintf("Unsupported input: %T\n", input))
 	}
 
-	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
-	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]any) {
-			byts, err := json.Marshal(msg)
-			require.NoError(t, err)
-			typedMsg := &spectypes.PartialSignatureMessages{}
-			require.NoError(t, json.Unmarshal(byts, typedMsg))
-			outputMsgs = append(outputMsgs, typedMsg)
-		}
-	}
+	outputMsgs, err := decodeOutputMessages(m["OutputMessages"])
+	require.NoError(t, err)
 
-	beaconBroadcastedRoots := make([]string, 0)
-	if m["BeaconBroadcastedRoots"] != nil {
-		for _, r := range m["BeaconBroadcastedRoots"].([]any) {
-			beaconBroadcastedRoots = append(beaconBroadcastedRoots, r.(string))
-		}
-	}
+	beaconBroadcastedRoots, err := decodeBeaconRoots(m["BeaconBroadcastedRoots"])
+	require.NoError(t, err)
 
 	c := fixCommitteeForRun(t, logger, committeeMap, needsAggRunners)
 
