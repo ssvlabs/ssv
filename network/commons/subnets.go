@@ -10,7 +10,6 @@ import (
 	"math/bits"
 	"strconv"
 	"strings"
-	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -60,27 +59,14 @@ func ParseTopicSubnet(topicName string) (Subnet, error) {
 	return 0, fmt.Errorf("invalid topic format: %s", topicName)
 }
 
-var bigIntPool = sync.Pool{
-	New: func() any { return new(big.Int) },
-}
-
 // BooleCommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).
 // It requires committee to be valid and have length >=1.
-// It uses sync.Pool to reduce heap allocations.
 func BooleCommitteeSubnet(committee []spectypes.OperatorID) Subnet {
 	var operatorBytes [8]byte
-	var hash [32]byte
-
-	lowest := bigIntPool.Get().(*big.Int)
-	hashNum := bigIntPool.Get().(*big.Int)
-	result := bigIntPool.Get().(*big.Int)
-
-	defer bigIntPool.Put(lowest)
-	defer bigIntPool.Put(hashNum)
-	defer bigIntPool.Put(result)
-
 	binary.LittleEndian.PutUint64(operatorBytes[:], committee[0])
-	hash = sha256.Sum256(operatorBytes[:])
+
+	var lowest, hashNum, result big.Int
+	hash := sha256.Sum256(operatorBytes[:])
 	lowest.SetBytes(hash[:])
 
 	for i := 1; i < len(committee); i++ {
@@ -88,24 +74,19 @@ func BooleCommitteeSubnet(committee []spectypes.OperatorID) Subnet {
 		hash = sha256.Sum256(operatorBytes[:])
 		hashNum.SetBytes(hash[:])
 
-		if hashNum.Cmp(lowest) < 0 {
-			lowest.Set(hashNum)
+		if hashNum.Cmp(&lowest) < 0 {
+			lowest.Set(&hashNum)
 		}
 	}
 
-	result.Mod(lowest, bigIntSubnetsCount)
-	subnet := result.Uint64()
-
-	return Subnet(subnet)
+	result.Mod(&lowest, bigIntSubnetsCount)
+	return Subnet(result.Uint64())
 }
 
 // AlanCommitteeSubnet returns the subnet for the given committee for Alan fork
 func AlanCommitteeSubnet(cid spectypes.CommitteeID) Subnet {
-	bi := bigIntPool.Get().(*big.Int)
-	defer bigIntPool.Put(bi)
-
-	bi.SetBytes(cid[:])
-	bi.Mod(bi, bigIntSubnetsCount)
+	var bi big.Int
+	bi.Mod(bi.SetBytes(cid[:]), bigIntSubnetsCount)
 	return Subnet(bi.Uint64())
 }
 
