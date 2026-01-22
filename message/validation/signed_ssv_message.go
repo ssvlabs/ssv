@@ -134,20 +134,17 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 }
 
 func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {
-	roles := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
-		spectypes.RoleProposer,
-		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit,
+	isInBooleFork := mv.netCfg.BooleForkAtSlot(slot)
+	switch roleType {
+	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		return true
+	case spectypes.RoleAggregatorCommittee:
+		return isInBooleFork
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
+		return !isInBooleFork
+	default:
+		return false
 	}
-
-	if mv.netCfg.BooleForkAtSlot(slot) {
-		roles = append(roles, spectypes.RoleAggregatorCommittee)
-	} else {
-		roles = append(roles, ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution)
-	}
-
-	return slices.Contains(roles, roleType)
 }
 
 // belongsToCommittee checks if the signers belong to the committee.
