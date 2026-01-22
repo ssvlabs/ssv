@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -50,6 +51,8 @@ func TestBooleForkInSubsequentWindow(t *testing.T) {
 		{name: "at_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10), expected: true},
 		{name: "after_fork_slot", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) + 1, expected: false},
 		{name: "after_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(11), expected: false},
+		{name: "boole_zero_epoch_zero", boole: 0, slot: TestNetwork.FirstSlotAtEpoch(0), expected: false},
+		{name: "boole_max_epoch_zero", boole: phase0.Epoch(math.MaxUint64), slot: TestNetwork.FirstSlotAtEpoch(0), expected: false},
 	}
 
 	for _, test := range tests {
@@ -61,30 +64,6 @@ func TestBooleForkInSubsequentWindow(t *testing.T) {
 			}
 
 			require.Equal(t, test.expected, netCfg.inBooleSubsequentWindow(test.slot))
-		})
-	}
-}
-
-func TestBooleForkAtEpoch(t *testing.T) {
-	tests := []struct {
-		name     string
-		boole    phase0.Epoch
-		epoch    phase0.Epoch
-		expected bool
-	}{
-		{name: "before_fork", boole: 10, epoch: 9, expected: false},
-		{name: "at_fork", boole: 10, epoch: 10, expected: true},
-		{name: "after_fork", boole: 10, epoch: 11, expected: true},
-		{name: "boole_zero_epoch_zero", boole: 0, epoch: 0, expected: true},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			netCfg := Network{
-				SSV: &SSV{Forks: SSVForks{Boole: test.boole}},
-			}
-
-			require.Equal(t, test.expected, netCfg.BooleForkAtEpoch(test.epoch))
 		})
 	}
 }
@@ -109,6 +88,32 @@ func TestBooleFork(t *testing.T) {
 			}
 
 			require.Equal(t, test.expectedForked, netCfg.BooleFork())
+		})
+	}
+}
+
+func TestBooleForkAtSlot(t *testing.T) {
+	tests := []struct {
+		name     string
+		boole    phase0.Epoch
+		slot     phase0.Slot
+		expected bool
+	}{
+		{name: "before_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) - 1, expected: false},
+		{name: "at_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10), expected: true},
+		{name: "after_fork_slot", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) + 1, expected: true},
+		{name: "boole_zero_slot_zero", boole: 0, slot: TestNetwork.FirstSlotAtEpoch(0), expected: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beacon := *TestNetwork.Beacon
+			netCfg := Network{
+				Beacon: &beacon,
+				SSV:    &SSV{Forks: SSVForks{Boole: test.boole}},
+			}
+
+			require.Equal(t, test.expected, netCfg.BooleForkAtSlot(test.slot))
 		})
 	}
 }

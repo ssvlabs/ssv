@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
@@ -39,12 +40,8 @@ func (n Network) BooleFork() bool {
 	return n.BooleForkAtSlot(n.EstimatedCurrentSlot())
 }
 
-func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
-	return epoch >= n.SSV.Forks.Boole
-}
-
 func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
-	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
+	return n.EstimatedEpochAtSlot(slot) >= n.SSV.Forks.Boole
 }
 
 func (n Network) InBooleTransitionWindow(slot phase0.Slot) bool {
@@ -56,18 +53,33 @@ func (n Network) inBoolePriorWindow(slot phase0.Slot) bool {
 		return false
 	}
 	epoch := n.EstimatedEpochAtSlot(slot)
-	booleEpoch := n.SSV.Forks.Boole
-	if booleEpoch <= boolePriorWindowEpochs {
-		return true
+	if n.SSV.Forks.Boole == 0 {
+		return false
 	}
-	return epoch >= booleEpoch-boolePriorWindowEpochs
+	if n.SSV.Forks.Boole <= boolePriorWindowEpochs {
+		return epoch == 0
+	}
+	return epoch >= n.SSV.Forks.Boole-boolePriorWindowEpochs
 }
 
 func (n Network) inBooleSubsequentWindow(slot phase0.Slot) bool {
 	if booleSubsequentWindowSlots == 0 {
 		return false
 	}
+	if n.SSV.Forks.Boole == 0 {
+		return false
+	}
+	if n.SSV.Forks.Boole == phase0.Epoch(math.MaxUint64) {
+		return false
+	}
+	maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
+	if n.SSV.Forks.Boole > maxEpoch {
+		return false
+	}
 	start := n.FirstSlotAtEpoch(n.SSV.Forks.Boole)
+	if start > phase0.Slot(math.MaxUint64)-booleSubsequentWindowSlots {
+		return false
+	}
 	end := start + booleSubsequentWindowSlots
 	return slot >= start && slot < end
 }
