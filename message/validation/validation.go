@@ -143,8 +143,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}
 
 	pmsg.ValidatorData = decodedMessage
-	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
-	return pubsub.ValidationAccept
+	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
@@ -170,13 +169,11 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		SignedSSVMessage: signedSSVMessage,
 	}
 
-	if signedSSVMessage != nil {
-		decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
-	}
-
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
 		return decodedMessage, err
 	}
+
+	decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
 
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
 		return decodedMessage, err

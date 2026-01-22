@@ -48,7 +48,7 @@ func (n Network) BooleForkInPriorWindow(epoch phase0.Epoch) bool {
 	}
 	booleEpoch := n.SSV.Forks.Boole
 	if booleEpoch <= boolePriorWindowEpochs {
-		return epoch >= 0
+		return true
 	}
 	return epoch >= booleEpoch-boolePriorWindowEpochs
 }

@@ -172,3 +172,8 @@ func (mv *messageValidator) handleValidationError(
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
 }
+
+func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
+	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
+	return pubsub.ValidationAccept
+}
