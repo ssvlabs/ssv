@@ -474,9 +474,9 @@ func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	ticker := time.NewTicker(time.Second)
-	registeredSubnets := commons.Subnets{}
-	registeredAlanSubnets := commons.Subnets{}
-	registeredBooleSubnets := commons.Subnets{}
+	prevRegisteredSubnets := commons.Subnets{}
+	prevRegisteredAlanSubnets := commons.Subnets{}
+	prevRegisteredBooleSubnets := commons.Subnets{}
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
@@ -484,31 +484,31 @@ func (n *p2pNetwork) UpdateSubnets() {
 		start := time.Now()
 
 		alanSubnets, booleSubnets := n.subscribedSubnetsForCurrentEpoch()
-		updatedSubnets := unionSubnets(alanSubnets, booleSubnets)
-		n.currentSubnets = updatedSubnets
+		currentSubnets := unionSubnets(alanSubnets, booleSubnets)
+		n.currentSubnets = currentSubnets
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]commons.Subnet, 0)
-		for _, subnet := range updatedSubnets.SubnetList() {
-			if !registeredSubnets.IsSet(subnet) {
+		for _, subnet := range currentSubnets.SubnetList() {
+			if !prevRegisteredSubnets.IsSet(subnet) {
 				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]commons.Subnet, 0)
-		for _, subnet := range registeredSubnets.SubnetList() {
-			if !updatedSubnets.IsSet(subnet) {
+		for _, subnet := range prevRegisteredSubnets.SubnetList() {
+			if !currentSubnets.IsSet(subnet) {
 				removedSubnets = append(removedSubnets, subnet)
 			}
 		}
 
-		addedAlanSubnets, removedAlanSubnets := registeredAlanSubnets.DiffSubnets(alanSubnets)
-		addedBooleSubnets, removedBooleSubnets := registeredBooleSubnets.DiffSubnets(booleSubnets)
+		addedAlanSubnets, removedAlanSubnets := prevRegisteredAlanSubnets.DiffSubnets(alanSubnets)
+		addedBooleSubnets, removedBooleSubnets := prevRegisteredBooleSubnets.DiffSubnets(booleSubnets)
 
-		registeredSubnets = updatedSubnets
-		registeredAlanSubnets = alanSubnets
-		registeredBooleSubnets = booleSubnets
+		prevRegisteredSubnets = currentSubnets
+		prevRegisteredAlanSubnets = alanSubnets
+		prevRegisteredBooleSubnets = booleSubnets
 
 		hasSubnetChanges := len(addedSubnets) > 0 || len(removedSubnets) > 0
 		hasAlanChanges := addedAlanSubnets.HasActive() || removedAlanSubnets.HasActive()
