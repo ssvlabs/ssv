@@ -57,7 +57,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		if n.cfg.NetworkConfig.BooleFork() {
 			val, exists := n.nodeStorage.ValidatorStore().Committee(committeeID)
 			if !exists {
-				return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
+				return fmt.Errorf("could not find share for committee %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 			}
 			topic = val.BooleSubnet.BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 		} else {
