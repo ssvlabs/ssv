@@ -23,7 +23,7 @@ func (n Network) String() string {
 
 const alanForkName = "alan"
 const boolePriorWindowEpochs = phase0.Epoch(1)
-const booleUnsubscriptionWindowSlots = phase0.Slot(1)
+const booleSubsequentWindowSlots = phase0.Slot(1)
 
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with fork name.
@@ -48,7 +48,7 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 }
 
 func (n Network) InBooleTransitionWindow(slot phase0.Slot) bool {
-	return n.inBoolePriorWindow(slot) || n.inBooleUnsubscriptionWindow(slot)
+	return n.inBoolePriorWindow(slot) || n.inBooleSubsequentWindow(slot)
 }
 
 func (n Network) inBoolePriorWindow(slot phase0.Slot) bool {
@@ -63,11 +63,11 @@ func (n Network) inBoolePriorWindow(slot phase0.Slot) bool {
 	return epoch >= booleEpoch-boolePriorWindowEpochs
 }
 
-func (n Network) inBooleUnsubscriptionWindow(slot phase0.Slot) bool {
-	if booleUnsubscriptionWindowSlots == 0 {
+func (n Network) inBooleSubsequentWindow(slot phase0.Slot) bool {
+	if booleSubsequentWindowSlots == 0 {
 		return false
 	}
 	start := n.FirstSlotAtEpoch(n.SSV.Forks.Boole)
-	end := start + booleUnsubscriptionWindowSlots
+	end := start + booleSubsequentWindowSlots
 	return slot >= start && slot < end
 }

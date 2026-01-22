@@ -39,7 +39,7 @@ func TestBooleForkInPriorWindow(t *testing.T) {
 	}
 }
 
-func TestBooleForkInUnsubscriptionWindow(t *testing.T) {
+func TestBooleForkInSubsequentWindow(t *testing.T) {
 	tests := []struct {
 		name     string
 		boole    phase0.Epoch
@@ -60,7 +60,7 @@ func TestBooleForkInUnsubscriptionWindow(t *testing.T) {
 				SSV:    &SSV{Forks: SSVForks{Boole: test.boole}},
 			}
 
-			require.Equal(t, test.expected, netCfg.inBooleUnsubscriptionWindow(test.slot))
+			require.Equal(t, test.expected, netCfg.inBooleSubsequentWindow(test.slot))
 		})
 	}
 }
