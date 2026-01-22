@@ -145,11 +145,12 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 // SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets
 // and the active committees/validators.
 func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
-	alanSubnets, booleSubnets := n.subscribedSubnetsWithFormats()
+	alanSubnets, booleSubnets := n.subscribedSubnetsForCurrentEpoch()
 	return unionSubnets(alanSubnets, booleSubnets)
 }
 
-func (n *p2pNetwork) subscribedSubnetsWithFormats() (commons.Subnets, commons.Subnets) {
+// TODO: Remove Alan subnets after the Boole fork transition logic is dropped.
+func (n *p2pNetwork) subscribedSubnetsForCurrentEpoch() (commons.Subnets, commons.Subnets) {
 	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
 	alanSubnets := commons.ZeroSubnets
 	booleSubnets := commons.ZeroSubnets

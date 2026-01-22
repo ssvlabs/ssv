@@ -42,23 +42,15 @@ func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
 	return epoch >= n.SSV.Forks.Boole
 }
 
-func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
-	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
-}
-
-func (n Network) BoolePriorWindowStartEpoch() phase0.Epoch {
-	booleEpoch := n.SSV.Forks.Boole
-	if booleEpoch <= boolePriorWindowEpochs {
-		return 0
-	}
-	return booleEpoch - boolePriorWindowEpochs
-}
-
 func (n Network) BooleForkInPriorWindow(epoch phase0.Epoch) bool {
 	if n.BooleForkAtEpoch(epoch) {
 		return false
 	}
-	return epoch >= n.BoolePriorWindowStartEpoch()
+	booleEpoch := n.SSV.Forks.Boole
+	if booleEpoch <= boolePriorWindowEpochs {
+		return epoch >= 0
+	}
+	return epoch >= booleEpoch-boolePriorWindowEpochs
 }
 
 func (n Network) BooleForkInUnsubscriptionWindow(epoch phase0.Epoch) bool {

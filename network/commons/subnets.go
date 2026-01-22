@@ -13,6 +13,8 @@ import (
 	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -117,12 +119,14 @@ func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
 }
 
 // Topics returns the available Alan and Boole topics for the given network.
-func Topics(networkName string) []string {
+func Topics(netCfg *networkconfig.Network) []string {
 	topics := make([]string, 0, SubnetsCount*2)
 	for i := uint64(0); i < SubnetsCount; i++ {
 		baseName := SubnetTopicID(i)
-		topics = append(topics, AlanTopicFullName(baseName))
-		topics = append(topics, TopicFullName(networkName, baseName))
+		if !netCfg.BooleFork() {
+			topics = append(topics, AlanTopicFullName(baseName))
+		}
+		topics = append(topics, TopicFullName(netCfg.Beacon.Name, baseName))
 	}
 	return topics
 }

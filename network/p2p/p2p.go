@@ -467,7 +467,10 @@ func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
 }
 
-// UpdateSubnets will update the registered subnets according to active validators.
+// UpdateSubnets refreshes discovery records and pubsub subscriptions based on
+// the current validator/committee set, including the fork transition where both
+// Alan and Boole topics may be active. Initial fixed-subnet subscriptions run
+// in Start (synchronously), and repeated subscriptions here are safe.
 func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
@@ -481,7 +484,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 	for ; true; <-ticker.C {
 		start := time.Now()
 
-		alanSubnets, booleSubnets := n.subscribedSubnetsWithFormats()
+		alanSubnets, booleSubnets := n.subscribedSubnetsForCurrentEpoch()
 		updatedSubnets := unionSubnets(alanSubnets, booleSubnets)
 		n.currentSubnets = updatedSubnets
 
@@ -534,20 +537,34 @@ func (n *p2pNetwork) UpdateSubnets() {
 		if addedAlanSubnets.HasActive() {
 			for _, addedSubnet := range addedAlanSubnets.SubnetList() {
 				if err := n.subscribeSubnet(addedSubnet, false); err != nil {
-					n.logger.Debug("could not subscribe to subnet", zap.Uint64("subnet", addedSubnet), zap.Error(err))
+					n.logger.Debug("could not subscribe to subnet",
+						zap.Uint64("subnet", addedSubnet),
+						zap.String("fork", "Alan"),
+						zap.Error(err),
+					)
 					errs = errors.Join(errs, err)
 				} else {
-					n.logger.Debug("subscribed to subnet", zap.Uint64("subnet", addedSubnet))
+					n.logger.Debug("subscribed to subnet",
+						zap.Uint64("subnet", addedSubnet),
+						zap.String("fork", "Alan"),
+					)
 				}
 			}
 		}
 		if addedBooleSubnets.HasActive() {
 			for _, addedSubnet := range addedBooleSubnets.SubnetList() {
 				if err := n.subscribeSubnet(addedSubnet, true); err != nil {
-					n.logger.Debug("could not subscribe to subnet", zap.Uint64("subnet", addedSubnet), zap.Error(err))
+					n.logger.Debug("could not subscribe to subnet",
+						zap.Uint64("subnet", addedSubnet),
+						zap.String("fork", "Boole"),
+						zap.Error(err),
+					)
 					errs = errors.Join(errs, err)
 				} else {
-					n.logger.Debug("subscribed to subnet", zap.Uint64("subnet", addedSubnet))
+					n.logger.Debug("subscribed to subnet",
+						zap.Uint64("subnet", addedSubnet),
+						zap.String("fork", "Boole"),
+					)
 				}
 			}
 		}
@@ -562,20 +579,34 @@ func (n *p2pNetwork) UpdateSubnets() {
 		if removedAlanSubnets.HasActive() {
 			for _, removedSubnet := range removedAlanSubnets.SubnetList() {
 				if err := n.unsubscribeSubnet(removedSubnet, false); err != nil {
-					n.logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
+					n.logger.Debug("could not unsubscribe from subnet",
+						zap.Uint64("subnet", removedSubnet),
+						zap.String("fork", "Alan"),
+						zap.Error(err),
+					)
 					errs = errors.Join(errs, err)
 				} else {
-					n.logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
+					n.logger.Debug("unsubscribed from subnet",
+						zap.Uint64("subnet", removedSubnet),
+						zap.String("fork", "Alan"),
+					)
 				}
 			}
 		}
 		if removedBooleSubnets.HasActive() {
 			for _, removedSubnet := range removedBooleSubnets.SubnetList() {
 				if err := n.unsubscribeSubnet(removedSubnet, true); err != nil {
-					n.logger.Debug("could not unsubscribe from subnet", zap.Uint64("subnet", removedSubnet), zap.Error(err))
+					n.logger.Debug("could not unsubscribe from subnet",
+						zap.Uint64("subnet", removedSubnet),
+						zap.Error(err),
+						zap.String("fork", "Boole"),
+					)
 					errs = errors.Join(errs, err)
 				} else {
-					n.logger.Debug("unsubscribed from subnet", zap.Uint64("subnet", removedSubnet))
+					n.logger.Debug("unsubscribed from subnet",
+						zap.Uint64("subnet", removedSubnet),
+						zap.String("fork", "Boole"),
+					)
 				}
 			}
 		}
