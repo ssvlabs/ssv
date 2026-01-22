@@ -6,7 +6,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -32,10 +31,6 @@ func newSubFilter(logger *zap.Logger, subsLimit int) SubFilter {
 
 // CanSubscribe returns true if the topic is of interest and we can subscribe to it
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	if commons.GetTopicBaseName(topic) == topic {
-		// not of the same fork
-		return false
-	}
 	return sf.Whitelisted(topic)
 }
 

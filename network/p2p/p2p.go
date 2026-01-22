@@ -7,7 +7,6 @@ import (
 	"maps"
 	"math/rand"
 	"slices"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -673,15 +672,15 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 	// Compute number of peers we're connected to for each subnet excluding peer with peerID.
 	subnetPeersExcluding := newSubnetPeers()
 	for topic, peers := range n.PeersByTopic() {
-		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
+		subnet, err := commons.ParseTopicSubnet(topic)
 		if err != nil {
 			n.logger.Error("failed to parse topic",
 				zap.String("topic", topic), zap.Error(err))
 			continue
 		}
-		if subnet < 0 || subnet >= commons.SubnetsCount {
+		if subnet >= commons.SubnetsCount {
 			n.logger.Error("invalid topic",
-				zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+				zap.String("topic", topic), zap.Uint64("subnet", subnet))
 			continue
 		}
 		for _, pID := range peers {

@@ -227,14 +227,6 @@ func (s *SSVShare) CommitteeSubnetAlan() uint64 {
 	return id
 }
 
-func (s *SSVShare) CommitteeTopicID() []string {
-	return []string{commons.SubnetTopicID(s.CommitteeSubnet())}
-}
-
-func (s *SSVShare) CommitteeTopicIDAlan() []string {
-	return []string{commons.SubnetTopicID(s.CommitteeSubnetAlan())}
-}
-
 func (s *SSVShare) HasQuorum(cnt uint64) bool {
 	return cnt >= s.Quorum()
 }

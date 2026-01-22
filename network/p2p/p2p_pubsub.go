@@ -51,16 +51,16 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	var topics []string
+	var topic string
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		if n.cfg.NetworkConfig.BooleFork() {
 			val, exists := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 			if !exists {
 				return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 			}
-			topics = []string{n.booleTopicFullName(val.Subnet)}
+			topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, val.Subnet)
 		} else {
-			topics = []string{n.alanTopicFullName(commons.CommitteeSubnetAlan(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])))}
+			topic = commons.AlanTopicFullName(commons.CommitteeSubnetAlan(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])))
 		}
 	} else {
 		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
@@ -68,21 +68,15 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
 		if n.cfg.NetworkConfig.BooleFork() {
-			for _, topic := range val.CommitteeTopicID() {
-				topics = append(topics, commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, topic))
-			}
+			topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, val.CommitteeSubnet())
 		} else {
-			for _, topic := range val.CommitteeTopicIDAlan() {
-				topics = append(topics, commons.AlanTopicFullName(topic))
-			}
+			topic = commons.AlanTopicFullName(val.CommitteeSubnetAlan())
 		}
 	}
 
-	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
-			return fmt.Errorf("could not broadcast msg: %w", err)
-		}
+	if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
+		n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
+		return fmt.Errorf("could not broadcast msg: %w", err)
 	}
 	return nil
 }
@@ -238,14 +232,6 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 	return nil
 }
 
-func (n *p2pNetwork) alanTopicFullName(subnet uint64) string {
-	return commons.AlanTopicFullName(commons.SubnetTopicID(subnet))
-}
-
-func (n *p2pNetwork) booleTopicFullName(subnet uint64) string {
-	return commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, commons.SubnetTopicID(subnet))
-}
-
 func (n *p2pNetwork) subscribeSubnetForCurrentEpoch(subnet uint64) error {
 	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
 	switch {
@@ -268,9 +254,9 @@ func (n *p2pNetwork) subscribeSubnet(subnet uint64, useBoole bool) error {
 	if subnet >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	topic := n.alanTopicFullName(subnet)
+	topic := commons.AlanTopicFullName(subnet)
 	if useBoole {
-		topic = n.booleTopicFullName(subnet)
+		topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, subnet)
 	}
 	if err := n.topicsCtrl.Subscribe(topic); err != nil {
 		return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
@@ -285,9 +271,9 @@ func (n *p2pNetwork) unsubscribeSubnet(subnet uint64, useBoole bool) error {
 	if subnet >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	topic := n.alanTopicFullName(subnet)
+	topic := commons.AlanTopicFullName(subnet)
 	if useBoole {
-		topic = n.booleTopicFullName(subnet)
+		topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, subnet)
 	}
 	if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
@@ -319,8 +305,8 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 
 func (n *p2pNetwork) committeeTopicSetForCurrentEpoch(share *ssvtypes.SSVShare) map[string]struct{} {
 	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
-	alanTopic := n.alanTopicFullName(share.CommitteeSubnetAlan())
-	booleTopic := n.booleTopicFullName(share.CommitteeSubnet())
+	alanTopic := commons.AlanTopicFullName(share.CommitteeSubnetAlan())
+	booleTopic := commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, share.CommitteeSubnet())
 	topicSet := make(map[string]struct{})
 
 	switch {

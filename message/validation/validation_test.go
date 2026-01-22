@@ -88,7 +88,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	slices.Sort(committee)
 
 	committeeID := shares.active.CommitteeID()
-	topicID := commons.TopicFullName(netCfg.Beacon.Name, shares.active.CommitteeTopicID()[0])
+	topicID := commons.TopicFullName(netCfg.Beacon.Name, shares.active.CommitteeSubnet())
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
@@ -270,7 +270,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		topic := commons.AlanTopicFullName(commons.SubnetTopicID(commons.CommitteeSubnetAlan(committeeID)))
+		topic := commons.AlanTopicFullName(commons.CommitteeSubnetAlan(committeeID))
 		msgSize := maxSignedMsgSize*2 + MessageOffset
 
 		pmsg := &pubsub.Message{
@@ -295,7 +295,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 
-		topic := commons.AlanTopicFullName(commons.SubnetTopicID(commons.CommitteeSubnetAlan(committeeID)))
+		topic := commons.AlanTopicFullName(commons.CommitteeSubnetAlan(committeeID))
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
 				Data:  bytes.Repeat([]byte{1}, 1+MessageOffset),
@@ -1610,25 +1610,25 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}{
 			{
 				name:  "Alan topic / Alan config",
-				topic: commons.AlanTopicFullName(shares.active.CommitteeTopicIDAlan()[0]),
+				topic: commons.AlanTopicFullName(shares.active.CommitteeSubnetAlan()),
 				cfg:   alanNetCfg,
 				err:   nil,
 			},
 			{
 				name:  "Alan topic / network topology config",
-				topic: commons.AlanTopicFullName(shares.active.CommitteeTopicIDAlan()[0]),
+				topic: commons.AlanTopicFullName(shares.active.CommitteeSubnetAlan()),
 				cfg:   networkTopologyNetCfg,
 				err:   ErrIncorrectTopic,
 			},
 			{
 				name:  "network topology topic / Alan config",
-				topic: commons.TopicFullName(netCfg.Beacon.Name, shares.active.CommitteeTopicID()[0]),
+				topic: commons.TopicFullName(netCfg.Beacon.Name, shares.active.CommitteeSubnet()),
 				cfg:   alanNetCfg,
 				err:   ErrIncorrectTopic,
 			},
 			{
 				name:  "network topology topic / network topology config",
-				topic: commons.TopicFullName(netCfg.Beacon.Name, shares.active.CommitteeTopicID()[0]),
+				topic: commons.TopicFullName(netCfg.Beacon.Name, shares.active.CommitteeSubnet()),
 				cfg:   networkTopologyNetCfg,
 				err:   nil,
 			},

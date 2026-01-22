@@ -221,8 +221,8 @@ func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, commi
 	currentEpoch := netCfg.EstimatedCurrentEpoch()
 
 	for _, committee := range committees {
-		booleTopic := commons.TopicFullName(netCfg.Beacon.Name, commons.SubnetTopicID(committee.Subnet))
-		alanTopic := commons.AlanTopicFullName(commons.SubnetTopicID(committee.SubnetAlan))
+		booleTopic := commons.TopicFullName(netCfg.Beacon.Name, committee.Subnet)
+		alanTopic := commons.AlanTopicFullName(committee.SubnetAlan)
 
 		switch {
 		case netCfg.BooleForkAtEpoch(currentEpoch):
@@ -260,10 +260,14 @@ func formatInvalidMessageStats(filtered []*topicScoreSnapshot) string {
 		if i > 0 {
 			b.WriteString(" ")
 		}
+		label := snapshot.topic
+		if subnet, err := commons.ParseTopicSubnet(snapshot.topic); err == nil {
+			label = strconv.FormatUint(subnet, 10)
+		}
 		fmt.Fprintf(
 			&b,
 			"%s=%s,%s,%s,%s",
-			commons.GetTopicBaseName(snapshot.topic),
+			label,
 			fmtFloat(snapshot.TimeInMesh.Seconds()),
 			fmtFloat(snapshot.FirstMessageDeliveries),
 			fmtFloat(snapshot.MeshMessageDeliveries),

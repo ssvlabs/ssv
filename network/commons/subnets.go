@@ -6,9 +6,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"math/big"
 	"math/bits"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -23,11 +23,6 @@ const (
 
 	byteCount = SubnetsCount / 8
 
-	UnknownSubnetId = math.MaxUint64
-
-	// UnknownSubnet is used when a validator public key is invalid
-	UnknownSubnet = "unknown"
-
 	alanTopicPrefix = "ssv.v2"
 	topicRoot       = "/ssv"
 	booleTopicFork  = "boole"
@@ -36,37 +31,31 @@ const (
 // BigIntSubnetsCount is the big.Int representation of SubnetsCount
 var bigIntSubnetsCount = new(big.Int).SetUint64(SubnetsCount)
 
-// SubnetTopicID returns the topic to use for the given subnet
-func SubnetTopicID(subnet uint64) string {
-	if subnet == UnknownSubnetId {
-		return UnknownSubnet
-	}
-	return fmt.Sprintf("%d", subnet)
-}
-
 // AlanTopicFullName returns the Alan topic full name, including prefix.
-func AlanTopicFullName(baseName string) string {
-	return fmt.Sprintf("%s.%s", alanTopicPrefix, baseName)
+func AlanTopicFullName(subnet uint64) string {
+	return fmt.Sprintf("%s.%d", alanTopicPrefix, subnet)
 }
 
 // TopicFullName returns the topic full name, including prefix.
-func TopicFullName(networkName, baseName string) string {
-	return fmt.Sprintf("%s/%s/%s/%s", topicRoot, networkName, booleTopicFork, baseName)
+func TopicFullName(networkName string, subnet uint64) string {
+	return fmt.Sprintf("%s/%s/%s/%d", topicRoot, networkName, booleTopicFork, subnet)
 }
 
-// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix.
-func GetTopicBaseName(topicName string) string {
+// ParseTopicSubnet extracts the subnet number from a full topic name.
+func ParseTopicSubnet(topicName string) (uint64, error) {
 	if strings.HasPrefix(topicName, alanTopicPrefix+".") {
-		return strings.TrimPrefix(topicName, alanTopicPrefix+".")
+		trimmed := strings.TrimPrefix(topicName, alanTopicPrefix+".")
+		return strconv.ParseUint(trimmed, 10, 64)
 	}
 	if strings.HasPrefix(topicName, topicRoot+"/") {
 		remainder := strings.TrimPrefix(topicName, topicRoot+"/")
 		parts := strings.SplitN(remainder, "/", 3)
-		if len(parts) == 3 && parts[1] == booleTopicFork && parts[2] != "" {
-			return parts[2]
+		if len(parts) != 3 || parts[1] != booleTopicFork || parts[2] == "" {
+			return 0, fmt.Errorf("invalid topic format: %s", topicName)
 		}
+		return strconv.ParseUint(parts[2], 10, 64)
 	}
-	return topicName
+	return 0, fmt.Errorf("invalid topic format: %s", topicName)
 }
 
 var bigIntPool = sync.Pool{
@@ -122,11 +111,10 @@ func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
 func Topics(netCfg *networkconfig.Network) []string {
 	topics := make([]string, 0, SubnetsCount*2)
 	for i := uint64(0); i < SubnetsCount; i++ {
-		baseName := SubnetTopicID(i)
 		if !netCfg.BooleFork() {
-			topics = append(topics, AlanTopicFullName(baseName))
+			topics = append(topics, AlanTopicFullName(i))
 		}
-		topics = append(topics, TopicFullName(netCfg.Beacon.Name, baseName))
+		topics = append(topics, TopicFullName(netCfg.Beacon.Name, i))
 	}
 	return topics
 }

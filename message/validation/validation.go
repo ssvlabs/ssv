@@ -228,10 +228,8 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	// Rule: Check if message was sent in the correct topic
 	var messageTopicNames []string
 	currentEpoch := mv.netCfg.EstimatedCurrentEpoch()
-	alanTopic := commons.SubnetTopicID(committeeInfo.subnetAlan)
-	booleTopic := commons.SubnetTopicID(committeeInfo.subnet)
-	alanTopicFullName := commons.AlanTopicFullName(alanTopic)
-	booleTopicFullName := commons.TopicFullName(mv.netCfg.Beacon.Name, booleTopic)
+	alanTopicFullName := commons.AlanTopicFullName(committeeInfo.subnetAlan)
+	booleTopicFullName := commons.TopicFullName(mv.netCfg.Beacon.Name, committeeInfo.subnet)
 	unionTopicNames := []string{alanTopicFullName, booleTopicFullName}
 	switch {
 	case mv.netCfg.BooleForkInPriorWindow(currentEpoch), mv.netCfg.BooleForkInUnsubscriptionWindow(currentEpoch):
