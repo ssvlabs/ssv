@@ -339,12 +339,12 @@ func (s *Syncer) selfSubnets() networkcommons.Subnets {
 	for _, v := range myValidators {
 		switch {
 		case s.netCfg.BooleForkAtEpoch(currentEpoch):
-			mySubnets.Set(v.CommitteeSubnet())
+			mySubnets.Set(v.BooleCommitteeSubnet())
 		case s.netCfg.BooleForkInPriorWindow(currentEpoch):
-			mySubnets.Set(v.CommitteeSubnetAlan())
-			mySubnets.Set(v.CommitteeSubnet())
+			mySubnets.Set(v.AlanCommitteeSubnet())
+			mySubnets.Set(v.BooleCommitteeSubnet())
 		default:
-			mySubnets.Set(v.CommitteeSubnetAlan())
+			mySubnets.Set(v.AlanCommitteeSubnet())
 		}
 	}
 
@@ -355,10 +355,10 @@ func (s *Syncer) shareInOwnSubnets(share *ssvtypes.SSVShare, ownSubnets networkc
 	currentEpoch := s.netCfg.EstimatedCurrentEpoch()
 	switch {
 	case s.netCfg.BooleForkAtEpoch(currentEpoch):
-		return ownSubnets.IsSet(share.CommitteeSubnet())
+		return ownSubnets.IsSet(share.BooleCommitteeSubnet())
 	case s.netCfg.BooleForkInPriorWindow(currentEpoch):
-		return ownSubnets.IsSet(share.CommitteeSubnetAlan()) || ownSubnets.IsSet(share.CommitteeSubnet())
+		return ownSubnets.IsSet(share.AlanCommitteeSubnet()) || ownSubnets.IsSet(share.BooleCommitteeSubnet())
 	default:
-		return ownSubnets.IsSet(share.CommitteeSubnetAlan())
+		return ownSubnets.IsSet(share.AlanCommitteeSubnet())
 	}
 }

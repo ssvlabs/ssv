@@ -70,9 +70,9 @@ type HostProvider interface {
 }
 
 type statusWithSubnet struct {
-	status     committeeSubscriptionStatus
-	subnet     uint64
-	subnetAlan uint64
+	status      committeeSubscriptionStatus
+	booleSubnet commons.Subnet
+	alanSubnet  commons.Subnet
 }
 
 // p2pNetwork implements network.P2PNetwork
@@ -488,7 +488,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 		n.currentSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
-		addedSubnets := make([]uint64, 0)
+		addedSubnets := make([]commons.Subnet, 0)
 		for _, subnet := range updatedSubnets.SubnetList() {
 			if !registeredSubnets.IsSet(subnet) {
 				addedSubnets = append(addedSubnets, subnet)
@@ -496,7 +496,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 		}
 
 		// Compute the not anymore registered subnets.
-		removedSubnets := make([]uint64, 0)
+		removedSubnets := make([]commons.Subnet, 0)
 		for _, subnet := range registeredSubnets.SubnetList() {
 			if !updatedSubnets.IsSet(subnet) {
 				removedSubnets = append(removedSubnets, subnet)
@@ -537,14 +537,14 @@ func (n *p2pNetwork) UpdateSubnets() {
 			for _, addedSubnet := range addedAlanSubnets.SubnetList() {
 				if err := n.subscribeSubnet(addedSubnet, false); err != nil {
 					n.logger.Debug("could not subscribe to subnet",
-						zap.Uint64("subnet", addedSubnet),
+						fields.Subnet(addedSubnet),
 						zap.String("fork", "Alan"),
 						zap.Error(err),
 					)
 					errs = errors.Join(errs, err)
 				} else {
 					n.logger.Debug("subscribed to subnet",
-						zap.Uint64("subnet", addedSubnet),
+						fields.Subnet(addedSubnet),
 						zap.String("fork", "Alan"),
 					)
 				}
@@ -554,14 +554,14 @@ func (n *p2pNetwork) UpdateSubnets() {
 			for _, addedSubnet := range addedBooleSubnets.SubnetList() {
 				if err := n.subscribeSubnet(addedSubnet, true); err != nil {
 					n.logger.Debug("could not subscribe to subnet",
-						zap.Uint64("subnet", addedSubnet),
+						fields.Subnet(addedSubnet),
 						zap.String("fork", "Boole"),
 						zap.Error(err),
 					)
 					errs = errors.Join(errs, err)
 				} else {
 					n.logger.Debug("subscribed to subnet",
-						zap.Uint64("subnet", addedSubnet),
+						fields.Subnet(addedSubnet),
 						zap.String("fork", "Boole"),
 					)
 				}
@@ -579,14 +579,14 @@ func (n *p2pNetwork) UpdateSubnets() {
 			for _, removedSubnet := range removedAlanSubnets.SubnetList() {
 				if err := n.unsubscribeSubnet(removedSubnet, false); err != nil {
 					n.logger.Debug("could not unsubscribe from subnet",
-						zap.Uint64("subnet", removedSubnet),
+						fields.Subnet(removedSubnet),
 						zap.String("fork", "Alan"),
 						zap.Error(err),
 					)
 					errs = errors.Join(errs, err)
 				} else {
 					n.logger.Debug("unsubscribed from subnet",
-						zap.Uint64("subnet", removedSubnet),
+						fields.Subnet(removedSubnet),
 						zap.String("fork", "Alan"),
 					)
 				}
@@ -596,14 +596,14 @@ func (n *p2pNetwork) UpdateSubnets() {
 			for _, removedSubnet := range removedBooleSubnets.SubnetList() {
 				if err := n.unsubscribeSubnet(removedSubnet, true); err != nil {
 					n.logger.Debug("could not unsubscribe from subnet",
-						zap.Uint64("subnet", removedSubnet),
+						fields.Subnet(removedSubnet),
 						zap.Error(err),
 						zap.String("fork", "Boole"),
 					)
 					errs = errors.Join(errs, err)
 				} else {
 					n.logger.Debug("unsubscribed from subnet",
-						zap.Uint64("subnet", removedSubnet),
+						fields.Subnet(removedSubnet),
 						zap.String("fork", "Boole"),
 					)
 				}
@@ -678,16 +678,16 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 				zap.String("topic", topic), zap.Error(err))
 			continue
 		}
-		if subnet >= commons.SubnetsCount {
+		if uint64(subnet) >= commons.SubnetsCount {
 			n.logger.Error("invalid topic",
-				zap.String("topic", topic), zap.Uint64("subnet", subnet))
+				zap.String("topic", topic), fields.Subnet(subnet))
 			continue
 		}
 		for _, pID := range peers {
 			if pID == peerID {
 				continue
 			}
-			subnetPeersExcluding[subnet]++
+			subnetPeersExcluding[uint64(subnet)]++
 		}
 	}
 
@@ -730,10 +730,9 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 	)
 	score := float64(0)
 
-	for i := range a {
-		// #nosec G115 -- subnet index is never negative
-		if ours.IsSet(uint64(i)) && theirs.IsSet(uint64(i)) {
-			switch a[i] {
+	for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
+		if ours.IsSet(subnet) && theirs.IsSet(subnet) {
+			switch a[subnet] {
 			case 0:
 				score += deadSubnetPriority
 			case 1:

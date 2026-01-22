@@ -182,8 +182,8 @@ func CustomNode(
 	}
 	if setSubnets {
 		subnetsVec := bitfield.NewBitvector128()
-		for i := uint64(0); i < commons.SubnetsCount; i++ {
-			subnetsVec.SetBitAt(i, subnets.IsSet(i))
+		for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
+			subnetsVec.SetBitAt(uint64(subnet), subnets.IsSet(subnet))
 		}
 		record.Set(enr.WithEntry("subnets", &subnetsVec))
 	}

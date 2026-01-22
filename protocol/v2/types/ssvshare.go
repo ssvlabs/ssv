@@ -53,10 +53,10 @@ type SSVShare struct {
 
 	// committeeID is a cached value for committee ID so we don't recompute it every time.
 	committeeID atomic.Pointer[spectypes.CommitteeID]
-	// committeeSubnet is a cached value for committee subnet so we don't recompute it every time.
-	committeeSubnet atomic.Pointer[uint64]
-	// committeeSubnetAlan is a cached value for committee subnet in Alan fork so we don't recompute it every time.
-	committeeSubnetAlan atomic.Pointer[uint64]
+	// booleCommitteeSubnet is a cached value for committee subnet so we don't recompute it every time.
+	booleCommitteeSubnet atomic.Pointer[commons.Subnet]
+	// alanCommitteeSubnet is a cached value for committee subnet in Alan fork so we don't recompute it every time.
+	alanCommitteeSubnet atomic.Pointer[commons.Subnet]
 
 	// minParticipationEpoch is the epoch at which the validator can start participating.
 	// This is set on registration and on every reactivation.
@@ -203,28 +203,26 @@ func (s *SSVShare) OperatorIDs() []spectypes.OperatorID {
 	return ids
 }
 
-// CommitteeSubnet safely retrieves or computes committee subnet.
-func (s *SSVShare) CommitteeSubnet() uint64 {
-	if ptr := s.committeeSubnet.Load(); ptr != nil {
+// BooleCommitteeSubnet safely retrieves or computes committee subnet for Boole fork.
+func (s *SSVShare) BooleCommitteeSubnet() commons.Subnet {
+	if ptr := s.booleCommitteeSubnet.Load(); ptr != nil {
 		return *ptr
 	}
 
-	id := commons.CommitteeSubnet(s.OperatorIDs())
-
-	s.committeeSubnet.Store(&id)
-	return id
+	subnet := commons.BooleCommitteeSubnet(s.OperatorIDs())
+	s.booleCommitteeSubnet.Store(&subnet)
+	return subnet
 }
 
-// CommitteeSubnetAlan safely retrieves or computes committee subnet for Alan fork
-func (s *SSVShare) CommitteeSubnetAlan() uint64 {
-	if ptr := s.committeeSubnetAlan.Load(); ptr != nil {
+// AlanCommitteeSubnet safely retrieves or computes committee subnet for Alan fork.
+func (s *SSVShare) AlanCommitteeSubnet() commons.Subnet {
+	if ptr := s.alanCommitteeSubnet.Load(); ptr != nil {
 		return *ptr
 	}
 
-	id := commons.CommitteeSubnetAlan(s.CommitteeID())
-
-	s.committeeSubnetAlan.Store(&id)
-	return id
+	subnet := commons.AlanCommitteeSubnet(s.CommitteeID())
+	s.alanCommitteeSubnet.Store(&subnet)
+	return subnet
 }
 
 func (s *SSVShare) HasQuorum(cnt uint64) bool {

@@ -4,6 +4,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
@@ -13,8 +14,8 @@ type CommitteeInfo struct {
 	committee        []spectypes.OperatorID
 	signerIndices    map[spectypes.OperatorID]int
 	validatorIndices []phase0.ValidatorIndex
-	subnet           uint64
-	subnetAlan       uint64
+	subnet           commons.Subnet
+	subnetAlan       commons.Subnet
 }
 
 func committeeInfoFromCommittee(committee *registrystorage.Committee) CommitteeInfo {
@@ -28,8 +29,8 @@ func committeeInfoFromCommittee(committee *registrystorage.Committee) CommitteeI
 		committee:        committee.Operators,
 		signerIndices:    signerIndices,
 		validatorIndices: committee.Indices,
-		subnet:           committee.Subnet,
-		subnetAlan:       committee.SubnetAlan,
+		subnet:           committee.BooleSubnet,
+		subnetAlan:       committee.AlanSubnet,
 	}
 }
 
@@ -44,8 +45,8 @@ func committeeInfoFromShare(share *ssvtypes.SSVShare, validatorIndices []phase0.
 		committee:        share.OperatorIDs(),
 		signerIndices:    signerIndices,
 		validatorIndices: validatorIndices,
-		subnet:           share.CommitteeSubnet(),
-		subnetAlan:       share.CommitteeSubnetAlan(),
+		subnet:           share.BooleCommitteeSubnet(),
+		subnetAlan:       share.AlanCommitteeSubnet(),
 	}
 }
 

@@ -73,12 +73,12 @@ func (n *p2pNetwork) startDiscovery() error {
 					zap.String("topic", topic), zap.Error(err))
 				continue
 			}
-			if subnet >= commons.SubnetsCount {
+			if uint64(subnet) >= commons.SubnetsCount {
 				n.logger.Error("invalid topic",
-					zap.String("topic", topic), zap.Uint64("subnet", subnet))
+					zap.String("topic", topic), fields.Subnet(subnet))
 				continue
 			}
-			currentSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+			currentSubnetPeers[uint64(subnet)] = uint16(len(peers)) //nolint: gosec
 		}
 
 		n.logger.Debug("selecting discovered peers",

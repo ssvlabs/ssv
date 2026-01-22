@@ -8,11 +8,11 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 )
 
-// createSubnets creates a commons.Subnets with the specified subnets active
-func createSubnets(activeSubnets ...uint64) commons.Subnets {
+// createSubnets creates a commons.Subnets with the specified subnets active.
+func createSubnets(activeSubnets ...commons.Subnet) commons.Subnets {
 	subnets := commons.Subnets{}
 	for _, subnet := range activeSubnets {
-		if subnet < commons.SubnetsCount {
+		if uint64(subnet) < commons.SubnetsCount {
 			subnets.Set(subnet)
 		}
 	}
@@ -154,7 +154,18 @@ func TestSubnetPeers_Score_MixedSubnets(t *testing.T) {
 	// Test case with a mix of subnet states
 
 	// Our node is subscribed to subnets 0-9
-	ourSubnets := createSubnets(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+	ourSubnets := createSubnets(
+		commons.Subnet(0),
+		commons.Subnet(1),
+		commons.Subnet(2),
+		commons.Subnet(3),
+		commons.Subnet(4),
+		commons.Subnet(5),
+		commons.Subnet(6),
+		commons.Subnet(7),
+		commons.Subnet(8),
+		commons.Subnet(9),
+	)
 
 	// We have different peer counts in each subnet:
 	// - Dead (0 peers): 0, 1

@@ -14,27 +14,27 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-func BenchmarkCommitteeSubnet(b *testing.B) {
+func BenchmarkBooleCommittee(b *testing.B) {
 	committee := []spectypes.OperatorID{1, 2, 3, 4, 5, 6, 7, 8}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		CommitteeSubnet(committee)
+		BooleCommitteeSubnet(committee)
 	}
 }
 
-func BenchmarkCommitteeSubnetAlan(b *testing.B) {
+func BenchmarkAlanCommitteeSubnet(b *testing.B) {
 	cid := [32]byte{}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		CommitteeSubnetAlan(cid)
+		AlanCommitteeSubnet(cid)
 	}
 }
 
-// BenchmarkCommitteeSubnetAlan_PrevImpl benchmarks previous implementation of committee calculation without allocations.
+// BenchmarkAlanCommitteeSubnet_PrevImpl benchmarks previous implementation of committee calculation without allocations.
 // The implementation has been removed in favor of sync pool, but it's kept in this benchmark to allow comparison.
-func BenchmarkCommitteeSubnetAlan_PrevImpl(b *testing.B) {
+func BenchmarkAlanCommitteeSubnet_PrevImpl(b *testing.B) {
 	prevImpl := func(bigInt *big.Int, cid spectypes.CommitteeID) {
 		bigInt.SetBytes(cid[:])
 		bigInt.Mod(bigInt, bigIntSubnetsCount)
@@ -49,10 +49,10 @@ func BenchmarkCommitteeSubnetAlan_PrevImpl(b *testing.B) {
 	}
 }
 
-func TestCommitteeSubnet(t *testing.T) {
+func TestBooleCommitteeSubnet(t *testing.T) {
 	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
 
-	t.Run("after Alan fork", func(t *testing.T) {
+	t.Run("Boole", func(t *testing.T) {
 		operators := []spectypes.OperatorID{
 			1, // sha256(0100000000000000)=7c9fa136d4413fa6173637e883b6998d32e1d675f88cddff9dcbcf331820f4b8
 			2, // sha256(0200000000000000)=d86e8112f3c4c4442126f8e9f44f16867da487f29052bf91b810457db34209a4
@@ -60,7 +60,7 @@ func TestCommitteeSubnet(t *testing.T) {
 			4, // sha256(0400000000000000)=f0a0278e4372459cca6159cd5e71cfee638302a7b9ca9b05c34181ac0a65ac5d
 		}
 
-		actual := CommitteeSubnet(operators)
+		actual := BooleCommitteeSubnet(operators)
 
 		hashes := make([][32]byte, 0, len(operators))
 		for _, operator := range operators {
@@ -73,22 +73,22 @@ func TestCommitteeSubnet(t *testing.T) {
 		}
 
 		lowestHash := hashes[2] // pre-calculated (lowest hash is 35be322d094f9d154a8aba4733b8497f180353bd7ae7b0a15f90b586b549f28b)
-		expected := new(big.Int).Mod(new(big.Int).SetBytes(lowestHash[:]), bigIntSubnetsCount).Uint64()
+		expected := Subnet(new(big.Int).Mod(new(big.Int).SetBytes(lowestHash[:]), bigIntSubnetsCount).Uint64())
 
 		require.Equal(t, expected, actual)
 	})
 
-	t.Run("in Alan fork", func(t *testing.T) {
+	t.Run("Alan", func(t *testing.T) {
 		committeeID := spectypes.CommitteeID(bytes.Repeat([]byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}, 4))
 
-		actual := CommitteeSubnetAlan(committeeID)
-		expected := uint64(committeeID[31] % 128) // 0xef % 128 == 0xef % 0x80 == 0x6f
+		actual := AlanCommitteeSubnet(committeeID)
+		expected := Subnet(committeeID[31] % 128) // 0xef % 128 == 0xef % 0x80 == 0x6f
 
 		require.Equal(t, expected, actual)
 	})
 }
 
-func TestCommitteeSubnetAlan(t *testing.T) {
+func TestAlanCommitteeSubnet(t *testing.T) {
 	require.Equal(t, SubnetsCount, int(bigIntSubnetsCount.Uint64()))
 
 	bigInt := new(big.Int)
@@ -98,16 +98,15 @@ func TestCommitteeSubnetAlan(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Get result from CommitteeSubnetAlan
-		actual := CommitteeSubnetAlan(cid)
+		actual := AlanCommitteeSubnet(cid)
 
 		f := func(out *big.Int, cid spectypes.CommitteeID) {
 			out.SetBytes(cid[:])
 			out.Mod(out, bigIntSubnetsCount)
 		}
-		// Get expected result
+
 		f(bigInt, cid)
-		expected := bigInt.Uint64()
+		expected := Subnet(bigInt.Uint64())
 
 		require.Equal(t, expected, actual)
 	}
@@ -185,11 +184,11 @@ func TestSubnetsList(t *testing.T) {
 
 	require.Lenf(t, subnetList, SubnetsCount, "Expected %d subnets, got %d", SubnetsCount, len(subnetList))
 	for i := uint64(0); i < SubnetsCount; i++ {
-		require.EqualValuesf(t, i, subnetList[i], "Expected subnet index %d, got %d", i, subnetList[i])
+		require.EqualValuesf(t, Subnet(i), subnetList[i], "Expected subnet index %d, got %d", i, subnetList[i])
 	}
 
 	// Test Case 3: Random subnets set
-	expected := []uint64{0, 15, 16, 31, 63, 64, 127}
+	expected := []Subnet{0, 15, 16, 31, 63, 64, 127}
 
 	subnets = ZeroSubnets
 	for _, v := range expected {
@@ -212,7 +211,7 @@ func TestSubnetsList(t *testing.T) {
 	subnets.Set(42)
 	subnetList = subnets.SubnetList()
 	require.Lenf(t, subnetList, 1, "Expected 1 subnet, got %d", len(subnetList))
-	require.EqualValuesf(t, 42, subnetList[0], "Expected subnet [42], got %v", subnetList)
+	require.EqualValuesf(t, Subnet(42), subnetList[0], "Expected subnet [42], got %v", subnetList)
 
 	// Test Case 6: Clearing subnets
 	subnets = AllSubnets
@@ -221,7 +220,7 @@ func TestSubnetsList(t *testing.T) {
 	subnets.Clear(127)
 	subnetList = subnets.SubnetList()
 	require.Lenf(t, subnetList, SubnetsCount-3, "Expected %d subnets, got %d", SubnetsCount-3, len(subnetList))
-	for _, idx := range []int{0, 64, 127} {
+	for _, idx := range []Subnet{0, 64, 127} {
 		require.NotContainsf(t, subnetList, idx, "Subnet %d should have been cleared", idx)
 	}
 }

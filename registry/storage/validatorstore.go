@@ -13,6 +13,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -53,12 +54,12 @@ type SelfValidatorStore interface {
 }
 
 type Committee struct {
-	ID         spectypes.CommitteeID
-	Operators  []spectypes.OperatorID
-	Shares     []*types.SSVShare
-	Indices    []phase0.ValidatorIndex
-	Subnet     uint64
-	SubnetAlan uint64
+	ID          spectypes.CommitteeID
+	Operators   []spectypes.OperatorID
+	Shares      []*types.SSVShare
+	Indices     []phase0.ValidatorIndex
+	BooleSubnet commons.Subnet
+	AlanSubnet  commons.Subnet
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
@@ -619,8 +620,8 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 
 	// Some test shares might have zero length committee
 	if len(shares[0].Committee) > 0 {
-		committee.Subnet = shares[0].CommitteeSubnet()
-		committee.SubnetAlan = shares[0].CommitteeSubnetAlan()
+		committee.BooleSubnet = shares[0].BooleCommitteeSubnet()
+		committee.AlanSubnet = shares[0].AlanCommitteeSubnet()
 	}
 
 	return committee

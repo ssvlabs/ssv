@@ -53,14 +53,15 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	var topic string
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		committeeID := spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
 		if n.cfg.NetworkConfig.BooleFork() {
-			val, exists := n.nodeStorage.ValidatorStore().Committee(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
+			val, exists := n.nodeStorage.ValidatorStore().Committee(committeeID)
 			if !exists {
 				return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 			}
-			topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, val.Subnet)
+			topic = val.BooleSubnet.BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 		} else {
-			topic = commons.AlanTopicFullName(commons.CommitteeSubnetAlan(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])))
+			topic = commons.AlanCommitteeSubnet(committeeID).AlanTopic()
 		}
 	} else {
 		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
@@ -68,9 +69,9 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
 		if n.cfg.NetworkConfig.BooleFork() {
-			topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, val.CommitteeSubnet())
+			topic = val.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 		} else {
-			topic = commons.AlanTopicFullName(val.CommitteeSubnetAlan())
+			topic = val.AlanCommitteeSubnet().AlanTopic()
 		}
 	}
 
@@ -86,7 +87,7 @@ func (n *p2pNetwork) SubscribeAll() error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	n.persistentSubnets = commons.AllSubnets
-	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
+	for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
 		if err := n.subscribeSubnetForCurrentEpoch(subnet); err != nil {
 			return err
 		}
@@ -112,7 +113,8 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 		// check if any of subnets we've generated in this random set is already being used by us
 		randSubnetAlreadyInUse := false
 		for _, subnet := range randomSubnets {
-			if n.currentSubnets.IsSet(uint64(subnet)) {
+			subnetID := commons.Subnet(subnet)
+			if n.currentSubnets.IsSet(subnetID) {
 				randSubnetAlreadyInUse = true
 				break
 			}
@@ -124,13 +126,13 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 	}
 
 	for _, subnet := range randomSubnets {
-		if err := n.subscribeSubnetForCurrentEpoch(uint64(subnet)); err != nil {
+		if err := n.subscribeSubnetForCurrentEpoch(commons.Subnet(subnet)); err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
 	}
 
 	for _, subnet := range randomSubnets {
-		n.persistentSubnets.Set(uint64(subnet))
+		n.persistentSubnets.Set(commons.Subnet(subnet))
 	}
 
 	return nil
@@ -162,12 +164,12 @@ func (n *p2pNetwork) subscribedSubnetsForCurrentEpoch() (commons.Subnets, common
 	n.subscribedCommittees.Range(func(encodedCommittee string, statusAndSubnet statusWithSubnet) bool {
 		switch {
 		case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
-			booleSubnets.Set(statusAndSubnet.subnet)
+			booleSubnets.Set(statusAndSubnet.booleSubnet)
 		case n.cfg.NetworkConfig.BooleForkInPriorWindow(currentEpoch):
-			alanSubnets.Set(statusAndSubnet.subnetAlan)
-			booleSubnets.Set(statusAndSubnet.subnet)
+			alanSubnets.Set(statusAndSubnet.alanSubnet)
+			booleSubnets.Set(statusAndSubnet.booleSubnet)
 		default:
-			alanSubnets.Set(statusAndSubnet.subnetAlan)
+			alanSubnets.Set(statusAndSubnet.alanSubnet)
 		}
 		return true
 	})
@@ -207,9 +209,9 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 	cid := share.CommitteeID()
 
 	statusToSet := statusWithSubnet{
-		status:     committeeSubscriptionStatusSubscribing,
-		subnet:     share.CommitteeSubnet(),
-		subnetAlan: share.CommitteeSubnetAlan(),
+		status:      committeeSubscriptionStatusSubscribing,
+		booleSubnet: share.BooleCommitteeSubnet(),
+		alanSubnet:  share.AlanCommitteeSubnet(),
 	}
 	currentStatus, found := n.subscribedCommittees.GetOrSet(string(cid[:]), statusToSet)
 	if found && currentStatus.status != committeeSubscriptionStatusInactive {
@@ -232,7 +234,7 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 	return nil
 }
 
-func (n *p2pNetwork) subscribeSubnetForCurrentEpoch(subnet uint64) error {
+func (n *p2pNetwork) subscribeSubnetForCurrentEpoch(subnet commons.Subnet) error {
 	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
 	switch {
 	case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
@@ -247,16 +249,16 @@ func (n *p2pNetwork) subscribeSubnetForCurrentEpoch(subnet uint64) error {
 	}
 }
 
-func (n *p2pNetwork) subscribeSubnet(subnet uint64, useBoole bool) error {
+func (n *p2pNetwork) subscribeSubnet(subnet commons.Subnet, useBoole bool) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if subnet >= commons.SubnetsCount {
+	if uint64(subnet) >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	topic := commons.AlanTopicFullName(subnet)
+	topic := subnet.AlanTopic()
 	if useBoole {
-		topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, subnet)
+		topic = subnet.BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 	}
 	if err := n.topicsCtrl.Subscribe(topic); err != nil {
 		return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
@@ -264,16 +266,16 @@ func (n *p2pNetwork) subscribeSubnet(subnet uint64, useBoole bool) error {
 	return nil
 }
 
-func (n *p2pNetwork) unsubscribeSubnet(subnet uint64, useBoole bool) error {
+func (n *p2pNetwork) unsubscribeSubnet(subnet commons.Subnet, useBoole bool) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if subnet >= commons.SubnetsCount {
+	if uint64(subnet) >= commons.SubnetsCount {
 		return fmt.Errorf("invalid subnet %d", subnet)
 	}
-	topic := commons.AlanTopicFullName(subnet)
+	topic := subnet.AlanTopic()
 	if useBoole {
-		topic = commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, subnet)
+		topic = subnet.BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 	}
 	if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
@@ -305,8 +307,8 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 
 func (n *p2pNetwork) committeeTopicSetForCurrentEpoch(share *ssvtypes.SSVShare) map[string]struct{} {
 	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
-	alanTopic := commons.AlanTopicFullName(share.CommitteeSubnetAlan())
-	booleTopic := commons.TopicFullName(n.cfg.NetworkConfig.Beacon.Name, share.CommitteeSubnet())
+	alanTopic := share.AlanCommitteeSubnet().AlanTopic()
+	booleTopic := share.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 	topicSet := make(map[string]struct{})
 
 	switch {
@@ -359,7 +361,7 @@ func (n *p2pNetwork) subscribeToFixedSubnets() {
 
 	for _, subnet := range n.persistentSubnets.SubnetList() {
 		if err := n.subscribeSubnetForCurrentEpoch(subnet); err != nil {
-			n.logger.Error("could not subscribe to subnet", zap.Uint64("subnet", subnet), zap.Error(err))
+			n.logger.Error("could not subscribe to subnet", fields.Subnet(subnet), zap.Error(err))
 		}
 	}
 }

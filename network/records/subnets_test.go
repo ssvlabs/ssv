@@ -21,11 +21,11 @@ func Test_SubnetsEntry(t *testing.T) {
 	require.NoError(t, err)
 
 	subnets := commons.Subnets{}
-	for i := uint64(0); i < commons.SubnetsCount; i++ {
-		if i%4 == 0 {
-			subnets.Set(i)
+	for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
+		if uint64(subnet)%4 == 0 {
+			subnets.Set(subnet)
 		} else {
-			subnets.Clear(i)
+			subnets.Clear(subnet)
 		}
 	}
 	require.NoError(t, SetSubnetsEntry(node, subnets))
@@ -34,11 +34,11 @@ func Test_SubnetsEntry(t *testing.T) {
 	subnetsFromEnr, err := GetSubnetsEntry(node.Node().Record())
 	require.NoError(t, err)
 
-	for i := uint64(0); i < commons.SubnetsCount; i++ {
-		if i%4 == 0 {
-			require.True(t, subnetsFromEnr.IsSet(i))
+	for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
+		if uint64(subnet)%4 == 0 {
+			require.True(t, subnetsFromEnr.IsSet(subnet))
 		} else {
-			require.False(t, subnetsFromEnr.IsSet(i))
+			require.False(t, subnetsFromEnr.IsSet(subnet))
 		}
 	}
 }

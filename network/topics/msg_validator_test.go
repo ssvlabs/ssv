@@ -18,7 +18,6 @@ import (
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -96,7 +95,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.TopicFullName(networkconfig.TestNetwork.Beacon.Name, share.CommitteeSubnet())
+		topicID := share.BooleCommitteeSubnet().BooleTopic(networkconfig.TestNetwork.Beacon.Name)
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -158,7 +157,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := commons.AlanTopicFullName(share.CommitteeSubnetAlan())
+		topicID := share.AlanCommitteeSubnet().AlanTopic()
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{

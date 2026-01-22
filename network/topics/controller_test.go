@@ -317,7 +317,7 @@ func committeeTopic(cidHex string) string {
 		return "invalid"
 	}
 
-	return commons.AlanTopicFullName(commons.CommitteeSubnetAlan(spectypes.CommitteeID(cid)))
+	return commons.AlanCommitteeSubnet(spectypes.CommitteeID(cid)).AlanTopic()
 }
 
 type P struct {

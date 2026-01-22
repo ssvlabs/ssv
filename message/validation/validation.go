@@ -21,7 +21,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -226,23 +225,22 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	}
 
 	// Rule: Check if message was sent in the correct topic
-	var messageTopicNames []string
+	var expectedTopics []string
 	currentEpoch := mv.netCfg.EstimatedCurrentEpoch()
-	alanTopicFullName := commons.AlanTopicFullName(committeeInfo.subnetAlan)
-	booleTopicFullName := commons.TopicFullName(mv.netCfg.Beacon.Name, committeeInfo.subnet)
-	unionTopicNames := []string{alanTopicFullName, booleTopicFullName}
+	alanTopic := committeeInfo.subnetAlan.AlanTopic()
+	booleTopic := committeeInfo.subnet.BooleTopic(mv.netCfg.Beacon.Name)
 	switch {
 	case mv.netCfg.BooleForkInPriorWindow(currentEpoch), mv.netCfg.BooleForkInUnsubscriptionWindow(currentEpoch):
-		messageTopicNames = unionTopicNames
+		expectedTopics = []string{alanTopic, booleTopic}
 	case mv.netCfg.BooleForkAtEpoch(currentEpoch):
-		messageTopicNames = []string{booleTopicFullName}
+		expectedTopics = []string{booleTopic}
 	default:
-		messageTopicNames = []string{alanTopicFullName}
+		expectedTopics = []string{alanTopic}
 	}
-	if !slices.Contains(messageTopicNames, topic) {
+	if !slices.Contains(expectedTopics, topic) {
 		e := ErrIncorrectTopic
 		e.got = fmt.Sprintf("topic %v", topic)
-		e.want = messageTopicNames
+		e.want = expectedTopics
 		return e
 	}
 

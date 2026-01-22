@@ -28,24 +28,25 @@ const (
 	booleTopicFork  = "boole"
 )
 
+type Subnet uint64
+
 // BigIntSubnetsCount is the big.Int representation of SubnetsCount
 var bigIntSubnetsCount = new(big.Int).SetUint64(SubnetsCount)
 
-// AlanTopicFullName returns the Alan topic full name, including prefix.
-func AlanTopicFullName(subnet uint64) string {
-	return fmt.Sprintf("%s.%d", alanTopicPrefix, subnet)
+func (s Subnet) AlanTopic() string {
+	return fmt.Sprintf("%s.%d", alanTopicPrefix, s)
 }
 
-// TopicFullName returns the topic full name, including prefix.
-func TopicFullName(networkName string, subnet uint64) string {
-	return fmt.Sprintf("%s/%s/%s/%d", topicRoot, networkName, booleTopicFork, subnet)
+func (s Subnet) BooleTopic(networkName string) string {
+	return fmt.Sprintf("%s/%s/%s/%d", topicRoot, networkName, booleTopicFork, s)
 }
 
 // ParseTopicSubnet extracts the subnet number from a full topic name.
-func ParseTopicSubnet(topicName string) (uint64, error) {
+func ParseTopicSubnet(topicName string) (Subnet, error) {
 	if strings.HasPrefix(topicName, alanTopicPrefix+".") {
 		trimmed := strings.TrimPrefix(topicName, alanTopicPrefix+".")
-		return strconv.ParseUint(trimmed, 10, 64)
+		subnet, err := strconv.ParseUint(trimmed, 10, 64)
+		return Subnet(subnet), err
 	}
 	if strings.HasPrefix(topicName, topicRoot+"/") {
 		remainder := strings.TrimPrefix(topicName, topicRoot+"/")
@@ -53,7 +54,8 @@ func ParseTopicSubnet(topicName string) (uint64, error) {
 		if len(parts) != 3 || parts[1] != booleTopicFork || parts[2] == "" {
 			return 0, fmt.Errorf("invalid topic format: %s", topicName)
 		}
-		return strconv.ParseUint(parts[2], 10, 64)
+		subnet, err := strconv.ParseUint(parts[2], 10, 64)
+		return Subnet(subnet), err
 	}
 	return 0, fmt.Errorf("invalid topic format: %s", topicName)
 }
@@ -62,10 +64,10 @@ var bigIntPool = sync.Pool{
 	New: func() any { return new(big.Int) },
 }
 
-// CommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).
+// BooleCommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).
 // It requires committee to be valid and have length >=1.
 // It uses sync.Pool to reduce heap allocations.
-func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
+func BooleCommitteeSubnet(committee []spectypes.OperatorID) Subnet {
 	var operatorBytes [8]byte
 	var hash [32]byte
 
@@ -94,27 +96,27 @@ func CommitteeSubnet(committee []spectypes.OperatorID) uint64 {
 	result.Mod(lowest, bigIntSubnetsCount)
 	subnet := result.Uint64()
 
-	return subnet
+	return Subnet(subnet)
 }
 
-// CommitteeSubnetAlan returns the subnet for the given committee for Alan fork
-func CommitteeSubnetAlan(cid spectypes.CommitteeID) uint64 {
+// AlanCommitteeSubnet returns the subnet for the given committee for Alan fork
+func AlanCommitteeSubnet(cid spectypes.CommitteeID) Subnet {
 	bi := bigIntPool.Get().(*big.Int)
 	defer bigIntPool.Put(bi)
 
 	bi.SetBytes(cid[:])
 	bi.Mod(bi, bigIntSubnetsCount)
-	return bi.Uint64()
+	return Subnet(bi.Uint64())
 }
 
 // Topics returns the available Alan and Boole topics for the given network.
 func Topics(netCfg *networkconfig.Network) []string {
 	topics := make([]string, 0, SubnetsCount*2)
-	for i := uint64(0); i < SubnetsCount; i++ {
+	for subnet := Subnet(0); subnet < Subnet(SubnetsCount); subnet++ {
 		if !netCfg.BooleFork() {
-			topics = append(topics, AlanTopicFullName(i))
+			topics = append(topics, subnet.AlanTopic())
 		}
-		topics = append(topics, TopicFullName(netCfg.Beacon.Name, i))
+		topics = append(topics, subnet.BooleTopic(netCfg.Beacon.Name))
 	}
 	return topics
 }
@@ -155,32 +157,32 @@ func SubnetsFromString(subnetsStr string) (Subnets, error) {
 }
 
 // IsSet checks if the i-th subnet is set.
-func (s *Subnets) IsSet(i uint64) bool {
-	if i >= SubnetsCount {
+func (s *Subnets) IsSet(i Subnet) bool {
+	if uint64(i) >= SubnetsCount {
 		return false
 	}
-	byteIndex := i / 8
-	bitIndex := i % 8
+	byteIndex := uint64(i) / 8
+	bitIndex := uint64(i) % 8
 	return (s.v[byteIndex] & (1 << bitIndex)) != 0
 }
 
 // Set marks the i-th subnet as set.
-func (s *Subnets) Set(i uint64) {
-	if i >= SubnetsCount {
+func (s *Subnets) Set(i Subnet) {
+	if uint64(i) >= SubnetsCount {
 		return
 	}
-	byteIndex := i / 8
-	bitIndex := i % 8
+	byteIndex := uint64(i) / 8
+	bitIndex := uint64(i) % 8
 	s.v[byteIndex] |= 1 << bitIndex
 }
 
 // Clear marks the i-th subnet as not set.
-func (s *Subnets) Clear(i uint64) {
-	if i >= SubnetsCount {
+func (s *Subnets) Clear(i Subnet) {
+	if uint64(i) >= SubnetsCount {
 		return
 	}
-	byteIndex := i / 8
-	bitIndex := i % 8
+	byteIndex := uint64(i) / 8
+	bitIndex := uint64(i) % 8
 	s.v[byteIndex] &^= 1 << bitIndex
 }
 
@@ -201,9 +203,9 @@ func (s *Subnets) String() string {
 	return s.StringHex()
 }
 
-// SubnetList returns a list of subnets; Each subnet in that list is a number in the range [0, SubnetsCount).
-func (s *Subnets) SubnetList() []uint64 {
-	subnetNumbers := make([]uint64, 0)
+// SubnetList returns a list of subnets; each subnet is in the range [0, SubnetsCount).
+func (s *Subnets) SubnetList() []Subnet {
+	subnetNumbers := make([]Subnet, 0)
 	for byteIdx, b := range s.v {
 		if byteIdx >= SubnetsCount {
 			break
@@ -211,7 +213,7 @@ func (s *Subnets) SubnetList() []uint64 {
 		for bitIdx := uint64(0); bitIdx < 8; bitIdx++ {
 			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of SubnetsCount
 			if b&bit == bit {
-				subnet := uint64(byteIdx)*8 + bitIdx
+				subnet := Subnet(byteIdx)*8 + Subnet(bitIdx)
 				subnetNumbers = append(subnetNumbers, subnet)
 			}
 		}
@@ -231,28 +233,20 @@ func (s *Subnets) HasActive() bool {
 	return s.ActiveCount() > 0
 }
 
-// ToMap returns a map with all subnets and their values
-func (s *Subnets) ToMap() map[uint64]bool {
-	m := make(map[uint64]bool)
-	for i := uint64(0); i < SubnetsCount; i++ {
-		m[i] = s.IsSet(i)
-	}
-	return m
-}
-
 // SharedSubnets returns the shared subnets
-func (s *Subnets) SharedSubnets(other Subnets) []uint64 {
+func (s *Subnets) SharedSubnets(other Subnets) []Subnet {
 	return s.SharedSubnetsN(other, 0)
 }
 
-func (s *Subnets) SharedSubnetsN(other Subnets, n int) []uint64 {
-	var shared []uint64
+// SharedSubnetsN returns up to n shared subnets (all if n <= 0).
+func (s *Subnets) SharedSubnetsN(other Subnets, n int) []Subnet {
+	var shared []Subnet
 	if n <= 0 {
 		n = SubnetsCount
 	}
-	for i := uint64(0); i < SubnetsCount; i++ {
-		if s.IsSet(i) && other.IsSet(i) {
-			shared = append(shared, i)
+	for subnet := Subnet(0); subnet < Subnet(SubnetsCount); subnet++ {
+		if s.IsSet(subnet) && other.IsSet(subnet) {
+			shared = append(shared, subnet)
 			if len(shared) == n {
 				break
 			}
