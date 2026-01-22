@@ -84,9 +84,6 @@ func TestBooleForkAtEpoch(t *testing.T) {
 }
 
 func TestBooleFork(t *testing.T) {
-	const slotsPerEpoch = uint64(32)
-	const slotDuration = 10 * time.Second
-
 	tests := []struct {
 		name           string
 		currentEpoch   phase0.Epoch
