@@ -98,11 +98,13 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.SpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+	case reflect.TypeOf(&valcheck.SpecTest{}).String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &valcheck.SpecTest{}
-		require.NoError(t, json.Unmarshal(byts, &typedTest))
+		specTest := &valcheck.SpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &specTest))
+		// Wrap with our implementation's value checkers
+		typedTest := &ValCheckSpecTest{SpecTest: specTest}
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -110,11 +112,17 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.MultiSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+	case reflect.TypeOf(&valcheck.MultiSpecTest{}).String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &valcheck.MultiSpecTest{}
-		require.NoError(t, json.Unmarshal(byts, &typedTest))
+		specTest := &valcheck.MultiSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &specTest))
+		// Wrap with our implementation's value checkers
+		tests := make([]*ValCheckSpecTest, len(specTest.Tests))
+		for i, t := range specTest.Tests {
+			tests[i] = &ValCheckSpecTest{SpecTest: t}
+		}
+		typedTest := &MultiValCheckSpecTest{Name: specTest.Name, Tests: tests}
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -307,8 +315,9 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 		panic("no beacon or committee duty")
 	}
 
-	msgs := make([]*spectypes.SignedSSVMessage, 0)
-	for _, msg := range m["Messages"].([]any) {
+	rawMsgs := m["Messages"].([]any)
+	msgs := make([]*spectypes.SignedSSVMessage, 0, len(rawMsgs))
+	for _, msg := range rawMsgs {
 		byts, err := json.Marshal(msg)
 		require.NoError(t, err)
 		typedMsg := &spectypes.SignedSSVMessage{}
@@ -380,11 +389,11 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutil
 	ret := createRunnerWithBaseRunner(logger, baseRunner.RunnerRoleType, baseRunner, ks)
 
 	if baseRunner.QBFTController != nil {
-		baseRunner.QBFTController = fixControllerForRun(t, logger, ret, baseRunner.QBFTController, ks)
+		baseRunner.QBFTController = fixControllerForRun(logger, baseRunner.QBFTController, ks)
 		if baseRunner.State != nil {
 			if baseRunner.State.RunningInstance != nil {
 				operator := spectestingutils.TestingCommitteeMember(ks)
-				baseRunner.State.RunningInstance = fixInstanceForRun(t, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
+				baseRunner.State.RunningInstance = fixInstanceForRun(logger, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
 			}
 		}
 	}
@@ -392,7 +401,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutil
 	return ret
 }
 
-func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
+func fixControllerForRun(logger *zap.Logger, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
 	config := protocoltesting.TestingConfig(logger, ks)
 	newContr := controller.NewController(
 		contr.Identifier,
@@ -409,14 +418,21 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 			continue
 		}
 		operator := spectestingutils.TestingCommitteeMember(ks)
-		newContr.StoredInstances[i] = fixInstanceForRun(t, ks, inst, newContr, operator)
+		newContr.StoredInstances[i] = fixInstanceForRun(logger, ks, inst, newContr, operator)
 	}
 	return newContr
 }
 
-func fixInstanceForRun(t *testing.T, ks *spectestingutils.TestKeySet, inst *instance.Instance, contr *controller.Controller, share *spectypes.CommitteeMember) *instance.Instance {
+func fixInstanceForRun(
+	logger *zap.Logger,
+	ks *spectestingutils.TestKeySet,
+	inst *instance.Instance,
+	contr *controller.Controller,
+	share *spectypes.CommitteeMember,
+) *instance.Instance {
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	newInst := instance.NewInstance(
+		logger,
 		contr.GetConfig(),
 		share,
 		contr.Identifier,

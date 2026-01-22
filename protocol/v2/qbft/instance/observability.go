@@ -18,9 +18,11 @@ const (
 type stage string
 
 const (
-	stageProposal stage = "proposal"
-	stagePrepare  stage = "prepare"
-	stageCommit   stage = "commit"
+	stageProposal    stage = "proposal"
+	stagePrepare     stage = "prepare"
+	stageCommit      stage = "commit"
+	stageRoundChange stage = "round_change"
+	stageUndefined   stage = "undefined"
 )
 
 // roundChangeReason represents the reason for a round change in the QBFT protocol

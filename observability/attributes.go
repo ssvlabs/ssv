@@ -131,13 +131,6 @@ func ValidatorIndexAttribute(index phase0.ValidatorIndex) attribute.KeyValue {
 	}
 }
 
-func ValidatorSignerAttribute(signer spectypes.OperatorID) attribute.KeyValue {
-	return attribute.KeyValue{
-		Key:   "ssv.validator.signer",
-		Value: Uint64AttributeValue(signer),
-	}
-}
-
 func ValidatorProposerAttribute(proposer spectypes.OperatorID) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.proposer",

@@ -24,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -54,8 +55,17 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	lastErr := test.runPreTesting(logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
-	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
-	broadcastedRoots := make([]phase0.Root, 0)
+	broadcastedMsgsCap := 0
+	broadcastedRootsCap := 0
+	for _, runner := range test.Committee.Runners {
+		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
+		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		broadcastedMsgsCap += len(network.BroadcastedMsgs)
+		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
+	}
+
+	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0, broadcastedMsgsCap)
+	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
@@ -189,12 +199,17 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	for i := range committee.Runners {
-		committee.Runners[i].BaseRunner.NetworkConfig = networkconfig.TestNetwork
-		committee.Runners[i].ValCheck = protocoltesting.TestingValueChecker{}
+	for slot := range committee.Runners {
+		committee.Runners[slot].BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		// Use test runner as signer source since deserialized runner has no signer
+		var signerSource runner.Runner
+		if testRunner, ok := test.Committee.Runners[slot]; ok {
+			signerSource = testRunner
+		}
+		committee.Runners[slot].ValCheck = createValueChecker(committee.Runners[slot], signerSource)
 	}
-	for i := range test.Committee.Runners {
-		test.Committee.Runners[i].ValCheck = protocoltesting.TestingValueChecker{}
+	for slot := range test.Committee.Runners {
+		test.Committee.Runners[slot].ValCheck = createValueChecker(test.Committee.Runners[slot])
 	}
 
 	root, err := committee.GetRoot()

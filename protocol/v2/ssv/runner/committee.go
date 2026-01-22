@@ -54,7 +54,6 @@ type CommitteeRunner struct {
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
 	measurements        *dutyMeasurements
-	mfpStrict           bool
 
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
@@ -73,7 +72,6 @@ func NewCommitteeRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	dutyGuard CommitteeDutyGuard,
 	doppelgangerHandler DoppelgangerProvider,
-	mfpStrict bool,
 ) (Runner, error) {
 	if len(share) == 0 {
 		return nil, errors.New("no shares")
@@ -96,7 +94,6 @@ func NewCommitteeRunner(
 		DutyGuard:           dutyGuard,
 		doppelgangerHandler: doppelgangerHandler,
 		measurements:        newMeasurementsStore(),
-		mfpStrict:           mfpStrict,
 	}, nil
 }
 
@@ -527,33 +524,18 @@ func (r *CommitteeRunner) signAttesterDuty(
 	return false, partialMsg, nil
 }
 
-// TODO finish edge case where some roots may be missing
 func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("base post consensus message processing")
-	hasQuorum, quorumRoots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) {
 		err = NewRetryableError(err)
 	}
 	if err != nil {
 		return fmt.Errorf("failed processing post consensus message: %w", err)
 	}
-
-	vIndices := make([]uint64, 0, len(signedMsg.Messages))
-	for _, msg := range signedMsg.Messages {
-		vIndices = append(vIndices, uint64(msg.ValidatorIndex))
-	}
-
-	const eventMsg = "🧩 got partial signatures (post consensus)"
-	span.AddEvent(eventMsg)
-	logger.Debug(eventMsg,
-		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
-		zap.Uint64s("validators", vIndices),
-		zap.Bool("quorum", hasQuorum),
-		zap.Int("quorum_roots", len(quorumRoots)),
-	)
 
 	if !hasQuorum {
 		return nil
@@ -574,17 +556,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
-	// Get unique roots to avoid repetition
-	deduplicatedRoots := make(map[[32]byte]struct{})
-	for _, root := range quorumRoots {
-		deduplicatedRoots[root] = struct{}{}
-	}
-
 	var executionErr error
 
-	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(deduplicatedRoots)))
+	span.SetAttributes(observability.BeaconBlockRootCountAttribute(len(roots)))
 	// For each root that got at least one quorum, find the duties associated to it and try to submit
-	for root := range deduplicatedRoots {
+	for i, root := range roots {
 		// Get validators related to the given root
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
 		if !found {
@@ -618,8 +594,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 		span.AddEvent("constructing sync-committee and attestations signature messages", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		for _, validator := range validators {
-			// Skip if no quorum - We know that a root has quorum but not necessarily for the validator
-			if !r.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root) {
+			// As per the comments below, the quorums (for root+validator pairs) we got from basePostConsensusMsgProcessing
+			// call above are optimistic - some of these quorums might have been invalidated now, hence, to avoid an
+			// unnecessary unsuccessful BLS signature reconstruction attempt we need to check if root+validator pair
+			// still has quorum.
+			gotQuorum, quorumSigners := r.BaseRunner.State.PostConsensusContainer.HasQuorum(validator, root)
+			if !gotQuorum {
 				continue
 			}
 			// Skip if already submitted
@@ -628,18 +608,36 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			}
 
 			wg.Add(1)
-			go func(validatorIndex phase0.ValidatorIndex, root [32]byte, roots map[[32]byte]struct{}) {
+			go func(validatorIndex phase0.ValidatorIndex, root [32]byte) {
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
-
 				pubKey := share.ValidatorPubKey
-				vLogger := logger.With(zap.Uint64("validator_index", uint64(validatorIndex)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
+
+				vLogger := logger.With(
+					zap.Uint64("validator_index", uint64(validatorIndex)),
+					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+					fields.BlockRoot(root),
+					zap.Uint64s("quorum_signers", quorumSigners),
+				)
 
 				sig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PostConsensusContainer, root, pubKey[:], validatorIndex)
-				// If the reconstructed signature verification failed, fall back to verifying each partial signature
 				if err != nil {
-					for root := range roots {
+					// If the reconstructed signature verification failed, fall back to verifying each individual
+					// partial signature + discarding the invalid ones. This should not happen often in practice,
+					// but it's a very desirable optimization to have because when it does happen - we wouldn't
+					// want to reconstruct lots of BLS signatures only to discover most of them being invalid.
+					// Notes:
+					// 1) FallBackAndVerifyEachSignature call may also lead to a certain root+validator pairs
+					//    in PostConsensusContainer not having quorum anymore since it previously was computed
+					//    optimistically.
+					// 2) we need to verify partial signatures only for the roots we haven't tried reconstructing
+					//    signatures for (hence roots[i:])
+					// 3) since this code is running a bunch of concurrent go-routines, we need to be careful to
+					//    not call FallBackAndVerifyEachSignature for the same root+validator pair multiple times -
+					//    this is why we are parallelizing by validators only (and not by root+validator), processing
+					//    each root sequentially
+					for _, root := range roots[i:] {
 						r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PostConsensusContainer, root, share.Committee, validatorIndex)
 					}
 					const eventMsg = "got post-consensus quorum but it has invalid signatures"
@@ -656,7 +654,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					validatorIndex: validatorIndex,
 					signature:      (phase0.BLSSignature)(sig),
 				}
-			}(validator, root, deduplicatedRoots)
+			}(validator, root)
 		}
 
 		go func() {
@@ -711,10 +709,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			}
 		}
 
-		logger.Debug("🧩 reconstructed partial signatures for root",
-			zap.Uint64s("signers", getPostConsensusCommitteeSigners(r.BaseRunner.State, root)),
-			fields.BlockRoot(root),
-		)
+		logger.Debug("🧩 reconstructed partial signatures for root", fields.BlockRoot(root))
 	}
 
 	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
@@ -1063,9 +1058,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 		r.signer,
 		slot,
 		r.attestingValidators,
-		r.GetNetworkConfig().EstimatedCurrentEpoch(),
 		vote,
-		r.mfpStrict,
 	)
 	if err := r.BaseRunner.decide(ctx, logger, duty.DutySlot(), vote, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)

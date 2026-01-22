@@ -105,11 +105,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		return fmt.Errorf("failed processing validator registration message: %w", err)
 	}
 
-	logger.Debug("got partial sig",
-		zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(signedMsg)),
-		zap.Bool("quorum", hasQuorum),
-	)
-
 	// quorum returns true only once (first time quorum achieved)
 	if !hasQuorum {
 		return nil
