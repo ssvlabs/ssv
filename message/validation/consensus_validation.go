@@ -87,6 +87,15 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	signers := signedSSVMessage.OperatorIDs
 	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	msgType := consensusMessage.MsgType
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+	slot := phase0.Slot(consensusMessage.Height)
+
+	// Rule: If role is invalid
+	if !mv.validRoleAtSlot(role, slot) {
+		e := ErrInvalidRole
+		e.got = fmt.Sprintf("%v (%d) @ %v", role, role, slot)
+		return e
+	}
 
 	if len(signers) > 1 {
 		// Rule: Decided msg with different type than Commit
@@ -135,8 +144,6 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		e.got = specqbft.NoRound
 		return e
 	}
-
-	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {

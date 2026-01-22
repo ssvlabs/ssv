@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
@@ -130,27 +130,24 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		return err
 	}
 
-	// Rule: If role is invalid
-	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
-		return ErrInvalidRole
-	}
-
 	return nil
 }
 
-func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
-	switch roleType {
-	case spectypes.RoleCommittee,
-		spectypes.RoleAggregatorCommittee,
-		ssvtypes.RoleAggregator,
+func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {
+	roles := []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
 		spectypes.RoleProposer,
-		ssvtypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit:
-		return true
-	default:
-		return false
+		spectypes.RoleVoluntaryExit,
 	}
+
+	if mv.netCfg.BooleForkAtSlot(slot) {
+		roles = append(roles, spectypes.RoleAggregatorCommittee)
+	} else {
+		roles = append(roles, ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution)
+	}
+
+	return slices.Contains(roles, roleType)
 }
 
 // belongsToCommittee checks if the signers belong to the committee.

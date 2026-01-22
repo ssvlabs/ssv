@@ -75,6 +75,14 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	validatorIndices []phase0.ValidatorIndex,
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+	slot := partialSignatureMessages.Slot
+
+	// Rule: If role is invalid
+	if !mv.validRoleAtSlot(role, slot) {
+		e := ErrInvalidRole
+		e.got = fmt.Sprintf("%v (%d) @ %v", role, role, slot)
+		return e
+	}
 
 	// Rule: Partial Signature message must have 1 signer
 	signers := signedSSVMessage.OperatorIDs

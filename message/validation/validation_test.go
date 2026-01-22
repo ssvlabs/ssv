@@ -71,10 +71,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
-	require.NoError(t, err)
+	preBooleCfg := func(booleEpoch phase0.Epoch) *networkconfig.Network {
+		cfg := *networkconfig.TestNetwork
+		beaconCfg := *networkconfig.TestNetwork.Beacon
+		ssvCfg := *networkconfig.TestNetwork.SSV
+		ssvCfg.Forks.Boole = booleEpoch
+		cfg.Beacon = &beaconCfg
+		cfg.SSV = &ssvCfg
+		return &cfg
+	}
+	currentEpoch := networkconfig.TestNetwork.EstimatedCurrentEpoch()
+	netCfg := preBooleCfg(currentEpoch + 100)
+	postBooleCfg := networkconfig.TestNetwork
 
-	netCfg := networkconfig.TestNetwork
+	ns, err := storage.NewNodeStorage(netCfg.Beacon, logger, db)
+	require.NoError(t, err)
 
 	ks := spectestingutils.Testing4SharesSet()
 	shares := generateShares(t, ks, ns, netCfg)
@@ -455,17 +466,61 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send message with a value that refers to a non-existent role
 	t.Run("invalid role", func(t *testing.T) {
-		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		t.Run("unknown role value", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-		slot := netCfg.FirstSlotAtEpoch(1)
+			slot := netCfg.FirstSlotAtEpoch(1)
 
-		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, math.MaxInt32)
-		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+			badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], math.MaxInt32)
+			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
-		receivedAt := netCfg.SlotStartTime(slot)
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrInvalidRole)
+			topicID := commons.CommitteeTopicID(committeeID)[0]
+			receivedAt := netCfg.SlotStartTime(slot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
+
+		t.Run("aggregator committee pre-fork", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			slot := netCfg.FirstSlotAtEpoch(1)
+
+			badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+			topicID := commons.CommitteeTopicID(committeeID)[0]
+			receivedAt := netCfg.SlotStartTime(slot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
+
+		t.Run("aggregator post-fork", func(t *testing.T) {
+			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			slot := postBooleCfg.FirstSlotAtEpoch(1)
+
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
+			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+			topicID := commons.CommitteeTopicID(committeeID)[0]
+			receivedAt := postBooleCfg.SlotStartTime(slot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
+
+		t.Run("sync committee contribution post-fork", func(t *testing.T) {
+			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			slot := postBooleCfg.FirstSlotAtEpoch(1)
+
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
+			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+			topicID := commons.CommitteeTopicID(committeeID)[0]
+			receivedAt := postBooleCfg.SlotStartTime(slot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
 	})
 
 	// Perform validator registration or voluntary exit with a consensus type message will give an error
@@ -647,12 +702,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	const epoch1 = 1
 
-	beaconConfigEpoch1 := *networkconfig.TestNetwork.Beacon
+	beaconConfigEpoch1 := *netCfg.Beacon
 	beaconConfigEpoch1.GenesisTime = time.Now().Add(-epoch1 * beaconConfigEpoch1.EpochDuration())
 
 	netCfgEpoch1 := &networkconfig.Network{
 		Beacon: &beaconConfigEpoch1,
-		SSV:    networkconfig.TestNetwork.SSV,
+		SSV:    netCfg.SSV,
 	}
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
@@ -1215,7 +1270,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		tests := map[spectypes.RunnerRole]time.Time{
 			spectypes.RoleCommittee:                netCfg.SlotStartTime(slot + 35),
 			ssvtypes.RoleAggregator:                netCfg.SlotStartTime(slot + 35),
-			spectypes.RoleAggregatorCommittee:      netCfg.SlotStartTime(slot + 35),
 			spectypes.RoleProposer:                 netCfg.SlotStartTime(slot + 4),
 			ssvtypes.RoleSyncCommitteeContribution: netCfg.SlotStartTime(slot + 4),
 		}
@@ -1235,6 +1289,18 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 			})
 		}
+
+		t.Run(message.RunnerRoleToString(spectypes.RoleAggregatorCommittee), func(t *testing.T) {
+			validator := New(postBooleCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+
+			msgID := spectypes.NewMsgID(postBooleCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+			signedSSVMessage := generateSignedMessage(ks, msgID, slot)
+			receivedAt := postBooleCfg.SlotStartTime(slot + 35)
+
+			topicID := commons.CommitteeTopicID(committeeID)[0]
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorContains(t, err, ErrLateSlotMessage.Error())
+		})
 	})
 
 	// Send early message for all roles before the duty start and receive early message error
