@@ -52,14 +52,21 @@ func (n Network) inBoolePriorWindow(slot phase0.Slot) bool {
 	if n.BooleForkAtSlot(slot) {
 		return false
 	}
-	epoch := n.EstimatedEpochAtSlot(slot)
-	if n.SSV.Forks.Boole == 0 {
+	booleEpoch := n.SSV.Forks.Boole
+	if booleEpoch == 0 {
 		return false
 	}
-	if n.SSV.Forks.Boole <= boolePriorWindowEpochs {
-		return epoch == 0
+	if boolePriorWindowEpochs == 0 {
+		return false
 	}
-	return epoch >= n.SSV.Forks.Boole-boolePriorWindowEpochs
+
+	startEpoch := phase0.Epoch(0)
+	if boolePriorWindowEpochs < booleEpoch {
+		startEpoch = booleEpoch - boolePriorWindowEpochs
+	}
+
+	epoch := n.EstimatedEpochAtSlot(slot)
+	return epoch >= startEpoch
 }
 
 func (n Network) inBooleSubsequentWindow(slot phase0.Slot) bool {
