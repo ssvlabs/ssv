@@ -218,22 +218,22 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 // Returns a new committee list with only the committees that belong to the given topic
 func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, committees []*storage.Committee) []*storage.Committee {
 	topicCommittees := make([]*storage.Committee, 0)
-	currentEpoch := netCfg.EstimatedCurrentEpoch()
+	currentSlot := netCfg.EstimatedCurrentSlot()
 
 	for _, committee := range committees {
 		booleTopic := committee.BooleSubnet.BooleTopic(netCfg.Beacon.Name)
 		alanTopic := committee.AlanSubnet.AlanTopic()
 
 		switch {
-		case netCfg.BooleForkAtEpoch(currentEpoch):
-			if topic == booleTopic {
-				topicCommittees = append(topicCommittees, committee)
-			}
-		case netCfg.BooleForkInPriorWindow(currentEpoch):
+		case netCfg.InBooleTransitionWindow(currentSlot):
 			if topic == alanTopic {
 				topicCommittees = append(topicCommittees, committee)
 				continue
 			}
+			if topic == booleTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
+		case netCfg.BooleForkAtSlot(currentSlot):
 			if topic == booleTopic {
 				topicCommittees = append(topicCommittees, committee)
 			}

@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -184,7 +183,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
 		return decodedMessage, err
 	}
 
@@ -199,14 +198,26 @@ func (mv *messageValidator) handleSignedSSVMessage(
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(
+			signedSSVMessage,
+			committeeInfo,
+			topic,
+			receivedFrom,
+			receivedAt,
+		)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(
+			signedSSVMessage,
+			committeeInfo,
+			topic,
+			receivedFrom,
+			receivedAt,
+		)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
@@ -219,28 +230,16 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	return decodedMessage, nil
 }
 
-func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
-		return err
+func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, topic string, slot phase0.Slot) error {
+	expectedTopic := committeeInfo.subnetAlan.AlanTopic()
+	if mv.netCfg.BooleForkAtSlot(slot) {
+		expectedTopic = committeeInfo.subnet.BooleTopic(mv.netCfg.Beacon.Name)
 	}
-
 	// Rule: Check if message was sent in the correct topic
-	var expectedTopics []string
-	currentEpoch := mv.netCfg.EstimatedCurrentEpoch()
-	alanTopic := committeeInfo.subnetAlan.AlanTopic()
-	booleTopic := committeeInfo.subnet.BooleTopic(mv.netCfg.Beacon.Name)
-	switch {
-	case mv.netCfg.BooleForkInPriorWindow(currentEpoch), mv.netCfg.BooleForkInUnsubscriptionWindow(currentEpoch):
-		expectedTopics = []string{alanTopic, booleTopic}
-	case mv.netCfg.BooleForkAtEpoch(currentEpoch):
-		expectedTopics = []string{booleTopic}
-	default:
-		expectedTopics = []string{alanTopic}
-	}
-	if !slices.Contains(expectedTopics, topic) {
+	if expectedTopic != topic {
 		e := ErrIncorrectTopic
-		e.got = fmt.Sprintf("topic %v", topic)
-		e.want = expectedTopics
+		e.got = fmt.Sprintf("%v @ %v", topic, slot)
+		e.want = expectedTopic
 		return e
 	}
 

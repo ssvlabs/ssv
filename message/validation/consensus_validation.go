@@ -24,6 +24,7 @@ import (
 func (mv *messageValidator) validateConsensusMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
+	topic string,
 	receivedFrom peer.ID,
 	receivedAt time.Time,
 ) (*specqbft.Message, error) {
@@ -41,6 +42,10 @@ func (mv *messageValidator) validateConsensusMessage(
 		e := ErrUndecodableMessageData
 		e.innerErr = err
 		return nil, e
+	}
+
+	if err := mv.validateTopicAtSlot(committeeInfo, topic, phase0.Slot(consensusMessage.Height)); err != nil {
+		return consensusMessage, err
 	}
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.committee); err != nil {

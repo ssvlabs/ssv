@@ -624,7 +624,7 @@ var StartNodeCmd = &cobra.Command{
 			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
-			booleFork := networkConfig.BooleForkAtEpoch(networkConfig.EstimatedCurrentEpoch())
+			booleFork := networkConfig.BooleForkAtSlot(networkConfig.EstimatedCurrentSlot())
 			for _, v := range myValidators {
 				if subnet := v.BooleCommitteeSubnet(); !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)

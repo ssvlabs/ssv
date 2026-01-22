@@ -147,15 +147,15 @@ func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 
 // TODO: Remove Alan subnets after the Boole fork transition logic is dropped.
 func (n *p2pNetwork) subscribedSubnetsForCurrentEpoch() (commons.Subnets, commons.Subnets) {
-	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
+	currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
 	alanSubnets := commons.ZeroSubnets
 	booleSubnets := commons.ZeroSubnets
 
 	switch {
-	case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
-		booleSubnets = n.persistentSubnets
-	case n.cfg.NetworkConfig.BooleForkInPriorWindow(currentEpoch):
+	case n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot):
 		alanSubnets = n.persistentSubnets
+		booleSubnets = n.persistentSubnets
+	case n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot):
 		booleSubnets = n.persistentSubnets
 	default:
 		alanSubnets = n.persistentSubnets
@@ -163,10 +163,10 @@ func (n *p2pNetwork) subscribedSubnetsForCurrentEpoch() (commons.Subnets, common
 
 	n.subscribedCommittees.Range(func(encodedCommittee string, statusAndSubnet statusWithSubnet) bool {
 		switch {
-		case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
-			booleSubnets.Set(statusAndSubnet.booleSubnet)
-		case n.cfg.NetworkConfig.BooleForkInPriorWindow(currentEpoch):
+		case n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot):
 			alanSubnets.Set(statusAndSubnet.alanSubnet)
+			booleSubnets.Set(statusAndSubnet.booleSubnet)
+		case n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot):
 			booleSubnets.Set(statusAndSubnet.booleSubnet)
 		default:
 			alanSubnets.Set(statusAndSubnet.alanSubnet)
@@ -235,14 +235,14 @@ func (n *p2pNetwork) subscribeCommittee(share *ssvtypes.SSVShare) error {
 }
 
 func (n *p2pNetwork) subscribeSubnetForCurrentEpoch(subnet commons.Subnet) error {
-	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
+	currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
 	switch {
-	case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
-		return n.subscribeSubnet(subnet, true)
-	case n.cfg.NetworkConfig.BooleForkInPriorWindow(currentEpoch):
+	case n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot):
 		if err := n.subscribeSubnet(subnet, false); err != nil {
 			return err
 		}
+		return n.subscribeSubnet(subnet, true)
+	case n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot):
 		return n.subscribeSubnet(subnet, true)
 	default:
 		return n.subscribeSubnet(subnet, false)
@@ -306,16 +306,16 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 }
 
 func (n *p2pNetwork) committeeTopicSetForCurrentEpoch(share *ssvtypes.SSVShare) map[string]struct{} {
-	currentEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
+	currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
 	alanTopic := share.AlanCommitteeSubnet().AlanTopic()
 	booleTopic := share.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 	topicSet := make(map[string]struct{})
 
 	switch {
-	case n.cfg.NetworkConfig.BooleForkAtEpoch(currentEpoch):
-		topicSet[booleTopic] = struct{}{}
-	case n.cfg.NetworkConfig.BooleForkInPriorWindow(currentEpoch):
+	case n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot):
 		topicSet[alanTopic] = struct{}{}
+		topicSet[booleTopic] = struct{}{}
+	case n.cfg.NetworkConfig.BooleForkAtSlot(currentSlot):
 		topicSet[booleTopic] = struct{}{}
 	default:
 		topicSet[alanTopic] = struct{}{}

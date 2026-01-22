@@ -27,11 +27,14 @@ func TestBooleForkInPriorWindow(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			beacon := *TestNetwork.Beacon
 			netCfg := Network{
-				SSV: &SSV{Forks: SSVForks{Boole: test.boole}},
+				Beacon: &beacon,
+				SSV:    &SSV{Forks: SSVForks{Boole: test.boole}},
 			}
 
-			require.Equal(t, test.expected, netCfg.BooleForkInPriorWindow(test.epoch))
+			slot := netCfg.FirstSlotAtEpoch(test.epoch)
+			require.Equal(t, test.expected, netCfg.inBoolePriorWindow(slot))
 		})
 	}
 }
@@ -40,21 +43,24 @@ func TestBooleForkInUnsubscriptionWindow(t *testing.T) {
 	tests := []struct {
 		name     string
 		boole    phase0.Epoch
-		epoch    phase0.Epoch
+		slot     phase0.Slot
 		expected bool
 	}{
-		{name: "before_fork", boole: 10, epoch: 9, expected: false},
-		{name: "at_fork", boole: 10, epoch: 10, expected: true},
-		{name: "after_fork", boole: 10, epoch: 11, expected: false},
+		{name: "before_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) - 1, expected: false},
+		{name: "at_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10), expected: true},
+		{name: "after_fork_slot", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) + 1, expected: false},
+		{name: "after_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(11), expected: false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			beacon := *TestNetwork.Beacon
 			netCfg := Network{
-				SSV: &SSV{Forks: SSVForks{Boole: test.boole}},
+				Beacon: &beacon,
+				SSV:    &SSV{Forks: SSVForks{Boole: test.boole}},
 			}
 
-			require.Equal(t, test.expected, netCfg.BooleForkInUnsubscriptionWindow(test.epoch))
+			require.Equal(t, test.expected, netCfg.inBooleUnsubscriptionWindow(test.slot))
 		})
 	}
 }

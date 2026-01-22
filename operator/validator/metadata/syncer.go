@@ -333,15 +333,15 @@ func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
 func (s *Syncer) selfSubnets() networkcommons.Subnets {
 	// Start off with a copy of the fixed subnets (e.g., exporter subscribed to all subnets).
 	mySubnets := s.fixedSubnets
-	currentEpoch := s.netCfg.EstimatedCurrentEpoch()
+	currentSlot := s.netCfg.EstimatedCurrentSlot()
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
 		switch {
-		case s.netCfg.BooleForkAtEpoch(currentEpoch):
-			mySubnets.Set(v.BooleCommitteeSubnet())
-		case s.netCfg.BooleForkInPriorWindow(currentEpoch):
+		case s.netCfg.InBooleTransitionWindow(currentSlot):
 			mySubnets.Set(v.AlanCommitteeSubnet())
+			mySubnets.Set(v.BooleCommitteeSubnet())
+		case s.netCfg.BooleForkAtSlot(currentSlot):
 			mySubnets.Set(v.BooleCommitteeSubnet())
 		default:
 			mySubnets.Set(v.AlanCommitteeSubnet())
@@ -352,12 +352,12 @@ func (s *Syncer) selfSubnets() networkcommons.Subnets {
 }
 
 func (s *Syncer) shareInOwnSubnets(share *ssvtypes.SSVShare, ownSubnets networkcommons.Subnets) bool {
-	currentEpoch := s.netCfg.EstimatedCurrentEpoch()
+	currentSlot := s.netCfg.EstimatedCurrentSlot()
 	switch {
-	case s.netCfg.BooleForkAtEpoch(currentEpoch):
-		return ownSubnets.IsSet(share.BooleCommitteeSubnet())
-	case s.netCfg.BooleForkInPriorWindow(currentEpoch):
+	case s.netCfg.InBooleTransitionWindow(currentSlot):
 		return ownSubnets.IsSet(share.AlanCommitteeSubnet()) || ownSubnets.IsSet(share.BooleCommitteeSubnet())
+	case s.netCfg.BooleForkAtSlot(currentSlot):
+		return ownSubnets.IsSet(share.BooleCommitteeSubnet())
 	default:
 		return ownSubnets.IsSet(share.AlanCommitteeSubnet())
 	}
