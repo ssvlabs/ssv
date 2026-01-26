@@ -11,6 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ValueChecker interface {
@@ -197,16 +198,17 @@ func checkValidatorConsensusData(
 	if err := cd.Decode(value); err != nil {
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}
-	if err := cd.Validate(); err != nil {
-		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
-	}
 
-	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
-		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
+	if err := ssvtypes.ValidateConsensusData(cd); err != nil {
+		return cd, spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
 	}
 
 	if expectedType != cd.Duty.Type {
 		return cd, spectypes.NewError(spectypes.WrongBeaconRoleTypeErrorCode, "wrong beacon role type")
+	}
+
+	if beaconConfig.EstimatedEpochAtSlot(cd.Duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
+		return cd, spectypes.NewError(spectypes.DutyEpochTooFarFutureErrorCode, "duty epoch is into far future")
 	}
 
 	if !bytes.Equal(validatorPK[:], cd.Duty.PubKey[:]) {
