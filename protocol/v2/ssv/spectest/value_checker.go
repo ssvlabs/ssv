@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // ValCheckSpecTest wraps valcheck.SpecTest but uses our implementation's value checkers
@@ -118,19 +119,22 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 			sharePubKeys[0],
 		)
 		return checker.CheckValue
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		checker := ssv.NewAggregatorChecker(
 			beaconConfig,
 			pubKeyBytes,
 			spectestingutils.TestingValidatorIndex,
 		)
 		return checker.CheckValue
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		checker := ssv.NewSyncCommitteeContributionChecker(
 			beaconConfig,
 			pubKeyBytes,
 			spectestingutils.TestingValidatorIndex,
 		)
+		return checker.CheckValue
+	case spectypes.RoleAggregatorCommittee:
+		checker := ssv.NewAggregatorCommitteeChecker()
 		return checker.CheckValue
 	default:
 		return nil
@@ -246,6 +250,8 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 			sharePubKeys,
 			expectedVote,
 		)
+	case *runner.AggregatorCommitteeRunner:
+		return ssv.NewAggregatorCommitteeChecker()
 
 	default:
 		return nil

@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
@@ -129,23 +130,18 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		return err
 	}
 
-	// Rule: If role is invalid
-	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
-		return ErrInvalidRole
-	}
-
 	return nil
 }
 
-func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
+func (mv *messageValidator) validRoleAtSlot(roleType spectypes.RunnerRole, slot phase0.Slot) bool {
+	isInBooleFork := mv.netCfg.BooleForkAtSlot(slot)
 	switch roleType {
-	case spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
-		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit:
+	case spectypes.RoleCommittee, spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return true
+	case spectypes.RoleAggregatorCommittee:
+		return isInBooleFork
+	case ssvtypes.RoleAggregator, ssvtypes.RoleSyncCommitteeContribution:
+		return !isInBooleFork
 	default:
 		return false
 	}

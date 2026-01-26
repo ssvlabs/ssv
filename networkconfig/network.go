@@ -44,6 +44,10 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.EstimatedEpochAtSlot(slot) >= n.SSV.Forks.Boole
 }
 
+func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
+	return epoch >= n.SSV.Forks.Boole
+}
+
 // InBooleTransitionWindow checks if the slot is in the Boole transition window,
 // i.e., in `PRIOR_WINDOW` or `SUBSEQUENT_WINDOW` according to https://github.com/ssvlabs/SIPs/pull/43.
 func (n Network) InBooleTransitionWindow(slot phase0.Slot) bool {

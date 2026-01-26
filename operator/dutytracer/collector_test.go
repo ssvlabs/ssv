@@ -41,7 +41,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	const (
 		slot         = phase0.Slot(1)
-		role, bnRole = spectypes.RoleAggregator, spectypes.BNRoleAggregator
+		role, bnRole = ssvtypes.RoleAggregator, spectypes.BNRoleAggregator
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
@@ -336,7 +336,7 @@ func TestValidatorDuty(t *testing.T) {
 
 		proposalMsg.Data = data
 
-		pData, err := new(spectypes.ValidatorConsensusData).Encode()
+		pData, err := new(spectypes.ProposerConsensusData).Encode()
 		require.NoError(t, err)
 
 		proposalMsg.SignedSSVMessage.FullData = pData
@@ -376,7 +376,7 @@ func TestValidatorDuties(t *testing.T) {
 
 	const (
 		slot         = phase0.Slot(1)
-		role, bnRole = spectypes.RoleAggregator, spectypes.BNRoleAggregator
+		role, bnRole = ssvtypes.RoleAggregator, spectypes.BNRoleAggregator
 		vIndex       = phase0.ValidatorIndex(55)
 	)
 
@@ -1301,8 +1301,8 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 		err  bool
 	}{
 		{spectypes.RoleProposer, spectypes.BNRoleProposer, false},
-		{spectypes.RoleAggregator, spectypes.BNRoleAggregator, false},
-		{spectypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
+		{ssvtypes.RoleAggregator, spectypes.BNRoleAggregator, false},
+		{ssvtypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
 		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
 		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
 		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},

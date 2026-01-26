@@ -168,11 +168,12 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	slot := phase0.Slot(123)
 
 	committee := &Committee{
-		logger:          logger,
-		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
-		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		CommitteeMember: &spectypes.CommitteeMember{},
+		logger:            logger,
+		networkConfig:     networkconfig.TestNetwork,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		CommitteeMember:   &spectypes.CommitteeMember{},
 	}
 
 	msgID := spectypes.MessageID{1, 2, 3, 4}
@@ -220,11 +221,12 @@ func TestConsumeQueueBasic(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		logger:          logger,
-		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
-		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		CommitteeMember: &spectypes.CommitteeMember{},
+		logger:            logger,
+		networkConfig:     networkconfig.TestNetwork,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		CommitteeMember:   &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -306,10 +308,11 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
-		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		CommitteeMember: &spectypes.CommitteeMember{},
+		networkConfig:     networkconfig.TestNetwork,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		CommitteeMember:   &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -426,10 +429,11 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
-		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		CommitteeMember: &spectypes.CommitteeMember{},
+		networkConfig:     networkconfig.TestNetwork,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		CommitteeMember:   &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -506,10 +510,11 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
-		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		CommitteeMember: &spectypes.CommitteeMember{},
+		networkConfig:     networkconfig.TestNetwork,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		CommitteeMember:   &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -988,10 +993,11 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
-		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		CommitteeMember: &spectypes.CommitteeMember{},
+		networkConfig:     networkconfig.TestNetwork,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		CommitteeMember:   &spectypes.CommitteeMember{},
 	}
 
 	slot := phase0.Slot(123)
@@ -1282,10 +1288,11 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	// --- Setup a single-slot committee and its queue ---
 	slot := phase0.Slot(42)
 	committee := &Committee{
-		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
-		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
-		CommitteeMember: &spectypes.CommitteeMember{},
+		networkConfig:     networkconfig.TestNetwork,
+		Queues:            make(map[phase0.Slot]queueContainer),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		AggregatorRunners: make(map[phase0.Slot]*runner.AggregatorCommitteeRunner),
+		CommitteeMember:   &spectypes.CommitteeMember{},
 	}
 	qc := queueContainer{
 		Q: queue.New(logger, 1000),
@@ -1306,18 +1313,22 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 			MsgType: specqbft.ProposalMsgType,
 		},
 	}
-	committee.Runners[slot] = &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         true,
-						ProposalAcceptedForCurrentRound: acceptedProposal,
-						Round:                           1,
-					},
+	baseRunner := &runner.BaseRunner{
+		State: &runner.State{
+			RunningInstance: &instance.Instance{
+				State: &specqbft.State{
+					Decided:                         true,
+					ProposalAcceptedForCurrentRound: acceptedProposal,
+					Round:                           1,
 				},
 			},
 		},
+	}
+	committee.Runners[slot] = &runner.CommitteeRunner{
+		BaseRunner: baseRunner,
+	}
+	committee.AggregatorRunners[slot] = &runner.AggregatorCommitteeRunner{
+		BaseRunner: baseRunner,
 	}
 
 	// --- Build 200 randomized messages and count expected per priority bucket ---
@@ -1417,6 +1428,7 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	go func() {
 		defer close(bucketChan)
 		committee.ConsumeQueue(ctx, logger, qc, handler, committee.Runners[slot])
+		// TODO: test aggregator runners
 	}()
 
 	// Wait for exactly len(allMsgs) messages (or fail on timeout)

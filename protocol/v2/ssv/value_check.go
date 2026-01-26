@@ -77,6 +77,27 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
+type aggregatorCommitteeChecker struct{}
+
+func NewAggregatorCommitteeChecker() ValueChecker {
+	return &aggregatorCommitteeChecker{}
+}
+
+func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
+	cd := &spectypes.AggregatorCommitteeConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return spectypes.WrapError(
+			spectypes.AggCommConsensusDataDecodeErrorCode,
+			fmt.Errorf("failed decoding aggregator committee consensus data: %w", err),
+		)
+	}
+	if err := cd.Validate(); err != nil {
+		return fmt.Errorf("invalid value: %w", err)
+	}
+
+	return nil
+}
+
 type proposerChecker struct {
 	signer         ekm.BeaconSigner
 	beaconConfig   *networkconfig.Beacon
@@ -171,8 +192,8 @@ func checkValidatorConsensusData(
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-) (*spectypes.ValidatorConsensusData, error) {
-	cd := &spectypes.ValidatorConsensusData{}
+) (*spectypes.ProposerConsensusData, error) {
+	cd := &spectypes.ProposerConsensusData{}
 	if err := cd.Decode(value); err != nil {
 		return nil, fmt.Errorf("failed decoding consensus data: %w", err)
 	}

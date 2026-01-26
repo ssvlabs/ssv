@@ -8,6 +8,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -97,7 +99,7 @@ func (c *SeenMsgTypes) ValidateConsensusMessage(signedSSVMessage *spectypes.Sign
 // Returns an error if the message type exceeds its respective count limit.
 func (c *SeenMsgTypes) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages) error {
 	switch m.Type {
-	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
+	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig:
 		if c.reachedPreConsensusLimit() {
 			err := ErrInvalidPartialSignatureTypeCount
 			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
@@ -138,7 +140,7 @@ func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.Signed
 // RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
 func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.PartialSignatureMessages) error {
 	switch messages.Type {
-	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
+	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig, spectypes.AggregatorCommitteePartialSig:
 		c.recordPreConsensus()
 	case spectypes.PostConsensusPartialSig:
 		c.recordPostConsensus()

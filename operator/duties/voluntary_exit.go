@@ -62,7 +62,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
@@ -138,7 +138,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingDuties
-	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.SlotsPerEpoch))
+	h.duties.RemoveSlot(slot - phase0.Slot(h.netCfg.SlotsPerEpoch))
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
@@ -165,7 +165,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
+	blockSlot = h.netCfg.EstimatedSlotAtTime(time.Unix(int64(header.Time), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 

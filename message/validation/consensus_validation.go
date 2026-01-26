@@ -92,6 +92,15 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	signers := signedSSVMessage.OperatorIDs
 	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	msgType := consensusMessage.MsgType
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+	slot := phase0.Slot(consensusMessage.Height)
+
+	// Rule: If role is invalid
+	if !mv.validRoleAtSlot(role, slot) {
+		e := ErrInvalidRole
+		e.got = fmt.Sprintf("%v (%d) @ slot %v", role, role, slot)
+		return e
+	}
 
 	if len(signers) > 1 {
 		// Rule: Decided msg with different type than Commit
@@ -141,8 +150,6 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return e
 	}
 
-	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
-
 	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
 		e := ErrUnexpectedConsensusMessage
@@ -151,7 +158,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	}
 
 	// Rule: Round cut-offs for roles:
-	// - 12 (committee and aggregation)
+	// - 12 (committee, aggregator, and aggregator committee)
 	// - 6 (other types)
 	maxRound, err := mv.maxRound(role)
 	if err != nil {
@@ -266,7 +273,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if role != spectypes.RoleCommittee { // Rule only for validator runners
+	if !mv.committeeRole(role) { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.OperatorIDs {
 			signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
 			if maxSlot := signerStateBySlot.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
@@ -285,16 +292,12 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	// Rule: current slot(height) must be between duty's starting slot and:
-	// - duty's starting slot + 34 (committee and aggregation)
+	// - duty's starting slot + 34 (committee, aggregator, and aggregator committee)
 	// - duty's starting slot + 3 (other types)
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return err
 	}
 
-	// Rule: valid number of duties per epoch:
-	// - 2 for aggregation, voluntary exit and validator registration
-	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
-	// - else, accept
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
 		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, committeeInfo.validatorIndices, signerStateBySlot); err != nil {
@@ -395,9 +398,9 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 
 func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round, error) {
 	switch role {
-	case spectypes.RoleCommittee, spectypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
+	case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee, ssvtypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, ssvtypes.RoleSyncCommitteeContribution:
 		return 6, nil
 	default:
 		return 0, fmt.Errorf("unknown role")
