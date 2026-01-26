@@ -11,10 +11,11 @@ import (
 
 func TestBooleForkInPriorWindow(t *testing.T) {
 	tests := []struct {
-		name     string
-		boole    phase0.Epoch
-		epoch    phase0.Epoch
-		expected bool
+		name         string
+		boole        phase0.Epoch
+		epoch        phase0.Epoch
+		windowEpochs *phase0.Epoch
+		expected     bool
 	}{
 		{name: "before_window", boole: 10, epoch: 8, expected: false},
 		{name: "in_window", boole: 10, epoch: 9, expected: true},
@@ -24,6 +25,10 @@ func TestBooleForkInPriorWindow(t *testing.T) {
 		{name: "boole_zero_epoch_one", boole: 0, epoch: 1, expected: false},
 		{name: "boole_one_epoch_zero", boole: 1, epoch: 0, expected: true},
 		{name: "boole_one_epoch_one", boole: 1, epoch: 1, expected: false},
+		{name: "zero_window", boole: 10, epoch: 9, windowEpochs: ptr(phase0.Epoch(0)), expected: false},
+		{name: "window_larger_than_boole", boole: 1, epoch: 0, windowEpochs: ptr(phase0.Epoch(2)), expected: true},
+		{name: "boole_max_epoch", boole: phase0.Epoch(math.MaxUint64), epoch: 0, windowEpochs: ptr(phase0.Epoch(1)), expected: false},
+		{name: "boole_zero_epoch", boole: 0, epoch: 0, windowEpochs: ptr(phase0.Epoch(1)), expected: false},
 	}
 
 	for _, test := range tests {
@@ -35,17 +40,24 @@ func TestBooleForkInPriorWindow(t *testing.T) {
 			}
 
 			slot := netCfg.FirstSlotAtEpoch(test.epoch)
-			require.Equal(t, test.expected, netCfg.inBoolePriorWindow(slot))
+			if test.windowEpochs == nil {
+				require.Equal(t, test.expected, netCfg.inBoolePriorWindow(slot))
+				return
+			}
+			require.Equal(t, test.expected, netCfg.inBoolePriorWindowWithEpochs(slot, *test.windowEpochs))
 		})
 	}
 }
 
 func TestBooleForkInSubsequentWindow(t *testing.T) {
+	maxEpochForTwoSlots := phase0.Epoch(math.MaxUint64 / 2)
 	tests := []struct {
-		name     string
-		boole    phase0.Epoch
-		slot     phase0.Slot
-		expected bool
+		name          string
+		boole         phase0.Epoch
+		slot          phase0.Slot
+		windowSlots   *phase0.Slot
+		slotsPerEpoch *uint64
+		expected      bool
 	}{
 		{name: "before_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10) - 1, expected: false},
 		{name: "at_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10), expected: true},
@@ -53,17 +65,28 @@ func TestBooleForkInSubsequentWindow(t *testing.T) {
 		{name: "after_fork", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(11), expected: false},
 		{name: "boole_zero_epoch_zero", boole: 0, slot: TestNetwork.FirstSlotAtEpoch(0), expected: false},
 		{name: "boole_max_epoch_zero", boole: phase0.Epoch(math.MaxUint64), slot: TestNetwork.FirstSlotAtEpoch(0), expected: false},
+		{name: "zero_window", boole: 10, slot: TestNetwork.FirstSlotAtEpoch(10), windowSlots: ptr(phase0.Slot(0)), expected: false},
+		{name: "boole_over_max_epoch_slot_zero", boole: maxEpochForTwoSlots + 1, slot: TestNetwork.FirstSlotAtEpoch(0), slotsPerEpoch: ptr(uint64(2)), windowSlots: ptr(phase0.Slot(1)), expected: false},
+		{name: "boole_over_max_epoch", boole: maxEpochForTwoSlots + 1, slot: phase0.Slot(math.MaxUint64), slotsPerEpoch: ptr(uint64(2)), windowSlots: ptr(phase0.Slot(1)), expected: false},
+		{name: "start_overflow", boole: 1, slot: phase0.Slot(math.MaxUint64), slotsPerEpoch: ptr(uint64(math.MaxUint64)), windowSlots: ptr(phase0.Slot(1)), expected: false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			beacon := *TestNetwork.Beacon
+			if test.slotsPerEpoch != nil {
+				beacon.SlotsPerEpoch = *test.slotsPerEpoch
+			}
 			netCfg := Network{
 				Beacon: &beacon,
 				SSV:    &SSV{Forks: SSVForks{Boole: test.boole}},
 			}
 
-			require.Equal(t, test.expected, netCfg.inBooleSubsequentWindow(test.slot))
+			if test.windowSlots == nil {
+				require.Equal(t, test.expected, netCfg.inBooleSubsequentWindow(test.slot))
+				return
+			}
+			require.Equal(t, test.expected, netCfg.inBooleSubsequentWindowWithSlots(test.slot, *test.windowSlots))
 		})
 	}
 }
@@ -124,4 +147,8 @@ func beaconAtEpoch(epoch phase0.Epoch) *Beacon {
 	genesisTime := time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
 	beacon.GenesisTime = genesisTime
 	return &beacon
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }

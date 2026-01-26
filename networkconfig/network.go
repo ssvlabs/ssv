@@ -23,8 +23,8 @@ func (n Network) String() string {
 }
 
 const alanForkName = "alan"
-const boolePriorWindowEpochs = phase0.Epoch(1)
-const booleSubsequentWindowSlots = phase0.Slot(1)
+const boolePriorWindowEpochs = phase0.Epoch(1)    // epochs before Boole to subscribe to both topic sets
+const booleSubsequentWindowSlots = phase0.Slot(1) // slots after Boole to keep accepting old-topic messages
 
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with fork name.
@@ -44,49 +44,44 @@ func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.EstimatedEpochAtSlot(slot) >= n.SSV.Forks.Boole
 }
 
+// InBooleTransitionWindow checks if the slot is in the Boole transition window,
+// i.e., in `PRIOR_WINDOW` or `SUBSEQUENT_WINDOW` according to https://github.com/ssvlabs/SIPs/pull/43.
 func (n Network) InBooleTransitionWindow(slot phase0.Slot) bool {
 	return n.inBoolePriorWindow(slot) || n.inBooleSubsequentWindow(slot)
 }
 
 func (n Network) inBoolePriorWindow(slot phase0.Slot) bool {
-	if n.BooleForkAtSlot(slot) {
-		return false
-	}
-	booleEpoch := n.SSV.Forks.Boole
-	if booleEpoch == 0 {
-		return false
-	}
-	if boolePriorWindowEpochs == 0 {
-		return false
+	return n.inBoolePriorWindowWithEpochs(slot, boolePriorWindowEpochs)
+}
+
+func (n Network) inBoolePriorWindowWithEpochs(slot phase0.Slot, windowEpochs phase0.Epoch) bool {
+	priorWindowStartEpoch := phase0.Epoch(0)
+	if windowEpochs <= n.SSV.Forks.Boole {
+		priorWindowStartEpoch = n.SSV.Forks.Boole - windowEpochs
 	}
 
-	startEpoch := phase0.Epoch(0)
-	if boolePriorWindowEpochs < booleEpoch {
-		startEpoch = booleEpoch - boolePriorWindowEpochs
-	}
-
-	epoch := n.EstimatedEpochAtSlot(slot)
-	return epoch >= startEpoch
+	return n.EstimatedEpochAtSlot(slot) >= priorWindowStartEpoch && !n.BooleForkAtSlot(slot)
 }
 
 func (n Network) inBooleSubsequentWindow(slot phase0.Slot) bool {
-	if booleSubsequentWindowSlots == 0 {
-		return false
-	}
+	return n.inBooleSubsequentWindowWithSlots(slot, booleSubsequentWindowSlots)
+}
+
+func (n Network) inBooleSubsequentWindowWithSlots(slot phase0.Slot, windowSlots phase0.Slot) bool {
+	// If Boole is at genesis there is no transition/unsubscription window to apply; without
+	// this guard we would treat slot 0 as being inside the window.
 	if n.SSV.Forks.Boole == 0 {
 		return false
 	}
-	if n.SSV.Forks.Boole == phase0.Epoch(math.MaxUint64) {
-		return false
-	}
+
+	// Avoid FirstSlotAtEpoch overflow when Boole is beyond the representable epoch range;
+	// without this guard the multiplication would wrap and could treat small slots as in-window.
 	maxEpoch := phase0.Epoch(math.MaxUint64 / n.SlotsPerEpoch)
 	if n.SSV.Forks.Boole > maxEpoch {
 		return false
 	}
+
 	start := n.FirstSlotAtEpoch(n.SSV.Forks.Boole)
-	if start > phase0.Slot(math.MaxUint64)-booleSubsequentWindowSlots {
-		return false
-	}
-	end := start + booleSubsequentWindowSlots
+	end := start + windowSlots
 	return slot >= start && slot < end
 }
