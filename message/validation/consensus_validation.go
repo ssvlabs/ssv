@@ -93,7 +93,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	// Rule: If role is invalid
 	if !mv.validRoleAtSlot(role, slot) {
 		e := ErrInvalidRole
-		e.got = fmt.Sprintf("%v (%d) @ %v", role, role, slot)
+		e.got = fmt.Sprintf("%v (%d) @ slot %v", role, role, slot)
 		return e
 	}
 
