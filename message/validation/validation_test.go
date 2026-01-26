@@ -494,7 +494,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
 			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			receivedAt := postBooleCfg.SlotStartTime(slot)
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
@@ -508,7 +507,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
 			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			receivedAt := postBooleCfg.SlotStartTime(slot)
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
@@ -1260,7 +1258,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			signedSSVMessage := generateSignedMessage(ks, msgID, slot)
 			receivedAt := postBooleCfg.SlotStartTime(slot + 35)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 		})

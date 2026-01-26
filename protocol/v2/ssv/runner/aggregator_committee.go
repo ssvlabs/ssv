@@ -366,7 +366,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	duty := r.state().CurrentDuty.(*spectypes.AggregatorCommitteeDuty)
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	dataVersion, _ := r.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
+	dataVersion, _ := r.GetBaseRunner().NetworkConfig.BeaconForkAtEpoch(epoch)
 	consensusData := &spectypes.AggregatorCommitteeConsensusData{
 		Version: dataVersion,
 	}
