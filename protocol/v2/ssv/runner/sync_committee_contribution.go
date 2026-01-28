@@ -40,8 +40,8 @@ type SyncCommitteeAggregatorRunner struct {
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
 
-	// rootToValidatorIdx is the root->validator mapping for the current duty.
-	rootToValidatorIdx map[phase0.Root]phase0.ValidatorIndex
+	// rootToSyncCommitteeIdx is the root->validator_sync_committee_index mapping for the current duty.
+	rootToSyncCommitteeIdx map[phase0.Root]phase0.ValidatorIndex
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -135,10 +135,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		}
 
 		// fetch sync committee contribution
-		vIdx := r.rootToValidatorIdx[root]
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(
-			phase0.CommitteeIndex(r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices[vIdx]),
-		)
+		vIdx := r.rootToSyncCommitteeIdx[root]
+		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
@@ -487,7 +485,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 	}
 
 	// re-build the root->validator mapping for this duty
-	r.rootToValidatorIdx = make(map[phase0.Root]phase0.ValidatorIndex)
+	r.rootToSyncCommitteeIdx = make(map[phase0.Root]phase0.ValidatorIndex)
 
 	for _, vIdx := range r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
@@ -510,7 +508,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 
 		msgs.Messages = append(msgs.Messages, msg)
 
-		r.rootToValidatorIdx[msg.SigningRoot] = phase0.ValidatorIndex(vIdx)
+		r.rootToSyncCommitteeIdx[msg.SigningRoot] = phase0.ValidatorIndex(vIdx)
 	}
 
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
