@@ -170,7 +170,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("get beacon block: %w", err)
 	}
 	// Log essentials about the retrieved block.
-	logFields, proposalMeta := proposalCommonFields(vBlk)
+	logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
 	logFields = append(
 		logFields,
 		zap.Duration("proposer_delay", r.proposerDelay),
@@ -185,9 +185,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 	const eventMsg = "🧊 got beacon block proposal"
 	logger.Info(eventMsg, logFields...)
-	span.AddEvent(eventMsg, trace.WithAttributes(
-		proposalTraceAttrs(proposalMeta, vBlk.Blinded)...,
-	))
+	span.AddEvent(eventMsg, trace.WithAttributes(proposalTraceAttrs...))
 
 	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
 	// block, convert it to blinded form by swapping the execution payload with
@@ -393,7 +391,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		}
 	}
 
-	loggerFields, proposalMeta := proposalCommonFields(vBlk)
+	loggerFields, proposalTraceAttrs := proposalCommonFields(vBlk)
 
 	logger = logger.With(loggerFields...)
 
@@ -407,7 +405,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	submittedAttrs := append([]attribute.KeyValue{
 		observability.BeaconSlotAttribute(r.BaseRunner.State.CurrentDuty.DutySlot()),
 		observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
-	}, proposalTraceAttrs(proposalMeta, vBlk.Blinded)...)
+	}, proposalTraceAttrs...)
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
 	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
 
@@ -693,49 +691,26 @@ func extractExecutionInfo(vBlk *api.VersionedProposal) (executionInfo, error) {
 	}
 }
 
-type proposalMeta struct {
-	blockRootErr error
-	blockHashErr error
-
-	blockRoot phase0.Root
-	blockHash phase0.Hash32
-}
-
-func proposalTraceAttrs(meta proposalMeta, blinded bool) []attribute.KeyValue {
-	attrs := []attribute.KeyValue{
-		observability.BeaconBlockIsBlindedAttribute(blinded),
-	}
-	if meta.blockHashErr == nil {
-		attrs = append(attrs, observability.BeaconBlockHashAttribute(meta.blockHash))
-	}
-	if meta.blockRootErr == nil {
-		attrs = append(attrs, observability.BeaconBlockRootAttribute(meta.blockRoot))
-	}
-	return attrs
-}
-
-func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, proposalMeta) {
+func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, []attribute.KeyValue) {
 	if vBlk == nil {
-		return []zap.Field{zap.NamedError("proposal_err", fmt.Errorf("proposal is nil"))}, proposalMeta{
-			blockRootErr: fmt.Errorf("proposal is nil"),
-			blockHashErr: fmt.Errorf("proposal is nil"),
-		}
+		err := fmt.Errorf("proposal is nil")
+		return []zap.Field{zap.NamedError("proposal_err", err)}, []attribute.KeyValue{observability.BeaconBlockIsBlindedAttribute(false)}
 	}
 
 	logFields := []zap.Field{
 		zap.String("version", vBlk.Version.String()),
 		zap.Bool("blinded", vBlk.Blinded),
 	}
-
-	var meta proposalMeta
+	traceAttrs := []attribute.KeyValue{
+		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
+	}
 
 	blockRoot, err := vBlk.Root()
-	meta.blockRoot = blockRoot
-	meta.blockRootErr = err
 	if err != nil {
 		logFields = append(logFields, zap.NamedError("blockRoot_err", err))
 	} else {
 		logFields = append(logFields, fields.BlockRoot(blockRoot))
+		traceAttrs = append(traceAttrs, observability.BeaconBlockRootAttribute(blockRoot))
 	}
 
 	parentRoot, err := vBlk.ParentRoot()
@@ -746,8 +721,6 @@ func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, proposalMet
 	}
 
 	execInfo, err := extractExecutionInfo(vBlk)
-	meta.blockHash = execInfo.BlockHash
-	meta.blockHashErr = err
 	if err != nil {
 		logFields = append(logFields, zap.NamedError("execution_err", err))
 	} else {
@@ -757,7 +730,8 @@ func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, proposalMet
 			zap.String("execution_parent_hash", hex.EncodeToString(execInfo.ParentHash[:])),
 			zap.Uint64("execution_block_number", execInfo.BlockNumber),
 		)
+		traceAttrs = append(traceAttrs, observability.BeaconBlockHashAttribute(execInfo.BlockHash))
 	}
 
-	return logFields, meta
+	return logFields, traceAttrs
 }
