@@ -101,6 +101,125 @@ func TestValidCommitteeSize(t *testing.T) {
 	}
 }
 
+func TestSMRQuorumCalculations(t *testing.T) {
+	t.Run("ComputeSMRF", func(t *testing.T) {
+		tt := []struct {
+			committeeSize uint64
+			expectedF     uint64
+		}{
+			{committeeSize: 0, expectedF: 0},
+			{committeeSize: 1, expectedF: 0},
+			{committeeSize: 2, expectedF: 0},
+			{committeeSize: 3, expectedF: 0},
+			{committeeSize: 4, expectedF: 1},
+			{committeeSize: 7, expectedF: 1},
+			{committeeSize: 8, expectedF: 1},
+			{committeeSize: 9, expectedF: 2},
+			{committeeSize: 10, expectedF: 2},
+			{committeeSize: 13, expectedF: 2},
+			{committeeSize: 14, expectedF: 3},
+		}
+
+		for _, tc := range tt {
+			require.Equal(t, tc.expectedF, ComputeSMRF(tc.committeeSize))
+		}
+	})
+
+	t.Run("ComputeSMRQuorum", func(t *testing.T) {
+		tt := []struct {
+			committeeSize uint64
+			expectedQ     uint64
+		}{
+			{committeeSize: 0, expectedQ: 0},
+			{committeeSize: 3, expectedQ: 0},
+			{committeeSize: 4, expectedQ: 3},
+			{committeeSize: 7, expectedQ: 3},
+			{committeeSize: 10, expectedQ: 7},
+			{committeeSize: 13, expectedQ: 7},
+			{committeeSize: 14, expectedQ: 11},
+		}
+
+		for _, tc := range tt {
+			require.Equal(t, tc.expectedQ, ComputeSMRQuorum(tc.committeeSize))
+		}
+	})
+
+	t.Run("ValidSMRCommitteeSize", func(t *testing.T) {
+		tt := []struct {
+			committeeSize uint64
+			valid         bool
+		}{
+			{committeeSize: 0, valid: false},
+			{committeeSize: 1, valid: false},
+			{committeeSize: 2, valid: false},
+			{committeeSize: 3, valid: false},
+			{committeeSize: 4, valid: true},
+			{committeeSize: 5, valid: true},
+			{committeeSize: 7, valid: true},
+			{committeeSize: 8, valid: true},
+			{committeeSize: 9, valid: true},
+			{committeeSize: 10, valid: true},
+			{committeeSize: 13, valid: true},
+			{committeeSize: 14, valid: true},
+		}
+
+		for _, tc := range tt {
+			require.Equal(t, tc.valid, ValidSMRCommitteeSize(tc.committeeSize))
+		}
+	})
+
+	t.Run("CommitteeMemberWrapper", func(t *testing.T) {
+		tt := []struct {
+			committeeSize uint64
+			expectedQ     uint64
+		}{
+			{committeeSize: 4, expectedQ: 3},
+			{committeeSize: 7, expectedQ: 3},
+			{committeeSize: 10, expectedQ: 7},
+			{committeeSize: 13, expectedQ: 7},
+		}
+
+		for _, tc := range tt {
+			cm := &spectypes.CommitteeMember{
+				Committee: make([]*spectypes.Operator, int(tc.committeeSize)),
+			}
+			wrapped := SMRCommitteeMember{CommitteeMember: cm}
+			require.Equal(t, tc.expectedQ, wrapped.GetSMRQuorum())
+
+			require.False(t, wrapped.HasSMRQuorum(-1))
+			require.False(t, wrapped.HasSMRQuorum(int(tc.expectedQ-1)))
+			require.True(t, wrapped.HasSMRQuorum(int(tc.expectedQ)))
+		}
+
+		require.Equal(t, uint64(0), SMRCommitteeMember{}.GetSMRQuorum())
+		require.False(t, SMRCommitteeMember{}.HasSMRQuorum(0))
+	})
+
+	t.Run("CompareQBFTAndSMRQuorums", func(t *testing.T) {
+		tt := []struct {
+			committeeSize uint64
+			qbftF         uint64
+			qbftQ         uint64
+			smrF          uint64
+			smrQ          uint64
+		}{
+			{committeeSize: 4, qbftF: 1, qbftQ: 3, smrF: 1, smrQ: 3},
+			{committeeSize: 7, qbftF: 2, qbftQ: 5, smrF: 1, smrQ: 3},
+			{committeeSize: 10, qbftF: 3, qbftQ: 7, smrF: 2, smrQ: 7},
+			{committeeSize: 13, qbftF: 4, qbftQ: 9, smrF: 2, smrQ: 7},
+		}
+
+		for _, tc := range tt {
+			qbftQ, _ := ComputeQuorumAndPartialQuorum(tc.committeeSize)
+			require.Equal(t, tc.qbftF, ComputeF(tc.committeeSize))
+			require.Equal(t, tc.qbftQ, qbftQ)
+
+			require.Equal(t, tc.smrF, ComputeSMRF(tc.committeeSize))
+			require.Equal(t, tc.smrQ, ComputeSMRQuorum(tc.committeeSize))
+		}
+	})
+}
+
 func TestSSVShare_IsAttesting(t *testing.T) {
 	currentEpoch := phase0.Epoch(100) // Example current epoch for testing
 	tt := []struct {

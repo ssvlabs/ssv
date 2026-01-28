@@ -242,6 +242,56 @@ func ValidCommitteeSize(committeeSize uint64) bool {
 	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
 }
 
+// ComputeSMRF calculates the maximum number of Byzantine faults tolerated by the
+// (5f-1)-SMR protocol given a committee size n.
+// For n >= 5f-1, f = floor((n+1)/5).
+func ComputeSMRF(committeeSize uint64) uint64 {
+	return (committeeSize + 1) / 5
+}
+
+// ComputeSMRQuorum returns the SMR quorum size (4f-1) for a given committee size n.
+func ComputeSMRQuorum(committeeSize uint64) uint64 {
+	f := ComputeSMRF(committeeSize)
+	if f == 0 {
+		return 0
+	}
+	return 4*f - 1
+}
+
+// ValidSMRCommitteeSize validates that the committee size n can tolerate at least 1 Byzantine fault
+// under the (5f-1)-SMR resilience requirement n >= 5f-1.
+func ValidSMRCommitteeSize(committeeSize uint64) bool {
+	f := ComputeSMRF(committeeSize)
+	if f == 0 {
+		return false
+	}
+	return committeeSize >= 5*f-1
+}
+
+// SMRCommitteeMember wraps a spec CommitteeMember and provides (5f-1)-SMR quorum helpers.
+// It computes f from the committee size using ComputeSMRF.
+type SMRCommitteeMember struct {
+	*spectypes.CommitteeMember
+}
+
+func (cm SMRCommitteeMember) HasSMRQuorum(cnt int) bool {
+	if cnt < 0 {
+		return false
+	}
+	quorum := cm.GetSMRQuorum()
+	if quorum == 0 {
+		return false
+	}
+	return uint64(cnt) >= quorum
+}
+
+func (cm SMRCommitteeMember) GetSMRQuorum() uint64 {
+	if cm.CommitteeMember == nil {
+		return 0
+	}
+	return ComputeSMRQuorum(uint64(len(cm.Committee)))
+}
+
 // Return a 32 bytes ID for the committee of operators
 func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID {
 	// sort
