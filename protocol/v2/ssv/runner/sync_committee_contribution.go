@@ -135,7 +135,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		}
 
 		// fetch sync committee contribution
-		vIdx := r.rootToSyncCommitteeIdx[root]
+		vIdx, ok := r.rootToSyncCommitteeIdx[root]
+		if !ok {
+			logger.Warn("root got a quorum, but is unknown to us", fields.Root(root))
+			continue
+		}
 		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
