@@ -73,3 +73,28 @@ func GetSyncCommitteeContributions(cd *spectypes.ProposerConsensusData) (spectyp
 	}
 	return ret, nil
 }
+
+// ValidateConsensusData validates duty-specific consensus data and returns spec-style errors.
+func ValidateConsensusData(cd *spectypes.ProposerConsensusData) error {
+	switch cd.Duty.Type {
+	case spectypes.BNRoleProposer:
+		if err := cd.Validate(); err != nil {
+			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+		}
+	case spectypes.BNRoleAggregator:
+		if _, _, err := GetAggregateAndProof(cd); err != nil {
+			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+		}
+	case spectypes.BNRoleSyncCommitteeContribution:
+		if _, err := GetSyncCommitteeContributions(cd); err != nil {
+			return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+		}
+	case spectypes.BNRoleValidatorRegistration:
+		return spectypes.NewError(spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode, "validator registration has no consensus data")
+	case spectypes.BNRoleVoluntaryExit:
+		return spectypes.NewError(spectypes.ValidatorExitNoConsensusPhaseErrorCode, "voluntary exit has no consensus data")
+	default:
+		return spectypes.NewError(spectypes.UnknownDutyRoleDataErrorCode, "unknown duty role")
+	}
+	return nil
+}
