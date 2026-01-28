@@ -70,6 +70,11 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
 
+.PHONY: spec-test-alan
+spec-test-alan:
+	@echo "Running spec tests against ssv-spec Alan"
+	@SSV_SPEC_GOMOD=go.spec.alan.mod go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
+
 .PHONY: all-spec-test-raceless
 all-spec-test-raceless:
 	@echo "Running spec tests"

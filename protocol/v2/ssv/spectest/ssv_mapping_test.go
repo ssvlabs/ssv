@@ -37,6 +37,10 @@ import (
 )
 
 func TestSSVMapping(t *testing.T) {
+	runSSVMappingTest(t)
+}
+
+func runSSVMappingTest(t *testing.T) {
 	path, err := os.Getwd()
 	require.NoError(t, err)
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "ssv")
@@ -164,6 +168,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 		require.NoError(t, err)
 		typedTest := &partialsigcontainer.PartialSigContainerTest{}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
+		typedTest.ExpectedErrorCode = adjustExpectedErrorCode(typedTest.ExpectedErrorCode)
 
 		return &runnable{
 			name: typedTest.TestName(),
@@ -558,7 +563,13 @@ func fixCommitteeForRun(
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
 
 	committeeRunnersMap, _ := committeeMap["CommitteeRunners"].(map[string]any)
+	if committeeRunnersMap == nil {
+		committeeRunnersMap, _ = committeeMap["Runners"].(map[string]any)
+	}
 	aggregatorRunnersMap, _ := committeeMap["AggregatorCommitteeRunners"].(map[string]any)
+	if aggregatorRunnersMap == nil {
+		aggregatorRunnersMap, _ = committeeMap["AggregatorRunners"].(map[string]any)
+	}
 	ks := keySetFromShares(c.Shares)
 	if (committeeRunnersMap != nil || aggregatorRunnersMap != nil) && ks == nil {
 		require.Fail(t, "no shares for runner keyset")

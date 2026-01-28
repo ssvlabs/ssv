@@ -23,10 +23,16 @@ import (
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
 	overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t, test, test.Name)
+
+	if !networkconfig.TestNetwork.BooleForkAtSlot(testingutils.TestingSyncCommitteeContributionDuty.DutySlot()) {
+		runSyncCommitteeAggProofAlan(t, test)
+		return
+	}
 
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks, testingutils.TestingValidatorIndex)
@@ -79,6 +85,78 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	}
 
 	// post root
+	postRoot, err := r.GetStateRoot()
+	require.NoError(t, err)
+	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
+}
+
+func runSyncCommitteeAggProofAlan(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
+	ks := testingutils.Testing4SharesSet()
+	logger := log.TestLogger(t)
+
+	v := ssvtesting.BaseValidator(logger, ks)
+	r := v.DutyRunners[ssvtypes.RoleSyncCommitteeContribution]
+	require.NotNil(t, r, "sync committee runner is missing")
+
+	rawDuty := any(testingutils.TestingSyncCommitteeContributionDuty)
+	var duty spectypes.Duty
+	switch typed := rawDuty.(type) {
+	case spectypes.Duty:
+		duty = typed
+	case spectypes.ValidatorDuty:
+		duty = &typed
+	case *spectypes.ValidatorDuty:
+		duty = typed
+	case spectypes.AggregatorCommitteeDuty:
+		duty = &typed
+	case *spectypes.AggregatorCommitteeDuty:
+		duty = typed
+	default:
+		t.Fatalf("unexpected sync committee duty type %T", rawDuty)
+	}
+	if aggDuty, ok := duty.(*spectypes.AggregatorCommitteeDuty); ok {
+		var syncDuty *spectypes.ValidatorDuty
+		for _, vd := range aggDuty.ValidatorDuties {
+			if vd != nil && vd.Type == spectypes.BNRoleSyncCommitteeContribution {
+				syncDuty = vd
+				break
+			}
+		}
+		if syncDuty == nil {
+			t.Fatalf("sync committee duty missing in AggregatorCommitteeDuty")
+		}
+		duty = syncDuty
+	}
+	if syncDuty, ok := duty.(*spectypes.ValidatorDuty); ok {
+		sharePubKey := phase0.BLSPubKey(v.Share.ValidatorPubKey)
+		if syncDuty.PubKey != sharePubKey || syncDuty.ValidatorIndex != v.Share.ValidatorIndex {
+			patched := *syncDuty
+			patched.PubKey = sharePubKey
+			patched.ValidatorIndex = v.Share.ValidatorIndex
+			duty = &patched
+		}
+	}
+
+	lastErr := r.StartNewDuty(t.Context(), logger, duty, v.Operator.GetQuorum())
+	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
+
+	for _, msg := range test.Messages {
+		dmsg, err := queue.DecodeSignedSSVMessage(msg)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		err = v.ProcessMessage(t.Context(), logger, dmsg)
+		if err != nil {
+			lastErr = err
+		}
+	}
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
+
 	postRoot, err := r.GetStateRoot()
 	require.NoError(t, err)
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))

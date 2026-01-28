@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	specModule = "github.com/ssvlabs/ssv-spec"
+	specGoModEnv = "SSV_SPEC_GOMOD"
+	specModule   = "github.com/ssvlabs/ssv-spec"
 )
 
 // TODO: add missing tests
@@ -233,23 +234,45 @@ func GetModulePath(name, version string) (string, error) {
 }
 
 func getGoModFile(path string) (*modfile.File, error) {
-	// find project root path
-	for {
-		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
-			break
+	if modPath := os.Getenv(specGoModEnv); modPath != "" {
+		if !filepath.IsAbs(modPath) {
+			root, err := findModuleRoot(path)
+			if err != nil {
+				return nil, err
+			}
+			modPath = filepath.Join(root, modPath)
 		}
-		path = filepath.Dir(path)
-		if path == "/" {
-			return nil, errors.New("could not find go.mod file")
+		buf, err := os.ReadFile(filepath.Clean(modPath))
+		if err != nil {
+			return nil, errors.New("could not read go.mod")
 		}
+		return modfile.Parse(modPath, buf, nil)
+	}
+
+	root, err := findModuleRoot(path)
+	if err != nil {
+		return nil, err
 	}
 
 	// read go.mod
-	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), "go.mod"))
+	buf, err := os.ReadFile(filepath.Join(filepath.Clean(root), "go.mod"))
 	if err != nil {
 		return nil, errors.New("could not read go.mod")
 	}
 
 	// parse go.mod
 	return modfile.Parse("go.mod", buf, nil)
+}
+
+func findModuleRoot(path string) (string, error) {
+	for {
+		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+			return path, nil
+		}
+		next := filepath.Dir(path)
+		if next == path || next == "/" {
+			return "", errors.New("could not find go.mod file")
+		}
+		path = next
+	}
 }
