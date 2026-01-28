@@ -21,6 +21,6 @@ var HoodiStageSSV = &SSV{
 	Forks: SSVForks{
 		Alan:       0,
 		GasLimit36: 0,
-		Boole:      math.MaxUint64,
+		Boole:      71355,
 	},
 }
