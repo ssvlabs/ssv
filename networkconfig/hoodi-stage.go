@@ -20,6 +20,6 @@ var HoodiStageSSV = &SSV{
 	Forks: SSVForks{
 		Alan:       0,
 		GasLimit36: 0,
-		Boole:      71527,
+		Boole:      71562,
 	},
 }
