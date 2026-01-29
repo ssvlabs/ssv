@@ -2,7 +2,6 @@ package networkconfig
 
 import (
 	"math/big"
-	"math"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 )
@@ -21,6 +20,6 @@ var HoodiStageSSV = &SSV{
 	Forks: SSVForks{
 		Alan:       0,
 		GasLimit36: 0,
-		Boole:      71355,
+		Boole:      71527,
 	},
 }
