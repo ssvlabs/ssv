@@ -49,6 +49,8 @@ type AggregatorCommitteeRunner struct {
 	// For aggregator role: tracks by validator index only (one submission per validator)
 	// For sync committee contribution role: tracks by validator index and root (multiple submissions per validator)
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]map[[32]byte]struct{}
+	// rootToSyncCommitteeIdx is the root->validator_sync_committee_index mapping for the current duty.
+	rootToSyncCommitteeIdx map[phase0.Root]phase0.ValidatorIndex
 
 	// IsAggregator is an exported struct field, so it can be mocked out for easy testing.
 	IsAggregator func(
@@ -484,10 +486,16 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			case spectypes.BNRoleSyncCommitteeContribution:
 				vDuty := r.findValidatorDuty(validatorIndex, spectypes.BNRoleSyncCommitteeContribution)
 				if vDuty != nil {
+					vIdx, ok := r.rootToSyncCommitteeIdx[root]
+					if !ok {
+						logger.Warn("root got a quorum, but is unknown to us", fields.Root(root))
+						continue
+					}
+
 					isAggregator, err := r.processSyncCommitteeSelectionProof(
 						ctx,
 						blsSig,
-						metadata.ValidatorSyncCommitteeIndex,
+						uint64(vIdx),
 						vDuty,
 						consensusData,
 					)
@@ -1540,6 +1548,8 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
+	r.rootToSyncCommitteeIdx = make(map[phase0.Root]phase0.ValidatorIndex)
+
 	// Generate selection proofs for all validators and duties
 	for _, vDuty := range aggCommitteeDuty.ValidatorDuties {
 		switch vDuty.Type {
@@ -1584,6 +1594,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 				}
 
 				msg.Messages = append(msg.Messages, partialSig)
+				r.rootToSyncCommitteeIdx[partialSig.SigningRoot] = phase0.ValidatorIndex(index)
 			}
 
 		default:
