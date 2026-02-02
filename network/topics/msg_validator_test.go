@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -26,6 +27,14 @@ import (
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+func topicForSlot(netCfg *networkconfig.Network, share *ssvtypes.SSVShare, slot phase0.Slot) string {
+	if netCfg.BooleForkAtSlot(slot) {
+		return share.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name)
+	}
+
+	return share.AlanCommitteeSubnet().AlanTopic()
+}
 
 func TestMsgValidator(t *testing.T) {
 	logger := zaptest.NewLogger(t)
@@ -95,7 +104,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := share.BooleCommitteeSubnet().BooleTopic(networkconfig.TestNetwork.Beacon.Name)
+		topicID := topicForSlot(networkconfig.TestNetwork, share, slot)
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -157,7 +166,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := share.AlanCommitteeSubnet().AlanTopic()
+		topicID := topicForSlot(networkconfig.TestNetwork, share, slot)
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
