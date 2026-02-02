@@ -1090,54 +1090,34 @@ func (r *AggregatorCommitteeRunner) OnTimeoutQBFT(
 // For aggregator role we expect exactly one submission per validator.
 // For sync committee contribution role we expect one submission per expected root
 // (i.e., per subcommittee index assigned to that validator for this slot).
-func (r *AggregatorCommitteeRunner) HasSubmittedAllDuties(ctx context.Context) bool {
-	duty := r.state().CurrentDuty.(*spectypes.AggregatorCommitteeDuty)
-
+func (r *AggregatorCommitteeRunner) HasSubmittedAllDuties(ctx context.Context, logger *zap.Logger) bool {
 	// Build the expected post-consensus roots per validator/role from the decided data.
-	aggregatorMap, contributionMap, _, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
+	aggregatorMap, contributionMap, _, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
 		// If we can't resolve the expected set, do not finish yet.
 		return false
 	}
 
-	for _, vDuty := range duty.ValidatorDuties {
-		if vDuty == nil {
-			continue
-		}
-
+	// Use decided data as the source of truth; non-selected validators won't appear here.
+	for validatorIndex, expectedRoot := range aggregatorMap {
 		// Only consider validators this operator actually runs.
-		if _, hasShare := r.BaseRunner.Share[vDuty.ValidatorIndex]; !hasShare {
+		if _, hasShare := r.BaseRunner.Share[validatorIndex]; !hasShare {
 			continue
 		}
-
-		switch vDuty.Type {
-		case spectypes.BNRoleAggregator:
-			// Expect exactly one aggregate root for this validator.
-			expectedRoot, ok := aggregatorMap[vDuty.ValidatorIndex]
-			if !ok {
-				// If consensus did not include this validator's aggregate, we haven't finished.
-				return false
-			}
-			if !r.HasSubmitted(spectypes.BNRoleAggregator, vDuty.ValidatorIndex, expectedRoot) {
-				return false
-			}
-
-		case spectypes.BNRoleSyncCommitteeContribution:
-			// Expect a submission for every contribution root assigned to this validator.
-			expectedRoots, ok := contributionMap[vDuty.ValidatorIndex]
-			if !ok || len(expectedRoots) == 0 {
-				// The duty indicates sync committee work but no expected roots were found.
-				return false
-			}
-			for _, root := range expectedRoots {
-				if !r.HasSubmitted(spectypes.BNRoleSyncCommitteeContribution, vDuty.ValidatorIndex, root) {
-					return false
-				}
-			}
-
-		default:
-			// Unknown role type: don't allow finishing.
+		if !r.HasSubmitted(spectypes.BNRoleAggregator, validatorIndex, expectedRoot) {
 			return false
+		}
+	}
+
+	for validatorIndex, expectedRoots := range contributionMap {
+		// Only consider validators this operator actually runs.
+		if _, hasShare := r.BaseRunner.Share[validatorIndex]; !hasShare {
+			continue
+		}
+		for _, root := range expectedRoots {
+			if !r.HasSubmitted(spectypes.BNRoleSyncCommitteeContribution, validatorIndex, root) {
+				return false
+			}
 		}
 	}
 
