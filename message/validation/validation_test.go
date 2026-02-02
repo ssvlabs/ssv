@@ -1661,11 +1661,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		for _, tc := range tt {
 			t.Run(tc.name, func(t *testing.T) {
 				validator := New(tc.cfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+				testLeaderCtx := &leaderTestCtx{
+					netCfg:    tc.cfg,
+					committee: committee,
+				}
 
 				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
 
-				leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
-				signedSSVMessage := generateSignedMessageWithSigner(ks, leader, committeeIdentifier, slot)
+				signedSSVMessage := generateSignedMessage(testLeaderCtx, ks, committeeIdentifier, slot)
 
 				receivedAt := netCfg.SlotStartTime(slot)
 
@@ -2002,16 +2005,6 @@ type leaderTestCtx struct {
 func generateSignedMessage(
 	ctx *leaderTestCtx,
 	ks *spectestingutils.TestKeySet,
-	identifier spectypes.MessageID,
-	slot phase0.Slot,
-	opts ...func(message *specqbft.Message),
-) *spectypes.SignedSSVMessage {
-	return generateSignedMessageWithSigner(ks, 1, identifier, slot, opts...)
-}
-
-func generateSignedMessageWithSigner(
-	ks *spectestingutils.TestKeySet,
-	signer spectypes.OperatorID,
 	identifier spectypes.MessageID,
 	slot phase0.Slot,
 	opts ...func(message *specqbft.Message),
