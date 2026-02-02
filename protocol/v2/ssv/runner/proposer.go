@@ -718,6 +718,7 @@ func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, []attribute
 		logFields = append(logFields, zap.NamedError("parentRoot_err", err))
 	} else {
 		logFields = append(logFields, zap.String("parent_root", hex.EncodeToString(parentRoot[:])))
+		traceAttrs = append(traceAttrs, observability.BeaconBlockParentRootAttribute(parentRoot))
 	}
 
 	execInfo, err := extractExecutionInfo(vBlk)

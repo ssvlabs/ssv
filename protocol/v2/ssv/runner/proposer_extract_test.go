@@ -22,7 +22,13 @@ func TestExtractExecutionFields(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("unsupported version", func(t *testing.T) {
+		_, err := extractExecutionInfo(&api.VersionedProposal{Version: spec.DataVersion(999)})
+		require.Error(t, err)
+	})
+
 	parent := phase0.Hash32{1}
+	blockHash := phase0.Hash32{2}
 	const blockNumber = uint64(123)
 
 	tests := []struct {
@@ -35,7 +41,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Version: spec.DataVersionCapella,
 				Capella: &capella.BeaconBlock{
 					Body: &capella.BeaconBlockBody{
-						ExecutionPayload: &capella.ExecutionPayload{ParentHash: parent, BlockNumber: blockNumber},
+						ExecutionPayload: &capella.ExecutionPayload{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 					},
 				},
 			},
@@ -47,7 +53,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Blinded: true,
 				CapellaBlinded: &apiv1capella.BlindedBeaconBlock{
 					Body: &apiv1capella.BlindedBeaconBlockBody{
-						ExecutionPayloadHeader: &capella.ExecutionPayloadHeader{ParentHash: parent, BlockNumber: blockNumber},
+						ExecutionPayloadHeader: &capella.ExecutionPayloadHeader{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 					},
 				},
 			},
@@ -59,7 +65,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Deneb: &apiv1deneb.BlockContents{
 					Block: &deneb.BeaconBlock{
 						Body: &deneb.BeaconBlockBody{
-							ExecutionPayload: &deneb.ExecutionPayload{ParentHash: parent, BlockNumber: blockNumber},
+							ExecutionPayload: &deneb.ExecutionPayload{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 						},
 					},
 				},
@@ -72,7 +78,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Blinded: true,
 				DenebBlinded: &apiv1deneb.BlindedBeaconBlock{
 					Body: &apiv1deneb.BlindedBeaconBlockBody{
-						ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{ParentHash: parent, BlockNumber: blockNumber},
+						ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 					},
 				},
 			},
@@ -84,7 +90,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Electra: &apiv1electra.BlockContents{
 					Block: &electra.BeaconBlock{
 						Body: &electra.BeaconBlockBody{
-							ExecutionPayload: &deneb.ExecutionPayload{ParentHash: parent, BlockNumber: blockNumber},
+							ExecutionPayload: &deneb.ExecutionPayload{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 						},
 					},
 				},
@@ -97,7 +103,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Blinded: true,
 				ElectraBlinded: &apiv1electra.BlindedBeaconBlock{
 					Body: &apiv1electra.BlindedBeaconBlockBody{
-						ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{ParentHash: parent, BlockNumber: blockNumber},
+						ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 					},
 				},
 			},
@@ -109,7 +115,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Fulu: &apiv1fulu.BlockContents{
 					Block: &electra.BeaconBlock{
 						Body: &electra.BeaconBlockBody{
-							ExecutionPayload: &deneb.ExecutionPayload{ParentHash: parent, BlockNumber: blockNumber},
+							ExecutionPayload: &deneb.ExecutionPayload{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 						},
 					},
 				},
@@ -122,7 +128,7 @@ func TestExtractExecutionFields(t *testing.T) {
 				Blinded: true,
 				FuluBlinded: &apiv1electra.BlindedBeaconBlock{
 					Body: &apiv1electra.BlindedBeaconBlockBody{
-						ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{ParentHash: parent, BlockNumber: blockNumber},
+						ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{ParentHash: parent, BlockHash: blockHash, BlockNumber: blockNumber},
 					},
 				},
 			},
@@ -134,6 +140,7 @@ func TestExtractExecutionFields(t *testing.T) {
 			got, err := extractExecutionInfo(tt.proposal)
 			require.NoError(t, err)
 			require.Equal(t, parent, got.ParentHash)
+			require.Equal(t, blockHash, got.BlockHash)
 			require.Equal(t, blockNumber, got.BlockNumber)
 		})
 	}
