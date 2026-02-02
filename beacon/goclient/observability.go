@@ -105,6 +105,31 @@ var (
 			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_skipped"),
 			metric.WithUnit("{skip}"),
 			metric.WithDescription("retry skipped due to insufficient time before deadline")))
+
+	// Proposal parent verification metrics (observability only, no re-fetch)
+	proposalParentVerifyCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "proposal.parent_verify"),
+			metric.WithUnit("{verification}"),
+			metric.WithDescription("total proposals that attempted parent root verification")))
+
+	proposalParentMatchCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "proposal.parent_match"),
+			metric.WithUnit("{match}"),
+			metric.WithDescription("proposal parent root matched cached HeadEvent")))
+
+	proposalParentCacheMissCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "proposal.parent_cache_miss"),
+			metric.WithUnit("{miss}"),
+			metric.WithDescription("parent slot head was not cached (no verification performed)")))
+
+	proposalParentMismatchCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "proposal.parent_mismatch"),
+			metric.WithUnit("{mismatch}"),
+			metric.WithDescription("proposal parent root did not match cached HeadEvent")))
 )
 
 func recordRequest(
