@@ -1211,6 +1211,10 @@ func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(ctx context.Contex
 		case spectypes.BNRoleAggregator:
 			root, err := r.expectedAggregatorSelectionRoot(ctx, duty.Slot)
 			if err != nil {
+				logger.Debug("failed to compute aggregator selection root",
+					zap.Uint64("validator_index", uint64(vDuty.ValidatorIndex)),
+					zap.Error(err),
+				)
 				continue
 			}
 			aggregatorMap[vDuty.ValidatorIndex] = root
@@ -1223,6 +1227,11 @@ func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(ctx context.Contex
 			for _, index := range vDuty.ValidatorSyncCommitteeIndices {
 				root, err := r.expectedSyncCommitteeSelectionRoot(ctx, duty.Slot, index)
 				if err != nil {
+					logger.Debug("failed to compute sync committee selection root",
+						zap.Uint64("validator_index", uint64(vDuty.ValidatorIndex)),
+						zap.Uint64("subcommittee_index", index),
+						zap.Error(err),
+					)
 					continue
 				}
 				contributionMap[vDuty.ValidatorIndex][index] = root
@@ -1300,17 +1309,29 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(c
 		validatorIndex := consensusData.Aggregators[i].ValidatorIndex
 		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggregateAndProof)
 		if err != nil {
+			logger.Debug("failed to compute aggregate and proof hash root",
+				zap.Uint64("validator_index", uint64(validatorIndex)),
+				zap.Error(err),
+			)
 			continue
 		}
 
 		// Calculate signing root for aggregate and proof
 		domain, err := r.beacon.DomainData(ctx, epoch, spectypes.DomainAggregateAndProof)
 		if err != nil {
+			logger.Debug("failed to get aggregate and proof domain",
+				zap.Uint64("validator_index", uint64(validatorIndex)),
+				zap.Error(err),
+			)
 			continue
 		}
 
 		root, err := spectypes.ComputeETHSigningRoot(hashRoot, domain)
 		if err != nil {
+			logger.Debug("failed to compute aggregate and proof signing root",
+				zap.Uint64("validator_index", uint64(validatorIndex)),
+				zap.Error(err),
+			)
 			continue
 		}
 
@@ -1341,11 +1362,21 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(c
 		// Calculate signing root
 		domain, err := r.beacon.DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 		if err != nil {
+			logger.Debug("failed to get contribution and proof domain",
+				zap.Uint64("validator_index", uint64(validatorIndex)),
+				zap.Uint64("subcommittee_index", contribution.Contribution.SubcommitteeIndex),
+				zap.Error(err),
+			)
 			continue
 		}
 
 		root, err := spectypes.ComputeETHSigningRoot(contribAndProof, domain)
 		if err != nil {
+			logger.Debug("failed to compute contribution and proof signing root",
+				zap.Uint64("validator_index", uint64(validatorIndex)),
+				zap.Uint64("subcommittee_index", contribution.Contribution.SubcommitteeIndex),
+				zap.Error(err),
+			)
 			continue
 		}
 
