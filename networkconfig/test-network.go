@@ -1,7 +1,10 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -78,4 +81,21 @@ var TestNetwork = &Network{
 			Boole:      0,
 		},
 	},
+}
+
+func init() {
+	// Tests sometimes need to validate behavior both pre- and post-fork. This env var allows CI to
+	// flip the effective fork activation for the global TestNetwork without changing code.
+	//
+	// Supported values:
+	// - "pre":  disables the Boole fork (sets it to max epoch)
+	// - "post": enables the Boole fork from genesis (epoch 0)
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SSV_TEST_BOOLE_FORK"))) {
+	case "":
+		// keep default from code
+	case "pre", "pre-fork", "prefork":
+		TestNetwork.SSV.Forks.Boole = phase0.Epoch(math.MaxUint64)
+	case "post", "post-fork", "postfork":
+		TestNetwork.SSV.Forks.Boole = 0
+	}
 }

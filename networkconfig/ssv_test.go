@@ -30,6 +30,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		Forks: SSVForks{
 			Alan:       0,
 			GasLimit36: 0,
+			Boole:      0,
 		},
 	}
 
@@ -72,6 +73,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		Forks: SSVForks{
 			Alan:       0,
 			GasLimit36: 0,
+			Boole:      0,
 		},
 	}
 
@@ -168,6 +170,7 @@ func TestFieldPreservation(t *testing.T) {
 			Forks: SSVForks{
 				Alan:       0,
 				GasLimit36: 0,
+				Boole:      0,
 			},
 		}
 
@@ -207,6 +210,7 @@ func TestFieldPreservation(t *testing.T) {
 			Forks: SSVForks{
 				Alan:       0,
 				GasLimit36: 0,
+				Boole:      0,
 			},
 		}
 
