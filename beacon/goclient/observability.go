@@ -56,6 +56,55 @@ var (
 			observability.InstrumentName(observabilityNamespace, "attestation_data.client_selections"),
 			metric.WithUnit("{selection}"),
 			metric.WithDescription("beacon client selections for attestation data")))
+
+	// Head verification metrics (for stale attestation data detection)
+	attestationDataHeadVerifyCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.head_verify"),
+			metric.WithUnit("{verification}"),
+			metric.WithDescription("total attestation data fetches that attempted head verification")))
+
+	attestationDataHeadMatchCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.head_match"),
+			metric.WithUnit("{match}"),
+			metric.WithDescription("attestation data head matched cached HeadEvent")))
+
+	attestationDataHeadCacheMissCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.head_cache_miss"),
+			metric.WithUnit("{miss}"),
+			metric.WithDescription("head root was not cached (no verification performed)")))
+
+	attestationDataHeadMismatchCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.head_mismatch"),
+			metric.WithUnit("{mismatch}"),
+			metric.WithDescription("attestation data head did not match cached HeadEvent")))
+
+	attestationDataRefetchSuccessCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_success"),
+			metric.WithUnit("{refetch}"),
+			metric.WithDescription("re-fetch got correct head after mismatch")))
+
+	attestationDataRefetchFailedCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_failed"),
+			metric.WithUnit("{refetch}"),
+			metric.WithDescription("re-fetch failed or timed out")))
+
+	attestationDataRefetchStillMismatchCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_still_mismatch"),
+			metric.WithUnit("{refetch}"),
+			metric.WithDescription("re-fetch still had wrong head (possible reorg)")))
+
+	attestationDataRefetchSkippedCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "attestation_data.refetch_skipped"),
+			metric.WithUnit("{skip}"),
+			metric.WithDescription("retry skipped due to insufficient time before deadline")))
 )
 
 func recordRequest(

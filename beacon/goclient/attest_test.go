@@ -14,6 +14,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -640,4 +641,208 @@ func createAttestationDataResponse(
 	  }`, slot, committeeIndex, blockRoot, sourceEpoch, sourceRoot, targetEpoch, targetRoot))
 
 	return resp
+}
+
+func TestVerifyAndRefetchIfStale_NilHeadCache(t *testing.T) {
+	gc := &GoClient{headCache: nil}
+	attData := &phase0.AttestationData{BeaconBlockRoot: phase0.Root{0x01}}
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
+
+	require.Equal(t, attData, result)
+	require.True(t, shouldCache)
+}
+
+func TestVerifyAndRefetchIfStale_CacheMiss(t *testing.T) {
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+
+	// Cache has no entry for slot 100
+	attData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: phase0.Root{0x01},
+	}
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
+
+	require.Equal(t, attData, result, "should return original data on cache miss")
+	require.True(t, shouldCache, "should cache on cache miss")
+}
+
+func TestVerifyAndRefetchIfStale_CacheHit_Match(t *testing.T) {
+	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
+
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, expectedRoot, ttlcache.DefaultTTL)
+
+	attData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: expectedRoot, // Matches cached root
+	}
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
+
+	require.Equal(t, attData, result, "should return original data on match")
+	require.True(t, shouldCache, "should cache on match")
+}
+
+func TestVerifyAndRefetchIfStale_InsufficientTimeForRetry(t *testing.T) {
+	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
+	staleRoot := phase0.Root{0xAA, 0xBB, 0xCC}
+
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, expectedRoot, ttlcache.DefaultTTL)
+
+	staleData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: staleRoot,
+	}
+
+	// Context with deadline < minTimeForRetry (150ms)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+
+	require.Equal(t, staleData, result, "should return original data when insufficient time")
+	require.False(t, shouldCache, "should NOT cache when retry skipped")
+}
+
+func TestVerifyAndRefetchIfStale_RefetchSuccess(t *testing.T) {
+	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
+	staleRoot := phase0.Root{0xAA, 0xBB, 0xCC}
+
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, expectedRoot, ttlcache.DefaultTTL)
+
+	// Mock fetch returns correct root on re-fetch.
+	correctData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: expectedRoot,
+	}
+	gc.fetchAttestationDataFunc = func(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+		return correctData, nil
+	}
+
+	staleData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: staleRoot,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+
+	require.Equal(t, correctData, result, "should return re-fetched data on success")
+	require.True(t, shouldCache, "should cache when re-fetch matches expected root")
+}
+
+func TestVerifyAndRefetchIfStale_RefetchFailed(t *testing.T) {
+	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
+	staleRoot := phase0.Root{0xAA, 0xBB, 0xCC}
+
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, expectedRoot, ttlcache.DefaultTTL)
+
+	// Mock fetch returns error.
+	gc.fetchAttestationDataFunc = func(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+		return nil, fmt.Errorf("beacon node unavailable")
+	}
+
+	staleData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: staleRoot,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+
+	require.Equal(t, staleData, result, "should return original data on re-fetch failure")
+	require.False(t, shouldCache, "should NOT cache when re-fetch failed")
+}
+
+func TestVerifyAndRefetchIfStale_RefetchStillMismatch(t *testing.T) {
+	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
+	staleRoot := phase0.Root{0xAA, 0xBB, 0xCC}
+	anotherRoot := phase0.Root{0xDD, 0xEE, 0xFF}
+
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, expectedRoot, ttlcache.DefaultTTL)
+
+	// Mock fetch returns different (but still wrong) root - simulates reorg.
+	refetchedData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: anotherRoot,
+	}
+	gc.fetchAttestationDataFunc = func(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+		return refetchedData, nil
+	}
+
+	staleData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: staleRoot,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+
+	require.Equal(t, refetchedData, result, "should return re-fetched data (likely more recent)")
+	require.False(t, shouldCache, "should NOT cache when still mismatched")
+}
+
+func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
+	expectedRoot := phase0.Root{0x01, 0x02, 0x03}
+	staleRoot := phase0.Root{0xAA, 0xBB, 0xCC}
+
+	gc := &GoClient{
+		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+		log:       zap.NewNop(),
+	}
+	gc.headCache.Set(100, expectedRoot, ttlcache.DefaultTTL)
+
+	fetchCalled := false
+	gc.fetchAttestationDataFunc = func(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
+		fetchCalled = true
+		return nil, fmt.Errorf("should not be called")
+	}
+
+	staleData := &phase0.AttestationData{
+		Slot:            100,
+		BeaconBlockRoot: staleRoot,
+	}
+
+	// Context with enough time for minTimeForRetry check but cancelled during delay.
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	go func() {
+		time.Sleep(20 * time.Millisecond) // Cancel before refetchDelay (50ms) completes
+		cancel()
+	}()
+
+	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+
+	require.Equal(t, staleData, result, "should return original data when cancelled during delay")
+	require.False(t, shouldCache, "should NOT cache when context cancelled")
+	require.False(t, fetchCalled, "should not have called fetch when cancelled during delay")
 }
