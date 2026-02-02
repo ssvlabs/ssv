@@ -358,7 +358,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 
 		if role != spectypes.RoleAggregatorCommittee {
-			return fmt.Errorf("invalid aggregator partial sig msg for commmittee role")
+			return fmt.Errorf("invalid aggregator partial sig msg for committee role")
 		}
 
 		// Handle all non-post consensus partial signatures via pre-consensus path
