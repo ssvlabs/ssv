@@ -589,11 +589,13 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		consensusData,
 		r.ValCheck,
 	); err != nil {
+		r.measurements.EndConsensus()
 		return fmt.Errorf("failed to start consensus: %w", err)
 	}
 
 	// Raise error if any
 	if anyErr != nil {
+		r.measurements.EndConsensus()
 		return anyErr
 	}
 
