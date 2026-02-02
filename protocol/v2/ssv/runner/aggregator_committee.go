@@ -49,8 +49,8 @@ type AggregatorCommitteeRunner struct {
 	// For aggregator role: tracks by validator index only (one submission per validator)
 	// For sync committee contribution role: tracks by validator index and root (multiple submissions per validator)
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]map[[32]byte]struct{}
-	// rootToSyncCommitteeIdx is the root->validator_sync_committee_index mapping for the current duty.
-	rootToSyncCommitteeIdx map[phase0.Root]phase0.ValidatorIndex
+	// rootToSyncCommitteeIdx is the root->sync committee index mapping for the current duty.
+	rootToSyncCommitteeIdx map[phase0.Root]phase0.CommitteeIndex
 
 	// IsAggregator is an exported struct field, so it can be mocked out for easy testing.
 	IsAggregator func(
@@ -279,7 +279,7 @@ func (r *AggregatorCommitteeRunner) waitTwoThirdsIntoSlot(ctx context.Context, s
 func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 	ctx context.Context,
 	selectionProof phase0.BLSSignature,
-	validatorSyncCommitteeIndex uint64,
+	validatorSyncCommitteeIndex phase0.CommitteeIndex,
 	vDuty *spectypes.ValidatorDuty,
 	aggregatorData *spectypes.AggregatorCommitteeConsensusData,
 ) (bool, error) {
@@ -287,7 +287,7 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 		return false, nil // Not selected as sync committee aggregator
 	}
 
-	subnetID := r.beacon.SyncCommitteeSubnetID(phase0.CommitteeIndex(validatorSyncCommitteeIndex))
+	subnetID := r.beacon.SyncCommitteeSubnetID(validatorSyncCommitteeIndex)
 
 	// Check if we already have a contribution for this sync committee subnet ID
 	for _, contrib := range aggregatorData.SyncCommitteeContributions {
@@ -486,7 +486,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			case spectypes.BNRoleSyncCommitteeContribution:
 				vDuty := r.findValidatorDuty(validatorIndex, spectypes.BNRoleSyncCommitteeContribution)
 				if vDuty != nil {
-					vIdx, ok := r.rootToSyncCommitteeIdx[root]
+					scIndex, ok := r.rootToSyncCommitteeIdx[root]
 					if !ok {
 						logger.Warn("root got a quorum, but is unknown to us", fields.Root(root))
 						continue
@@ -495,7 +495,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 					isAggregator, err := r.processSyncCommitteeSelectionProof(
 						ctx,
 						blsSig,
-						uint64(vIdx),
+						scIndex,
 						vDuty,
 						consensusData,
 					)
@@ -1567,7 +1567,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	r.rootToSyncCommitteeIdx = make(map[phase0.Root]phase0.ValidatorIndex)
+	r.rootToSyncCommitteeIdx = make(map[phase0.Root]phase0.CommitteeIndex)
 
 	// Generate selection proofs for all validators and duties
 	for _, vDuty := range aggCommitteeDuty.ValidatorDuties {
@@ -1619,7 +1619,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 				}
 
 				msg.Messages = append(msg.Messages, partialSig)
-				r.rootToSyncCommitteeIdx[partialSig.SigningRoot] = phase0.ValidatorIndex(index)
+				r.rootToSyncCommitteeIdx[partialSig.SigningRoot] = phase0.CommitteeIndex(index)
 			}
 
 		default:
