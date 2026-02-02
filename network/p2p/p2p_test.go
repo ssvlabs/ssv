@@ -11,6 +11,7 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -202,6 +204,15 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 
 func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 	share := spectestingutils.TestingShare(ks, 1)
+	netCfg := networkconfig.TestNetwork
+
+	if netCfg.BooleForkAtSlot(phase0.Slot(height)) {
+		committee := make([]spectypes.OperatorID, 0, len(share.Committee))
+		for _, c := range share.Committee {
+			committee = append(committee, c.Signer)
+		}
+		return qbft.RoundRobinProposer(height, round, committee, netCfg)
+	}
 
 	firstRoundIndex := 0
 	if height != specqbft.FirstHeight {

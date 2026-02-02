@@ -37,10 +37,11 @@ func (n Network) BooleFork() bool {
 	return n.BooleForkAtEpoch(n.EstimatedCurrentEpoch())
 }
 
+func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
+	return epoch >= n.SSV.Forks.Boole
+}
+
 func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
 }
 
-func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
-	return epoch >= n.SSV.Forks.Boole
-}
