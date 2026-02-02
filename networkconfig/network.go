@@ -44,4 +44,3 @@ func (n Network) BooleForkAtEpoch(epoch phase0.Epoch) bool {
 func (n Network) BooleForkAtSlot(slot phase0.Slot) bool {
 	return n.BooleForkAtEpoch(n.EstimatedEpochAtSlot(slot))
 }
-
