@@ -2,20 +2,47 @@ package controller
 
 import (
 	"context"
+	"crypto/rsa"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/observability/log"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+type testingNetwork struct {
+	*spectestingutils.TestingNetwork
+}
+
+func newTestingNetwork(operatorID spectypes.OperatorID, sk *rsa.PrivateKey) *testingNetwork {
+	return &testingNetwork{TestingNetwork: spectestingutils.NewTestingNetwork(operatorID, sk)}
+}
+
+func (n *testingNetwork) Subscribe(_ spectypes.ValidatorPK) error {
+	return nil
+}
+
+func (n *testingNetwork) Unsubscribe(_ spectypes.ValidatorPK) error {
+	return nil
+}
+
+func (n *testingNetwork) BroadcastAtSlot(message *spectypes.SignedSSVMessage, _ phase0.Slot) error {
+	return n.Broadcast(message.SSVMessage.GetID(), message)
+}
+
+func (n *testingNetwork) ReportValidation(_ *spectypes.SSVMessage, _ protocolp2p.MsgValidationResult) {
+}
 
 func TestController_Marshaling(t *testing.T) {
 	c := qbft.TestingControllerStruct
@@ -42,7 +69,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
 		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
-		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Network:      newTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:        roundtimer.NewTestingTimer(),
 		CutOffRound:  spectestingutils.TestingCutOffRound,
 	}

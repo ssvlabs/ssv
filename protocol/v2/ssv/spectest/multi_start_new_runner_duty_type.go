@@ -46,7 +46,7 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
 	// test output message
-	broadcastedSignedMsgs := test.Runner.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+	broadcastedSignedMsgs := test.Runner.GetNetwork().(*protocoltesting.TestingNetwork).BroadcastedMsgs
 	broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
 	if len(broadcastedMsgs) > 0 {
 		index := 0

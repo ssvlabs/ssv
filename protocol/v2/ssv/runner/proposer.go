@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -35,7 +36,7 @@ type ProposerRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon              beacon.BeaconNode
-	network             specqbft.Network
+	network             protocolp2p.Network
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
@@ -66,7 +67,7 @@ func NewProposerRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	doppelgangerHandler DoppelgangerProvider,
@@ -316,7 +317,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := broadcastAtSlot(r.GetNetwork(), msgToBroadcast, postConsensusMsg.Slot); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -533,7 +534,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	r.measurements.StartPreConsensus()
 	span.AddEvent("broadcasting signed SSV message")
-	if err := broadcastAtSlot(r.GetNetwork(), msgToBroadcast, duty.DutySlot()); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, duty.DutySlot()); err != nil {
 		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
 	}
 
@@ -574,7 +575,7 @@ func (r *ProposerRunner) SetTimeoutFunc(fn TimeoutF) {
 	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
-func (r *ProposerRunner) GetNetwork() specqbft.Network {
+func (r *ProposerRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 

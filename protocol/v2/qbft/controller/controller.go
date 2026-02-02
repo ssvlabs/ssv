@@ -228,16 +228,7 @@ func (c *Controller) Decode(data []byte) error {
 
 func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage, height specqbft.Height) error {
 	net := c.GetConfig().GetNetwork()
-	if broadcaster, ok := net.(interface {
-		BroadcastAtSlot(message *spectypes.SignedSSVMessage, slot phase0.Slot) error
-	}); ok {
-		if err := broadcaster.BroadcastAtSlot(aggregatedCommit, phase0.Slot(height)); err != nil {
-			return errors.Wrap(err, "could not broadcast decided")
-		}
-		return nil
-	}
-
-	if err := net.Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit); err != nil {
+	if err := net.BroadcastAtSlot(aggregatedCommit, phase0.Slot(height)); err != nil {
 		// We do not return error here, just Log broadcasting error.
 		return errors.Wrap(err, "could not broadcast decided")
 	}

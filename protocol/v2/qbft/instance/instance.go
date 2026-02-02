@@ -147,12 +147,7 @@ func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
 	}
 
 	net := i.GetConfig().GetNetwork()
-	if broadcaster, ok := net.(interface {
-		BroadcastAtSlot(message *spectypes.SignedSSVMessage, slot phase0.Slot) error
-	}); ok {
-		return broadcaster.BroadcastAtSlot(msg, phase0.Slot(i.State.Height))
-	}
-	return net.Broadcast(msg.SSVMessage.GetID(), msg)
+	return net.BroadcastAtSlot(msg, phase0.Slot(i.State.Height))
 }
 
 func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
