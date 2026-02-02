@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
 
@@ -38,6 +39,19 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
+	decodedMsg, err := queue.DecodeSignedSSVMessage(msg)
+	if err != nil {
+		return fmt.Errorf("could not decode signed ssv message: %w", err)
+	}
+	msgSlot, err := decodedMsg.Slot()
+	if err != nil {
+		return fmt.Errorf("could not resolve message slot: %w", err)
+	}
+
+	return n.BroadcastAtSlot(msg, msgSlot)
+}
+
+func (n *p2pNetwork) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.Slot) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -54,7 +68,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	var topic string
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		committeeID := spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
-		if n.cfg.NetworkConfig.BooleFork() {
+		if n.cfg.NetworkConfig.BooleForkAtSlot(slot) {
 			val, exists := n.nodeStorage.ValidatorStore().Committee(committeeID)
 			if !exists {
 				return fmt.Errorf("could not find share for committee %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
@@ -68,7 +82,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		if !exists {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
-		if n.cfg.NetworkConfig.BooleFork() {
+		if n.cfg.NetworkConfig.BooleForkAtSlot(slot) {
 			topic = val.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
 		} else {
 			topic = val.AlanCommitteeSubnet().AlanTopic()

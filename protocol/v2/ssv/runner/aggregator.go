@@ -260,7 +260,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := broadcastAtSlot(r.GetNetwork(), msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -438,7 +438,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	r.measurements.StartPreConsensus()
 	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := broadcastAtSlot(r.GetNetwork(), msgToBroadcast, duty.DutySlot()); err != nil {
 		return fmt.Errorf("can't broadcast partial selection proof sig: %w", err)
 	}
 

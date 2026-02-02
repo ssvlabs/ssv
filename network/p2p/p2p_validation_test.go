@@ -158,8 +158,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				roleBroadcasts[role]++
 				mtx.Unlock()
 
-				msgID, msg := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
-				err := node.Broadcast(msgID, msg)
+				_, msg, slot := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
+				err := node.BroadcastAtSlot(msg, slot)
 				if err != nil {
 					return err
 				}
@@ -317,8 +317,8 @@ type VirtualNode struct {
 	PeerScores atomic.Pointer[map[NodeIndex]*pubsub.PeerScoreSnapshot]
 }
 
-func (n *VirtualNode) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
-	return n.Network.Broadcast(msgID, msg)
+func (n *VirtualNode) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase0.Slot) error {
+	return n.Network.BroadcastAtSlot(msg, slot)
 }
 
 // VirtualNet is a utility to create & interact with a virtual network of nodes.

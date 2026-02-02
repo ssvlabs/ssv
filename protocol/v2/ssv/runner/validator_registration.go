@@ -239,7 +239,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := broadcastAtSlot(r.GetNetwork(), msgToBroadcast, duty.DutySlot()); err != nil {
 		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
 	}
 

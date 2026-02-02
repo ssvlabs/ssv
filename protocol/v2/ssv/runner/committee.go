@@ -460,7 +460,7 @@ listener:
 	}
 
 	r.measurements.StartPostConsensus()
-	if err := r.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
+	if err := broadcastAtSlot(r.GetNetwork(), msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"

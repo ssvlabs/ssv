@@ -146,7 +146,13 @@ func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
 		return spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
 	}
 
-	return i.GetConfig().GetNetwork().Broadcast(msg.SSVMessage.GetID(), msg)
+	net := i.GetConfig().GetNetwork()
+	if broadcaster, ok := net.(interface {
+		BroadcastAtSlot(message *spectypes.SignedSSVMessage, slot phase0.Slot) error
+	}); ok {
+		return broadcaster.BroadcastAtSlot(msg, phase0.Slot(i.State.Height))
+	}
+	return net.Broadcast(msg.SSVMessage.GetID(), msg)
 }
 
 func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {

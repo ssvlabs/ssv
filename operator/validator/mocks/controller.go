@@ -12,6 +12,7 @@ package mocks
 import (
 	reflect "reflect"
 
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
 	commons "github.com/ssvlabs/ssv/network/commons"
@@ -141,6 +142,20 @@ func (m *MockP2PNetwork) Broadcast(id types.MessageID, message *types.SignedSSVM
 func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
+}
+
+// BroadcastAtSlot mocks base method.
+func (m *MockP2PNetwork) BroadcastAtSlot(message *types.SignedSSVMessage, slot phase0.Slot) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BroadcastAtSlot", message, slot)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BroadcastAtSlot indicates an expected call of BroadcastAtSlot.
+func (mr *MockP2PNetworkMockRecorder) BroadcastAtSlot(message, slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BroadcastAtSlot", reflect.TypeOf((*MockP2PNetwork)(nil).BroadcastAtSlot), message, slot)
 }
 
 // FixedSubnets mocks base method.

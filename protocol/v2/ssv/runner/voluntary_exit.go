@@ -218,7 +218,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := broadcastAtSlot(r.GetNetwork(), msgToBroadcast, duty.DutySlot()); err != nil {
 		return fmt.Errorf("can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
 	}
 
