@@ -361,7 +361,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregatorCommittee)
 
-	aggregatorMap, contributionMap, err := r.expectedPreConsensusRoots(ctx)
+	aggregatorMap, contributionMap, err := r.expectedPreConsensusRoots(ctx, logger)
 	if err != nil {
 		return fmt.Errorf("could not get expected pre-consensus roots: %w", err)
 	}
@@ -789,7 +789,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 	span.AddEvent("getting aggregations, sync committee contributions and root beacon objects")
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
-	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx)
+	aggregatorMap, contributionMap, beaconObjects, err := r.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
 		return fmt.Errorf("could not get expected post consensus roots and beacon objects: %w", err)
 	}
@@ -1050,7 +1050,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	}
 
 	// Check if duty has terminated (runner has submitted for all duties)
-	if r.HasSubmittedAllDuties(ctx) {
+	if r.HasSubmittedAllDuties(ctx, logger) {
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, r.state().RunningInstance.State.Round)
@@ -1174,7 +1174,10 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndDomain(context.
 
 // expectedPreConsensusRoots returns the expected roots for the pre-consensus phase.
 // It returns the aggregator and sync committee validator to root maps.
-func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(ctx context.Context) (
+func (r *AggregatorCommitteeRunner) expectedPreConsensusRoots(
+	ctx context.Context,
+	logger *zap.Logger,
+) (
 	aggregatorMap map[phase0.ValidatorIndex][32]byte,
 	contributionMap map[phase0.ValidatorIndex]map[ValidatorSyncCommitteeIndex][32]byte,
 	err error,
@@ -1264,7 +1267,10 @@ func (r *AggregatorCommitteeRunner) expectedSyncCommitteeSelectionRoot(
 	return spectypes.ComputeETHSigningRoot(data, domain)
 }
 
-func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context) (
+func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
+	ctx context.Context,
+	logger *zap.Logger,
+) (
 	aggregatorMap map[phase0.ValidatorIndex][32]byte,
 	contributionMap map[phase0.ValidatorIndex][][32]byte,
 	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, err error,
