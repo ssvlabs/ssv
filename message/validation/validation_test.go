@@ -94,11 +94,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	}
 
 	committeeID := shares.active.CommitteeID()
-	defaultSlot := phase0.Slot(1)
+	defaultSlot := phase0.Slot(spectestingutils.TestingDutySlot)
 	topicID := shares.active.AlanCommitteeSubnet().AlanTopic()
 	if netCfg.BooleForkAtSlot(defaultSlot) {
 		topicID = shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name)
 	}
+
+	defaultEpoch := netCfg.EstimatedEpochAtSlot(defaultSlot)
+	dutyStore.Proposer.Set(defaultEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+		{
+			Slot:           defaultSlot,
+			ValidatorIndex: shares.active.ValidatorIndex,
+			Duty:           &eth2apiv1.ProposerDuty{},
+			InCommittee:    true,
+		},
+	})
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
