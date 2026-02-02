@@ -346,7 +346,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		r, ok := c.runnerForRole(role, slot)
 		c.mtx.RUnlock()
 		if !ok {
-			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot"))
+			return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
