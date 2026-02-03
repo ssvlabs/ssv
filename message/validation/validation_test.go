@@ -174,11 +174,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
-		key := peerIDWithMessageID{
-			peerID:    peerID,
-			messageID: committeeIdentifier,
-		}
-		state := validator.validatorState(key, committee)
+		state := validator.validatorState(committeeIdentifier, committee)
 		for i := range committee {
 			signerState := state.OperatorState(i)
 			require.NotNil(t, signerState)
@@ -202,7 +198,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.World.SeenMsgTypes)
 		for i := 1; i < len(committee); i++ {
 			require.NotNil(t, state.OperatorState(i))
 		}
@@ -220,7 +217,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 2, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.World.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -235,7 +233,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		storedState = operatorState.GetSignerStateForSlot(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.World.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -245,7 +244,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, operatorState)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.World.SeenMsgTypes)
 	})
 
 	// Send a pubsub message with no data should cause an error
@@ -1472,7 +1472,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrDecidedWithSameSigners)
+		require.ErrorIs(t, err, ErrDecidedMessageWithUnexpectedNumberOfSigners)
 	})
 
 	// Send message with a slot lower than in the previous message
