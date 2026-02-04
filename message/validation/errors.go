@@ -65,7 +65,7 @@ func (e Error) Is(target error) bool {
 	return e.text == t.text
 }
 
-// Ignored errors.
+// Messages with these errors are ignored (or rejected if they come from the same peer as duplicates).
 var (
 	ErrWrongDomain                      = Error{text: "wrong domain"}
 	ErrNoShareMetadata                  = Error{text: "share has no metadata"}
@@ -76,7 +76,6 @@ var (
 	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
 	ErrSlotAlreadyAdvanced              = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced             = Error{text: "signer has already advanced to a later round"}
-	ErrDecidedWithSameSigners           = Error{text: "decided with same number of signers"}
 	ErrPubSubDataTooBig                 = Error{text: "pub-sub message data too big"}
 	ErrIncorrectTopic                   = Error{text: "incorrect topic"}
 	ErrNonExistentCommitteeID           = Error{text: "committee ID doesn't exist"}
@@ -87,9 +86,10 @@ var (
 	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
 	ErrUnknownOperator                  = Error{text: "operator is unknown"}
 	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
+	ErrDecidedWithSameSigners           = Error{text: "decided with same number of signers"}
 )
 
-// Rejected errors.
+// Messages with these errors are rejected (regardless of what peer they come from).
 var (
 	ErrEmptyData                               = Error{text: "empty data", reject: true}
 	ErrMismatchedIdentifier                    = Error{text: "identifier mismatch", reject: true}
@@ -119,23 +119,23 @@ var (
 	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
 	ErrDecidedNotEnoughSigners                 = Error{text: "not enough signers in decided message", reject: true}
-	ErrDifferentProposalData                   = Error{text: "different proposal data", reject: true}
 	ErrMalformedPrepareJustifications          = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications         = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications      = Error{text: "malformed round change justifications", reject: true}
 	ErrUnexpectedRoundChangeJustifications     = Error{text: "round change justifications unexpected for this message type", reject: true}
-	ErrNoPartialSignatureMessages              = Error{text: "no partial signature messages", reject: true}
+	ErrNoMessagesInPartialSigMessage           = Error{text: "no messages in partial signature messages", reject: true}
 	ErrNoValidators                            = Error{text: "no validators for this committee ID", reject: true}
 	ErrNoSignatures                            = Error{text: "no signatures", reject: true}
+	ErrTooManySignaturesInPartialSigMessage    = Error{text: "too many signatures in a partial-signature message", reject: true}
 	ErrSignersAndSignaturesWithDifferentLength = Error{text: "signature and operator ID length mismatch", reject: true}
-	ErrPartialSigOneSigner                     = Error{text: "partial signature message must have only one signer", reject: true}
+	ErrPartialSigMessageMustHaveOneSigner      = Error{text: "partial signature message must have exactly one signer", reject: true}
 	ErrPrepareOrCommitWithFullData             = Error{text: "prepare or commit with full data", reject: true}
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
-	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
-	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
-	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
+	ErrDuplicatedMessage                       = Error{text: "got duplicate message", reject: true}
+	ErrTooManyPartialSigMessage                = Error{text: "got more partial signature messages of a certain type than allowed", reject: true}
+	ErrDifferentProposalData                   = Error{text: "got different proposal data", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {

@@ -20,7 +20,8 @@ const (
 )
 
 // SeenMsgTypes tracks whether various message types were received for validation.
-// It stores them as a bitset. It is enough because limit of all messages is 1.
+// It stores them as a bitset. It is sufficient because every message type must appear 1 time at most,
+// we treat the rest as duplicate messages.
 type SeenMsgTypes struct {
 	v uint8 // wrapped into a struct to avoid incorrect usage
 }
@@ -55,67 +56,6 @@ func (c *SeenMsgTypes) String() string {
 	return strings.Join(seen, ", ")
 }
 
-// ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.
-// Returns an error if the message type exceeds its respective count limit.
-func (c *SeenMsgTypes) ValidateConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
-	switch msg.MsgType {
-	case specqbft.ProposalMsgType:
-		if c.reachedProposalLimit() {
-			err := ErrDuplicatedMessage
-			err.got = fmt.Sprintf("proposal, having %v", c.String())
-			return err
-		}
-	case specqbft.PrepareMsgType:
-		if c.reachedPrepareLimit() {
-			err := ErrDuplicatedMessage
-			err.got = fmt.Sprintf("prepare, having %v", c.String())
-			return err
-		}
-	case specqbft.CommitMsgType:
-		if len(signedSSVMessage.OperatorIDs) == 1 {
-			if c.reachedCommitLimit() {
-				err := ErrDuplicatedMessage
-				err.got = fmt.Sprintf("commit, having %v", c.String())
-				return err
-			}
-		}
-	case specqbft.RoundChangeMsgType:
-		if c.reachedRoundChangeLimit() {
-			err := ErrDuplicatedMessage
-
-			err.got = fmt.Sprintf("round change, having %v", c.String())
-			return err
-		}
-	default:
-		return fmt.Errorf("unexpected signed message type") // should be checked before
-	}
-
-	return nil
-}
-
-// ValidatePartialSignatureMessage checks if the provided partial signature message exceeds the set limits.
-// Returns an error if the message type exceeds its respective count limit.
-func (c *SeenMsgTypes) ValidatePartialSignatureMessage(m *spectypes.PartialSignatureMessages) error {
-	switch m.Type {
-	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
-		if c.reachedPreConsensusLimit() {
-			err := ErrInvalidPartialSignatureTypeCount
-			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
-			return err
-		}
-	case spectypes.PostConsensusPartialSig:
-		if c.reachedPostConsensusLimit() {
-			err := ErrInvalidPartialSignatureTypeCount
-			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
-			return err
-		}
-	default:
-		return fmt.Errorf("unexpected partial signature message type") // should be checked before
-	}
-
-	return nil
-}
-
 // RecordConsensusMessage updates the counts based on the provided consensus message type.
 func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message) error {
 	switch msg.MsgType {
@@ -130,7 +70,7 @@ func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.Signed
 	case specqbft.RoundChangeMsgType:
 		c.recordRoundChange()
 	default:
-		return fmt.Errorf("unexpected signed message type") // should be checked before
+		return fmt.Errorf("unexpected signed message type: %d", msg.MsgType) // should be checked before
 	}
 	return nil
 }
