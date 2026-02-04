@@ -20,12 +20,13 @@ import (
 )
 
 const (
-	// refetchDelay gives BN time to catch up after HeadEvent (race typically resolves in 10-100ms).
+	// refetchDelay gives the BN time to update its cache after HeadEvent.
+	// Value is a heuristic; monitor refetch_success vs refetch_still_mismatch.
 	refetchDelay = 50 * time.Millisecond
-	// refetchTimeout bounds re-fetch time to preserve QBFT consensus budget.
+	// refetchTimeout bounds re-fetch to preserve QBFT consensus budget.
 	refetchTimeout = 200 * time.Millisecond
-	// minTimeForRetry ensures enough time for delay + fetch before 1/3 slot deadline.
-	minTimeForRetry = refetchDelay + 100*time.Millisecond
+	// minTimeForRetry is minimum time needed before deadline to attempt retry.
+	minTimeForRetry = refetchDelay + refetchTimeout
 )
 
 type (
