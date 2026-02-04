@@ -1472,7 +1472,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrDecidedMessageWithUnexpectedNumberOfSigners)
+		require.ErrorIs(t, err, ErrDecidedMessageWithTooFewSigners)
 	})
 
 	// Send message with a slot lower than in the previous message

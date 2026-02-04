@@ -67,29 +67,29 @@ func (e Error) Is(target error) bool {
 
 // Messages with these errors are ignored (or rejected if they come from the same peer as duplicates).
 var (
-	ErrWrongDomain                                 = Error{text: "wrong domain"}
-	ErrNoShareMetadata                             = Error{text: "share has no metadata"}
-	ErrUnknownValidator                            = Error{text: "unknown validator"}
-	ErrValidatorLiquidated                         = Error{text: "validator is liquidated"}
-	ErrValidatorNotAttesting                       = Error{text: "validator is not attesting"}
-	ErrEarlySlotMessage                            = Error{text: "message was sent before slot starts"}
-	ErrLateSlotMessage                             = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
-	ErrSlotAlreadyAdvanced                         = Error{text: "signer has already advanced to a later slot"}
-	ErrRoundAlreadyAdvanced                        = Error{text: "signer has already advanced to a later round"}
-	ErrPubSubDataTooBig                            = Error{text: "pub-sub message data too big"}
-	ErrIncorrectTopic                              = Error{text: "incorrect topic"}
-	ErrNonExistentCommitteeID                      = Error{text: "committee ID doesn't exist"}
-	ErrRoundTooHigh                                = Error{text: "round is too high for this role"}
-	ErrValidatorIndexMismatch                      = Error{text: "partial signature validator index not found"}
-	ErrTooManyDutiesPerEpoch                       = Error{text: "too many duties per epoch"}
-	ErrNoDuty                                      = Error{text: "no duty for this epoch"}
-	ErrEstimatedRoundNotInAllowedSpread            = Error{text: "message round is too far from estimated"}
-	ErrUnknownOperator                             = Error{text: "operator is unknown"}
-	ErrOperatorValidation                          = Error{text: "failed to validate operator data"}
-	ErrDuplicatedMessage                           = Error{text: "got duplicate message"}
-	ErrTooManyPartialSigMessage                    = Error{text: "got more partial signature messages of a certain type than allowed"}
-	ErrDifferentProposalData                       = Error{text: "got different proposal data"}
-	ErrDecidedMessageWithUnexpectedNumberOfSigners = Error{text: "got decided message with unexpected number of signers (same number or less)"}
+	ErrWrongDomain                      = Error{text: "wrong domain"}
+	ErrNoShareMetadata                  = Error{text: "share has no metadata"}
+	ErrUnknownValidator                 = Error{text: "unknown validator"}
+	ErrValidatorLiquidated              = Error{text: "validator is liquidated"}
+	ErrValidatorNotAttesting            = Error{text: "validator is not attesting"}
+	ErrEarlySlotMessage                 = Error{text: "message was sent before slot starts"}
+	ErrLateSlotMessage                  = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
+	ErrSlotAlreadyAdvanced              = Error{text: "signer has already advanced to a later slot"}
+	ErrRoundAlreadyAdvanced             = Error{text: "signer has already advanced to a later round"}
+	ErrPubSubDataTooBig                 = Error{text: "pub-sub message data too big"}
+	ErrIncorrectTopic                   = Error{text: "incorrect topic"}
+	ErrNonExistentCommitteeID           = Error{text: "committee ID doesn't exist"}
+	ErrRoundTooHigh                     = Error{text: "round is too high for this role"}
+	ErrValidatorIndexMismatch           = Error{text: "partial signature validator index not found"}
+	ErrTooManyDutiesPerEpoch            = Error{text: "too many duties per epoch"}
+	ErrNoDuty                           = Error{text: "no duty for this epoch"}
+	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
+	ErrUnknownOperator                  = Error{text: "operator is unknown"}
+	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
+	ErrDuplicatedMessage                = Error{text: "got duplicate message"}
+	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
+	ErrDifferentProposalData            = Error{text: "got different proposal data"}
+	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).

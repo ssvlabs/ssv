@@ -239,16 +239,10 @@ func (mv *messageValidator) validateQBFTLogic(
 			// Rule: Decided msg (signified by `len(signedSSVMessage.OperatorIDs) > 1`) can't have the same number
 			// of signers (or less) as previously sent before for the same duty
 
-			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
-			if len(signedSSVMessage.OperatorIDs) <= signerState.Peer(receivedFrom).SeenDecidedMsgSignersCount {
-				e := ErrDecidedMessageWithUnexpectedNumberOfSigners
-				e.reject = true
-				return e
-			}
-			// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
-			// is expected occasionally.
+			// For simplicity (because we are gonna get rid of decided messages soon anyway), we just check
+			// the world state here to see if we want to accept or ignore this message.
 			if len(signedSSVMessage.OperatorIDs) <= signerState.World.SeenDecidedMsgSignersCount {
-				e := ErrDecidedMessageWithUnexpectedNumberOfSigners
+				e := ErrDecidedMessageWithTooFewSigners
 				return e
 			}
 		}
