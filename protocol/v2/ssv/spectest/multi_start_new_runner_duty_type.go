@@ -36,7 +36,7 @@ func (test *StartNewRunnerDutySpecTest) TestName() string {
 
 // overrideStateComparison overrides the state comparison to compare the runner state
 func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*StartNewRunnerDutySpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "newduty.", 1)
 	overrideStateComparisonForStartNewRunnerDutySpecTest(t, test, test.Name, testType)
 }
@@ -161,7 +161,7 @@ func (tests *MultiStartNewRunnerDutySpecTest) overrideStateComparison(t *testing
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		testType := reflect.TypeOf(tests).String()
+		testType := reflect.TypeFor[*MultiStartNewRunnerDutySpecTest]().String()
 		testType = strings.Replace(testType, "spectest.", "newduty.", 1)
 		overrideStateComparisonForStartNewRunnerDutySpecTest(t, test, path, testType)
 	}

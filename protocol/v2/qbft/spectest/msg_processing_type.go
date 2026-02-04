@@ -91,7 +91,7 @@ func overrideStateComparisonForMsgProcessingSpecTest(t *testing.T, test *spectes
 	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	test.PostState, err = typescomparable.UnmarshalStateComparison(specDir, test.TestName(),
-		reflect.TypeOf(test).String(),
+		reflect.TypeFor[*spectests.MsgProcessingSpecTest]().String(),
 		&specqbft.State{})
 	require.NoError(t, err)
 

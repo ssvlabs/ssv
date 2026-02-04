@@ -74,7 +74,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 	testType := strings.Split(name, "_")[0]
 
 	switch testType {
-	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
+	case reflect.TypeFor[*tests.MsgProcessingSpecTest]().String():
 		typedTest := msgProcessingSpecTestFromMap(t, test.(map[string]any))
 
 		return &runnable{
@@ -83,7 +83,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				RunMsgProcessing(t, typedTest)
 			},
 		}
-	case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
+	case reflect.TypeFor[*tests.MultiMsgProcessingSpecTest]().String():
 		typedTest := &MultiMsgProcessingSpecTest{
 			Name: test.(map[string]any)["Name"].(string),
 		}
@@ -98,7 +98,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.SpecTest{}).String():
+	case reflect.TypeFor[*valcheck.SpecTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		specTest := &valcheck.SpecTest{}
@@ -112,7 +112,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&valcheck.MultiSpecTest{}).String():
+	case reflect.TypeFor[*valcheck.MultiSpecTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		specTest := &valcheck.MultiSpecTest{}
@@ -130,7 +130,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+	case reflect.TypeFor[*synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest]().String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
@@ -142,7 +142,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				RunSyncCommitteeAggProof(t, typedTest)
 			},
 		}
-	case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
+	case reflect.TypeFor[*newduty.MultiStartNewRunnerDutySpecTest]().String():
 		typedTest := &MultiStartNewRunnerDutySpecTest{
 			Name: test.(map[string]any)["Name"].(string),
 		}
@@ -157,7 +157,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t, logger)
 			},
 		}
-	case reflect.TypeOf(&partialsigcontainer.PartialSigContainerTest{}).String():
+	case reflect.TypeFor[*partialsigcontainer.PartialSigContainerTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		typedTest := &partialsigcontainer.PartialSigContainerTest{}
@@ -169,7 +169,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&committee.CommitteeSpecTest{}).String():
+	case reflect.TypeFor[*committee.CommitteeSpecTest]().String():
 		typedTest := committeeSpecTestFromMap(t, logger, test.(map[string]any))
 		return &runnable{
 			name: typedTest.TestName(),
@@ -177,7 +177,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&committee.MultiCommitteeSpecTest{}).String():
+	case reflect.TypeFor[*committee.MultiCommitteeSpecTest]().String():
 		subtests := test.(map[string]any)["Tests"].([]any)
 		typedTests := make([]*CommitteeSpecTest, 0)
 		for _, subtest := range subtests {
@@ -196,7 +196,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test any) *runna
 			},
 		}
 
-	case reflect.TypeOf(&runnerconstruction.RunnerConstructionSpecTest{}).String():
+	case reflect.TypeFor[*runnerconstruction.RunnerConstructionSpecTest]().String():
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
 		typedTest := &RunnerConstructionSpecTest{}

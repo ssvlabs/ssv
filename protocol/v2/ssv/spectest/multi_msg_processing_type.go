@@ -39,7 +39,7 @@ func (tests *MultiMsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		testType := reflect.TypeOf(tests).String()
+		testType := reflect.TypeFor[*MultiMsgProcessingSpecTest]().String()
 		testType = strings.Replace(testType, "spectest.", "tests.", 1)
 		overrideStateComparison(t, test, path, testType)
 	}

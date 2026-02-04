@@ -124,7 +124,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 }
 
 func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
-	strType := reflect.TypeOf(test).String()
+	strType := reflect.TypeFor[*CommitteeSpecTest]().String()
 	strType = strings.Replace(strType, "spectest.", "committee.", 1)
 	overrideStateComparisonCommitteeSpecTest(t, test, test.Name, strType)
 }
@@ -163,7 +163,7 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		strType := reflect.TypeOf(tests).String()
+		strType := reflect.TypeFor[*MultiCommitteeSpecTest]().String()
 		strType = strings.Replace(strType, "spectest.", "committee.", 1)
 		overrideStateComparisonCommitteeSpecTest(t, test, path, strType)
 	}
