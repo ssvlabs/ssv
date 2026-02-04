@@ -833,7 +833,7 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 		BeaconBlockRoot: staleRoot,
 	}
 
-	// Context with enough time for minTimeForRetry check but cancelled during delay.
+	// Context with enough time for minTimeForRetry check but canceled during delay.
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	go func() {
 		time.Sleep(20 * time.Millisecond) // Cancel before refetchDelay (50ms) completes
@@ -842,7 +842,7 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 
 	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
 
-	require.Equal(t, staleData, result, "should return original data when cancelled during delay")
-	require.False(t, shouldCache, "should NOT cache when context cancelled")
-	require.False(t, fetchCalled, "should not have called fetch when cancelled during delay")
+	require.Equal(t, staleData, result, "should return original data when canceled during delay")
+	require.False(t, shouldCache, "should NOT cache when context canceled")
+	require.False(t, fetchCalled, "should not have called fetch when canceled during delay")
 }
