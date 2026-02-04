@@ -134,7 +134,10 @@ func (test *ValCheckSpecTest) valCheckF(signer ekm.BeaconSigner) func([]byte) er
 		)
 		return checker.CheckValue
 	case spectypes.RoleAggregatorCommittee:
-		checker := ssv.NewAggregatorCommitteeChecker()
+		checker := ssv.NewAggregatorCommitteeChecker(
+			spectestingutils.TestingAggregatorCommitteeDutyMixed(spec.DataVersionPhase0),
+			spectestingutils.NewTestingBeaconNode(),
+		)
 		return checker.CheckValue
 	default:
 		return nil
@@ -251,7 +254,10 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 			expectedVote,
 		)
 	case *runner.AggregatorCommitteeRunner:
-		return ssv.NewAggregatorCommitteeChecker()
+		return ssv.NewAggregatorCommitteeChecker(
+			spectestingutils.TestingAggregatorCommitteeDutyMixed(spec.DataVersionPhase0),
+			spectestingutils.NewTestingBeaconNode(),
+		)
 
 	default:
 		return nil
