@@ -72,7 +72,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	preBooleCfg := func(booleEpoch phase0.Epoch) *networkconfig.Network {
+	cfgWithBooleEpoch := func(booleEpoch phase0.Epoch) *networkconfig.Network {
 		cfg := *networkconfig.TestNetwork
 		beaconCfg := *networkconfig.TestNetwork.Beacon
 		ssvCfg := *networkconfig.TestNetwork.SSV
@@ -82,8 +82,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		return &cfg
 	}
 	currentEpoch := networkconfig.TestNetwork.EstimatedCurrentEpoch()
-	netCfg := preBooleCfg(currentEpoch + 100)
-	postBooleCfg := networkconfig.TestNetwork
+	netCfg := cfgWithBooleEpoch(currentEpoch + 100)
+	postBooleCfg := cfgWithBooleEpoch(0)
 
 	ns, err := storage.NewNodeStorage(netCfg.Beacon, logger, db)
 	require.NoError(t, err)
