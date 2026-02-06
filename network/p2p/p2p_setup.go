@@ -189,7 +189,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.NetworkConfig.DomainType
+	d := n.cfg.NetworkConfig.CurrentDomainType()
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -218,10 +218,25 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.NetworkConfig.DomainType
-		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
+		currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
+		currentDomain := n.cfg.NetworkConfig.DomainTypeAtSlot(currentSlot)
+		allowedDomains := []string{"0x" + hex.EncodeToString(currentDomain[:])}
+		if n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot) {
+			nextDomain := n.cfg.NetworkConfig.NextDomainTypeAtSlot(currentSlot)
+			nextDomainString := "0x" + hex.EncodeToString(nextDomain[:])
+			if nextDomainString != allowedDomains[0] {
+				allowedDomains = append(allowedDomains, nextDomainString)
+			}
+		}
+
+		var networkFilter connections.HandshakeFilter
+		if len(allowedDomains) == 1 {
+			networkFilter = connections.NetworkIDFilter(allowedDomains[0])
+		} else {
+			networkFilter = connections.NetworkIDFilterAny(allowedDomains...)
+		}
 		return []connections.HandshakeFilter{
-			connections.NetworkIDFilter(newDomainString),
+			networkFilter,
 			connections.BadPeerFilter(n.idx),
 		}
 	}
@@ -237,7 +252,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			SubnetsIdx:      n.idx,
 			IDService:       ids,
 			Network:         n.host.Network(),
-			DomainType:      n.cfg.NetworkConfig.DomainType,
+			DomainTypeFn:    n.cfg.NetworkConfig.CurrentDomainType,
 			SubnetsProvider: n.ActiveSubnets,
 		}, filters)
 
@@ -295,7 +310,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		SubnetsIdx:          n.idx,
 		HostAddress:         n.cfg.HostAddress,
 		HostDNS:             n.cfg.HostDNS,
-		SSVConfig:           n.cfg.NetworkConfig.SSV,
+		NetworkConfig:       n.cfg.NetworkConfig,
 		DiscoveredPeersPool: n.discoveredPeersPool,
 		TrimmedRecently:     n.trimmedRecently,
 	}

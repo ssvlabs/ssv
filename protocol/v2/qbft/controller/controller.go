@@ -29,8 +29,8 @@ type NewDecidedHandler func(msg qbftstorage.Participation)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
-	Identifier []byte
-	Height     specqbft.Height // incremental Height for InstanceContainer
+	IdentifierFn func(height specqbft.Height) []byte `json:"-"`
+	Height       specqbft.Height                     // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
 	CommitteeMember   *spectypes.CommitteeMember
@@ -41,14 +41,14 @@ type Controller struct {
 }
 
 func NewController(
-	identifier []byte,
+	identifierFn func(height specqbft.Height) []byte,
 	committeeMember *spectypes.CommitteeMember,
 	config qbft.IConfig,
 	signer ssvtypes.OperatorSigner,
 	fullNode bool,
 ) *Controller {
 	return &Controller{
-		Identifier:      identifier,
+		IdentifierFn:    identifierFn,
 		Height:          specqbft.FirstHeight,
 		CommitteeMember: committeeMember,
 		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
@@ -85,7 +85,8 @@ func (c *Controller) StartNewInstance(
 
 	c.Height = height
 
-	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	identifier := c.IdentifierFn(c.Height)
+	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, identifier, c.Height, c.OperatorSigner)
 	c.StoredInstances.addNewInstance(newInstance)
 	newInstance.Start(ctx, value, height, valueChecker)
 	c.forceStopAllInstanceExceptCurrent()
@@ -169,7 +170,7 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 // BaseMsgValidation returns error if msg is invalid (base validation)
 func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	// verify msg belongs to controller
-	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
+	if !bytes.Equal(c.IdentifierFn(msg.QBFTMessage.Height), msg.QBFTMessage.Identifier) {
 		return spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
 	}
 
@@ -178,7 +179,7 @@ func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 
 // GetIdentifier returns QBFT Identifier, used to identify messages
 func (c *Controller) GetIdentifier() []byte {
-	return c.Identifier
+	return c.IdentifierFn(c.Height)
 }
 
 // isFutureMessage tells whether the provided message height is from a future instance.
@@ -202,6 +203,40 @@ func (c *Controller) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+type controllerAlias Controller
+
+func (c *Controller) MarshalJSON() ([]byte, error) {
+	aux := struct {
+		*controllerAlias
+		Identifier []byte `json:"Identifier,omitempty"`
+	}{
+		controllerAlias: (*controllerAlias)(c),
+		Identifier:      c.IdentifierFn(c.Height),
+	}
+
+	return json.Marshal(aux)
+}
+
+func (c *Controller) UnmarshalJSON(data []byte) error {
+	aux := struct {
+		*controllerAlias
+		Identifier []byte `json:"Identifier,omitempty"`
+	}{
+		controllerAlias: (*controllerAlias)(c),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	id := bytes.Clone(aux.Identifier)
+	c.IdentifierFn = func(specqbft.Height) []byte {
+		return id
+	}
+
+	return nil
 }
 
 // Encode implementation

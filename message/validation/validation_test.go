@@ -103,9 +103,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		netCfg:    netCfg,
 		committee: committee,
 	}
+	postBooleLeaderCtx := &leaderTestCtx{
+		netCfg:    postBooleCfg,
+		committee: committee,
+	}
 
 	committeeID := shares.active.CommitteeID()
-	topicID := shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name)
+	topicID := shares.active.AlanCommitteeSubnet().AlanTopic()
+	postBooleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
@@ -483,7 +488,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			slot := netCfg.FirstSlotAtEpoch(1)
 
 			badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], math.MaxInt32)
-			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
 
 			receivedAt := netCfg.SlotStartTime(slot)
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
@@ -509,10 +514,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			slot := postBooleCfg.FirstSlotAtEpoch(1)
 
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
-			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, badIdentifier, slot)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
-			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, postBooleTopicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
 		})
 
@@ -522,10 +527,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			slot := postBooleCfg.FirstSlotAtEpoch(1)
 
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
-			signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, badIdentifier, slot)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
-			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, postBooleTopicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
 		})
 	})
@@ -1272,10 +1277,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			validator := New(postBooleCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 			msgID := spectypes.NewMsgID(postBooleCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
-			signedSSVMessage := generateSignedMessage(ks, msgID, slot)
+			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, msgID, slot)
 			receivedAt := postBooleCfg.SlotStartTime(slot + 35)
 
-			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, postBooleTopicID, peerID, receivedAt)
 			require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 		})
 	})
@@ -1727,7 +1732,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
 
-				leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
+				leader := leaderForTest(&leaderTestCtx{
+					netCfg:    tc.cfg,
+					committee: committee,
+				}, specqbft.Height(slot), specqbft.FirstRound)
 				signedSSVMessage := generateSignedMessageWithSigner(ks, leader, committeeIdentifier, slot)
 
 				receivedAt := netCfg.SlotStartTime(slot)
@@ -2069,7 +2077,8 @@ func generateSignedMessage(
 	slot phase0.Slot,
 	opts ...func(message *specqbft.Message),
 ) *spectypes.SignedSSVMessage {
-	return generateSignedMessageWithSigner(ks, 1, identifier, slot, opts...)
+	leader := leaderForTest(ctx, specqbft.Height(slot), specqbft.FirstRound)
+	return generateSignedMessageWithSigner(ks, leader, identifier, slot, opts...)
 }
 
 func generateSignedMessageWithSigner(
@@ -2097,8 +2106,7 @@ func generateSignedMessageWithSigner(
 		opt(qbftMessage)
 	}
 
-	leader := leaderForTest(ctx, qbftMessage.Height, qbftMessage.Round)
-	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[signer], signer, qbftMessage)
 	signedSSVMessage.FullData = fullData
 
 	return signedSSVMessage

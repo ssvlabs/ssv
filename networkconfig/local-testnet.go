@@ -11,6 +11,7 @@ import (
 var LocalTestnetSSV = &SSV{
 	Name:                 "local-testnet",
 	DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},
+	NextDomainType:       spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x3},
 	RegistrySyncOffset:   new(big.Int).SetInt64(0),
 	RegistryContractAddr: ethcommon.HexToAddress("0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D"),
 	Bootnodes: []string{

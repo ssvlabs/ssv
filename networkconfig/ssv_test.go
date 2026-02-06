@@ -23,6 +23,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	originalConfig := SSV{
 		Name:                 "testnet",
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		NextDomainType:       spectypes.DomainType{0x05, 0x06, 0x07, 0x08},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
@@ -52,6 +53,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	// Compare the original and unmarshaled structs
 	assert.Equal(t, originalConfig.Name, unmarshaledConfig.Name)
 	assert.Equal(t, originalConfig.DomainType, unmarshaledConfig.DomainType)
+	assert.Equal(t, originalConfig.NextDomainType, unmarshaledConfig.NextDomainType)
 	assert.Equal(t, originalConfig.RegistrySyncOffset.Int64(), unmarshaledConfig.RegistrySyncOffset.Int64())
 	assert.Equal(t, originalConfig.RegistryContractAddr, unmarshaledConfig.RegistryContractAddr)
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
@@ -65,6 +67,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	originalConfig := SSV{
 		Name:                 "testnet",
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		NextDomainType:       spectypes.DomainType{0x05, 0x06, 0x07, 0x08},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
@@ -91,6 +94,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	// Compare the original and unmarshaled structs
 	assert.Equal(t, originalConfig.Name, unmarshaledConfig.Name)
 	assert.Equal(t, originalConfig.DomainType, unmarshaledConfig.DomainType)
+	assert.Equal(t, originalConfig.NextDomainType, unmarshaledConfig.NextDomainType)
 	assert.Equal(t, originalConfig.RegistrySyncOffset.Int64(), unmarshaledConfig.RegistrySyncOffset.Int64())
 	assert.Equal(t, originalConfig.RegistryContractAddr, unmarshaledConfig.RegistryContractAddr)
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
@@ -161,6 +165,7 @@ func TestFieldPreservation(t *testing.T) {
 		config := SSV{
 			Name:                 "testnet",
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+			NextDomainType:       spectypes.DomainType{0x05, 0x06, 0x07, 0x08},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
@@ -190,7 +195,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "25861a78c7a7335b913061e6d792731a2f47e29ec46c68c5a512748bb940ada2"
+		expectedJSONHash := "4e3c92f1c4850f64b137dfdba44887645d9369b1ffb61a70c6f314e9a8aecd6c"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -200,6 +205,7 @@ func TestFieldPreservation(t *testing.T) {
 		config := SSV{
 			Name:                 "testnet",
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+			NextDomainType:       spectypes.DomainType{0x05, 0x06, 0x07, 0x08},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
@@ -244,6 +250,7 @@ func TestExistingNetworkConfigs(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, config.DomainType, jsonUnmarshaled.DomainType)
+			assert.Equal(t, config.NextDomainType, jsonUnmarshaled.NextDomainType)
 
 			// YAML test
 			yamlBytes, err := yaml.Marshal(config)
@@ -254,6 +261,7 @@ func TestExistingNetworkConfigs(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, config.DomainType, yamlUnmarshaled.DomainType)
+			assert.Equal(t, config.NextDomainType, yamlUnmarshaled.NextDomainType)
 		})
 	}
 }

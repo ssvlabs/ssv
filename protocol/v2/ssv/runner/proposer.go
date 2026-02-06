@@ -290,7 +290,8 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	domain := r.BaseRunner.NetworkConfig.DomainTypeAtSlot(cd.Duty.Slot)
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode post consensus partial signature message: %w", err)
@@ -507,7 +508,8 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	domain := r.BaseRunner.NetworkConfig.DomainTypeAtSlot(duty.DutySlot())
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode randao partial signature message: %w", err)

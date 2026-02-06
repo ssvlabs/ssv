@@ -12,6 +12,7 @@ import (
 var HoodiSSV = &SSV{
 	Name:                 "hoodi",
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},
+	NextDomainType:       spectypes.DomainType{0x0, 0x0, 0x5, 0x4},
 	RegistrySyncOffset:   new(big.Int).SetInt64(1065),
 	RegistryContractAddr: ethcommon.HexToAddress("0x58410Bef803ECd7E63B23664C586A6DB72DAf59c"),
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},

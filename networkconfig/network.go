@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type Network struct {
@@ -34,6 +35,24 @@ func (n Network) StorageName() string {
 
 func (n Network) GasLimit36Fork() bool {
 	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.GasLimit36
+}
+
+func (n Network) DomainTypeAtSlot(slot phase0.Slot) spectypes.DomainType {
+	if n.BooleForkAtSlot(slot) {
+		return n.NextDomainType
+	}
+	return n.DomainType
+}
+
+func (n Network) CurrentDomainType() spectypes.DomainType {
+	return n.DomainTypeAtSlot(n.EstimatedCurrentSlot())
+}
+
+func (n Network) NextDomainTypeAtSlot(slot phase0.Slot) spectypes.DomainType {
+	if n.BooleForkAtSlot(slot) {
+		return n.DomainTypeAtSlot(slot)
+	}
+	return n.NextDomainType
 }
 
 func (n Network) BooleFork() bool {
