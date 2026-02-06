@@ -475,7 +475,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrWrongDomain
 		expectedErr.got = hex.EncodeToString(wrongDomain[:])
-		domain := netCfg.DomainType
+		domain := netCfg.DomainTypeAtSlot(slot)
 		expectedErr.want = hex.EncodeToString(domain[:])
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -511,9 +511,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("aggregator post-fork", func(t *testing.T) {
 			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-			slot := postBooleCfg.FirstSlotAtEpoch(1)
+			slot := postBooleCfg.FirstSlotAtEpoch(postBooleCfg.SSV.Forks.Boole)
 
-			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
 			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, badIdentifier, slot)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
@@ -524,9 +524,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("sync committee contribution post-fork", func(t *testing.T) {
 			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-			slot := postBooleCfg.FirstSlotAtEpoch(1)
+			slot := postBooleCfg.FirstSlotAtEpoch(postBooleCfg.SSV.Forks.Boole)
 
-			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
 			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, badIdentifier, slot)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
@@ -1275,8 +1275,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		t.Run(message.RunnerRoleToString(spectypes.RoleAggregatorCommittee), func(t *testing.T) {
 			validator := New(postBooleCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+			slot := postBooleCfg.FirstSlotAtEpoch(postBooleCfg.SSV.Forks.Boole)
 
-			msgID := spectypes.NewMsgID(postBooleCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+			msgID := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), encodedCommitteeID, spectypes.RoleAggregatorCommittee)
 			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, msgID, slot)
 			receivedAt := postBooleCfg.SlotStartTime(slot + 35)
 
@@ -1731,12 +1732,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				validator := New(tc.cfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
+				msgID := spectypes.NewMsgID(tc.cfg.DomainTypeAtSlot(slot), encodedCommitteeID, committeeRole)
 
 				leader := leaderForTest(&leaderTestCtx{
 					netCfg:    tc.cfg,
 					committee: committee,
 				}, specqbft.Height(slot), specqbft.FirstRound)
-				signedSSVMessage := generateSignedMessageWithSigner(ks, leader, committeeIdentifier, slot)
+				signedSSVMessage := generateSignedMessageWithSigner(ks, leader, msgID, slot)
 
 				receivedAt := netCfg.SlotStartTime(slot)
 
