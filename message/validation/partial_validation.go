@@ -45,6 +45,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	if err := mv.validateTopicAtSlot(committeeInfo, topic, partialSignatureMessages.Slot); err != nil {
 		return partialSignatureMessages, err
 	}
+	if err := mv.validateDomainAtSlot(ssvMessage.GetID(), partialSignatureMessages.Slot); err != nil {
+		return partialSignatureMessages, err
+	}
 
 	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.validatorIndices); err != nil {
 		return partialSignatureMessages, err

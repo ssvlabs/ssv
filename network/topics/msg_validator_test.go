@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -181,7 +182,8 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(dutyExecutorID []byte, height specqbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, spectypes.RoleCommittee)
+	slot := phase0.Slot(height)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainTypeAtSlot(slot), dutyExecutorID, spectypes.RoleCommittee)
 	qbftMsg := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     height,
