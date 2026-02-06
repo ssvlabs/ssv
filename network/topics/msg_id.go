@@ -93,32 +93,33 @@ func (handler *msgIDHandler) Start() {
 
 // MsgID returns the msg_id function that calculates msg_id based on it's content.
 func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message) string {
-	return func(pmsg *ps_pb.Message) string {
-		if pmsg == nil {
+	return func(pMsg *ps_pb.Message) string {
+		if pMsg == nil {
 			return MsgIDEmptyMessage
 		}
 
-		messageData := pmsg.GetData()
+		messageData := pMsg.GetData()
 		if len(messageData) == 0 {
 			return MsgIDEmptyMessage
 		}
 
-		pid, err := peer.IDFromBytes(pmsg.GetFrom())
+		peerID, err := peer.IDFromBytes(pMsg.GetFrom())
 		if err != nil {
 			return MsgIDBadPeerID
 		}
 
-		mid := handler.pubsubMsgToMsgID(messageData)
+		msgID := handler.pubsubMsgToMsgID(messageData)
 
-		if len(mid) == 0 {
+		if len(msgID) == 0 {
 			logger.Debug("could not create msg_id",
-				zap.ByteString("seq_no", pmsg.GetSeqno()),
-				fields.PeerID(pid))
+				zap.ByteString("seq_no", pMsg.GetSeqno()),
+				fields.PeerID(peerID),
+			)
 			return MsgIDError
 		}
 
-		handler.Add(mid, pid)
-		return mid
+		handler.Add(msgID, peerID)
+		return msgID
 	}
 }
 

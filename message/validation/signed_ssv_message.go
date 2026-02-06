@@ -101,10 +101,10 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 
 	// SSVMessage.Data must respect the size limit
 	if len(ssvMessage.Data) > maxPayloadDataSize {
-		err := ErrSSVDataTooBig
-		err.got = len(ssvMessage.Data)
-		err.want = maxPayloadDataSize
-		return err
+		e := ErrSSVDataTooBig
+		e.got = len(ssvMessage.Data)
+		e.want = maxPayloadDataSize
+		return e
 	}
 
 	switch ssvMessage.MsgType {
