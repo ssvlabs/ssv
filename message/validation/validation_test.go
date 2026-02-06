@@ -227,7 +227,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		signerIdx = slices.Index(committee, signedSSVMessage.OperatorIDs[0])
 		require.GreaterOrEqual(t, signerIdx, 0)
-		stateBySlot = state.Signer(signerIdx)
+		operatorState = state.OperatorState(signerIdx)
 
 		storedState = operatorState.GetSignerStateForSlot(slot)
 		require.NotNil(t, storedState)
@@ -247,7 +247,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		signerIdx = slices.Index(committee, signedSSVMessage.OperatorIDs[0])
 		require.GreaterOrEqual(t, signerIdx, 0)
-		stateBySlot = state.Signer(signerIdx)
+		operatorState = state.OperatorState(signerIdx)
 
 		storedState = operatorState.GetSignerStateForSlot(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
