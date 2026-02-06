@@ -194,7 +194,8 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	domain := r.BaseRunner.NetworkConfig.DomainTypeAtSlot(duty.DutySlot())
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode PartialSignatureMessages: %w", err)

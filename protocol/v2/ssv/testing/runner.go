@@ -121,7 +121,6 @@ var ConstructBaseRunner = func(
 		return 1
 	}
 	config.Network = net
-	config.BeaconSigner = km
 
 	contr := protocoltesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),

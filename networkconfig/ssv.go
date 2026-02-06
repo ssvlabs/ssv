@@ -36,6 +36,7 @@ type SSV struct {
 	// even if the beacon network is the same.
 	Name                 string
 	DomainType           spectypes.DomainType
+	NextDomainType       spectypes.DomainType
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr ethcommon.Address
 	Bootnodes            []string
@@ -62,6 +63,7 @@ func (s *SSV) String() string {
 type marshaledConfig struct {
 	Name                    string            `json:"name,omitempty" yaml:"Name,omitempty"`
 	DomainType              hexutil.Bytes     `json:"domain_type,omitempty" yaml:"DomainType,omitempty"`
+	NextDomainType          hexutil.Bytes     `json:"next_domain_type,omitempty" yaml:"NextDomainType,omitempty"`
 	RegistrySyncOffset      *big.Int          `json:"registry_sync_offset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
 	RegistryContractAddr    ethcommon.Address `json:"registry_contract_addr,omitempty" yaml:"RegistryContractAddr,omitempty"`
 	Bootnodes               []string          `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
@@ -75,6 +77,7 @@ func (s *SSV) marshal() *marshaledConfig {
 	return &marshaledConfig{
 		Name:                    s.Name,
 		DomainType:              s.DomainType[:],
+		NextDomainType:          s.NextDomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
 		RegistryContractAddr:    s.RegistryContractAddr,
 		Bootnodes:               s.Bootnodes,
@@ -97,6 +100,13 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	if len(aux.DomainType) != 4 {
 		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
 	}
+	if len(aux.NextDomainType) != 0 && len(aux.NextDomainType) != 4 {
+		return fmt.Errorf("invalid next domain type length: expected 4 bytes, got %d", len(aux.NextDomainType))
+	}
+
+	if len(aux.NextDomainType) == 0 {
+		aux.NextDomainType = aux.DomainType
+	}
 
 	if len(aux.DiscoveryProtocolID) != 6 {
 		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
@@ -105,6 +115,7 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	*s = SSV{
 		Name:                    aux.Name,
 		DomainType:              spectypes.DomainType(aux.DomainType),
+		NextDomainType:          spectypes.DomainType(aux.NextDomainType),
 		RegistrySyncOffset:      aux.RegistrySyncOffset,
 		RegistryContractAddr:    aux.RegistryContractAddr,
 		Bootnodes:               aux.Bootnodes,
