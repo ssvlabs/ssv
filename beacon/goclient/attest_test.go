@@ -696,7 +696,7 @@ func TestVerifyAndRefetchIfStale_InsufficientTimeForRetry(t *testing.T) {
 		BeaconBlockRoot: staleRoot,
 	}
 
-	// Context with deadline < minTimeForRetry (250ms)
+	// Context with deadline < minTimeForRetry (300ms)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -826,7 +826,7 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 	// Context with enough time for minTimeForRetry check but canceled during delay.
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	go func() {
-		time.Sleep(20 * time.Millisecond) // Cancel before refetchDelay (50ms) completes
+		time.Sleep(20 * time.Millisecond) // Cancel before refetchDelay (100ms) completes
 		cancel()
 	}()
 
