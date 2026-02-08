@@ -198,7 +198,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			mockFeeProvider,
-			runner.DefaultGasLimitOld,
+			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
@@ -461,7 +461,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			mockFeeProvider,
-			runner.DefaultGasLimitOld,
+			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
