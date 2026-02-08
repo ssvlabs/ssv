@@ -66,7 +66,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 // GetAttestationData returns attestation data for a given slot.
 // Multiple calls for the same slot are joined into a single request, after which
 // the result is cached for a short duration, deep copied and returned.
-// Verifies the returned head against cached HeadEvent root and re-fetches if stale.
+// It also verifies the returned head against cached HeadEvent root and re-fetches if stale.
 func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
 		if cachedResult := gc.attestationDataCache.Get(slot); cachedResult != nil {
@@ -78,9 +78,9 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 			return nil, err
 		}
 
-		attData, shouldCache := gc.verifyAndRefetchIfStale(ctx, slot, attData)
-		// Not caching on failure/skip allows next caller to retry with fresh fetch.
-		if shouldCache {
+		attData, stale := gc.verifyAndRefetchIfStale(ctx, slot, attData)
+		// Not caching stale data allows next caller to retry with fresh fetch.
+		if !stale {
 			gc.attestationDataCache.Set(slot, attData, ttlcache.DefaultTTL)
 		}
 
@@ -103,28 +103,24 @@ func (gc *GoClient) fetchAttestationData(ctx context.Context, slot phase0.Slot) 
 
 // verifyAndRefetchIfStale checks attestation data against cached head root.
 // If mismatch detected, waits briefly then re-fetches.
-// Returns (attestationData, shouldCache).
+// Returns (attestationData, stale) where stale=true means data may be outdated.
 func (gc *GoClient) verifyAndRefetchIfStale(
 	ctx context.Context,
 	slot phase0.Slot,
 	attData *phase0.AttestationData,
-) (result *phase0.AttestationData, shouldCache bool) {
-	if gc.headCache == nil {
-		return attData, true
-	}
-
+) (result *phase0.AttestationData, stale bool) {
 	attestationDataHeadVerifyCounter.Add(ctx, 1)
 
 	item := gc.headCache.Get(slot)
 	if item == nil {
 		attestationDataHeadCacheMissCounter.Add(ctx, 1)
-		return attData, true
+		return attData, false
 	}
 	expectedRoot := item.Value()
 
 	if attData.BeaconBlockRoot == expectedRoot {
 		attestationDataHeadMatchCounter.Add(ctx, 1)
-		return attData, true
+		return attData, false
 	}
 
 	attestationDataHeadMismatchCounter.Add(ctx, 1)
@@ -141,35 +137,30 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 				zap.Duration("min_required", minTimeForRetry),
 			)
 			attestationDataRefetchSkippedCounter.Add(ctx, 1)
-			// Don't cache so later caller with more time can retry.
-			return attData, false
+			return attData, true
 		}
 	}
 
 	select {
 	case <-ctx.Done():
-		return attData, false
+		return attData, true
 	case <-time.After(refetchDelay):
 	}
 
 	refetchCtx, cancel := context.WithTimeout(ctx, refetchTimeout)
 	defer cancel()
 
-	fetchFn := gc.fetchAttestationData
-	if gc.fetchAttestationDataFunc != nil {
-		fetchFn = gc.fetchAttestationDataFunc
-	}
-	newAttData, err := fetchFn(refetchCtx, slot)
+	newAttData, err := gc.fetchAttestationDataFunc(refetchCtx, slot)
 	if err != nil {
 		gc.log.Warn("re-fetch failed, using original data", zap.Error(err))
 		attestationDataRefetchFailedCounter.Add(ctx, 1)
-		return attData, false
+		return attData, true
 	}
 
 	if newAttData.BeaconBlockRoot == expectedRoot {
 		gc.log.Debug("re-fetch successful, got correct head")
 		attestationDataRefetchSuccessCounter.Add(ctx, 1)
-		return newAttData, true
+		return newAttData, false
 	}
 
 	gc.log.Warn("attestation data still mismatched after re-fetch",
@@ -179,7 +170,7 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	attestationDataRefetchStillMismatchCounter.Add(ctx, 1)
 
 	// Return re-fetched data as it's likely more recent.
-	return newAttData, false
+	return newAttData, true
 }
 
 func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {

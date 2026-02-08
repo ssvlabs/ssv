@@ -243,9 +243,12 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	client.committeesCache = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, []*eth2apiv1.BeaconCommittee](committeeTTL))
 	go client.committeesCache.Start()
 
-	// Must initialize before startEventListener to not miss first HeadEvents.
+	// Initialize before startEventListener to capture HeadEvents.
 	client.headCache = ttlcache.New[phase0.Slot, phase0.Root](ttlcache.WithTTL[phase0.Slot, phase0.Root](2 * config.SlotDuration))
 	go client.headCache.Start()
+
+	// Set default fetch function (can be overridden in tests).
+	client.fetchAttestationDataFunc = client.fetchAttestationData
 
 	client.log.Debug("starting event listener")
 

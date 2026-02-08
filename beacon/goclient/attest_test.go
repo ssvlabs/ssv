@@ -643,16 +643,6 @@ func createAttestationDataResponse(
 	return resp
 }
 
-func TestVerifyAndRefetchIfStale_NilHeadCache(t *testing.T) {
-	gc := &GoClient{headCache: nil}
-	attData := &phase0.AttestationData{BeaconBlockRoot: phase0.Root{0x01}}
-
-	result, shouldCache := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
-
-	require.Equal(t, attData, result)
-	require.True(t, shouldCache)
-}
-
 func TestVerifyAndRefetchIfStale_CacheMiss(t *testing.T) {
 	gc := &GoClient{
 		headCache: ttlcache.New[phase0.Slot, phase0.Root](),
@@ -665,10 +655,10 @@ func TestVerifyAndRefetchIfStale_CacheMiss(t *testing.T) {
 		BeaconBlockRoot: phase0.Root{0x01},
 	}
 
-	result, shouldCache := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
+	result, stale := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
 
 	require.Equal(t, attData, result, "should return original data on cache miss")
-	require.True(t, shouldCache, "should cache on cache miss")
+	require.False(t, stale, "data is not stale on cache miss")
 }
 
 func TestVerifyAndRefetchIfStale_CacheHit_Match(t *testing.T) {
@@ -685,10 +675,10 @@ func TestVerifyAndRefetchIfStale_CacheHit_Match(t *testing.T) {
 		BeaconBlockRoot: expectedRoot, // Matches cached root
 	}
 
-	result, shouldCache := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
+	result, stale := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
 
 	require.Equal(t, attData, result, "should return original data on match")
-	require.True(t, shouldCache, "should cache on match")
+	require.False(t, stale, "data is not stale on match")
 }
 
 func TestVerifyAndRefetchIfStale_InsufficientTimeForRetry(t *testing.T) {
@@ -706,14 +696,14 @@ func TestVerifyAndRefetchIfStale_InsufficientTimeForRetry(t *testing.T) {
 		BeaconBlockRoot: staleRoot,
 	}
 
-	// Context with deadline < minTimeForRetry (150ms)
+	// Context with deadline < minTimeForRetry (250ms)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+	result, stale := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
 
 	require.Equal(t, staleData, result, "should return original data when insufficient time")
-	require.False(t, shouldCache, "should NOT cache when retry skipped")
+	require.True(t, stale, "data is stale when retry skipped")
 }
 
 func TestVerifyAndRefetchIfStale_RefetchSuccess(t *testing.T) {
@@ -743,10 +733,10 @@ func TestVerifyAndRefetchIfStale_RefetchSuccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+	result, stale := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
 
 	require.Equal(t, correctData, result, "should return re-fetched data on success")
-	require.True(t, shouldCache, "should cache when re-fetch matches expected root")
+	require.False(t, stale, "data is not stale when re-fetch matches expected root")
 }
 
 func TestVerifyAndRefetchIfStale_RefetchFailed(t *testing.T) {
@@ -772,10 +762,10 @@ func TestVerifyAndRefetchIfStale_RefetchFailed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+	result, stale := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
 
 	require.Equal(t, staleData, result, "should return original data on re-fetch failure")
-	require.False(t, shouldCache, "should NOT cache when re-fetch failed")
+	require.True(t, stale, "data is stale when re-fetch failed")
 }
 
 func TestVerifyAndRefetchIfStale_RefetchStillMismatch(t *testing.T) {
@@ -806,10 +796,10 @@ func TestVerifyAndRefetchIfStale_RefetchStillMismatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+	result, stale := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
 
 	require.Equal(t, refetchedData, result, "should return re-fetched data (likely more recent)")
-	require.False(t, shouldCache, "should NOT cache when still mismatched")
+	require.True(t, stale, "data is stale when still mismatched")
 }
 
 func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
@@ -840,9 +830,9 @@ func TestVerifyAndRefetchIfStale_ContextCancelledDuringDelay(t *testing.T) {
 		cancel()
 	}()
 
-	result, shouldCache := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
+	result, stale := gc.verifyAndRefetchIfStale(ctx, 100, staleData)
 
 	require.Equal(t, staleData, result, "should return original data when canceled during delay")
-	require.False(t, shouldCache, "should NOT cache when context canceled")
+	require.True(t, stale, "data is stale when context canceled")
 	require.False(t, fetchCalled, "should not have called fetch when canceled during delay")
 }

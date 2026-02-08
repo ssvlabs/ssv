@@ -332,10 +332,6 @@ func (gc *GoClient) verifyProposalParent(
 	slot phase0.Slot,
 	proposal *api.VersionedProposal,
 ) {
-	if gc.headCache == nil {
-		return
-	}
-
 	proposalParentVerifyCounter.Add(ctx, 1)
 
 	parentRoot, err := proposal.ParentRoot()
