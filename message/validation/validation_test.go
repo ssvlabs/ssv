@@ -498,10 +498,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
 			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
-			topicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
+			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
-			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, booleTopicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
 		})
 
@@ -512,10 +512,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
 			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
-			topicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
+			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
-			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, booleTopicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
 		})
 	})
@@ -1240,9 +1240,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			leader := qbft.RoundRobinProposer(specqbft.Height(postSlot), specqbft.FirstRound, committeeInfo.committee, postBooleCfg)
 			signedSSVMessage := generateSignedMessageWithLeader(ks, msgID, postSlot, leader)
 			receivedAt := postBooleCfg.SlotStartTime(postSlot + 35)
-			topicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
+			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
 
-			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, booleTopicID, peerID, receivedAt)
 			require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 		})
 	})
