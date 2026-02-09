@@ -209,11 +209,11 @@ type controllerAlias Controller
 
 func (c *Controller) MarshalJSON() ([]byte, error) {
 	aux := struct {
-		*controllerAlias
 		Identifier []byte `json:"Identifier,omitempty"`
+		*controllerAlias
 	}{
-		controllerAlias: (*controllerAlias)(c),
 		Identifier:      c.IdentifierFn(c.Height),
+		controllerAlias: (*controllerAlias)(c),
 	}
 
 	return json.Marshal(aux)
@@ -246,7 +246,7 @@ func (c *Controller) Encode() ([]byte, error) {
 
 // Decode implementation
 func (c *Controller) Decode(data []byte) error {
-	err := json.Unmarshal(data, &c)
+	err := json.Unmarshal(data, c)
 	if err != nil {
 		return errors.Wrap(err, "could not decode controller")
 	}
