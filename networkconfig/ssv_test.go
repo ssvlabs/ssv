@@ -28,9 +28,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:       0,
-			GasLimit36: 0,
-			Boole:      0,
+			Boole: 0,
 		},
 	}
 
@@ -71,9 +69,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:       0,
-			GasLimit36: 0,
-			Boole:      0,
+			Boole: 0,
 		},
 	}
 
@@ -168,9 +164,7 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:       0,
-				GasLimit36: 0,
-				Boole:      0,
+				Boole: 0,
 			},
 		}
 
@@ -193,7 +187,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "25861a78c7a7335b913061e6d792731a2f47e29ec46c68c5a512748bb940ada2"
+		expectedJSONHash := "c0e3d5bd93156b217c1e728490f2c38ebd845abb6657e923fd0d4c02553c3317"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -208,9 +202,7 @@ func TestFieldPreservation(t *testing.T) {
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 			Forks: SSVForks{
-				Alan:       0,
-				GasLimit36: 0,
-				Boole:      0,
+				Boole: 0,
 			},
 		}
 

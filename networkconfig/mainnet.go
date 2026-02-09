@@ -30,8 +30,6 @@ var MainnetSSV = &SSV{
 	},
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
 	Forks: SSVForks{
-		Alan:       0,      // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
-		GasLimit36: 385150, // Aug-09-2025 06:40:23 AM UTC
-		Boole:      math.MaxUint64,
+		Boole: math.MaxUint64,
 	},
 }

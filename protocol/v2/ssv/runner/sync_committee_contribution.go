@@ -40,6 +40,9 @@ type SyncCommitteeAggregatorRunner struct {
 
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
+
+	// rootToSyncCommitteeIdx is the root->validator_sync_committee_index mapping for the current duty.
+	rootToSyncCommitteeIdx map[phase0.Root]phase0.ValidatorIndex
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -106,13 +109,13 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
-	// collect selection proofs and subnets
+	// Collect selection proofs and subnets. We must iterate the
 	//nolint: prealloc
 	var (
 		selectionProofs []phase0.BLSSignature
 		subnets         []uint64
 	)
-	for i, root := range roots {
+	for _, root := range roots {
 		// reconstruct selection proof sig
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		sig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
@@ -133,8 +136,12 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		}
 
 		// fetch sync committee contribution
-		span.AddEvent("fetching sync committee subnet ID")
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices[i]))
+		vIdx, ok := r.rootToSyncCommitteeIdx[root]
+		if !ok {
+			logger.Warn("root got a quorum, but is unknown to us", fields.Root(root))
+			continue
+		}
+		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
@@ -482,8 +489,11 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	for _, index := range r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+	// re-build the root->validator mapping for this duty
+	r.rootToSyncCommitteeIdx = make(map[phase0.Root]phase0.ValidatorIndex)
+
+	for _, vIdx := range r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
+		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              duty.DutySlot(),
 			SubcommitteeIndex: subnet,
@@ -502,6 +512,8 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		}
 
 		msgs.Messages = append(msgs.Messages, msg)
+
+		r.rootToSyncCommitteeIdx[msg.SigningRoot] = phase0.ValidatorIndex(vIdx)
 	}
 
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)

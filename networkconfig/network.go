@@ -32,10 +32,6 @@ func (n Network) StorageName() string {
 	return fmt.Sprintf("%s:%s", n.SSV.Name, alanForkName) // TODO: decide what forks change DB fork name
 }
 
-func (n Network) GasLimit36Fork() bool {
-	return n.EstimatedCurrentEpoch() >= n.SSV.Forks.GasLimit36
-}
-
 func (n Network) BooleFork() bool {
 	return n.BooleForkAtEpoch(n.EstimatedCurrentEpoch())
 }

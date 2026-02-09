@@ -22,8 +22,6 @@ var HoleskyStageSSV = &SSV{
 	},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 	Forks: SSVForks{
-		Alan:       0,
-		GasLimit36: 0,
-		Boole:      math.MaxUint64,
+		Boole: math.MaxUint64,
 	},
 }
