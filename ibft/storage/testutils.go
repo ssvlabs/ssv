@@ -232,6 +232,7 @@ func GetModulePath(name, version string) (string, error) {
 		modQuery = fmt.Sprintf("%s@%s", name, version)
 	}
 
+	// #nosec G204 -- modQuery is built from parsed go.mod module path/version and executed without a shell.
 	cmd := exec.Command("go", "mod", "download", "-json", modQuery)
 	cmd.Env = envWithOptionalGoMod()
 	out, err := cmd.CombinedOutput()
@@ -307,6 +308,7 @@ func envWithOptionalGoMod() []string {
 }
 
 func resolveModuleDirViaGoList(name string) (string, error) {
+	// #nosec G204 -- name comes from parsed go.mod module path and is passed as an argument (no shell evaluation).
 	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", name)
 	cmd.Env = envWithOptionalGoMod()
 
