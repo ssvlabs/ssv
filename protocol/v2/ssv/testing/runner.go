@@ -94,7 +94,7 @@ var ConstructBaseRunner = func(
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	dgHandler := doppelganger.NoOpHandler{}
-	validatorPK := spectypes.ValidatorPK(share.ValidatorPubKey)
+	validatorPK := share.ValidatorPubKey
 	validatorIndex := share.ValidatorIndex
 
 	var valCheck ssv.ValueChecker

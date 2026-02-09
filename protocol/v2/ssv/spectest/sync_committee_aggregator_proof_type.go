@@ -101,8 +101,6 @@ func runSyncCommitteeAggProofAlan(t *testing.T, test *synccommitteeaggregator.Sy
 	rawDuty := any(testingutils.TestingSyncCommitteeContributionDuty)
 	var duty spectypes.Duty
 	switch typed := rawDuty.(type) {
-	case spectypes.Duty:
-		duty = typed
 	case spectypes.ValidatorDuty:
 		duty = &typed
 	case *spectypes.ValidatorDuty:
@@ -110,6 +108,8 @@ func runSyncCommitteeAggProofAlan(t *testing.T, test *synccommitteeaggregator.Sy
 	case spectypes.AggregatorCommitteeDuty:
 		duty = &typed
 	case *spectypes.AggregatorCommitteeDuty:
+		duty = typed
+	case spectypes.Duty:
 		duty = typed
 	default:
 		t.Fatalf("unexpected sync committee duty type %T", rawDuty)
