@@ -119,9 +119,7 @@ func TestSSVForks_MarshalUppercaseKeys(t *testing.T) {
 		Bootnodes:            []string{"bootnode1"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
 		Forks: SSVForks{
-			Alan:       1,
-			GasLimit36: 2,
-			Boole:      3,
+			Boole: 3,
 		},
 	}
 
@@ -133,8 +131,6 @@ func TestSSVForks_MarshalUppercaseKeys(t *testing.T) {
 
 	yamlForks, ok := yamlMap["Forks"].(map[string]any)
 	require.True(t, ok, "expected Forks to be a map")
-	assert.Contains(t, yamlForks, "Alan")
-	assert.Contains(t, yamlForks, "GasLimit36")
 	assert.Contains(t, yamlForks, "Boole")
 
 	jsonBytes, err := json.Marshal(&config)
@@ -145,8 +141,6 @@ func TestSSVForks_MarshalUppercaseKeys(t *testing.T) {
 
 	jsonForks, ok := jsonMap["forks"].(map[string]any)
 	require.True(t, ok, "expected forks to be a map")
-	assert.Contains(t, jsonForks, "Alan")
-	assert.Contains(t, jsonForks, "GasLimit36")
 	assert.Contains(t, jsonForks, "Boole")
 }
 

@@ -266,7 +266,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 // Returns an error if the message type exceeds its respective count limit.
 func validatePartialSignatureMessageLimit(m *spectypes.PartialSignatureMessages, signerState *SignerState) error {
 	switch m.Type {
-	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs,
+	case spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig, spectypes.VoluntaryExitPartialSig:
 		if signerState.SeenMsgTypes.reachedPreConsensusLimit() {
 			e := ErrTooManyPartialSigMessage

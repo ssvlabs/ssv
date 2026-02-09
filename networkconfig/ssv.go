@@ -47,7 +47,7 @@ type SSV struct {
 }
 
 type SSVForks struct {
-	Boole phase0.Epoch
+	Boole phase0.Epoch `yaml:"Boole" json:"Boole"`
 }
 
 func (s *SSV) String() string {

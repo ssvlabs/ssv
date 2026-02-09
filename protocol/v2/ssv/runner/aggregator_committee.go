@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -36,7 +37,7 @@ import (
 // AggregatorCommitteeRunner has no DutyGuard because AggregatorCommitteeRunner's duties aren't slashable.
 type AggregatorCommitteeRunner struct {
 	BaseRunner     *BaseRunner
-	network        specqbft.Network
+	network        protocolp2p.Network
 	beacon         beacon.BeaconNode
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
@@ -67,7 +68,7 @@ func NewAggregatorCommitteeRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 ) (Runner, error) {
@@ -141,7 +142,7 @@ func (r *AggregatorCommitteeRunner) MarshalJSON() ([]byte, error) {
 	type AggregatorCommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -166,7 +167,7 @@ func (r *AggregatorCommitteeRunner) UnmarshalJSON(data []byte) error {
 	type AggregatorCommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -223,7 +224,7 @@ func (r *AggregatorCommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *AggregatorCommitteeRunner) GetNetwork() specqbft.Network {
+func (r *AggregatorCommitteeRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
@@ -368,7 +369,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 	duty := r.state().CurrentDuty.(*spectypes.AggregatorCommitteeDuty)
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	dataVersion, _ := r.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
+	dataVersion, _ := r.GetBaseRunner().NetworkConfig.BeaconForkAtEpoch(epoch)
 	consensusData := &spectypes.AggregatorCommitteeConsensusData{
 		Version: dataVersion,
 	}

@@ -470,12 +470,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("unknown role value", func(t *testing.T) {
 			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-			slot := netCfg.FirstSlotAtEpoch(1)
-
 			badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], math.MaxInt32)
 			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, defaultSlot)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			receivedAt := netCfg.SlotStartTime(defaultSlot)
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
@@ -489,7 +486,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
 			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			receivedAt := netCfg.SlotStartTime(slot)
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
@@ -502,8 +498,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
 			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
+			topicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			receivedAt := postBooleCfg.SlotStartTime(slot)
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
@@ -516,8 +512,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
 			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
+			topicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			receivedAt := postBooleCfg.SlotStartTime(slot)
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorIs(t, err, ErrInvalidRole)
@@ -1244,8 +1240,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			leader := qbft.RoundRobinProposer(specqbft.Height(postSlot), specqbft.FirstRound, committeeInfo.committee, postBooleCfg)
 			signedSSVMessage := generateSignedMessageWithLeader(ks, msgID, postSlot, leader)
 			receivedAt := postBooleCfg.SlotStartTime(postSlot + 35)
+			topicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
 
-			topicID := commons.CommitteeTopicID(committeeID)[0]
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 			require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 		})

@@ -295,13 +295,13 @@ func collectCommitteeBroadcasts(committee *validator.Committee) ([]*spectypes.Si
 	broadcastedRootsCap := 0
 
 	for _, runner := range committee.Runners {
-		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
+		network := runner.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgsCap += len(network.BroadcastedMsgs)
 		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
 	}
 	for _, runner := range committee.AggregatorRunners {
-		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
+		network := runner.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgsCap += len(network.BroadcastedMsgs)
 		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
@@ -310,13 +310,13 @@ func collectCommitteeBroadcasts(committee *validator.Committee) ([]*spectypes.Si
 	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0, broadcastedMsgsCap)
 	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
 	for _, r := range committee.Runners {
-		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
+		network := r.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
 		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
 	}
 	for _, r := range committee.AggregatorRunners {
-		network := r.GetNetwork().(*spectestingutils.TestingNetwork)
+		network := r.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork := r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
 		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)

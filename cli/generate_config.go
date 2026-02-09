@@ -110,8 +110,7 @@ var generateConfigCmd = &cobra.Command{
 			Bootnodes:            bootnodes,
 			DiscoveryProtocolID:  parsedDiscoveryProtocolIDArr,
 			Forks: networkconfig.SSVForks{
-				GasLimit36: 0,
-				Boole:      0,
+				Boole: 0,
 			},
 		}
 

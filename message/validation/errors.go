@@ -119,23 +119,23 @@ var (
 	ErrPartialSignatureTypeRoleMismatch                = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners                   = Error{text: "non-decided with multiple signers", reject: true}
 	ErrDecidedNotEnoughSigners                         = Error{text: "not enough signers in decided message", reject: true}
-
 	ErrMalformedPrepareJustifications                  = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications                 = Error{text: "prepare justifications unexpected for this message type", reject: true}
 	ErrMalformedRoundChangeJustifications              = Error{text: "malformed round change justifications", reject: true}
 	ErrUnexpectedRoundChangeJustifications             = Error{text: "round change justifications unexpected for this message type", reject: true}
-	ErrNoMessagesInPartialSigMessage                      = Error{text: "no messages inpartial signature messages", reject: true}
+	ErrNoMessagesInPartialSigMessage                   = Error{text: "no messages inpartial signature messages", reject: true}
 	ErrNoValidators                                    = Error{text: "no validators for this committee ID", reject: true}
 	ErrNoSignatures                                    = Error{text: "no signatures", reject: true}
-	ErrTooManySignaturesInPartialSigMessage    = Error{text: "too many signatures in a partial-signature message", reject: true}ErrSignersAndSignaturesWithDifferentLength         = Error{text: "signature and operator ID length mismatch", reject: true}
-	ErrPartialSigMessageMustHaveOneSigner                             = Error{text: "partial signature message must have exactly one signer", reject: true}
+	ErrTooManySignaturesInPartialSigMessage            = Error{text: "too many signatures in a partial-signature message", reject: true}
+	ErrSignersAndSignaturesWithDifferentLength         = Error{text: "signature and operator ID length mismatch", reject: true}
+	ErrPartialSigMessageMustHaveOneSigner              = Error{text: "partial signature message must have exactly one signer", reject: true}
 	ErrPrepareOrCommitWithFullData                     = Error{text: "prepare or commit with full data", reject: true}
 	ErrFullDataNotInConsensusMessage                   = Error{text: "full data not in consensus message", reject: true}
 	ErrTooManyEqualValidatorIndicesInPartialSignatures = Error{text: "validator index appears too many times in partial signatures", reject: true}
 	ErrZeroRound                                       = Error{text: "zero round", reject: true}
 	ErrDuplicatedMessage                               = Error{text: "got duplicate message", reject: true}
-	ErrTooManyPartialSigMessage                = Error{text: "got more partial signature messages of a certain type than allowed", reject: true}
-	ErrDifferentProposalData                 = Error{text: "got different proposal data", reject: true}
+	ErrTooManyPartialSigMessage                        = Error{text: "got more partial signature messages of a certain type than allowed", reject: true}
+	ErrDifferentProposalData                           = Error{text: "got different proposal data", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(
