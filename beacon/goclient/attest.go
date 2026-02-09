@@ -24,7 +24,7 @@ const (
 	// Value is a heuristic; monitor refetch_success vs refetch_still_mismatch.
 	refetchDelay = 100 * time.Millisecond
 	// refetchTimeout bounds re-fetch to preserve QBFT consensus budget.
-	refetchTimeout = 200 * time.Millisecond
+	refetchTimeout = 500 * time.Millisecond
 	// minTimeForRetry is minimum time needed before deadline to attempt retry.
 	minTimeForRetry = refetchDelay + refetchTimeout
 )
