@@ -110,7 +110,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committeeID := shares.active.CommitteeID()
 	topicID := shares.active.AlanCommitteeSubnet().AlanTopic()
-	postBooleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.Beacon.Name)
+	postBooleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.SSV.Name)
 
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
 		if id == committeeID {
@@ -1713,13 +1713,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			},
 			{
 				name:  "network topology topic / Alan config",
-				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name),
+				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.SSV.Name),
 				cfg:   alanNetCfg,
 				err:   ErrIncorrectTopic,
 			},
 			{
 				name:  "network topology topic / network topology config",
-				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name),
+				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.SSV.Name),
 				cfg:   networkTopologyNetCfg,
 				err:   nil,
 			},

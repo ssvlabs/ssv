@@ -96,7 +96,7 @@ func TestMsgValidator(t *testing.T) {
 		encodedMsg, err := signedSSVMessage.Encode()
 		require.NoError(t, err)
 
-		topicID := share.BooleCommitteeSubnet().BooleTopic(networkconfig.TestNetwork.Beacon.Name)
+		topicID := share.BooleCommitteeSubnet().BooleTopic(networkconfig.TestNetwork.SSV.Name)
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{

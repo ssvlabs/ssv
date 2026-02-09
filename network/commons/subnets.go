@@ -97,7 +97,7 @@ func Topics(netCfg *networkconfig.Network) []string {
 		if !netCfg.BooleFork() {
 			topics = append(topics, subnet.AlanTopic())
 		}
-		topics = append(topics, subnet.BooleTopic(netCfg.Beacon.Name))
+		topics = append(topics, subnet.BooleTopic(netCfg.SSV.Name))
 	}
 	return topics
 }
