@@ -36,10 +36,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func TestSSVMapping(t *testing.T) {
-	runSSVMappingTest(t)
-}
-
 func runSSVMappingTest(t *testing.T) {
 	path, err := os.Getwd()
 	require.NoError(t, err)
