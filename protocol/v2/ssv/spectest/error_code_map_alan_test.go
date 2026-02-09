@@ -16,7 +16,7 @@ func TestAdjustExpectedErrorCodeAlan(t *testing.T) {
 		require.Equal(
 			t,
 			spectypes.ValidatorRegistrationNoConsensusPhaseErrorCode,
-			adjustExpectedErrorCode(legacyAlanValidatorRegistrationNoConsensusDataErrorCode),
+			adjustExpectedErrorCode(AlanValidatorRegistrationNoConsensusDataErrorCode),
 		)
 	})
 
@@ -24,7 +24,7 @@ func TestAdjustExpectedErrorCodeAlan(t *testing.T) {
 		require.Equal(
 			t,
 			spectypes.ValidatorExitNoConsensusPhaseErrorCode,
-			adjustExpectedErrorCode(legacyAlanValidatorExitNoConsensusDataErrorCode),
+			adjustExpectedErrorCode(AlanValidatorExitNoConsensusDataErrorCode),
 		)
 	})
 
@@ -32,7 +32,7 @@ func TestAdjustExpectedErrorCodeAlan(t *testing.T) {
 		require.Equal(
 			t,
 			spectypes.UnknownDutyRoleDataErrorCode,
-			adjustExpectedErrorCode(legacyAlanUnknownDutyRoleDataErrorCode),
+			adjustExpectedErrorCode(AlanUnknownDutyRoleDataErrorCode),
 		)
 	})
 
