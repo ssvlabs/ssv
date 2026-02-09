@@ -17,6 +17,7 @@ import (
 func (mv *messageValidator) validatePartialSignatureMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
+	topic string,
 	receivedFrom peer.ID,
 	receivedAt time.Time,
 ) (
@@ -37,6 +38,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		e := ErrUndecodableMessageData
 		e.innerErr = err
 		return nil, e
+	}
+
+	if err := mv.validateTopicAtSlot(committeeInfo, topic, partialSignatureMessages.Slot); err != nil {
+		return partialSignatureMessages, err
 	}
 
 	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.validatorIndices); err != nil {

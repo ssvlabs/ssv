@@ -15,7 +15,7 @@ var (
 )
 
 // nsToSubnet converts the given topic to subnet
-func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
+func (dvs *DiscV5Service) nsToSubnet(ns string) (commons.Subnet, error) {
 	r, done := regPool.Get()
 	defer done()
 
@@ -33,5 +33,5 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
 		return 0, errValueOutOfRange
 	}
 
-	return val, nil
+	return commons.Subnet(val), nil
 }

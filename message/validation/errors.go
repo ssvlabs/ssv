@@ -138,7 +138,12 @@ var (
 	ErrDifferentProposalData                   = Error{text: "got different proposal data", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(
+	ctx context.Context,
+	peerID peer.ID,
+	decodedMessage *queue.SSVMessage,
+	err error,
+) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.

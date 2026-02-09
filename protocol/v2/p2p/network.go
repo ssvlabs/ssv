@@ -3,6 +3,7 @@ package protocolp2p
 import (
 	"errors"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -23,6 +24,7 @@ type Subscriber interface {
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
 	Broadcast(id spectypes.MessageID, message *spectypes.SignedSSVMessage) error
+	BroadcastAtSlot(message *spectypes.SignedSSVMessage, slot phase0.Slot) error
 }
 
 // SyncResult holds the result of a sync request, including the actual message and the sender

@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 // isSubnet checks if the given string is a subnet string
@@ -17,7 +19,7 @@ func TestNsToSubnet(t *testing.T) {
 	tests := []struct {
 		name        string
 		ns          string
-		expected    uint64
+		expected    commons.Subnet
 		expectedErr string
 		isSubnet    bool
 	}{

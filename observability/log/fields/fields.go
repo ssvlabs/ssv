@@ -70,6 +70,7 @@ const (
 	FieldBeaconRole            = "beacon_role"
 	FieldRunnerRole            = "runner_role"
 	FieldSlot                  = "slot"
+	FieldSubnet                = "subnet"
 	FieldTotalConsensusTime    = "total_consensus_time"
 	FieldTotalDutyTime         = "total_duty_time"
 	FieldTargetNodeENR         = "target_node_enr"
@@ -107,6 +108,10 @@ func Validator(pubKey []byte) zapcore.Field {
 
 func ValidatorIndex(index phase0.ValidatorIndex) zapcore.Field {
 	return zap.Uint64(FieldValidatorIndex, uint64(index))
+}
+
+func Subnet[T ~uint64](val T) zapcore.Field {
+	return zap.Uint64(FieldSubnet, uint64(val))
 }
 
 func DutyExecutorID(senderID []byte) zapcore.Field {

@@ -36,7 +36,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *q
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Network:     testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Network:     NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:       roundtimer.NewTestingTimer(),
 		CutOffRound: testingutils.TestingCutOffRound,
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	client "github.com/attestantio/go-eth2-client"
@@ -161,7 +162,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 	}
 
 	beaconConfig := &networkconfig.Beacon{
-		Name:                                 networkName,
+		Name:                                 strings.ToLower(networkName),
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,
 		EpochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,

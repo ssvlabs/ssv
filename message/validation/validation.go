@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -143,7 +141,6 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	}
 
 	pmsg.ValidatorData = decodedMessage
-
 	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
 
@@ -186,7 +183,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
 		return decodedMessage, err
 	}
 
@@ -201,14 +198,26 @@ func (mv *messageValidator) handleSignedSSVMessage(
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(
+			signedSSVMessage,
+			committeeInfo,
+			topic,
+			receivedFrom,
+			receivedAt,
+		)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(
+			signedSSVMessage,
+			committeeInfo,
+			topic,
+			receivedFrom,
+			receivedAt,
+		)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
@@ -221,18 +230,16 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	return decodedMessage, nil
 }
 
-func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
-		return err
+func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, topic string, slot phase0.Slot) error {
+	expectedTopic := committeeInfo.subnetAlan.AlanTopic()
+	if mv.netCfg.BooleForkAtSlot(slot) {
+		expectedTopic = committeeInfo.subnet.BooleTopic(mv.netCfg.Beacon.Name)
 	}
-
 	// Rule: Check if message was sent in the correct topic
-	messageTopics := commons.CommitteeTopicID(committeeInfo.committeeID)
-	topicBaseName := commons.GetTopicBaseName(topic)
-	if !slices.Contains(messageTopics, topicBaseName) {
+	if expectedTopic != topic {
 		e := ErrIncorrectTopic
-		e.got = fmt.Sprintf("topic %v / base name %v", topic, topicBaseName)
-		e.want = messageTopics
+		e.got = fmt.Sprintf("%v @ %v", topic, slot)
+		e.want = expectedTopic
 		return e
 	}
 
@@ -280,7 +287,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
+		return committeeInfoFromCommittee(committee), nil
 	}
 
 	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
@@ -306,13 +313,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeInfo{}, e
 	}
 
-	operators := make([]spectypes.OperatorID, 0, len(share.Committee))
-	for _, c := range share.Committee {
-		operators = append(operators, c.Signer)
-	}
-
 	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
-	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
+	return committeeInfoFromShare(share, indices), nil
 }
 
 func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {

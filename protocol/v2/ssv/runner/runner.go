@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -38,7 +39,7 @@ type Getters interface {
 	GetBeaconNode() beacon.BeaconNode
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
-	GetNetwork() specqbft.Network
+	GetNetwork() protocolp2p.Network
 	GetNetworkConfig() *networkconfig.Network
 }
 

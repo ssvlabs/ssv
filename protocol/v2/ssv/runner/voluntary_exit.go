@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -31,7 +32,7 @@ type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         beacon.BeaconNode
-	network        specqbft.Network
+	network        protocolp2p.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
@@ -42,7 +43,7 @@ func NewVoluntaryExitRunner(
 	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 ) (Runner, error) {
@@ -218,7 +219,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, duty.DutySlot()); err != nil {
 		return fmt.Errorf("can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
 	}
 
@@ -270,7 +271,7 @@ func (r *VoluntaryExitRunner) SetTimeoutFunc(fn TimeoutF) {
 	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
-func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
+func (r *VoluntaryExitRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
