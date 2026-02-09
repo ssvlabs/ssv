@@ -43,7 +43,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, err
 	}
 
-	state := mv.validatorState(ssvMessage.GetID(), committeeInfo.committee)
+	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state); err != nil {
 		return partialSignatureMessages, err
 	}

@@ -2,11 +2,18 @@ package validation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// ValidatorState keeps track of the signers for a given public key and role.
+// ValidatorState keeps track of signers(operators) for some validator.
 type ValidatorState struct {
-	operators       []*OperatorState
+	// committeeID is the ID of the committee this validator currently belongs to
+	committeeID spectypes.CommitteeID
+
+	// operators is a list of operators in the committee this validator currently belongs to
+	operators []*OperatorState
+
+	// storedSlotCount defines how many recent slots we want to store in OperatorState
 	storedSlotCount uint64
 }
 

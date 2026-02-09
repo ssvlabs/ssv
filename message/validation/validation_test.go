@@ -174,7 +174,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
-		state := validator.validatorState(committeeIdentifier, committee)
+		committeeInfo := CommitteeInfo{
+			committeeID: committeeID,
+			committee:   committee,
+		}
+		state := validator.validatorState(committeeIdentifier, committeeInfo)
 		for i := range committee {
 			signerState := state.OperatorState(i)
 			require.NotNil(t, signerState)
