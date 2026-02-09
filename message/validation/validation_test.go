@@ -97,7 +97,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	defaultSlot := phase0.Slot(spectestingutils.TestingDutySlot)
 	topicID := shares.active.AlanCommitteeSubnet().AlanTopic()
 	if netCfg.BooleForkAtSlot(defaultSlot) {
-		topicID = shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name)
+		topicID = shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.SSV.Name)
 	}
 
 	defaultEpoch := netCfg.EstimatedEpochAtSlot(defaultSlot)
@@ -1570,13 +1570,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			},
 			{
 				name:  "network topology topic / Alan config",
-				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name),
+				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.SSV.Name),
 				cfg:   alanNetCfg,
 				err:   ErrIncorrectTopic,
 			},
 			{
 				name:  "network topology topic / network topology config",
-				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name),
+				topic: shares.active.BooleCommitteeSubnet().BooleTopic(netCfg.SSV.Name),
 				cfg:   networkTopologyNetCfg,
 				err:   nil,
 			},
