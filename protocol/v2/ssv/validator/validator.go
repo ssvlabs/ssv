@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -45,7 +46,7 @@ type Validator struct {
 	cancel context.CancelFunc
 
 	NetworkConfig *networkconfig.Network
-	Network       specqbft.Network
+	Network       protocolp2p.Network
 
 	Operator       *spectypes.CommitteeMember
 	Share          *ssvtypes.SSVShare

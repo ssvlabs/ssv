@@ -149,7 +149,7 @@ type checkPeerTest struct {
 	expectedError  error
 }
 
-func mockSubnets(active ...uint64) commons.Subnets {
+func mockSubnets(active ...commons.Subnet) commons.Subnets {
 	subnets := commons.Subnets{}
 	for _, subnet := range active {
 		subnets.Set(subnet)

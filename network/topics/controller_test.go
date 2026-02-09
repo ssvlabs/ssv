@@ -168,11 +168,11 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				defer wg.Done()
 				for _, p := range peers {
 					// wait for messages
-					for ctxReadMessages.Err() == nil && p.getCount(commons.GetTopicFullName(committeeTopic(cid))) < minMsgCount {
+					for ctxReadMessages.Err() == nil && p.getCount(committeeTopic(cid)) < minMsgCount {
 						time.Sleep(time.Millisecond * 100)
 					}
 					require.NoError(t, ctxReadMessages.Err())
-					c := p.getCount(commons.GetTopicFullName(committeeTopic(cid)))
+					c := p.getCount(committeeTopic(cid))
 					require.GreaterOrEqual(t, c, minMsgCount)
 					// require.LessOrEqual(t, c, maxMsgCount)
 				}
@@ -190,7 +190,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				defer wg.Done()
 
 				topic := committeeTopic(cid)
-				topicFullName := commons.GetTopicFullName(topic)
+				topicFullName := topic
 
 				err := p.tm.Unsubscribe(topic, false)
 				require.NoError(t, err)
@@ -231,7 +231,7 @@ func banningTest(t *testing.T, logger *zap.Logger, peers []*P, cids []string, sc
 	t.Log("checking initial scores")
 	for _, pk := range cids {
 		for _, p := range peers {
-			peerList, err := p.tm.Peers(pk)
+			peerList, err := p.tm.Peers(committeeTopic(pk))
 			require.NoError(t, err)
 
 			for _, pid := range peerList {
@@ -317,7 +317,7 @@ func committeeTopic(cidHex string) string {
 		return "invalid"
 	}
 
-	return commons.CommitteeTopicID(spectypes.CommitteeID(cid))[0]
+	return commons.AlanCommitteeSubnet(spectypes.CommitteeID(cid)).AlanTopic()
 }
 
 type P struct {
@@ -390,9 +390,10 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		go midHandler.Start()
 	}
 	cfg := &topics.PubSubConfig{
-		Host:         h,
-		TraceLog:     false,
-		MsgIDHandler: midHandler,
+		NetworkConfig: networkconfig.TestNetwork,
+		Host:          h,
+		TraceLog:      false,
+		MsgIDHandler:  midHandler,
 		MsgHandler: func(_ context.Context, topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil

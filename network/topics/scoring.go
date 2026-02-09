@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
@@ -190,7 +191,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 
 		// Get committees
 		committees := committeesProvider.Committees()
-		topicCommittees := filterCommitteesForTopic(t, committees)
+		topicCommittees := filterCommitteesForTopic(cfg.NetworkConfig, t, committees)
 
 		// Log
 		validatorsInTopic := 0
@@ -215,18 +216,31 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 }
 
 // Returns a new committee list with only the committees that belong to the given topic
-func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
+func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, committees []*storage.Committee) []*storage.Committee {
 	topicCommittees := make([]*storage.Committee, 0)
+	currentSlot := netCfg.EstimatedCurrentSlot()
 
 	for _, committee := range committees {
-		// Get topic
-		subnet := commons.CommitteeSubnet(committee.ID)
-		committeeTopic := commons.SubnetTopicID(subnet)
-		committeeTopicFullName := commons.GetTopicFullName(committeeTopic)
+		booleTopic := committee.BooleSubnet.BooleTopic(netCfg.Beacon.Name)
+		alanTopic := committee.AlanSubnet.AlanTopic()
 
-		// If it belongs to the topic, add it
-		if topic == committeeTopicFullName {
-			topicCommittees = append(topicCommittees, committee)
+		switch {
+		case netCfg.InBooleTransitionWindow(currentSlot):
+			if topic == alanTopic {
+				topicCommittees = append(topicCommittees, committee)
+				continue
+			}
+			if topic == booleTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
+		case netCfg.BooleForkAtSlot(currentSlot):
+			if topic == booleTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
+		default:
+			if topic == alanTopic {
+				topicCommittees = append(topicCommittees, committee)
+			}
 		}
 	}
 	return topicCommittees
@@ -246,10 +260,14 @@ func formatInvalidMessageStats(filtered []*topicScoreSnapshot) string {
 		if i > 0 {
 			b.WriteString(" ")
 		}
+		label := snapshot.topic
+		if subnet, err := commons.ParseTopicSubnet(snapshot.topic); err == nil {
+			label = strconv.FormatUint(uint64(subnet), 10)
+		}
 		fmt.Fprintf(
 			&b,
 			"%s=%s,%s,%s,%s",
-			commons.GetTopicBaseName(snapshot.topic),
+			label,
 			fmtFloat(snapshot.TimeInMesh.Seconds()),
 			fmtFloat(snapshot.FirstMessageDeliveries),
 			fmtFloat(snapshot.MeshMessageDeliveries),

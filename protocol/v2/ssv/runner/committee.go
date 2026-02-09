@@ -31,6 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -47,7 +48,7 @@ type CommitteeRunner struct {
 	// attestingValidators is a list of validator this committee-runner will be processing attestation duties for.
 	attestingValidators []phase0.BLSPubKey
 
-	network             specqbft.Network
+	network             protocolp2p.Network
 	beacon              beacon.BeaconNode
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
@@ -67,7 +68,7 @@ func NewCommitteeRunner(
 	attestingValidators []phase0.BLSPubKey,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	dutyGuard CommitteeDutyGuard,
@@ -149,7 +150,7 @@ func (r *CommitteeRunner) MarshalJSON() ([]byte, error) {
 	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -174,7 +175,7 @@ func (r *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	type CommitteeRunnerAlias struct {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
-		network        specqbft.Network
+		network        protocolp2p.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       ssv.ValueChecker
@@ -232,7 +233,7 @@ func (r *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *CommitteeRunner) GetNetwork() specqbft.Network {
+func (r *CommitteeRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 
@@ -282,7 +283,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	}
 
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	version, _ := r.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
+	version, _ := r.BaseRunner.NetworkConfig.BeaconForkAtEpoch(epoch)
 
 	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
@@ -460,7 +461,7 @@ listener:
 	}
 
 	r.measurements.StartPostConsensus()
-	if err := r.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, postConsensusMsg.Slot); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -954,7 +955,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 
 	slot := duty.DutySlot()
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
-	dataVersion, _ := r.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
+	dataVersion, _ := r.BaseRunner.NetworkConfig.BeaconForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {

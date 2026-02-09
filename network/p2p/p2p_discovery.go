@@ -3,7 +3,6 @@ package p2pv1
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -68,18 +67,18 @@ func (n *p2pNetwork) startDiscovery() error {
 		ownSubnets := n.SubscribedSubnets()
 		currentSubnetPeers := newSubnetPeers()
 		for topic, peers := range n.PeersByTopic() {
-			subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
+			subnet, err := commons.ParseTopicSubnet(topic)
 			if err != nil {
 				n.logger.Error("failed to parse topic",
 					zap.String("topic", topic), zap.Error(err))
 				continue
 			}
-			if subnet < 0 || subnet >= commons.SubnetsCount {
+			if uint64(subnet) >= commons.SubnetsCount {
 				n.logger.Error("invalid topic",
-					zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+					zap.String("topic", topic), fields.Subnet(subnet))
 				continue
 			}
-			currentSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+			currentSubnetPeers[uint64(subnet)] = uint16(len(peers)) //nolint: gosec
 		}
 
 		n.logger.Debug("selecting discovered peers",

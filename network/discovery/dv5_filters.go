@@ -8,6 +8,7 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -72,7 +73,7 @@ func (dvs *DiscV5Service) recentlyTrimmedFilter() func(node *enode.Node) bool {
 }
 
 // subnetFilter checks if the node has an interest in the given subnet
-func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node) bool {
+func (dvs *DiscV5Service) subnetFilter(subnets ...commons.Subnet) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		fromEntry, err := records.GetSubnetsEntry(node.Record())
 		if err != nil {

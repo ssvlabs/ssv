@@ -119,7 +119,7 @@ func (gc *GoClient) computeAttDataRootAndVersion(
 
 	// Explicitly set Index field as beacon nodes may return inconsistent values.
 	// EIP-7549: Electra+ uses Index=0; pre-Electra uses committee index
-	version, _ := gc.beaconConfig.ForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
+	version, _ := gc.beaconConfig.BeaconForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
 	attData.Index = 0
 	if version < spec.DataVersionElectra {
 		attData.Index = committeeIndex

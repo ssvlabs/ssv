@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -71,7 +72,7 @@ type CommitteeObserverOptions struct {
 	FullNode             bool
 	Logger               *zap.Logger
 	BeaconConfig         *networkconfig.Beacon
-	Network              specqbft.Network
+	Network              protocolp2p.Network
 	Storage              *storage.ParticipantStores
 	OperatorSigner       ssvtypes.OperatorSigner
 	NewDecidedHandler    qbftcontroller.NewDecidedHandler

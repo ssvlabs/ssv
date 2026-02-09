@@ -15,6 +15,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/observability/log"
 )
 
@@ -93,13 +94,13 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(subnets ...uint64) (updated bool, err error) {
+func (md *localDiscovery) RegisterSubnets(subnets ...commons.Subnet) (updated bool, err error) {
 	// TODO
 	return false, nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(subnets ...uint64) (updated bool, err error) {
+func (md *localDiscovery) DeregisterSubnets(subnets ...commons.Subnet) (updated bool, err error) {
 	// TODO
 	return false, nil
 }

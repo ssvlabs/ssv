@@ -28,19 +28,19 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
-	DefaultGasLimit    = uint64(36_000_000)
-	DefaultGasLimitOld = uint64(30_000_000)
+	DefaultGasLimit = uint64(36_000_000)
 )
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon                         beacon.BeaconNode
-	network                        specqbft.Network
+	network                        protocolp2p.Network
 	signer                         ekm.BeaconSigner
 	operatorSigner                 ssvtypes.OperatorSigner
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
@@ -53,7 +53,7 @@ func NewValidatorRegistrationRunner(
 	networkConfig *networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
-	network specqbft.Network,
+	network protocolp2p.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter,
@@ -239,7 +239,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, duty.DutySlot()); err != nil {
 		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
 	}
 
@@ -258,11 +258,7 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 	// on the current epoch as compared to when this transition is supposed to happen.
 	gasLimit := r.gasLimit
 	if gasLimit == 0 {
-		defaultGasLimit := DefaultGasLimit
-		if !r.BaseRunner.NetworkConfig.GasLimit36Fork() {
-			defaultGasLimit = DefaultGasLimitOld
-		}
-		gasLimit = defaultGasLimit
+		gasLimit = DefaultGasLimit
 	}
 
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
@@ -306,7 +302,7 @@ func (r *ValidatorRegistrationRunner) SetTimeoutFunc(fn TimeoutF) {
 	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
-func (r *ValidatorRegistrationRunner) GetNetwork() specqbft.Network {
+func (r *ValidatorRegistrationRunner) GetNetwork() protocolp2p.Network {
 	return r.network
 }
 

@@ -14,8 +14,8 @@ func TestSubFilter(t *testing.T) {
 	sf := newSubFilter(l, 2)
 
 	require.False(t, sf.CanSubscribe("xxx"))
-	require.False(t, sf.CanSubscribe(commons.GetTopicFullName("xxx")))
-	sf.(Whitelist).Register(commons.GetTopicFullName("1"))
-	require.True(t, sf.CanSubscribe(commons.GetTopicFullName("1")))
-	require.False(t, sf.CanSubscribe(commons.GetTopicFullName("2")))
+	require.False(t, sf.CanSubscribe("ssv.v2.xxx"))
+	sf.(Whitelist).Register(commons.Subnet(1).AlanTopic())
+	require.True(t, sf.CanSubscribe(commons.Subnet(1).AlanTopic()))
+	require.False(t, sf.CanSubscribe(commons.Subnet(2).AlanTopic()))
 }

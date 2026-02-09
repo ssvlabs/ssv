@@ -353,7 +353,7 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(subnets ...uint64) (updated bool, err error) {
+func (dvs *DiscV5Service) RegisterSubnets(subnets ...commons.Subnet) (updated bool, err error) {
 	if len(subnets) == 0 {
 		return false, nil
 	}
@@ -370,7 +370,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...uint64) (updated bool, err 
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, err error) {
+func (dvs *DiscV5Service) DeregisterSubnets(subnets ...commons.Subnet) (updated bool, err error) {
 	if len(subnets) == 0 {
 		return false, nil
 	}

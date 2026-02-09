@@ -49,7 +49,7 @@ func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s commons.Subnets) bool {
 	si.peerSubnets[id] = s
 
 	// Update subnet-peer mappings
-	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
+	for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
 		if addedSubnets.IsSet(subnet) {
 			// Add peer to the subnet
 			si.subnets[subnet] = append(si.subnets[subnet], id)

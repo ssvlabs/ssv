@@ -24,8 +24,8 @@ import (
 
 const (
 	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to.
-	// 128 subnets + 1 safety buffer
-	subscriptionRequestLimit = 128 + 1
+	// 128 subnets (Alan + Boole during prior window) + 1 safety buffer
+	subscriptionRequestLimit = commons.SubnetsCount*2 + 1
 )
 
 // the following are kept in vars to allow flexibility (e.g. in tests)
@@ -128,7 +128,7 @@ func NewPubSub(
 
 	// Set up a SubFilter with a whitelist of known topics.
 	sf := newSubFilter(logger, subscriptionRequestLimit)
-	for _, topic := range commons.Topics() {
+	for _, topic := range commons.Topics(cfg.NetworkConfig) {
 		sf.(Whitelist).Register(topic)
 	}
 

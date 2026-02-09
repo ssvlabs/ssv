@@ -6,6 +6,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
@@ -21,7 +22,7 @@ type IConfig interface {
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() specqbft.Network
+	GetNetwork() protocolp2p.Network
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
 	// GetCutOffRound returns the round cut off
@@ -32,7 +33,7 @@ type Config struct {
 	BeaconSigner ekm.BeaconSigner
 	Domain       spectypes.DomainType
 	ProposerF    specqbft.ProposerF
-	Network      specqbft.Network
+	Network      protocolp2p.Network
 	Timer        roundtimer.Timer
 	CutOffRound  specqbft.Round
 }
@@ -53,7 +54,7 @@ func (c *Config) GetProposerF() specqbft.ProposerF {
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() specqbft.Network {
+func (c *Config) GetNetwork() protocolp2p.Network {
 	return c.Network
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/ttl"
@@ -60,8 +61,8 @@ func (o *Options) Validate() error {
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(subnets ...uint64) (updated bool, err error)
-	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
+	RegisterSubnets(subnets ...commons.Subnet) (updated bool, err error)
+	DeregisterSubnets(subnets ...commons.Subnet) (updated bool, err error)
 	Bootstrap(handler HandleNewPeer) error
 	PublishENR()
 }

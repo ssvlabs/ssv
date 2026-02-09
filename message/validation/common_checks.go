@@ -58,9 +58,9 @@ func (mv *messageValidator) validateDutyCount(
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
 	validatorIndices []phase0.ValidatorIndex,
-	signerStateBySlot *OperatorState,
+	operatorState *OperatorState,
 ) error {
-	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.EstimatedEpochAtSlot(msgSlot))
+	dutyCount := operatorState.DutyCount(mv.netCfg.EstimatedEpochAtSlot(msgSlot))
 
 	dutyLimit, exists := mv.dutyLimit(msgID, msgSlot, validatorIndices)
 	if !exists {
@@ -70,7 +70,7 @@ func (mv *messageValidator) validateDutyCount(
 	// If no message has been observed for this slot yet, treat it as a new duty.
 	// It will increment the duty count during state update after successful validation,
 	// so we preemptively increment the checked duty count to reflect that.
-	if signerStateBySlot.GetSignerState(msgSlot) == nil {
+	if operatorState.GetSignerStateForSlot(msgSlot) == nil {
 		dutyCount++
 	}
 
@@ -79,10 +79,10 @@ func (mv *messageValidator) validateDutyCount(
 	// - 2*V for Committee and AggregatorCommittee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
 	if dutyCount > dutyLimit {
-		err := ErrTooManyDutiesPerEpoch
-		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
-		err.want = fmt.Sprintf("<=%v", dutyLimit)
-		return err
+		e := ErrTooManyDutiesPerEpoch
+		e.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
+		e.want = fmt.Sprintf("<=%v", dutyLimit)
+		return e
 	}
 
 	return nil
