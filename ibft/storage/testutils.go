@@ -212,6 +212,33 @@ func GetSpecDir(path, module string) (string, error) {
 }
 
 func GetModulePath(name, version string) (string, error) {
+	cachePath, err := moduleCachePath(name, version)
+	if err == nil {
+		if _, statErr := os.Stat(cachePath); statErr == nil {
+			return cachePath, nil
+		}
+	}
+
+	// If the module is not present in cache yet, ask Go to resolve/download it
+	// and report the extracted module dir.
+	modQuery := name
+	if version != "" {
+		modQuery = fmt.Sprintf("%s@%s", name, version)
+	}
+
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modQuery)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("could not resolve module path for %s: %w; output: %s", modQuery, err, strings.TrimSpace(string(out)))
+	}
+	resolvedPath := strings.TrimSpace(string(out))
+	if resolvedPath == "" {
+		return "", fmt.Errorf("could not resolve module path for %s: empty module dir", modQuery)
+	}
+	return resolvedPath, nil
+}
+
+func moduleCachePath(name, version string) (string, error) {
 	// first we need GOMODCACHE
 	cache, ok := os.LookupEnv("GOMODCACHE")
 	if !ok {
