@@ -2,6 +2,7 @@ package storage
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -219,23 +220,48 @@ func GetModulePath(name, version string) (string, error) {
 		}
 	}
 
-	// If the module is not present in cache yet, ask Go to resolve/download it
-	// and report the extracted module dir.
+	// Resolve from the selected modfile's build list first.
+	if resolvedPath, err := resolveModuleDirViaGoList(name); err == nil && strings.TrimSpace(resolvedPath) != "" {
+		return resolvedPath, nil
+	}
+
+	// If the module is not present in cache yet, ask Go to download it and
+	// report the extracted module dir.
 	modQuery := name
 	if version != "" {
 		modQuery = fmt.Sprintf("%s@%s", name, version)
 	}
 
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modQuery)
+	cmd := exec.Command("go", "mod", "download", "-json", modQuery)
+	cmd.Env = envWithOptionalGoMod()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("could not resolve module path for %s: %w; output: %s", modQuery, err, strings.TrimSpace(string(out)))
 	}
-	resolvedPath := strings.TrimSpace(string(out))
-	if resolvedPath == "" {
+
+	var downloaded struct {
+		Dir   string `json:"Dir"`
+		Error string `json:"Error"`
+	}
+	if err := json.Unmarshal(out, &downloaded); err != nil {
+		return "", fmt.Errorf("could not resolve module path for %s: invalid go mod download output: %w; output: %s", modQuery, err, strings.TrimSpace(string(out)))
+	}
+	if downloaded.Error != "" {
+		return "", fmt.Errorf("could not resolve module path for %s: %s", modQuery, downloaded.Error)
+	}
+	if strings.TrimSpace(downloaded.Dir) == "" {
+		// Some Go versions may omit Dir in download output; re-check using go list.
+		if resolvedPath, err := resolveModuleDirViaGoList(name); err == nil && strings.TrimSpace(resolvedPath) != "" {
+			return resolvedPath, nil
+		}
+		if cachePath != "" {
+			if _, statErr := os.Stat(cachePath); statErr == nil {
+				return cachePath, nil
+			}
+		}
 		return "", fmt.Errorf("could not resolve module path for %s: empty module dir", modQuery)
 	}
-	return resolvedPath, nil
+	return downloaded.Dir, nil
 }
 
 func moduleCachePath(name, version string) (string, error) {
@@ -258,6 +284,43 @@ func moduleCachePath(name, version string) (string, error) {
 	}
 
 	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
+}
+
+func envWithOptionalGoMod() []string {
+	env := os.Environ()
+
+	modPath := strings.TrimSpace(os.Getenv(specGoModEnv))
+	if modPath == "" {
+		return env
+	}
+
+	if !filepath.IsAbs(modPath) {
+		if wd, err := os.Getwd(); err == nil {
+			if root, err := findModuleRoot(wd); err == nil {
+				modPath = filepath.Join(root, modPath)
+			}
+		}
+	}
+
+	// Make sure go subcommands resolve modules against the same modfile used by tests.
+	return append(env, "GOMOD="+modPath, "GOWORK=off")
+}
+
+func resolveModuleDirViaGoList(name string) (string, error) {
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", name)
+	cmd.Env = envWithOptionalGoMod()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("go list module dir failed for %s: %w; output: %s", name, err, strings.TrimSpace(string(out)))
+	}
+
+	resolvedPath := strings.TrimSpace(string(out))
+	if resolvedPath == "" || resolvedPath == "<no value>" {
+		return "", fmt.Errorf("go list module dir returned empty path for %s", name)
+	}
+
+	return resolvedPath, nil
 }
 
 func getGoModFile(path string) (*modfile.File, error) {
