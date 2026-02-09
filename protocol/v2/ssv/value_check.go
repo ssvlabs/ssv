@@ -78,47 +78,10 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	return nil
 }
 
-type aggregatorCommitteeChecker struct {
-	allowedAggregators  map[phase0.ValidatorIndex]map[phase0.CommitteeIndex]struct{}
-	allowedContributors map[phase0.ValidatorIndex]map[uint64]struct{}
-}
+type aggregatorCommitteeChecker struct{}
 
-type syncCommitteeSubnetIDProvider interface {
-	SyncCommitteeSubnetID(phase0.CommitteeIndex) uint64
-}
-
-func NewAggregatorCommitteeChecker(
-	duty *spectypes.AggregatorCommitteeDuty,
-	subnetProvider syncCommitteeSubnetIDProvider,
-) ValueChecker {
-	allowedAggregators := make(map[phase0.ValidatorIndex]map[phase0.CommitteeIndex]struct{})
-	allowedContributors := make(map[phase0.ValidatorIndex]map[uint64]struct{})
-
-	for _, vDuty := range duty.ValidatorDuties {
-		switch vDuty.Type {
-		case spectypes.BNRoleAggregator:
-			if _, ok := allowedAggregators[vDuty.ValidatorIndex]; !ok {
-				allowedAggregators[vDuty.ValidatorIndex] = make(map[phase0.CommitteeIndex]struct{})
-			}
-			allowedAggregators[vDuty.ValidatorIndex][(vDuty.CommitteeIndex)] = struct{}{}
-
-		case spectypes.BNRoleSyncCommitteeContribution:
-			if _, ok := allowedContributors[vDuty.ValidatorIndex]; !ok {
-				allowedContributors[vDuty.ValidatorIndex] = make(map[uint64]struct{})
-			}
-			for _, index := range vDuty.ValidatorSyncCommitteeIndices {
-				subnet := subnetProvider.SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
-				allowedContributors[vDuty.ValidatorIndex][subnet] = struct{}{}
-			}
-		default:
-			// Other duty types are unexpected
-		}
-	}
-
-	return &aggregatorCommitteeChecker{
-		allowedAggregators:  allowedAggregators,
-		allowedContributors: allowedContributors,
-	}
+func NewAggregatorCommitteeChecker() ValueChecker {
+	return &aggregatorCommitteeChecker{}
 }
 
 func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
@@ -131,46 +94,6 @@ func (v *aggregatorCommitteeChecker) CheckValue(value []byte) error {
 	}
 	if err := cd.Validate(); err != nil {
 		return fmt.Errorf("invalid value: %w", err)
-	}
-
-	if len(cd.Aggregators) == 0 && len(cd.Contributors) == 0 {
-		return spectypes.WrapError(
-			spectypes.AggCommConsensusDataNoValidatorErrorCode,
-			fmt.Errorf("no aggregators or sync committee contributors in consensus data"),
-		)
-	}
-
-	for _, agg := range cd.Aggregators {
-		allowedByValidator, ok := v.allowedAggregators[agg.ValidatorIndex]
-		if !ok {
-			return spectypes.NewError(
-				spectypes.QBFTValueInvalidErrorCode,
-				fmt.Sprintf("unexpected aggregator validator %d", agg.ValidatorIndex),
-			)
-		}
-		if _, ok := allowedByValidator[phase0.CommitteeIndex(agg.CommitteeIndex)]; !ok {
-			return spectypes.NewError(
-				spectypes.QBFTValueInvalidErrorCode,
-				fmt.Sprintf("unexpected aggregator committee index %d for validator %d", agg.CommitteeIndex, agg.ValidatorIndex),
-			)
-		}
-	}
-
-	for _, contrib := range cd.Contributors {
-		allowedByValidator, ok := v.allowedContributors[contrib.ValidatorIndex]
-		if !ok {
-			return spectypes.NewError(
-				spectypes.QBFTValueInvalidErrorCode,
-				fmt.Sprintf("unexpected contributor validator %d", contrib.ValidatorIndex),
-			)
-		}
-		subnetID := contrib.CommitteeIndex
-		if _, ok := allowedByValidator[subnetID]; !ok {
-			return spectypes.NewError(
-				spectypes.QBFTValueInvalidErrorCode,
-				fmt.Sprintf("unexpected contributor subnet %d for validator %d", subnetID, contrib.ValidatorIndex),
-			)
-		}
 	}
 
 	return nil

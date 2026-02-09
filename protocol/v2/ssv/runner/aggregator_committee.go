@@ -82,6 +82,7 @@ func NewAggregatorCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
+		ValCheck:        ssv.NewAggregatorCommitteeChecker(),
 		beacon:          beacon,
 		network:         network,
 		signer:          signer,
@@ -580,10 +581,6 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		return fmt.Errorf("invalid aggregator committee consensus data: %w", err)
 	}
 
-	r.ValCheck = ssv.NewAggregatorCommitteeChecker(
-		duty,
-		r.GetBeaconNode(),
-	)
 	r.measurements.StartConsensus()
 	if err := r.BaseRunner.decide(
 		ctx,

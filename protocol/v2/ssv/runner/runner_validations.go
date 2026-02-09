@@ -10,7 +10,6 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -19,7 +18,6 @@ import (
 
 func (b *BaseRunner) ValidatePreConsensusMsg(
 	ctx context.Context,
-	logger *zap.Logger,
 	runner Runner,
 	psigMsgs *spectypes.PartialSignatureMessages,
 ) error {
@@ -30,40 +28,27 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrRunningDutyFinished)
 	}
 
-	if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
-		return err
+	// Validate the pre-consensus message differently depending on a message type.
+	validateMsg := func() error {
+		if err := b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot()); err != nil {
+			return err
+		}
+
+		roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
+		if err != nil {
+			return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
+		}
+
+		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
 	}
 
 	if runner.GetRole() == spectypes.RoleAggregatorCommittee {
-		aggRunner, ok := runner.(*AggregatorCommitteeRunner)
-		if !ok {
-			return fmt.Errorf("unexpected runner type %T for aggregator committee role", runner)
+		validateMsg = func() error {
+			return b.validatePartialSigMsg(psigMsgs, b.State.CurrentDuty.DutySlot())
 		}
-
-		aggregatorMap, contributionMap, err := aggRunner.expectedPreConsensusRoots(ctx, logger)
-		if err != nil {
-			return fmt.Errorf("compute pre-consensus roots: %w", err)
-		}
-
-		expectedRoots := make(map[[32]byte]struct{})
-		for _, root := range aggregatorMap {
-			expectedRoots[root] = struct{}{}
-		}
-		for _, indexMap := range contributionMap {
-			for _, root := range indexMap {
-				expectedRoots[root] = struct{}{}
-			}
-		}
-
-		return b.verifyExpectedSigningRoots(psigMsgs, expectedRoots)
 	}
 
-	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
-	if err != nil {
-		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
-	}
-
-	return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+	return validateMsg()
 }
 
 // Verify each signature in container removing the invalid ones
@@ -78,12 +63,7 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 	}
 }
 
-func (b *BaseRunner) ValidatePostConsensusMsg(
-	ctx context.Context,
-	logger *zap.Logger,
-	runner Runner,
-	psigMsgs *spectypes.PartialSignatureMessages,
-) error {
+func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasDutyAssigned() {
 		return spectypes.WrapError(spectypes.NoRunningDutyErrorCode, ErrNoDutyAssigned)
 	}
@@ -179,31 +159,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(
 			// Use b.State.CurrentDuty.DutySlot() since CurrentDuty never changes for AggregatorCommitteeRunner
 			// by design, hence there is no need to store slot number on decidedValue for AggregatorCommitteeRunner.
 			expectedSlot := b.State.CurrentDuty.DutySlot()
-			if err := b.validatePartialSigMsg(psigMsgs, expectedSlot); err != nil {
-				return err
-			}
-
-			aggRunner, ok := runner.(*AggregatorCommitteeRunner)
-			if !ok {
-				return fmt.Errorf("unexpected runner type %T for aggregator committee role", runner)
-			}
-
-			aggregatorMap, contributionMap, _, err := aggRunner.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
-			if err != nil {
-				return fmt.Errorf("compute post-consensus roots: %w", err)
-			}
-
-			expectedRoots := make(map[[32]byte]struct{})
-			for _, root := range aggregatorMap {
-				expectedRoots[root] = struct{}{}
-			}
-			for _, roots := range contributionMap {
-				for _, root := range roots {
-					expectedRoots[root] = struct{}{}
-				}
-			}
-
-			return b.verifyExpectedSigningRoots(psigMsgs, expectedRoots)
+			return b.validatePartialSigMsg(psigMsgs, expectedSlot)
 		}
 	}
 
@@ -275,18 +231,6 @@ func (b *BaseRunner) verifyExpectedRoot(
 	for i, r := range sortedRoots {
 		if !bytes.Equal(sortedExpectedRoots[i][:], r[:]) {
 			return spectypes.NewError(spectypes.WrongSigningRootErrorCode, "wrong signing root")
-		}
-	}
-	return nil
-}
-
-func (b *BaseRunner) verifyExpectedSigningRoots(
-	psigMsgs *spectypes.PartialSignatureMessages,
-	expectedRoots map[[32]byte]struct{},
-) error {
-	for _, msg := range psigMsgs.Messages {
-		if _, ok := expectedRoots[msg.SigningRoot]; !ok {
-			return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "unexpected signing root")
 		}
 	}
 	return nil

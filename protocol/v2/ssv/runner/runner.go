@@ -233,7 +233,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	if err := b.ValidatePreConsensusMsg(ctx, logger, runner, signedMsg); err != nil {
+	if err := b.ValidatePreConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, fmt.Errorf("invalid pre-consensus message: %w", err)
 	}
 
@@ -329,7 +329,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	if err := b.ValidatePostConsensusMsg(ctx, logger, runner, signedMsg); err != nil {
+	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, fmt.Errorf("invalid post-consensus message: %w", err)
 	}
 
