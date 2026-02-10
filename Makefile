@@ -90,7 +90,7 @@ all-spec-test-alan-raceless:
 .PHONY: spec-test-alan-deps
 spec-test-alan-deps:
 	@echo "Downloading Alan modfile dependencies"
-	@GOMOD=go.spec.alan.mod go mod download
+	@go mod download -modfile=go.spec.alan.mod
 
 .PHONY: spec-test-raceless
 spec-test-raceless:

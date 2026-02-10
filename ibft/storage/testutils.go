@@ -232,8 +232,13 @@ func GetModulePath(name, version string) (string, error) {
 		modQuery = fmt.Sprintf("%s@%s", name, version)
 	}
 
+	args := []string{"mod", "download", "-json"}
+	if modfileArg, ok := specGoModArg(); ok {
+		args = append(args, modfileArg)
+	}
+	args = append(args, modQuery)
 	// #nosec G204 -- modQuery is built from parsed go.mod module path/version and executed without a shell.
-	cmd := exec.Command("go", "mod", "download", "-json", modQuery)
+	cmd := exec.Command("go", args...)
 	cmd.Env = envWithOptionalGoMod()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -268,8 +273,21 @@ func GetModulePath(name, version string) (string, error) {
 func moduleCachePath(name, version string) (string, error) {
 	// first we need GOMODCACHE
 	cache, ok := os.LookupEnv("GOMODCACHE")
-	if !ok {
-		cache = path.Join(os.Getenv("GOPATH"), "pkg", "mod")
+	if !ok || strings.TrimSpace(cache) == "" {
+		goPath := strings.TrimSpace(os.Getenv("GOPATH"))
+		if goPath == "" {
+			// #nosec G204 -- fixed command and static arguments.
+			cmd := exec.Command("go", "env", "GOPATH")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return "", fmt.Errorf("could not resolve GOPATH: %w; output: %s", err, strings.TrimSpace(string(out)))
+			}
+			goPath = strings.TrimSpace(string(out))
+		}
+		if goPath == "" {
+			return "", errors.New("could not resolve GOPATH")
+		}
+		cache = path.Join(goPath, "pkg", "mod")
 	}
 
 	// then we need to escape path
@@ -289,27 +307,22 @@ func moduleCachePath(name, version string) (string, error) {
 
 func envWithOptionalGoMod() []string {
 	env := os.Environ()
-
-	modPath := strings.TrimSpace(os.Getenv(specGoModEnv))
-	if modPath == "" {
+	if _, ok := specGoModArg(); !ok {
 		return env
 	}
-
-	if !filepath.IsAbs(modPath) {
-		if wd, err := os.Getwd(); err == nil {
-			if root, err := findModuleRoot(wd); err == nil {
-				modPath = filepath.Join(root, modPath)
-			}
-		}
-	}
-
-	// Make sure go subcommands resolve modules against the same modfile used by tests.
-	return append(env, "GOMOD="+modPath, "GOWORK=off")
+	// Keep workspace mode disabled when using a selected modfile.
+	return append(env, "GOWORK=off")
 }
 
 func resolveModuleDirViaGoList(name string) (string, error) {
+	args := []string{"list", "-m", "-f", "{{.Dir}}"}
+	if modfileArg, ok := specGoModArg(); ok {
+		args = append(args, modfileArg)
+	}
+	args = append(args, name)
+
 	// #nosec G204 -- name comes from parsed go.mod module path and is passed as an argument (no shell evaluation).
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", name)
+	cmd := exec.Command("go", args...)
 	cmd.Env = envWithOptionalGoMod()
 
 	out, err := cmd.CombinedOutput()
@@ -323,6 +336,23 @@ func resolveModuleDirViaGoList(name string) (string, error) {
 	}
 
 	return resolvedPath, nil
+}
+
+func specGoModArg() (string, bool) {
+	modPath := strings.TrimSpace(os.Getenv(specGoModEnv))
+	if modPath == "" {
+		return "", false
+	}
+
+	if !filepath.IsAbs(modPath) {
+		if wd, err := os.Getwd(); err == nil {
+			if root, err := findModuleRoot(wd); err == nil {
+				modPath = filepath.Join(root, modPath)
+			}
+		}
+	}
+
+	return "-modfile=" + modPath, true
 }
 
 func getGoModFile(path string) (*modfile.File, error) {

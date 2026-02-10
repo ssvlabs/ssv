@@ -25,15 +25,14 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 
 	ks := testingutils.Testing4SharesSet()
 	logger := log.TestLogger(t)
-
-	v := ssvtesting.BaseValidator(logger, ks)
+	committeeMember := testingutils.TestingCommitteeMember(ks)
+	v := ssvtesting.BaseValidator(logger, testingutils.KeySetForCommitteeMember(committeeMember))
 	r := v.DutyRunners[ssvtypes.RoleSyncCommitteeContribution]
 	require.NotNil(t, r, "sync committee runner is missing")
-
-	duty := normalizeAlanSyncCommitteeDuty(t, v.Share.ValidatorPubKey, v.Share.ValidatorIndex)
-	lastErr := r.StartNewDuty(t.Context(), logger, duty, v.Operator.GetQuorum())
 	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
+	duty := normalizeAlanSyncCommitteeDuty(t, v.Share.ValidatorPubKey, v.Share.ValidatorIndex)
+	lastErr := v.StartDuty(t.Context(), logger, duty)
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSignedSSVMessage(msg)
 		if err != nil {
