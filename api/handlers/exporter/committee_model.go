@@ -116,7 +116,7 @@ func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
 	return CommitteeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
-		Role:          committeeRunnerRoleString(t.Role),
+		Role:          obsutils.FormatRunnerRole(spectypes.RunnerRole(t.Role)),
 		Consensus:     toRounds(t.Rounds),
 		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
@@ -124,16 +124,6 @@ func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
 		CommitteeID:   hex.EncodeToString(t.CommitteeID[:]),
 		Proposal:      formatProposalData(t.ProposalData),
 	}
-}
-
-func committeeRunnerRoleString(role uint64) string {
-	if role == 0 {
-		return obsutils.FormatRunnerRole(spectypes.RoleCommittee)
-	}
-	if role == 6 {
-		return obsutils.FormatRunnerRole(spectypes.RoleAggregatorCommittee)
-	}
-	return obsutils.FormatRunnerRole(spectypes.RoleUnknown)
 }
 
 func toCommitteePost(m []*exporter.SignerData) (out []CommitteeMessage) {

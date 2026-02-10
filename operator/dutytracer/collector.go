@@ -223,13 +223,6 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 
 var errInFlight = errors.New("in flight")
 
-func storedCommitteeTraceRole(role spectypes.RunnerRole) uint64 {
-	if role == spectypes.RoleAggregatorCommittee {
-		return 6
-	}
-	return 0
-}
-
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*committeeDutyTrace, bool, error) {
 	key := committeeTraceKey{id: committeeID, role: role}
 	// check late arrival
@@ -244,7 +237,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 				CommitteeDutyTrace: exporter.CommitteeDutyTrace{
 					CommitteeID: committeeID,
 					Slot:        slot,
-					Role:        storedCommitteeTraceRole(role),
+					Role:        uint64(role),
 				},
 			}
 			return trace, true, nil
@@ -273,7 +266,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 			CommitteeDutyTrace: exporter.CommitteeDutyTrace{
 				CommitteeID: committeeID,
 				Slot:        slot,
-				Role:        storedCommitteeTraceRole(role),
+				Role:        uint64(role),
 			},
 		}
 
@@ -1274,8 +1267,9 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
 	}
 
-	switch trace.Role {
-	case storedCommitteeTraceRole(spectypes.RoleAggregatorCommittee):
+	runnerRole := spectypes.RunnerRole(trace.Role)
+	switch runnerRole {
+	case spectypes.RoleAggregatorCommittee:
 		c.checkRoleQuorumForValidatorsByRoot(logger, trace, spectypes.BNRoleAggregator, slot, threshold)
 		c.checkRoleQuorumForValidatorsByRoot(logger, trace, spectypes.BNRoleSyncCommitteeContribution, slot, threshold)
 	default:
