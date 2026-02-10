@@ -1,5 +1,4 @@
 //go:build alan_spec
-// +build alan_spec
 
 package qbft
 
