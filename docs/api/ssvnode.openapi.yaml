@@ -43,7 +43,9 @@ definitions:
   exporter.CommitteeTrace:
     properties:
       attester:
-        description: Attester contains post-consensus messages for attester duties.
+        description: |-
+          Attester contains post-consensus messages for attester duties,
+          including aggregator signers.
         items:
           $ref: '#/definitions/exporter.CommitteeMessage'
         type: array
@@ -66,13 +68,21 @@ definitions:
           available.
         format: hex
         type: string
+      role:
+        description: Role is the committee runner role for this duty (e.g., COMMITTEE).
+        enum:
+        - COMMITTEE
+        - AGGREGATOR_COMMITTEE
+        example: COMMITTEE
+        type: string
       slot:
         description: Slot is the duty slot for this committee trace.
         format: int64
         type: integer
       sync_committee:
-        description: SyncCommittee contains post-consensus messages for sync-committee
-          duties.
+        description: |-
+          SyncCommittee contains post-consensus messages for sync-committee duties,
+          including sync committee contribution signers.
         items:
           $ref: '#/definitions/exporter.CommitteeMessage'
         type: array
@@ -93,6 +103,15 @@ definitions:
         format: int64
         minimum: 0
         type: integer
+      roles:
+        description: Roles is a comma-separated list of committee runner roles to
+          include.
+        items:
+          enum:
+          - COMMITTEE
+          - AGGREGATOR_COMMITTEE
+          type: string
+        type: array
       to:
         description: To is the ending slot (inclusive).
         format: int64
@@ -634,6 +653,17 @@ paths:
         minimum: 0
         name: from
         type: integer
+      - collectionFormat: csv
+        description: Roles is a comma-separated list of committee runner roles to
+          include.
+        in: query
+        items:
+          enum:
+          - COMMITTEE
+          - AGGREGATOR_COMMITTEE
+          type: string
+        name: roles
+        type: array
       - description: To is the ending slot (inclusive).
         format: int64
         in: query
@@ -686,6 +716,17 @@ paths:
         minimum: 0
         name: from
         type: integer
+      - collectionFormat: csv
+        description: Roles is a comma-separated list of committee runner roles to
+          include.
+        in: query
+        items:
+          enum:
+          - COMMITTEE
+          - AGGREGATOR_COMMITTEE
+          type: string
+        name: roles
+        type: array
       - description: To is the ending slot (inclusive).
         format: int64
         in: query

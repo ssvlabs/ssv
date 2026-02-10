@@ -17,7 +17,7 @@ import (
 
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
 func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*ValidatorTracesResult, *multierror.Error) {
-	if err := validateValidatorRequest(request); err != nil {
+	if err := e.validateValidatorRequest(request); err != nil {
 		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
@@ -35,12 +35,7 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		for _, role := range request.Roles {
-			providerFunc := e.getValidatorDutiesForRoleAndSlot
-			if isCommitteeDuty(role) {
-				providerFunc = e.getValidatorCommitteeDutiesForRoleAndSlot
-			}
-
-			duties, err := providerFunc(role, slot, indices)
+			duties, err := e.getValidatorTracesForRoleAndSlot(role, slot, indices)
 			results = append(results, duties...)
 			errs = multierror.Append(errs, err)
 		}
@@ -55,7 +50,23 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 	return &ValidatorTracesResult{Traces: results, Schedule: schedule}, errs
 }
 
-func validateValidatorRequest(request *ValidatorTracesQuery) error {
+func (e *Exporter) getValidatorTracesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]ValidatorCommitteeTrace, error) {
+	switch role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+		return e.getValidatorCommitteeDutiesForRoleAndSlot(role, slot, indices)
+	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+		// Alan: AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION are validator duties.
+		// Boole: AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION are committee duties.
+		if e.networkConfig.BooleForkAtSlot(slot) {
+			return e.getValidatorCommitteeDutiesForRoleAndSlot(role, slot, indices)
+		}
+		return e.getValidatorDutiesForRoleAndSlot(role, slot, indices)
+	default:
+		return e.getValidatorDutiesForRoleAndSlot(role, slot, indices)
+	}
+}
+
+func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -68,7 +79,10 @@ func validateValidatorRequest(request *ValidatorTracesQuery) error {
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
 		for _, role := range request.Roles {
 			if isCommitteeDuty(role) {
-				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
+				// Aggregator/SCC are validator duties pre-fork and committee duties post-fork.
+				if !isAggregatorCommitteeRole(role) || e.networkConfig.BooleForkAtSlot(phase0.Slot(request.To)) {
+					return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
+				}
 			}
 		}
 	}
@@ -116,9 +130,16 @@ func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, s
 	return duties, errs.ErrorOrNil()
 }
 
+// getValidatorCommitteeDutiesForRoleAndSlot reads committee-backed duties.
+// Callers should route AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION here only on Boole slots
+// (pre-Boole these are validator duties). ATTESTER/SYNC_COMMITTEE are committee duties on all forks.
 func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]ValidatorCommitteeTrace, error) {
 	results := make([]ValidatorCommitteeTrace, 0, len(indices))
 	var errs *multierror.Error
+	runnerRole := spectypes.RoleCommittee
+	if role == spectypes.BNRoleAggregator || role == spectypes.BNRoleSyncCommitteeContribution {
+		runnerRole = spectypes.RoleAggregatorCommittee
+	}
 
 	for _, index := range indices {
 		committeeID, err := e.traceStore.GetCommitteeID(slot, index)
@@ -128,7 +149,7 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 			continue
 		}
 
-		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
+		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, runnerRole)
 		if err != nil {
 			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.ValidatorIndex(index))
 			errs = multierror.Append(errs, err)
@@ -138,21 +159,22 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 		// Membership gating: only return a validator entry if this index appears
 		// in the role-specific signer data collected for this committee duty.
 		hasIndex := false
-		if role == spectypes.BNRoleAttester {
+		switch role {
+		case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 			for _, sd := range duty.Attester {
 				if slices.Contains(sd.ValidatorIdx, index) {
 					hasIndex = true
 					break
 				}
 			}
-		} else if role == spectypes.BNRoleSyncCommittee {
+		case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 			for _, sd := range duty.SyncCommittee {
 				if slices.Contains(sd.ValidatorIdx, index) {
 					hasIndex = true
 					break
 				}
 			}
-		} else {
+		default:
 			// For non-committee roles, should not reach this path; be conservative.
 			hasIndex = true
 		}
@@ -240,5 +262,14 @@ func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesQuery, indices []p
 
 // === Shared validator traces helpers ===
 func isCommitteeDuty(role spectypes.BeaconRole) bool {
-	return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
+	switch role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee, spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+		return true
+	default:
+		return false
+	}
+}
+
+func isAggregatorCommitteeRole(role spectypes.BeaconRole) bool {
+	return role == spectypes.BNRoleAggregator || role == spectypes.BNRoleSyncCommitteeContribution
 }

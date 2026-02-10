@@ -25,7 +25,7 @@ func (e *Exporter) CommitteeTracesCore(request *CommitteeTracesQuery) (*Committe
 	cids := request.CommitteeIDs
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
-		duties, err := e.getCommitteeDutiesForSlot(slot, cids)
+		duties, err := e.getCommitteeDutiesForSlot(slot, cids, request.Roles...)
 		all = append(all, duties...)
 		errs = multierror.Append(errs, err)
 	}
@@ -46,25 +46,52 @@ func validateCommitteeRequest(request *CommitteeTracesQuery) error {
 	return nil
 }
 
-func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID) ([]*exporter.CommitteeDutyTrace, error) {
+func (e *Exporter) getCommitteeDutiesForSlot(slot phase0.Slot, committeeIDs []spectypes.CommitteeID, roles ...spectypes.RunnerRole) ([]*exporter.CommitteeDutyTrace, error) {
 	if len(committeeIDs) == 0 {
-		duties, err := e.traceStore.GetCommitteeDuties(slot)
-		return duties, err
+		return e.traceStore.GetCommitteeDuties(slot, roles...)
+	}
+
+	if len(roles) == 0 {
+		roles = []spectypes.RunnerRole{
+			spectypes.RoleCommittee,
+			spectypes.RoleAggregatorCommittee,
+		}
 	}
 
 	duties := make([]*exporter.CommitteeDutyTrace, 0, len(committeeIDs))
 
 	var errs *multierror.Error
 	for _, cmtID := range committeeIDs {
-		duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID)
-		if err != nil {
-			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
-			errs = multierror.Append(errs, err)
-			continue
+		for _, role := range roles {
+			duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID, role)
+			if err != nil {
+				errs = multierror.Append(errs, err)
+				continue
+			}
+			duties = append(duties, duty)
 		}
-		duties = append(duties, duty)
 	}
+
 	return duties, errs.ErrorOrNil()
+}
+
+func runnerRolesToBeaconRoles(roles []spectypes.RunnerRole) []spectypes.BeaconRole {
+	if len(roles) == 0 {
+		return nil
+	}
+
+	out := make([]spectypes.BeaconRole, 0, len(roles)*2)
+	for _, role := range roles {
+		switch role {
+		case spectypes.RoleCommittee:
+			out = append(out, spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee)
+		case spectypes.RoleAggregatorCommittee:
+			out = append(out, spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution)
+		case spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit, spectypes.RoleUnknown:
+			// Not committee runner roles.
+		}
+	}
+	return out
 }
 
 // buildCommitteeSchedule constructs per-committee schedules by grouping scheduled indices
@@ -78,6 +105,11 @@ func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesQuery) []Committee
 		for _, id := range req.CommitteeIDs {
 			filter[id] = struct{}{}
 		}
+	}
+
+	rolesToIterate := rolemask.All()
+	if len(req.Roles) > 0 {
+		rolesToIterate = runnerRolesToBeaconRoles(req.Roles)
 	}
 
 	for s := req.From; s <= req.To; s++ {
@@ -115,7 +147,7 @@ func (e *Exporter) buildCommitteeSchedule(req *CommitteeTracesQuery) []Committee
 				grouped[cid] = make(map[spectypes.BeaconRole][]phase0.ValidatorIndex)
 			}
 			// Populate roles for bits present
-			for _, role := range rolemask.All() {
+			for _, role := range rolesToIterate {
 				if rolemask.Has(mask, role) {
 					grouped[cid][role] = append(grouped[cid][role], l.ValidatorIndex)
 				}

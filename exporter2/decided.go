@@ -41,6 +41,12 @@ func (e *Exporter) TraceDecidedsCore(request *DecidedsQuery) (*TraceDecidedsResu
 			switch role {
 			case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
 				roleParticipantsIdx, roleErrs = e.getCommitteeDecidedsForRole(slot, indices, role)
+			case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+				if e.networkConfig.BooleForkAtSlot(slot) {
+					roleParticipantsIdx, roleErrs = e.getCommitteeDecidedsForRole(slot, indices, role)
+				} else {
+					roleParticipantsIdx, roleErrs = e.getValidatorDecidedsForRole(slot, indices, role)
+				}
 			default:
 				roleParticipantsIdx, roleErrs = e.getValidatorDecidedsForRole(slot, indices, role)
 			}
