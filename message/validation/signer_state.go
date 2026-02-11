@@ -7,15 +7,23 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
-// SignerState represents the state of a signer, including its start time, slot, round,
-// message counts, proposal data, and the number of duties performed in the current epoch.
+// SignerState represents the current state of a signer (an Operator running a Runner that performs partial-signing
+// for duties of some type: proposer, committee, etc.) for a particular slot.
 type SignerState struct {
-	Slot         phase0.Slot // index stores slot modulo, so we also need to store slot here
-	Round        specqbft.Round
+	// Slot records current slot of the signer.
+	Slot phase0.Slot
+
+	// Round records current QBFT round (relevant for duties that have QBFT consensus phase) of the signer.
+	Round specqbft.Round
+
+	// SeenMsgTypes tracks what messages we've seen from this signer so far.
 	SeenMsgTypes SeenMsgTypes
-	// Storing pointer to byte array instead of slice to reduce memory consumption when we don't need the hash.
+
+	// HashedProposalData records the 1st proposal we've seen from this signer.
+	// Storing a pointer to byte array instead of slice to reduce memory consumption when we don't need the hash.
 	// A nil slice could be an alternative, but it'd consume more memory, and we'd need to cast [32]byte returned by sha256.Sum256() to slice.
 	HashedProposalData *[32]byte
+
 	// Max possible map size for committee sizes:
 	//  4 (f=1): C(4,3)+C(4,4)=5
 	//  7 (f=2): C(7,5)+C(7,6)+C(7,7)=29

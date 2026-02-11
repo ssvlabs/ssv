@@ -32,8 +32,7 @@ import (
 )
 
 const (
-	DefaultGasLimit    = uint64(36_000_000)
-	DefaultGasLimitOld = uint64(30_000_000)
+	DefaultGasLimit = uint64(36_000_000)
 )
 
 type ValidatorRegistrationRunner struct {
@@ -258,11 +257,7 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 	// on the current epoch as compared to when this transition is supposed to happen.
 	gasLimit := r.gasLimit
 	if gasLimit == 0 {
-		defaultGasLimit := DefaultGasLimit
-		if !r.BaseRunner.NetworkConfig.GasLimit36Fork() {
-			defaultGasLimit = DefaultGasLimitOld
-		}
-		gasLimit = defaultGasLimit
+		gasLimit = DefaultGasLimit
 	}
 
 	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)

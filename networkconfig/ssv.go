@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -46,12 +45,7 @@ type SSV struct {
 	Forks                   SSVForks
 }
 
-type SSVForks struct {
-	Alan phase0.Epoch
-	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
-	// to 36_000_000.
-	GasLimit36 phase0.Epoch
-}
+type SSVForks struct{}
 
 func (s *SSV) String() string {
 	marshaled, err := json.Marshal(s)
