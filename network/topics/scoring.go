@@ -221,7 +221,7 @@ func filterCommitteesForTopic(netCfg *networkconfig.Network, topic string, commi
 	currentSlot := netCfg.EstimatedCurrentSlot()
 
 	for _, committee := range committees {
-		booleTopic := committee.BooleSubnet.BooleTopic(netCfg.Beacon.Name)
+		booleTopic := committee.BooleSubnet.BooleTopic(netCfg.SSV.Name)
 		alanTopic := committee.AlanSubnet.AlanTopic()
 
 		switch {

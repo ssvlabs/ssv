@@ -74,7 +74,7 @@ func (n *p2pNetwork) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase
 			if !exists {
 				return fmt.Errorf("could not find share for committee %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 			}
-			topic = val.BooleSubnet.BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
+			topic = val.BooleSubnet.BooleTopic(n.cfg.NetworkConfig.SSV.Name)
 		} else {
 			topic = commons.AlanCommitteeSubnet(committeeID).AlanTopic()
 		}
@@ -84,7 +84,7 @@ func (n *p2pNetwork) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
 		if n.cfg.NetworkConfig.BooleForkAtSlot(slot) {
-			topic = val.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
+			topic = val.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.SSV.Name)
 		} else {
 			topic = val.AlanCommitteeSubnet().AlanTopic()
 		}
@@ -273,7 +273,7 @@ func (n *p2pNetwork) subscribeSubnet(subnet commons.Subnet, useBoole bool) error
 	}
 	topic := subnet.AlanTopic()
 	if useBoole {
-		topic = subnet.BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
+		topic = subnet.BooleTopic(n.cfg.NetworkConfig.SSV.Name)
 	}
 	if err := n.topicsCtrl.Subscribe(topic); err != nil {
 		return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
@@ -290,7 +290,7 @@ func (n *p2pNetwork) unsubscribeSubnet(subnet commons.Subnet, useBoole bool) err
 	}
 	topic := subnet.AlanTopic()
 	if useBoole {
-		topic = subnet.BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
+		topic = subnet.BooleTopic(n.cfg.NetworkConfig.SSV.Name)
 	}
 	if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 		return fmt.Errorf("could not unsubscribe from subnet %d: %w", subnet, err)
@@ -323,7 +323,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 func (n *p2pNetwork) committeeTopicSetForCurrentEpoch(share *ssvtypes.SSVShare) map[string]struct{} {
 	currentSlot := n.cfg.NetworkConfig.EstimatedCurrentSlot()
 	alanTopic := share.AlanCommitteeSubnet().AlanTopic()
-	booleTopic := share.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.Beacon.Name)
+	booleTopic := share.BooleCommitteeSubnet().BooleTopic(n.cfg.NetworkConfig.SSV.Name)
 	topicSet := make(map[string]struct{})
 
 	switch {
