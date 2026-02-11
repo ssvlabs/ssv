@@ -71,6 +71,10 @@ func BeaconBlockRootAttribute(root [32]byte) attribute.KeyValue {
 	return attribute.String("ssv.beacon.block.root", hex.EncodeToString(root[:]))
 }
 
+func BeaconBlockParentRootAttribute(root [32]byte) attribute.KeyValue {
+	return attribute.String("ssv.beacon.block.parent_root", hex.EncodeToString(root[:]))
+}
+
 func CommitteeIndexAttribute(index phase0.CommitteeIndex) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.validator.duty.committee.index",

@@ -2,11 +2,18 @@ package validation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// ValidatorState keeps track of the signers for a given public key and role.
+// ValidatorState keeps track of signers(operators) for some validator.
 type ValidatorState struct {
-	operators       []*OperatorState
+	// committeeID is the ID of the committee this validator currently belongs to
+	committeeID spectypes.CommitteeID
+
+	// operators is a list of operators in the committee this validator currently belongs to
+	operators []*OperatorState
+
+	// storedSlotCount defines how many recent slots we want to store in OperatorState
 	storedSlotCount uint64
 }
 
@@ -21,7 +28,7 @@ func (cs *ValidatorState) OperatorState(operatorIdx int) *OperatorState {
 type OperatorState struct {
 	// signers stores the latest ValidatorState.storedSlotCount signers, signer corresponding to
 	// slot s is residing at index s % ValidatorState.storedSlotCount
-	signers         []*SignerState
+	signers         []*SignerStateForSlotRound
 	maxSlot         phase0.Slot
 	maxEpoch        phase0.Epoch
 	currEpochDuties uint64
@@ -30,11 +37,11 @@ type OperatorState struct {
 
 func newOperatorState(size uint64) *OperatorState {
 	return &OperatorState{
-		signers: make([]*SignerState, size),
+		signers: make([]*SignerStateForSlotRound, size),
 	}
 }
 
-func (os *OperatorState) GetSignerStateForSlot(slot phase0.Slot) *SignerState {
+func (os *OperatorState) GetSignerStateForSlot(slot phase0.Slot) *SignerStateForSlotRound {
 	s := os.signers[(uint64(slot) % uint64(len(os.signers)))]
 	if s == nil || s.Slot != slot {
 		return nil
@@ -43,7 +50,7 @@ func (os *OperatorState) GetSignerStateForSlot(slot phase0.Slot) *SignerState {
 	return s
 }
 
-func (os *OperatorState) SetSignerStateForSlot(slot phase0.Slot, epoch phase0.Epoch, state *SignerState) {
+func (os *OperatorState) SetSignerStateForSlot(slot phase0.Slot, epoch phase0.Epoch, state *SignerStateForSlotRound) {
 	os.signers[uint64(slot)%uint64(len(os.signers))] = state
 	if slot > os.maxSlot {
 		os.maxSlot = slot

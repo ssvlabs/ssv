@@ -195,11 +195,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		height := specqbft.Height(defaultSlot)
 
-		key := peerIDWithMessageID{
-			peerID:    peerID,
-			messageID: committeeIdentifier,
+		committeeInfo := CommitteeInfo{
+			committeeID: committeeID,
+			committee:   committee,
 		}
-		state := validator.validatorState(key, committee)
+		state := validator.validatorState(committeeIdentifier, committeeInfo)
 		for i := range committee {
 			signerState := state.OperatorState(i)
 			require.NotNil(t, signerState)
@@ -225,7 +225,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.World.SeenMsgTypes)
 		for i := 1; i < len(committee); i++ {
 			require.NotNil(t, state.OperatorState(i))
 		}
@@ -247,7 +248,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 2, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.World.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -266,7 +268,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		storedState = operatorState.GetSignerStateForSlot(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.World.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -276,7 +279,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, operatorState)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.Peers[peerID].SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.World.SeenMsgTypes)
 	})
 
 	// Send a pubsub message with no data should cause an error
@@ -910,6 +914,77 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				}
 			}
 		})
+
+		// IGNORE or REJECT duplicate messages depending on which peers they come from
+		t.Run("duplicate messages", func(t *testing.T) {
+			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
+				spectypes.RoleCommittee:                 {spectypes.PostConsensusPartialSig},
+				spectypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, spectypes.SelectionProofPartialSig},
+				spectypes.RoleProposer:                  {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
+				spectypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
+				spectypes.RoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
+			}
+
+			for role, msgTypes := range tests {
+				for _, msgType := range msgTypes {
+					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), PartialMsgTypeToString(msgType))
+					t.Run(subtestName, func(t *testing.T) {
+						ds := dutystore.New()
+						ds.Proposer.Set(spectestingutils.TestingDutyEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+							{Slot: spectestingutils.TestingDutySlot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+						})
+						ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+							{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+						})
+						ds.VoluntaryExit.AddDuty(spectestingutils.TestingDutySlot, phase0.BLSPubKey(shares.active.ValidatorPubKey))
+
+						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+
+						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+						messages.Type = msgType
+
+						encodedMessages, err := messages.Encode()
+						require.NoError(t, err)
+
+						dutyExecutorID := shares.active.ValidatorPubKey[:]
+						if validator.committeeRole(role) {
+							dutyExecutorID = encodedCommitteeID
+						}
+						ssvMessage := &spectypes.SSVMessage{
+							MsgType: spectypes.SSVPartialSignatureMsgType,
+							MsgID:   spectypes.NewMsgID(netCfg.DomainType, dutyExecutorID, role),
+							Data:    encodedMessages,
+						}
+
+						signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+						receivedAt := netCfg.SlotStartTime(spectestingutils.TestingDutySlot)
+
+						topicID := commons.CommitteeTopicID(committeeID)[0]
+
+						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+						require.NoError(t, err)
+
+						var valErr Error
+
+						// REJECT a duplicate message from the same peer
+						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+						require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+						require.True(t, errors.As(err, &valErr))
+						require.True(t, valErr.reject)
+
+						// IGNORE a duplicate message from another peer
+						anotherPeerID, err := libp2ptest.RandPeerID()
+						require.NoError(t, err)
+						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, anotherPeerID, receivedAt)
+						require.ErrorIs(t, err, ErrTooManyPartialSigMessage)
+						require.True(t, errors.As(err, &valErr))
+						require.False(t, valErr.reject)
+					})
+				}
+			}
+		})
 	})
 
 	// Get error when receiving QBFT message with an invalid type
@@ -1306,9 +1381,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 		signedSSVMessage.FullData = anotherFullData
 
+		var valErr Error
+
+		// REJECT a duplicate message from the same peer
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		expectedErr := ErrDifferentProposalData
-		require.ErrorIs(t, err, expectedErr)
+		require.ErrorIs(t, err, ErrDifferentProposalData)
+		require.True(t, errors.As(err, &valErr))
+		require.True(t, valErr.reject)
+
+		// IGNORE a duplicate message from another peer
+		anotherPeerID, err := libp2ptest.RandPeerID()
+		require.NoError(t, err)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, anotherPeerID, receivedAt)
+		require.ErrorIs(t, err, ErrDifferentProposalData)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
 	})
 
 	// Receive prepare from same operator twice with different messages (same round) should receive an error
@@ -1325,10 +1412,25 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var valErr Error
+
+		// REJECT a duplicate message from the same peer
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "prepare, having prepare"
 		require.ErrorIs(t, err, expectedErr)
+		require.True(t, errors.As(err, &valErr))
+		require.True(t, valErr.reject)
+
+		// IGNORE a duplicate message from another peer
+		anotherPeerID, err := libp2ptest.RandPeerID()
+		require.NoError(t, err)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, anotherPeerID, receivedAt)
+		expectedErr = ErrDuplicatedMessage
+		expectedErr.got = "prepare, having prepare"
+		require.ErrorIs(t, err, expectedErr)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
 	})
 
 	// Receive commit from same operator twice with different messages (same round) should receive an error
@@ -1344,10 +1446,25 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var valErr Error
+
+		// REJECT a duplicate message from the same peer
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "commit, having commit"
 		require.ErrorIs(t, err, expectedErr)
+		require.True(t, errors.As(err, &valErr))
+		require.True(t, valErr.reject)
+
+		// IGNORE a duplicate message from another peer
+		anotherPeerID, err := libp2ptest.RandPeerID()
+		require.NoError(t, err)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, anotherPeerID, receivedAt)
+		expectedErr = ErrDuplicatedMessage
+		expectedErr.got = "commit, having commit"
+		require.ErrorIs(t, err, expectedErr)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
 	})
 
 	// Receive round change from same operator twice with different messages (same round) should receive an error
@@ -1363,10 +1480,25 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var valErr Error
+
+		// REJECT a duplicate message from the same peer
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "round change, having round change"
 		require.ErrorIs(t, err, expectedErr)
+		require.True(t, errors.As(err, &valErr))
+		require.True(t, valErr.reject)
+
+		// IGNORE a duplicate message from another peer
+		anotherPeerID, err := libp2ptest.RandPeerID()
+		require.NoError(t, err)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, anotherPeerID, receivedAt)
+		expectedErr = ErrDuplicatedMessage
+		expectedErr.got = "round change, having round change"
+		require.ErrorIs(t, err, expectedErr)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
 	})
 
 	// Decided with same signers should receive an error
@@ -1383,8 +1515,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
+		var valErr Error
+
+		// IGNORE a duplicate message from the same peer (ideally we'd want to REJECT it, but for implementation simplicity we don't)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrDecidedWithSameSigners)
+		require.ErrorIs(t, err, ErrDecidedMessageWithTooFewSigners)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
+
+		// IGNORE a duplicate message from another peer
+		anotherPeerID, err := libp2ptest.RandPeerID()
+		require.NoError(t, err)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, anotherPeerID, receivedAt)
+		require.ErrorIs(t, err, ErrDecidedMessageWithTooFewSigners)
+		require.True(t, errors.As(err, &valErr))
+		require.False(t, valErr.reject)
 	})
 
 	// Send message with a slot lower than in the previous message
