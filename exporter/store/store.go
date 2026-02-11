@@ -452,6 +452,7 @@ func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, role spectypes.Ru
 	prefix := make([]byte, 0, len(committeeDutyTraceKey)+4+1+32)
 	prefix = append(prefix, []byte(committeeDutyTraceKey)...)
 	prefix = append(prefix, slotToByteSlice(slot)...)
+	// Include runner role to avoid collisions between committee and aggregator-committee duties.
 	prefix = append(prefix, byte(role&0xff))
 	prefix = append(prefix, id[:]...)
 	return prefix

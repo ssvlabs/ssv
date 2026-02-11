@@ -145,11 +145,14 @@ type PartialSigTrace struct {
 	ReceivedTime uint64
 }
 
-// Committee
+// CommitteeDutyTrace represents committee-scoped duty traces for both
+// COMMITTEE and AGGREGATOR_COMMITTEE runner roles.
 type CommitteeDutyTrace struct {
 	ConsensusTrace
 
 	Slot phase0.Slot
+	// Role stores the runner role value for this committee trace
+	// (COMMITTEE or AGGREGATOR_COMMITTEE).
 	Role uint64
 
 	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`

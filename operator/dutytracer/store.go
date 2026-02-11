@@ -170,6 +170,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 // buckets to distinguish between attester vs aggregator and sync committee vs SCC.
 func hasSignersForRoles(duty *exporter.CommitteeDutyTrace, roles ...spectypes.BeaconRole) bool {
 	if len(roles) == 0 {
+		// No role filter means "match all committee duties".
 		return true
 	}
 	// Signer buckets are role-specific; use them to ensure the duty matches the requested beacon roles.
@@ -210,7 +211,7 @@ func runnerRolesForBeaconRoles(roles ...spectypes.BeaconRole) []spectypes.Runner
 			wantCommittee = true
 		case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
 			wantAggregator = true
-		case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit, spectypes.BNRoleUnknown:
+		default:
 			// Not committee-related beacon roles.
 		}
 	}

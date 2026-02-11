@@ -412,7 +412,7 @@ func (c *Collector) processPartialSigCommittee(ctx context.Context, receivedAt u
 	if msg.Type == spectypes.AggregatorCommitteePartialSig && !trace.aggSelectionRootReady {
 		root, err := c.getAggregatorSelectionRoot(ctx, msg.Slot)
 		if err != nil {
-			c.logger.Debug("failed to compute aggregator selection root",
+			c.logger.Warn("failed to compute aggregator selection root",
 				zap.Error(err),
 				fields.Slot(msg.Slot),
 				fields.CommitteeID(committeeID))
@@ -554,10 +554,16 @@ func (c *Collector) computeAggregatorCommitteePostConsensusRoles(
 	for _, aggAndProof := range aggregateAndProofs {
 		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggAndProof)
 		if err != nil {
+			c.logger.Warn("failed to get aggregate-and-proof hash root",
+				zap.Error(err),
+				fields.Slot(slot))
 			continue
 		}
 		root, err := spectypes.ComputeETHSigningRoot(hashRoot, dAgg)
 		if err != nil {
+			c.logger.Warn("failed to compute aggregate-and-proof signing root",
+				zap.Error(err),
+				fields.Slot(slot))
 			continue
 		}
 		roleByRoot[root] = spectypes.BNRoleAggregator
@@ -581,6 +587,10 @@ func (c *Collector) computeAggregatorCommitteePostConsensusRoles(
 		}
 		root, err := spectypes.ComputeETHSigningRoot(cp, dContrib)
 		if err != nil {
+			c.logger.Warn("failed to compute sync-committee-contribution signing root",
+				zap.Error(err),
+				fields.Slot(slot),
+				zap.Int("contribution_index", i))
 			continue
 		}
 		roleByRoot[root] = spectypes.BNRoleSyncCommitteeContribution
@@ -679,8 +689,8 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		msgID := spectypes.MessageID(subMsg.Identifier[:])
 		executorID := msgID.GetDutyExecutorID()
 
-		switch role := msgID.GetRoleType(); role {
-		case spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee:
+		role := msgID.GetRoleType()
+		if isCommitteeRunnerRole(role) {
 			var committeeID spectypes.CommitteeID
 			// committeeID is the last 16 bytes of the executorID
 			copy(committeeID[:], executorID[16:])
@@ -749,7 +759,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 							zap.Int("pending_signature_count", pendingCount),
 							pendingDetails(trace.pendingByRoot))
 					}
-				case spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit, spectypes.RoleUnknown:
+				default:
 					c.logger.Warn("unexpected committee role on committee trace path", zap.Int32("role", int32(role)))
 				}
 			}
@@ -768,69 +778,67 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			return nil
+		}
+		var validatorPK spectypes.ValidatorPK
+		copy(validatorPK[:], executorID)
 
-		default:
-			var validatorPK spectypes.ValidatorPK
-			copy(validatorPK[:], executorID)
+		bnRole, err := toBNRole(role)
+		if err != nil {
+			return err
+		}
 
-			bnRole, err := toBNRole(role)
-			if err != nil {
-				return err
-			}
+		// map pubkey to validator index for internal storage
+		index, found := c.validators.ValidatorIndex(validatorPK)
+		if !found {
+			c.logger.Error("validator not found by pubkey", fields.Validator(validatorPK[:]))
+			return fmt.Errorf("validator not found by pubkey: %x", validatorPK[:])
+		}
 
-			// map pubkey to validator index for internal storage
-			index, found := c.validators.ValidatorIndex(validatorPK)
-			if !found {
-				c.logger.Error("validator not found by pubkey", fields.Validator(validatorPK[:]))
-				return fmt.Errorf("validator not found by pubkey: %x", validatorPK[:])
-			}
+		trace, late, err := c.getOrCreateValidatorTrace(slot, bnRole, index)
+		if err != nil {
+			return err
+		}
 
-			trace, late, err := c.getOrCreateValidatorTrace(slot, bnRole, index)
-			if err != nil {
-				return err
-			}
+		var qbftMsg = new(specqbft.Message)
+		if err = qbftMsg.Decode(msg.Data); err == nil {
+			if qbftMsg.MsgType == specqbft.ProposalMsgType {
+				var data = new(spectypes.ProposerConsensusData)
+				if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
+					func() {
+						trace.Lock()
+						defer trace.Unlock()
 
-			var qbftMsg = new(specqbft.Message)
-			if err = qbftMsg.Decode(msg.Data); err == nil {
-				if qbftMsg.MsgType == specqbft.ProposalMsgType {
-					var data = new(spectypes.ProposerConsensusData)
-					if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
-						func() {
-							trace.Lock()
-							defer trace.Unlock()
+						roleDutyTrace := trace.getOrCreate(slot, bnRole)
 
-							roleDutyTrace := trace.getOrCreate(slot, bnRole)
-
-							if roleDutyTrace.Validator == 0 {
-								roleDutyTrace.Validator = data.Duty.ValidatorIndex
-							}
-							// non-committee duty will contain the proposal data
-							roleDutyTrace.ProposalData = data.DataSSZ
-						}()
-					}
+						if roleDutyTrace.Validator == 0 {
+							roleDutyTrace.Validator = data.Duty.ValidatorIndex
+						}
+						// non-committee duty will contain the proposal data
+						roleDutyTrace.ProposalData = data.DataSSZ
+					}()
 				}
 			}
-
-			trace.Lock()
-			defer trace.Unlock()
-
-			roleDutyTrace := trace.getOrCreate(slot, bnRole)
-
-			round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
-
-			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
-			if decided != nil {
-				roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
-			}
-
-			if late {
-				err := c.store.SaveValidatorDuty(roleDutyTrace)
-				_ = c.inFlightValidator.Delete(index)
-				return err
-			}
-
-			return nil
 		}
+
+		trace.Lock()
+		defer trace.Unlock()
+
+		roleDutyTrace := trace.getOrCreate(slot, bnRole)
+
+		round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
+
+		decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+		if decided != nil {
+			roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
+		}
+
+		if late {
+			err := c.store.SaveValidatorDuty(roleDutyTrace)
+			_ = c.inFlightValidator.Delete(index)
+			return err
+		}
+
+		return nil
 	}
 
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
@@ -859,7 +867,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		executorID := msg.MsgID.GetDutyExecutorID()
 
 		// process partial sig for committee
-		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee || msg.MsgID.GetRoleType() == spectypes.RoleAggregatorCommittee {
+		if isCommitteeRunnerRole(msg.MsgID.GetRoleType()) {
 			var committeeID spectypes.CommitteeID
 			// committeeID is the last 16 bytes of the executorID
 			copy(committeeID[:], executorID[16:])
@@ -953,6 +961,10 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 	}
 
 	return
+}
+
+func isCommitteeRunnerRole(role spectypes.RunnerRole) bool {
+	return role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee
 }
 
 type validatorDutyTrace struct {
