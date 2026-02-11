@@ -582,7 +582,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		threshold := uint64(3) // 4 operators, need 3 for quorum
 
 		// Call the method directly
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
+		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
 
 		// Verify quorum was published
 		calls := listener.GetCalls()
@@ -607,8 +607,8 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		threshold := uint64(3)
 
 		// Call twice - second call should not publish
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
-		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, phase0.Root{}, threshold)
+		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
+		collector.checkAndPublishQuorumForRoleByIndex(logger, trace, spectypes.BNRoleAttester, slot, vIndex1, threshold)
 
 		// Verify only ONE publication
 		calls := listener.GetCalls()
@@ -681,7 +681,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex_SCCRootScoped(t *testing.
 		rootB: spectypes.BNRoleSyncCommitteeContribution,
 	}
 
-	collector.checkAndPublishQuorumForRoleByIndex(
+	collector.checkAndPublishQuorumForRoleByIndexAndRoot(
 		logger,
 		trace,
 		spectypes.BNRoleSyncCommitteeContribution,

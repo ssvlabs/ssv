@@ -725,16 +725,29 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 							pendingDetails(trace.pendingByRoot))
 					}
 				case spectypes.RoleAggregatorCommittee:
-					rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, msg.SignedSSVMessage.FullData)
-					if err != nil {
-						c.logger.Error("failed to compute aggregator committee roots from proposal",
-							zap.Error(err),
-							fields.Slot(slot),
-							fields.CommitteeID(committeeID))
-					} else {
+					if rolesByRoot, err := c.computeAggregatorCommitteePostConsensusRoles(ctx, slot, msg.SignedSSVMessage.FullData); err == nil {
 						trace.aggPostConsensusRoles = rolesByRoot
 						trace.flushPending()
+						// Check quorum for all validators after flushing pending signatures.
+						// This ensures quorum detection happens immediately when signatures that
+						// arrived before the proposal are reclassified into role buckets.
 						c.checkQuorumAfterFlush(c.logger, committeeID, slot, trace)
+					} else {
+						// CRITICAL: If we fail to compute role roots, pending signatures will be dropped.
+						pendingCount := 0
+						for _, perSigner := range trace.pendingByRoot {
+							for _, byTs := range perSigner {
+								for _, idxs := range byTs {
+									pendingCount += len(idxs)
+								}
+							}
+						}
+						c.logger.Error("CRITICAL: failed to compute aggregator committee roots from proposal - pending signatures will be dropped",
+							zap.Error(err),
+							fields.Slot(slot),
+							fields.CommitteeID(committeeID),
+							zap.Int("pending_signature_count", pendingCount),
+							pendingDetails(trace.pendingByRoot))
 					}
 				case spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit, spectypes.RoleUnknown:
 					c.logger.Warn("unexpected committee role on committee trace path", zap.Int32("role", int32(role)))
@@ -1178,7 +1191,7 @@ func (c *Collector) checkAndPublishQuorumForRole(
 		return
 	}
 
-	signers := c.countUniqueSignersForValidatorAndRoot(logger, trace, signerData, partialMsg.ValidatorIndex, partialMsg.SigningRoot)
+	signers := c.countUniqueSignersForValidatorAndRoot(trace, signerData, partialMsg.ValidatorIndex, partialMsg.SigningRoot)
 	if uint64(len(signers)) < threshold {
 		return
 	}
@@ -1200,25 +1213,10 @@ func (c *Collector) checkAndPublishQuorumForRole(
 	}
 }
 
-// countUniqueSignersForValidatorAndRoot counts unique signers for a specific validator and signing root
-// Note: signerData should already be filtered by role (Attester or SyncCommittee bucket), ensuring
-// all signatures are for the expected root as validated during classification.
-func (c *Collector) countUniqueSignersForValidatorAndRoot(
-	logger *zap.Logger,
-	trace *committeeDutyTrace,
+func (c *Collector) countUniqueSignersForValidator(
 	signerData []*exporter.SignerData,
 	validatorIndex phase0.ValidatorIndex,
-	root phase0.Root,
 ) []spectypes.OperatorID {
-	if root != (phase0.Root{}) && trace != nil {
-		if byValidator, found := trace.signersByRoot[root]; found {
-			if signers, found := byValidator[validatorIndex]; found {
-				return sortedSigners(signers)
-			}
-			return nil
-		}
-	}
-
 	signers := make(map[spectypes.OperatorID]struct{})
 
 	for _, data := range signerData {
@@ -1228,6 +1226,29 @@ func (c *Collector) countUniqueSignersForValidatorAndRoot(
 	}
 
 	return sortedSigners(signers)
+}
+
+// countUniqueSignersForValidatorAndRoot counts signers for a specific validator and signing root.
+// If root-scoped data is unavailable, it falls back to role-bucket signerData.
+func (c *Collector) countUniqueSignersForValidatorAndRoot(
+	trace *committeeDutyTrace,
+	signerData []*exporter.SignerData,
+	validatorIndex phase0.ValidatorIndex,
+	root phase0.Root,
+) []spectypes.OperatorID {
+	if root == (phase0.Root{}) || trace == nil {
+		return c.countUniqueSignersForValidator(signerData, validatorIndex)
+	}
+
+	byValidator, found := trace.signersByRoot[root]
+	if !found {
+		return c.countUniqueSignersForValidator(signerData, validatorIndex)
+	}
+	if signers, found := byValidator[validatorIndex]; found {
+		return sortedSigners(signers)
+	}
+
+	return nil
 }
 
 func sortedSigners(signers map[spectypes.OperatorID]struct{}) []spectypes.OperatorID {
@@ -1309,7 +1330,7 @@ func (c *Collector) checkRoleQuorumForValidators(
 		if trace.publishedQuorums[validatorIndex] == nil {
 			trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
 		}
-		c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, phase0.Root{}, threshold)
+		c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, threshold)
 	}
 }
 
@@ -1340,7 +1361,7 @@ func (c *Collector) checkRoleQuorumForValidatorsByRoot(
 			if trace.publishedQuorums[validatorIndex] == nil {
 				trace.publishedQuorums[validatorIndex] = make(map[spectypes.BeaconRole]string)
 			}
-			c.checkAndPublishQuorumForRoleByIndex(logger, trace, role, slot, validatorIndex, root, threshold)
+			c.checkAndPublishQuorumForRoleByIndexAndRoot(logger, trace, role, slot, validatorIndex, root, threshold)
 		}
 	}
 }
@@ -1349,6 +1370,32 @@ func (c *Collector) checkRoleQuorumForValidatorsByRoot(
 // Similar to checkAndPublishQuorumForRole but works with validator index directly.
 // IMPORTANT: trace must be locked by the caller before calling this function.
 func (c *Collector) checkAndPublishQuorumForRoleByIndex(
+	logger *zap.Logger,
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	validatorIndex phase0.ValidatorIndex,
+	threshold uint64,
+) {
+	c.checkAndPublishQuorumForRoleByIndexCommon(logger, trace, role, slot, validatorIndex, phase0.Root{}, threshold)
+}
+
+// checkAndPublishQuorumForRoleByIndexAndRoot checks quorum for a specific validator and role after flush,
+// scoped to a specific signing root.
+// IMPORTANT: trace must be locked by the caller before calling this function.
+func (c *Collector) checkAndPublishQuorumForRoleByIndexAndRoot(
+	logger *zap.Logger,
+	trace *committeeDutyTrace,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	validatorIndex phase0.ValidatorIndex,
+	root phase0.Root,
+	threshold uint64,
+) {
+	c.checkAndPublishQuorumForRoleByIndexCommon(logger, trace, role, slot, validatorIndex, root, threshold)
+}
+
+func (c *Collector) checkAndPublishQuorumForRoleByIndexCommon(
 	logger *zap.Logger,
 	trace *committeeDutyTrace,
 	role spectypes.BeaconRole,
@@ -1368,7 +1415,7 @@ func (c *Collector) checkAndPublishQuorumForRoleByIndex(
 		return
 	}
 
-	signers := c.countUniqueSignersForValidatorAndRoot(logger, trace, signerData, validatorIndex, root)
+	signers := c.countUniqueSignersForValidatorAndRoot(trace, signerData, validatorIndex, root)
 	if uint64(len(signers)) < threshold {
 		return
 	}
