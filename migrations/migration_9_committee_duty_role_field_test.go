@@ -54,7 +54,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		var migrated exporter.CommitteeDutyTrace
 		require.NoError(t, migrated.UnmarshalSSZ(newValue))
 		require.Equal(t, slot, migrated.Slot)
-		require.Equal(t, uint64(role), migrated.Role)
+		require.Equal(t, role, migrated.Role)
 		require.Equal(t, committeeID, migrated.CommitteeID)
 		require.Equal(t, []spectypes.OperatorID{1, 2, 3}, migrated.OperatorIDs)
 		require.Len(t, migrated.Attester, 1)
@@ -71,7 +71,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		committeeID := testCommitteeID(0x22)
 		trace := &exporter.CommitteeDutyTrace{
 			Slot:        slot,
-			Role:        uint64(role),
+			Role:        role,
 			CommitteeID: committeeID,
 			OperatorIDs: []spectypes.OperatorID{7, 8},
 		}
@@ -97,7 +97,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		var migrated exporter.CommitteeDutyTrace
 		require.NoError(t, migrated.UnmarshalSSZ(value))
 		require.Equal(t, slot, migrated.Slot)
-		require.Equal(t, uint64(role), migrated.Role)
+		require.Equal(t, role, migrated.Role)
 		require.Equal(t, committeeID, migrated.CommitteeID)
 	})
 }

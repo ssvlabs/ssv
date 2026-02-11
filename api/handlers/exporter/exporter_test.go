@@ -1263,7 +1263,7 @@ func TestExporterTraceDecideds_InvalidJSON(t *testing.T) {
 func makeCommitteeDutyTrace(slot phase0.Slot) *exporter.CommitteeDutyTrace {
 	return &exporter.CommitteeDutyTrace{
 		Slot:        slot,
-		Role:        uint64(spectypes.RoleCommittee),
+		Role:        spectypes.RoleCommittee,
 		CommitteeID: spectypes.CommitteeID{1},
 		ConsensusTrace: exporter.ConsensusTrace{
 			Rounds: []*exporter.RoundTrace{

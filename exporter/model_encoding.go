@@ -1383,7 +1383,7 @@ func (c *CommitteeDutyTrace) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = ssz.MarshalUint64(dst, uint64(c.Slot))
 
 	// Field (3) 'Role'
-	dst = ssz.MarshalUint64(dst, c.Role)
+	dst = ssz.MarshalUint64(dst, uint64(c.Role))
 
 	// Field (4) 'CommitteeID'
 	dst = append(dst, c.CommitteeID[:]...)
@@ -1526,7 +1526,7 @@ func (c *CommitteeDutyTrace) UnmarshalSSZ(buf []byte) error {
 	c.Slot = phase0.Slot(ssz.UnmarshallUint64(buf[8:16]))
 
 	// Field (3) 'Role'
-	c.Role = ssz.UnmarshallUint64(buf[16:24])
+	c.Role = spectypes.RunnerRole(ssz.UnmarshallUint64(buf[16:24]))
 
 	// Field (4) 'CommitteeID'
 	copy(c.CommitteeID[:], buf[24:56])
@@ -1748,7 +1748,7 @@ func (c *CommitteeDutyTrace) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 	hh.PutUint64(uint64(c.Slot))
 
 	// Field (3) 'Role'
-	hh.PutUint64(c.Role)
+	hh.PutUint64(uint64(c.Role))
 
 	// Field (4) 'CommitteeID'
 	hh.PutBytes(c.CommitteeID[:])

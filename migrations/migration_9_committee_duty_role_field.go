@@ -66,7 +66,7 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 					Decideds: convertDecidedsV1(legacyTrace.Decideds),
 				},
 				Slot:         phase0.Slot(legacyTrace.Slot),
-				Role:         uint64(spectypes.RoleCommittee),
+				Role:         spectypes.RoleCommittee,
 				CommitteeID:  spectypes.CommitteeID(legacyTrace.CommitteeID),
 				OperatorIDs:  convertOperatorIDsV1(legacyTrace.OperatorIDs),
 				ProposalData: legacyTrace.ProposalData,

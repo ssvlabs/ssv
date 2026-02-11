@@ -153,7 +153,7 @@ type CommitteeDutyTrace struct {
 	Slot phase0.Slot
 	// Role stores the runner role value for this committee trace
 	// (COMMITTEE or AGGREGATOR_COMMITTEE).
-	Role uint64
+	Role spectypes.RunnerRole
 
 	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
 	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`

@@ -237,7 +237,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 				CommitteeDutyTrace: exporter.CommitteeDutyTrace{
 					CommitteeID: committeeID,
 					Slot:        slot,
-					Role:        uint64(role),
+					Role:        role,
 				},
 			}
 			return trace, true, nil
@@ -266,7 +266,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 			CommitteeDutyTrace: exporter.CommitteeDutyTrace{
 				CommitteeID: committeeID,
 				Slot:        slot,
-				Role:        uint64(role),
+				Role:        role,
 			},
 		}
 
@@ -1300,8 +1300,7 @@ func (c *Collector) checkQuorumAfterFlush(logger *zap.Logger, committeeID specty
 		trace.publishedQuorums = make(map[phase0.ValidatorIndex]map[spectypes.BeaconRole]string)
 	}
 
-	runnerRole := spectypes.RunnerRole(trace.Role)
-	switch runnerRole {
+	switch trace.Role {
 	case spectypes.RoleAggregatorCommittee:
 		c.checkRoleQuorumForValidatorsByRoot(logger, trace, spectypes.BNRoleAggregator, slot, threshold)
 		c.checkRoleQuorumForValidatorsByRoot(logger, trace, spectypes.BNRoleSyncCommitteeContribution, slot, threshold)

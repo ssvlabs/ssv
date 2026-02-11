@@ -116,7 +116,7 @@ func toCommitteeTrace(t *exporter.CommitteeDutyTrace) CommitteeTrace {
 	return CommitteeTrace{
 		// consensus trace
 		Slot:          uint64(t.Slot),
-		Role:          obsutils.FormatRunnerRole(spectypes.RunnerRole(t.Role)),
+		Role:          obsutils.FormatRunnerRole(t.Role),
 		Consensus:     toRounds(t.Rounds),
 		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
