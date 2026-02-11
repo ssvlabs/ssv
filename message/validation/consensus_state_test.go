@@ -20,7 +20,7 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState := &SignerState{Slot: slot}
+		signerState := &SignerStateForSlotRound{Slot: slot}
 
 		os.SetSignerStateForSlot(slot, epoch, signerState)
 		retrievedState := os.GetSignerStateForSlot(slot)
@@ -45,7 +45,7 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState := &SignerState{Slot: slot}
+		signerState := &SignerStateForSlotRound{Slot: slot}
 
 		os.SetSignerStateForSlot(slot, epoch, signerState)
 		require.EqualValues(t, os.MaxSlot(), slot)
@@ -57,7 +57,7 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState1 := &SignerState{Slot: slot}
+		signerState1 := &SignerStateForSlotRound{Slot: slot}
 
 		os.SetSignerStateForSlot(slot, epoch, signerState1)
 
@@ -66,7 +66,7 @@ func TestOperatorState(t *testing.T) {
 
 		const slot2 = 6
 		const epoch2 = 2
-		signerState2 := &SignerState{Slot: slot2}
+		signerState2 := &SignerStateForSlotRound{Slot: slot2}
 
 		os.SetSignerStateForSlot(slot2, epoch2, signerState2)
 
@@ -81,13 +81,13 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState1 := &SignerState{Slot: slot}
+		signerState1 := &SignerStateForSlotRound{Slot: slot}
 
 		os.SetSignerStateForSlot(slot, epoch, signerState1)
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
 
 		const slot2 = 6
-		signerState2 := &SignerState{Slot: slot2}
+		signerState2 := &SignerStateForSlotRound{Slot: slot2}
 		os.SetSignerStateForSlot(slot2, epoch, signerState2)
 
 		require.Equal(t, os.DutyCount(epoch), uint64(2))

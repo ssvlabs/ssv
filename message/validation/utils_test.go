@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -134,7 +135,7 @@ func TestRecordConsensusMessage(t *testing.T) {
 
 func TestValidateConsensusMessage(t *testing.T) {
 	type input struct {
-		signerState      *SignerState
+		signerState      *SignerStateForSlotRound
 		signedSSVMessage *spectypes.SignedSSVMessage
 		msg              *specqbft.Message
 	}
@@ -147,8 +148,11 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "ProposalMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				signerState: &SignerState{
-					SeenMsgTypes: SeenMsgTypes{v: 0b10},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b10},
+					},
 				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
@@ -158,8 +162,11 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "PrepareMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				signerState: &SignerState{
-					SeenMsgTypes: SeenMsgTypes{v: 0b100},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b100},
+					},
 				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
@@ -169,8 +176,11 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "CommitMessageWithSingleOperator_ExceedsLimit_ReturnsError",
 			input: input{
-				signerState: &SignerState{
-					SeenMsgTypes: SeenMsgTypes{v: 0b1000},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b1000},
+					},
 				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1}},
 				msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
@@ -180,8 +190,11 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "RoundChangeMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				signerState: &SignerState{
-					SeenMsgTypes: SeenMsgTypes{v: 0b10000},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b10000},
+					},
 				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
@@ -191,8 +204,11 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "UnexpectedMessageType_ReturnsError",
 			input: input{
-				signerState: &SignerState{
-					SeenMsgTypes: SeenMsgTypes{},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{},
+					},
 				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.MessageType(12345)},
@@ -202,8 +218,11 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "ValidProposalMessage_HappyFlow",
 			input: input{
-				signerState: &SignerState{
-					SeenMsgTypes: SeenMsgTypes{v: 0b0},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b0},
+					},
 				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
@@ -214,7 +233,12 @@ func TestValidateConsensusMessage(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateConsensusMessageLimit(tc.input.signedSSVMessage, tc.input.msg, tc.input.signerState)
+			err := validateConsensusMessageLimit(
+				tc.input.signedSSVMessage,
+				tc.input.msg,
+				"some_peer_id",
+				tc.input.signerState,
+			)
 
 			if tc.expectedError != nil {
 				require.EqualError(t, err, tc.expectedError.Error())
