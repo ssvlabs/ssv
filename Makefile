@@ -194,7 +194,7 @@ tools:
 	$(GET_TOOL) go.uber.org/mock/mockgen
 	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
-	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8.0
 	$(GET_TOOL) golang.org/x/tools/cmd/deadcode
 	$(GET_TOOL) github.com/swaggo/swag/cmd/swag
 	$(RUN_TOOL)
