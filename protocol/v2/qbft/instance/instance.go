@@ -136,6 +136,24 @@ func (i *Instance) Start(
 			logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 			span.RecordError(err)
 		}
+
+		// TESTING REJECTs
+
+		proposal2, err := i.CreateProposal([]byte("some other proposal"), nil, nil)
+		if err != nil {
+			logger.Warn("❗ failed to create proposal 2", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
+			return
+		}
+
+		logger.Debug("📢 leader broadcasting proposal message 2")
+
+		if err := i.Broadcast(proposal2); err != nil {
+			logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
+			span.RecordError(err)
+		}
+
+		// TESTING REJECTs
 	}
 
 	span.SetStatus(codes.Ok, "")
