@@ -25,7 +25,6 @@ ifeq ($(COVERAGE),true)
 	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
 
-GET_TOOL=go get -modfile=tool.mod -tool
 RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
@@ -187,17 +186,6 @@ openapi:
 
 openapi-lint:
 	@SWAG='$(SWAG)' bash scripts/openapi.sh --lint
-
-.PHONY: tools
-tools:
-	$(GET_TOOL) golang.org/x/tools/cmd/goimports
-	$(GET_TOOL) go.uber.org/mock/mockgen
-	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
-	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
-	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	$(GET_TOOL) golang.org/x/tools/cmd/deadcode
-	$(GET_TOOL) github.com/swaggo/swag/cmd/swag
-	$(RUN_TOOL)
 
 .PHONY: format
 format:
