@@ -972,12 +972,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// IGNORE or REJECT duplicate messages depending on which peers they come from
 		t.Run("duplicate messages", func(t *testing.T) {
 			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
-				spectypes.RoleCommittee:                 {spectypes.PostConsensusPartialSig},
-				spectypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, spectypes.SelectionProofPartialSig},
-				spectypes.RoleProposer:                  {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
-				spectypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
-				spectypes.RoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
+				spectypes.RoleCommittee:                {spectypes.PostConsensusPartialSig},
+				ssvtypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, ssvtypes.SelectionProofPartialSig},
+				spectypes.RoleProposer:                 {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
+				ssvtypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, ssvtypes.ContributionProofs},
+				spectypes.RoleValidatorRegistration:    {spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleVoluntaryExit:            {spectypes.VoluntaryExitPartialSig},
 			}
 
 			for role, msgTypes := range tests {
@@ -1014,8 +1014,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
 						receivedAt := netCfg.SlotStartTime(spectestingutils.TestingDutySlot)
-
-						topicID := commons.CommitteeTopicID(committeeID)[0]
 
 						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 						require.NoError(t, err)
