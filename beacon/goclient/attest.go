@@ -124,15 +124,15 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	}
 
 	attestationDataHeadMismatchCounter.Add(ctx, 1)
-	gc.log.Debug("attestation data head mismatch detected, will retry",
-		zap.Uint64("slot", uint64(slot)),
+	logger := gc.log.With(fields.Slot(slot))
+	logger.Debug("attestation data head mismatch detected, will retry",
 		zap.Stringer("expected_root", expectedRoot),
 		zap.Stringer("got_root", attData.BeaconBlockRoot),
 	)
 
 	if deadline, ok := ctx.Deadline(); ok {
 		if time.Until(deadline) < minTimeForRetry {
-			gc.log.Debug("not enough time remaining for retry",
+			logger.Debug("not enough time remaining for retry",
 				zap.Duration("remaining", time.Until(deadline)),
 				zap.Duration("min_required", minTimeForRetry),
 			)
@@ -152,18 +152,18 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 
 	newAttData, err := gc.fetchAttestationDataFunc(refetchCtx, slot)
 	if err != nil {
-		gc.log.Warn("re-fetch failed, using original data", zap.Error(err))
+		logger.Warn("re-fetch failed, using original data", zap.Error(err))
 		attestationDataRefetchFailedCounter.Add(ctx, 1)
 		return attData, true
 	}
 
 	if newAttData.BeaconBlockRoot == expectedRoot {
-		gc.log.Debug("re-fetch successful, got correct head")
+		logger.Debug("re-fetch successful, got correct head")
 		attestationDataRefetchSuccessCounter.Add(ctx, 1)
 		return newAttData, false
 	}
 
-	gc.log.Warn("attestation data still mismatched after re-fetch",
+	logger.Warn("attestation data still mismatched after re-fetch",
 		zap.Stringer("expected_root", expectedRoot),
 		zap.Stringer("got_root", newAttData.BeaconBlockRoot),
 	)

@@ -336,7 +336,7 @@ func (gc *GoClient) verifyProposalParent(
 
 	parentRoot, err := proposal.ParentRoot()
 	if err != nil {
-		logger.Warn("failed to get proposal parent root", zap.Error(err))
+		logger.Warn("failed to get proposal parent root", fields.Slot(slot), zap.Error(err))
 		return
 	}
 
@@ -356,7 +356,7 @@ func (gc *GoClient) verifyProposalParent(
 
 	proposalParentMismatchCounter.Add(ctx, 1)
 	logger.Warn("proposal parent root mismatch detected",
-		zap.Uint64("slot", uint64(slot)),
+		fields.Slot(slot),
 		zap.Uint64("parent_slot", uint64(parentSlot)),
 		zap.Stringer("expected_root", expectedRoot),
 		zap.Stringer("got_root", parentRoot),
