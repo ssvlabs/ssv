@@ -30,7 +30,7 @@ import (
 
 func topicForSlot(netCfg *networkconfig.Network, share *ssvtypes.SSVShare, slot phase0.Slot) string {
 	if netCfg.BooleForkAtSlot(slot) {
-		return share.BooleCommitteeSubnet().BooleTopic(netCfg.Beacon.Name)
+		return share.BooleCommitteeSubnet().BooleTopic(netCfg.SSV.Name)
 	}
 
 	return share.AlanCommitteeSubnet().AlanTopic()

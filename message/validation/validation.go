@@ -233,7 +233,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, topic string, slot phase0.Slot) error {
 	expectedTopic := committeeInfo.subnetAlan.AlanTopic()
 	if mv.netCfg.BooleForkAtSlot(slot) {
-		expectedTopic = committeeInfo.subnet.BooleTopic(mv.netCfg.Beacon.Name)
+		expectedTopic = committeeInfo.subnet.BooleTopic(mv.netCfg.SSV.Name)
 	}
 	// Rule: Check if message was sent in the correct topic
 	if expectedTopic != topic {
