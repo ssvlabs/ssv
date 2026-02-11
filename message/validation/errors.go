@@ -86,7 +86,10 @@ var (
 	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
 	ErrUnknownOperator                  = Error{text: "operator is unknown"}
 	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
-	ErrDecidedWithSameSigners           = Error{text: "decided with same number of signers"}
+	ErrDuplicatedMessage                = Error{text: "got duplicate message"}
+	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
+	ErrDifferentProposalData            = Error{text: "got different proposal data"}
+	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).
@@ -133,9 +136,6 @@ var (
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
-	ErrDuplicatedMessage                       = Error{text: "got duplicate message", reject: true}
-	ErrTooManyPartialSigMessage                = Error{text: "got more partial signature messages of a certain type than allowed", reject: true}
-	ErrDifferentProposalData                   = Error{text: "got different proposal data", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
