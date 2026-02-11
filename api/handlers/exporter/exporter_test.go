@@ -1381,14 +1381,12 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
 			},
 			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
-				var committeeID spectypes.CommitteeID
-				copy(committeeID[:], common.Hex2Bytes("0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"))
 				store.GetCommitteeDutyFunc = func(slot phase0.Slot, cID spectypes.CommitteeID, role spectypes.RunnerRole) (*exporter.CommitteeDutyTrace, error) {
 					if role != spectypes.RoleCommittee {
 						return nil, dutytracer.ErrNotFound
 					}
 					duty := makeCommitteeDutyTrace(slot)
-					duty.CommitteeID = committeeID
+					duty.CommitteeID = cID
 					return duty, nil
 				}
 			},
