@@ -69,6 +69,15 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
+	if n.cfg.DuplicateBroadcasts {
+		n.logger.Debug("intentionally duplicating message broadcast for testing")
+		for _, topic := range topics {
+			if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
+				n.logger.Debug("could not broadcast duplicate msg", fields.Topic(topic), zap.Error(err))
+				return fmt.Errorf("could not broadcast duplicate msg: %w", err)
+			}
+		}
+	}
 	return nil
 }
 

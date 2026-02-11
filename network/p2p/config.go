@@ -90,6 +90,10 @@ type Config struct {
 
 	DisableIPRateLimit bool `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" default:"false" env-description:"Disable IP-based rate limiting"`
 
+	// DuplicateBroadcasts, when true, broadcasts each message twice (consensus, pre-consensus, post-consensus).
+	// Used for testing duplicate message rejection in validation. Do not enable in production.
+	DuplicateBroadcasts bool `yaml:"DuplicateBroadcasts" env:"DUPLICATE_BROADCASTS" env-default:"false" env-description:"Broadcast all messages twice for testing duplicate rejection"`
+
 	GetValidatorStats network.GetValidatorStats
 
 	// PeerScoreInspector is called periodically to inspect the peer scores.
