@@ -180,7 +180,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 		state := validator.validatorState(key, committee)
 		for i := range committee {
-			signerState := state.Signer(i)
+			signerState := state.OperatorState(i)
 			require.NotNil(t, signerState)
 		}
 
@@ -195,16 +195,16 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.Signer(0)
-		require.NotNil(t, stateBySlot)
+		operatorState := state.OperatorState(0)
+		require.NotNil(t, operatorState)
 
-		storedState := stateBySlot.GetSignerState(slot)
+		storedState := operatorState.GetSignerStateForSlot(slot)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
 		for i := 1; i < len(committee); i++ {
-			require.NotNil(t, state.Signer(i))
+			require.NotNil(t, state.OperatorState(i))
 		}
 
 		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
@@ -216,7 +216,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		storedState = stateBySlot.GetSignerState(slot)
+		storedState = operatorState.GetSignerStateForSlot(slot)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 2, storedState.Round)
@@ -232,7 +232,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
 
-		storedState = stateBySlot.GetSignerState(phase0.Slot(height) + 1)
+		storedState = operatorState.GetSignerStateForSlot(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
@@ -243,7 +243,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage = generateMultiSignedMessage(ks, committeeIdentifier, slot+1)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
-		require.NotNil(t, stateBySlot)
+		require.NotNil(t, operatorState)
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 	})
@@ -798,7 +798,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrNoPartialSignatureMessages)
+		require.ErrorIs(t, err, ErrNoMessagesInPartialSigMessage)
 	})
 
 	// Receive error when the partial RSA signature message is not enough bytes
@@ -1769,7 +1769,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrPartialSigOneSigner)
+		require.ErrorIs(t, err, ErrPartialSigMessageMustHaveOneSigner)
 	})
 
 	// Receive a partial signature message with too many signers
@@ -1797,7 +1797,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorContains(t, err, ErrTooManyPartialSignatureMessages.Error())
+		require.ErrorContains(t, err, ErrTooManySignaturesInPartialSigMessage.Error())
 	})
 
 	// Receive a partial signature message with triple validator index
