@@ -68,7 +68,18 @@ ssvsigner-test:
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 ./protocol/v2/qbft/spectest ./protocol/v2/ssv/spectest
+	@$(MAKE) spec-test-qbft
+	@$(MAKE) spec-test-ssv
+
+.PHONY: spec-test-qbft
+spec-test-qbft:
+	@echo "Running QBFT spec tests"
+	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 ./protocol/v2/qbft/spectest
+
+.PHONY: spec-test-ssv
+spec-test-ssv:
+	@echo "Running SSV spec tests"
+	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 ./protocol/v2/ssv/spectest
 
 .PHONY: benchmark
 benchmark:
