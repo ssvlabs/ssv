@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -209,32 +208,32 @@ func (mv *messageValidator) validateQBFTLogic(
 				return e
 			}
 
-			if consensusMessage.Round == signerState.Round {
-				// Rule: Ignore proposals with different data in the same round
-				if len(signedSSVMessage.FullData) != 0 {
-					if signerState.Peer(receivedFrom).HashedProposalData != nil && *signerState.Peer(receivedFrom).HashedProposalData != consensusMessage.Root {
-						// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
-						e := ErrDifferentProposalData
-						e.reject = true
-						e.want = hexutil.Bytes((*signerState.Peer(receivedFrom).HashedProposalData)[:]).String()
-						e.got = hexutil.Bytes(consensusMessage.Root[:]).String()
-						return e
-					}
-					if signerState.World.HashedProposalData != nil && *signerState.World.HashedProposalData != consensusMessage.Root {
-						// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
-						// is expected occasionally.
-						e := ErrDifferentProposalData
-						e.want = hexutil.Bytes((*signerState.World.HashedProposalData)[:]).String()
-						e.got = hexutil.Bytes(consensusMessage.Root[:]).String()
-						return e
-					}
-				}
-
-				// Rule: Expect at most 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
-				if err := validateConsensusMessageLimit(signedSSVMessage, consensusMessage, receivedFrom, signerState); err != nil {
-					return err
-				}
-			}
+			//if consensusMessage.Round == signerState.Round {
+			//	// Rule: Ignore proposals with different data in the same round
+			//	if len(signedSSVMessage.FullData) != 0 {
+			//		if signerState.Peer(receivedFrom).HashedProposalData != nil && *signerState.Peer(receivedFrom).HashedProposalData != consensusMessage.Root {
+			//			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
+			//			e := ErrDifferentProposalData
+			//			e.reject = true
+			//			e.want = hexutil.Bytes((*signerState.Peer(receivedFrom).HashedProposalData)[:]).String()
+			//			e.got = hexutil.Bytes(consensusMessage.Root[:]).String()
+			//			return e
+			//		}
+			//		if signerState.World.HashedProposalData != nil && *signerState.World.HashedProposalData != consensusMessage.Root {
+			//			// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
+			//			// is expected occasionally.
+			//			e := ErrDifferentProposalData
+			//			e.want = hexutil.Bytes((*signerState.World.HashedProposalData)[:]).String()
+			//			e.got = hexutil.Bytes(consensusMessage.Root[:]).String()
+			//			return e
+			//		}
+			//	}
+			//
+			//	// Rule: Expect at most 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
+			//	if err := validateConsensusMessageLimit(signedSSVMessage, consensusMessage, receivedFrom, signerState); err != nil {
+			//		return err
+			//	}
+			//}
 		} else if len(signedSSVMessage.OperatorIDs) > 1 {
 			// Rule: Decided msg (signified by `len(signedSSVMessage.OperatorIDs) > 1`) can't have the same number
 			// of signers (or less) as previously sent before for the same duty
