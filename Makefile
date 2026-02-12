@@ -66,16 +66,6 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 ./protocol/v2/qbft/spectest ./protocol/v2/ssv/spectest
 
-.PHONY: all-spec-test-raceless
-all-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 ./protocol/...
-
-.PHONY: spec-test-raceless
-spec-test-raceless:
-	@echo "Running spec tests without race flag"
-	@go test -tags blst_enabled -timeout 20m -count=1 -p 1 ./protocol/v2/qbft/spectest ./protocol/v2/ssv/spectest
-
 .PHONY: benchmark
 benchmark:
 	@echo "Running benchmark for specified directory"
