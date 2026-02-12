@@ -20,9 +20,6 @@ jobs:
         with:
           lfs: true
 
-      - name: Setup make
-        run: sudo apt-get update && sudo apt-get install make
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -38,6 +35,33 @@ jobs:
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: ./coverage.out,./ssvsigner/coverage.out
+          files: ./coverage.out
+          flags: core
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  ssvsigner:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            ssvsigner/go.sum
+
+      - name: Run ssvsigner unit tests
+        run: make ssvsigner-test
+
+      - name: Upload ssvsigner coverage report to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./ssvsigner/coverage.out
+          flags: ssvsigner
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

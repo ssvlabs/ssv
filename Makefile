@@ -54,6 +54,10 @@ full-test:
 unit-test:
 	@echo "Running unit tests"
 	@go test -tags "blst_enabled lfs" -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
+
+.PHONY: unit-test-all
+unit-test-all:
+	@$(MAKE) unit-test
 	@$(MAKE) ssvsigner-test
 
 .PHONY: ssvsigner-test
