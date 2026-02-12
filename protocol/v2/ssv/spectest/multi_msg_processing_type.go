@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/observability/log"
 )
 
 type MultiMsgProcessingSpecTest struct {
@@ -23,7 +21,7 @@ func (tests *MultiMsgProcessingSpecTest) TestName() string {
 }
 
 func (tests *MultiMsgProcessingSpecTest) Run(t *testing.T) {
-	tests.logger = log.TestLogger(t)
+	tests.logger = spectestLogger(t)
 	tests.overrideStateComparison(t)
 
 	for _, test := range tests.Tests {

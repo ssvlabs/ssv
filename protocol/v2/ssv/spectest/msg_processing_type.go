@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -54,7 +53,7 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := log.TestLogger(t)
+	logger := spectestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
 }
@@ -218,7 +217,8 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
 
-	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
+	actualPostRoot := hex.EncodeToString(postRoot[:])
+	if test.PostDutyRunnerStateRoot != actualPostRoot && DebugDumpState {
 		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
 		logger.Error("post runner state not equal", zap.String("state", diff))
 	}
