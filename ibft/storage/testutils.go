@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -125,6 +126,13 @@ func GenerateSpecTestJSON(path string, module string) ([]byte, error) {
 		return jsonBytes, nil
 	}
 
+	// Fast path for first CI run: build tests.json from pre-generated files in ssv-spec module.
+	jsonBytes, err = buildTestsJSONFromDir(filepath.Join(p, "tests"))
+	if err == nil {
+		_ = os.WriteFile(testJSONPath, jsonBytes, 0644)
+		return jsonBytes, nil
+	}
+
 	// Step 2: Build the Go package, outputting an executable to the artifact directory.
 	binaryPath := filepath.Join(artifactDir, module)
 	//nolint: gosec
@@ -169,6 +177,45 @@ func specArtifactsDir(module, specGeneratePath string) string {
 	sum := sha256.Sum256([]byte(specGeneratePath))
 	artifactKey := module + "-" + hex.EncodeToString(sum[:8])
 	return filepath.Join(base, artifactKey)
+}
+
+func buildTestsJSONFromDir(testsDir string) ([]byte, error) {
+	entries, err := os.ReadDir(testsDir)
+	if err != nil {
+		return nil, fmt.Errorf("read tests directory: %w", err)
+	}
+
+	tests := make(map[string]json.RawMessage, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		key := strings.TrimSuffix(entry.Name(), ".json")
+		if split := strings.Index(key, "_"); split > 0 {
+			key = "*" + key[:split] + key[split:]
+		}
+		testPath := filepath.Join(testsDir, entry.Name())
+		content, readErr := os.ReadFile(testPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("read test file %s: %w", entry.Name(), readErr)
+		}
+		if len(content) == 0 {
+			continue
+		}
+		tests[key] = json.RawMessage(content)
+	}
+
+	if len(tests) == 0 {
+		return nil, errors.New("no pre-generated tests found")
+	}
+
+	output, err := json.Marshal(tests)
+	if err != nil {
+		return nil, fmt.Errorf("marshal tests map: %w", err)
+	}
+
+	return output, nil
 }
 
 // GetSpecDir returns the path to the ssv-spec module.
@@ -230,8 +277,19 @@ func GetSpecDir(path, module string) (string, error) {
 func GetModulePath(name, version string) (string, error) {
 	// first we need GOMODCACHE
 	cache, ok := os.LookupEnv("GOMODCACHE")
-	if !ok {
-		cache = path.Join(os.Getenv("GOPATH"), "pkg", "mod")
+	if !ok || cache == "" {
+		if goPath := os.Getenv("GOPATH"); goPath != "" {
+			cache = path.Join(goPath, "pkg", "mod")
+		} else {
+			out, err := exec.Command("go", "env", "GOMODCACHE").Output()
+			if err != nil {
+				return "", fmt.Errorf("could not resolve GOMODCACHE: %w", err)
+			}
+			cache = strings.TrimSpace(string(out))
+		}
+	}
+	if cache == "" {
+		return "", errors.New("could not resolve module cache path")
 	}
 
 	// then we need to escape path
