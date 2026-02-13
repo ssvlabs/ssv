@@ -27,7 +27,6 @@ jobs:
           cache: true
           cache-dependency-path: |
             go.sum
-            ssvsigner/go.sum
 
       - name: Run unit tests
         run: make unit-test
