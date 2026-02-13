@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  qbft:
+  spec:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -35,38 +35,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spec-artifacts-
 
-      - name: Run QBFT spec tests
-        run: make spec-test-qbft
-        env:
-          SSV_SPEC_CACHE_DIR: ${{ github.workspace }}/.cache/spec-tests
-        timeout-minutes: 80
-
-  ssv:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: |
-            go.sum
-            ssvsigner/go.sum
-
-      - name: Cache generated spec artifacts
-        uses: actions/cache@v4
-        with:
-          path: .cache/spec-tests
-          key: ${{ runner.os }}-spec-artifacts-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-spec-artifacts-
-
-      - name: Run SSV spec tests
-        run: make spec-test-ssv
+      - name: Run spec tests
+        run: make spec-test
         env:
           SSV_SPEC_CACHE_DIR: ${{ github.workspace }}/.cache/spec-tests
         timeout-minutes: 80
