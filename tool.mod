@@ -3,7 +3,7 @@ module github.com/ssvlabs/ssv
 
 go 1.25
 
-toolchain go1.25
+toolchain go1.25.0
 
 tool (
 	github.com/ethereum/go-ethereum/cmd/abigen

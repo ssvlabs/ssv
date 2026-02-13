@@ -50,7 +50,6 @@ func (v *validatorStoreStub) ValidatorPubkey(index phase0.ValidatorIndex) (spect
 }
 
 func TestPrefetchingBeaconCommitteesCaching(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -80,7 +79,6 @@ func TestPrefetchingBeaconCommitteesCaching(t *testing.T) {
 }
 
 func TestPrefetchingBeaconEnsureAttesterEpoch(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -121,7 +119,6 @@ func TestPrefetchingBeaconEnsureAttesterEpoch(t *testing.T) {
 }
 
 func TestPrefetchingBeaconEnsureProposerEpochBatchesIndices(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -149,7 +146,6 @@ func TestPrefetchingBeaconEnsureProposerEpochBatchesIndices(t *testing.T) {
 }
 
 func TestPrefetchingBeaconEnsureSyncPeriod(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -176,7 +172,6 @@ func TestPrefetchingBeaconEnsureSyncPeriod(t *testing.T) {
 }
 
 func TestPrefetchingBeaconCommitteesUnsupported(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -192,7 +187,6 @@ func TestPrefetchingBeaconCommitteesUnsupported(t *testing.T) {
 }
 
 func TestPrefetchingBeaconEvictOldAttester(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		cfg := *networkconfig.TestNetwork.Beacon
 		pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
@@ -222,7 +216,6 @@ func TestPrefetchingBeaconEvictOldAttester(t *testing.T) {
 }
 
 func TestPrefetchingBeaconEvictOldProposer(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		cfg := *networkconfig.TestNetwork.Beacon
 		pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)
@@ -252,7 +245,6 @@ func TestPrefetchingBeaconEvictOldProposer(t *testing.T) {
 }
 
 func TestPrefetchingBeaconEvictOldSyncCommittee(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
 		cfg := *networkconfig.TestNetwork.Beacon
 		pb := NewPrefetchingBeacon(zap.NewNop(), nil, &cfg, nil)

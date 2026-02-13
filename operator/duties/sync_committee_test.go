@@ -99,9 +99,7 @@ func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties [
 }
 
 func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
-
 		var (
 			handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
 			dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
@@ -164,9 +162,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
-
 		var (
 			handler        = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
 			waitForDuties  = &SafeValue[bool]{}
@@ -241,9 +237,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
-
 		var (
 			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
 			waitForDuties = &SafeValue[bool]{}
@@ -306,9 +300,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
-
 		var (
 			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
 			waitForDuties = &SafeValue[bool]{}
@@ -375,9 +367,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 
 // reorg current dependent root changed
 func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
-
 		var (
 			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
 			waitForDuties = &SafeValue[bool]{}
@@ -457,9 +447,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 
 // reorg current dependent root changed including indices change in the same slot
 func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
-
 		var (
 			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
 			waitForDuties = &SafeValue[bool]{}
@@ -548,9 +536,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
-
 	synctest.Test(t, func(t *testing.T) {
-
 		var (
 			handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
 			dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()

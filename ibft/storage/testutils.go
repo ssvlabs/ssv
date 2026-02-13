@@ -121,6 +121,7 @@ func GenerateSpecTestJSON(path string, module string) ([]byte, error) {
 	testJSONPath := filepath.Join(artifactDir, "tests.json")
 
 	// Fast path: use already-generated tests.json from the local artifact cache.
+	// #nosec G304 -- test helper reads from a controlled cache path.
 	jsonBytes, err := os.ReadFile(testJSONPath)
 	if err == nil && len(jsonBytes) > 0 {
 		return jsonBytes, nil
@@ -129,7 +130,7 @@ func GenerateSpecTestJSON(path string, module string) ([]byte, error) {
 	// Fast path for first CI run: build tests.json from pre-generated files in ssv-spec module.
 	jsonBytes, err = buildTestsJSONFromDir(filepath.Join(p, "tests"))
 	if err == nil {
-		_ = os.WriteFile(testJSONPath, jsonBytes, 0644)
+		_ = os.WriteFile(testJSONPath, jsonBytes, 0600)
 		return jsonBytes, nil
 	}
 
@@ -196,6 +197,7 @@ func buildTestsJSONFromDir(testsDir string) ([]byte, error) {
 			key = "*" + key[:split] + key[split:]
 		}
 		testPath := filepath.Join(testsDir, entry.Name())
+		// #nosec G304 -- testsDir is controlled by the test harness.
 		content, readErr := os.ReadFile(testPath)
 		if readErr != nil {
 			return nil, fmt.Errorf("read test file %s: %w", entry.Name(), readErr)
