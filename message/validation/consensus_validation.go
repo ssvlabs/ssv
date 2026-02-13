@@ -4,12 +4,12 @@ package validation
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -47,13 +47,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	key := peerIDWithMessageID{
-		peerID:    receivedFrom,
-		messageID: ssvMessage.GetID(),
-	}
-	state := mv.validatorState(key, committeeInfo.committee)
+	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
 
-	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state); err != nil {
+	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
 		return consensusMessage, err
 	}
 
@@ -72,7 +68,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, state); err != nil {
+	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state); err != nil {
 		return consensusMessage, err
 	}
 
@@ -154,10 +150,10 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	}
 
 	if consensusMessage.Round > maxRound {
-		err := ErrRoundTooHigh
-		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
-		err.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
-		return err
+		e := ErrRoundTooHigh
+		e.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
+		e.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
+		return e
 	}
 
 	// Rule: consensus message must have the same identifier as the ssv message's identifier
@@ -179,6 +175,7 @@ func (mv *messageValidator) validateQBFTLogic(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	consensusMessage *specqbft.Message,
 	committeeInfo CommitteeInfo,
+	receivedFrom peer.ID,
 	receivedAt time.Time,
 	state *ValidatorState,
 ) error {
@@ -186,17 +183,16 @@ func (mv *messageValidator) validateQBFTLogic(
 		// Rule: Signer must be the leader
 		leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committeeInfo.committee)
 		if signedSSVMessage.OperatorIDs[0] != leader {
-			err := ErrSignerNotLeader
-			err.got = signedSSVMessage.OperatorIDs[0]
-			err.want = leader
-			return err
+			e := ErrSignerNotLeader
+			e.got = signedSSVMessage.OperatorIDs[0]
+			e.want = leader
+			return e
 		}
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.OperatorIDs {
-		signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
-		signerState := signerStateBySlot.GetSignerState(msgSlot)
+		signerState := state.OperatorState(committeeInfo.signerIndex(signer)).GetSignerStateForSlot(msgSlot)
 		if signerState == nil {
 			continue
 		}
@@ -207,36 +203,47 @@ func (mv *messageValidator) validateQBFTLogic(
 				// Signers aren't allowed to decrease their round.
 				// If they've sent a future message due to clock error,
 				// they'd have to wait for the next slot/round to be accepted.
-				err := ErrRoundAlreadyAdvanced
-				err.want = signerState.Round
-				err.got = consensusMessage.Round
-				return err
+				e := ErrRoundAlreadyAdvanced
+				e.want = signerState.Round
+				e.got = consensusMessage.Round
+				return e
 			}
 
 			if consensusMessage.Round == signerState.Round {
-				// Rule: Peer must not send two proposals with different data
-				if len(signedSSVMessage.FullData) != 0 && signerState.HashedProposalData != nil {
-					if *signerState.HashedProposalData != sha256.Sum256(signedSSVMessage.FullData) {
-						return ErrDifferentProposalData
+				// Rule: Ignore proposals with different data in the same round
+				if len(signedSSVMessage.FullData) != 0 {
+					if signerState.Peer(receivedFrom).HashedProposalData != nil && *signerState.Peer(receivedFrom).HashedProposalData != consensusMessage.Root {
+						// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
+						e := ErrDifferentProposalData
+						e.reject = true
+						e.want = hexutil.Bytes((*signerState.Peer(receivedFrom).HashedProposalData)[:]).String()
+						e.got = hexutil.Bytes(consensusMessage.Root[:]).String()
+						return e
+					}
+					if signerState.World.HashedProposalData != nil && *signerState.World.HashedProposalData != consensusMessage.Root {
+						// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
+						// is expected occasionally.
+						e := ErrDifferentProposalData
+						e.want = hexutil.Bytes((*signerState.World.HashedProposalData)[:]).String()
+						e.got = hexutil.Bytes(consensusMessage.Root[:]).String()
+						return e
 					}
 				}
 
-				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
-				if err := signerState.SeenMsgTypes.ValidateConsensusMessage(signedSSVMessage, consensusMessage); err != nil {
+				// Rule: Expect at most 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
+				if err := validateConsensusMessageLimit(signedSSVMessage, consensusMessage, receivedFrom, signerState); err != nil {
 					return err
 				}
 			}
 		} else if len(signedSSVMessage.OperatorIDs) > 1 {
-			quorum := Quorum{
-				Signers:   signedSSVMessage.OperatorIDs,
-				Committee: committeeInfo.committee,
-			}
+			// Rule: Decided msg (signified by `len(signedSSVMessage.OperatorIDs) > 1`) can't have the same number
+			// of signers (or less) as previously sent before for the same duty
 
-			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
-			if signerState.SeenSigners != nil {
-				if _, ok := signerState.SeenSigners[quorum.ToBitMask()]; ok {
-					return ErrDecidedWithSameSigners
-				}
+			// For simplicity (because we are gonna get rid of decided messages soon anyway), we just check
+			// the world state here to see if we want to accept or ignore this message.
+			if len(signedSSVMessage.OperatorIDs) <= signerState.World.SeenDecidedMsgSignersCount {
+				e := ErrDecidedMessageWithTooFewSigners
+				return e
 			}
 		}
 	}
@@ -263,8 +270,8 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
 	if role != spectypes.RoleCommittee { // Rule only for validator runners
 		for _, signer := range signedSSVMessage.OperatorIDs {
-			signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
-			if maxSlot := signerStateBySlot.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
+			operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
+			if maxSlot := operatorState.MaxSlot(); maxSlot > phase0.Slot(consensusMessage.Height) {
 				e := ErrSlotAlreadyAdvanced
 				e.got = consensusMessage.Height
 				e.want = maxSlot
@@ -291,8 +298,8 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
 	// - else, accept
 	for _, signer := range signedSSVMessage.OperatorIDs {
-		signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
-		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, committeeInfo.validatorIndices, signerStateBySlot); err != nil {
+		operatorState := state.OperatorState(committeeInfo.signerIndex(signer))
+		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, committeeInfo.validatorIndices, operatorState); err != nil {
 			return err
 		}
 	}
@@ -304,24 +311,25 @@ func (mv *messageValidator) updateConsensusState(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	consensusMessage *specqbft.Message,
 	committeeInfo CommitteeInfo,
+	receivedFrom peer.ID,
 	consensusState *ValidatorState,
 ) error {
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	msgEpoch := mv.netCfg.EstimatedEpochAtSlot(msgSlot)
 
 	for _, signer := range signedSSVMessage.OperatorIDs {
-		stateBySlot := consensusState.Signer(committeeInfo.signerIndex(signer))
-		signerState := stateBySlot.GetSignerState(msgSlot)
+		operatorState := consensusState.OperatorState(committeeInfo.signerIndex(signer))
+		signerState := operatorState.GetSignerStateForSlot(msgSlot)
 		if signerState == nil {
 			signerState = newSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
-			stateBySlot.SetSignerState(msgSlot, msgEpoch, signerState)
+			operatorState.SetSignerStateForSlot(msgSlot, msgEpoch, signerState)
 		} else {
 			if consensusMessage.Round > signerState.Round {
 				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
 			}
 		}
 
-		if err := mv.processSignerState(signedSSVMessage, consensusMessage, committeeInfo.committee, signerState); err != nil {
+		if err := mv.processSignerState(signedSSVMessage, consensusMessage, receivedFrom, signerState); err != nil {
 			return err
 		}
 	}
@@ -332,28 +340,31 @@ func (mv *messageValidator) updateConsensusState(
 func (mv *messageValidator) processSignerState(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	consensusMessage *specqbft.Message,
-	committee []spectypes.OperatorID,
-	signerState *SignerState,
+	receivedFrom peer.ID,
+	signerState *SignerStateForSlotRound,
 ) error {
 	if len(signedSSVMessage.FullData) != 0 && consensusMessage.MsgType == specqbft.ProposalMsgType {
-		fullDataHash := sha256.Sum256(signedSSVMessage.FullData)
-		signerState.HashedProposalData = &fullDataHash
+		rootCopy := consensusMessage.Root // optimization: allows GC to collect consensusMessage
+		signerState.Peer(receivedFrom).HashedProposalData = &rootCopy
+		signerState.World.HashedProposalData = &rootCopy
 	}
 
 	signerCount := len(signedSSVMessage.OperatorIDs)
-	if signerCount > 1 {
-		quorum := Quorum{
-			Signers:   signedSSVMessage.OperatorIDs,
-			Committee: committee,
-		}
-
-		if signerState.SeenSigners == nil {
-			signerState.SeenSigners = make(map[SignersBitMask]struct{}) // lazy init on demand to reduce mem consumption
-		}
-		signerState.SeenSigners[quorum.ToBitMask()] = struct{}{}
+	if signerCount > 1 { // checks if this is a "decided" message
+		signerState.Peer(receivedFrom).SeenDecidedMsgSignersCount = signerCount
+		signerState.World.SeenDecidedMsgSignersCount = signerCount
 	}
 
-	return signerState.SeenMsgTypes.RecordConsensusMessage(signedSSVMessage, consensusMessage)
+	err := signerState.Peer(receivedFrom).SeenMsgTypes.RecordConsensusMessage(signedSSVMessage, consensusMessage)
+	if err != nil {
+		return err
+	}
+	err = signerState.World.SeenMsgTypes.RecordConsensusMessage(signedSSVMessage, consensusMessage)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {
@@ -424,6 +435,84 @@ func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) 
 	default:
 		return false
 	}
+}
+
+// validateConsensusMessageLimit checks if the provided consensus message exceeds the set limits.
+// Returns an error if the message type exceeds its respective count limit.
+func validateConsensusMessageLimit(
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	msg *specqbft.Message,
+	receivedFrom peer.ID,
+	signerState *SignerStateForSlotRound,
+) error {
+	switch msg.MsgType {
+	case specqbft.ProposalMsgType:
+		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedProposalLimit() {
+			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
+			e := ErrDuplicatedMessage
+			e.reject = true
+			e.got = fmt.Sprintf("proposal, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+			return e
+		}
+		if signerState.World.SeenMsgTypes.reachedProposalLimit() {
+			// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
+			// is expected occasionally.
+			e := ErrDuplicatedMessage
+			e.got = fmt.Sprintf("proposal, having %v", signerState.World.SeenMsgTypes.String())
+			return e
+		}
+	case specqbft.PrepareMsgType:
+		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedPrepareLimit() {
+			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
+			e := ErrDuplicatedMessage
+			e.reject = true
+			e.got = fmt.Sprintf("prepare, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+			return e
+		}
+		if signerState.World.SeenMsgTypes.reachedPrepareLimit() {
+			// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
+			// is expected occasionally.
+			e := ErrDuplicatedMessage
+			e.got = fmt.Sprintf("prepare, having %v", signerState.World.SeenMsgTypes.String())
+			return e
+		}
+	case specqbft.CommitMsgType:
+		if len(signedSSVMessage.OperatorIDs) == 1 {
+			if signerState.Peer(receivedFrom).SeenMsgTypes.reachedCommitLimit() {
+				// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
+				e := ErrDuplicatedMessage
+				e.reject = true
+				e.got = fmt.Sprintf("commit, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+				return e
+			}
+			if signerState.World.SeenMsgTypes.reachedCommitLimit() {
+				// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
+				// is expected occasionally.
+				e := ErrDuplicatedMessage
+				e.got = fmt.Sprintf("commit, having %v", signerState.World.SeenMsgTypes.String())
+				return e
+			}
+		}
+	case specqbft.RoundChangeMsgType:
+		if signerState.Peer(receivedFrom).SeenMsgTypes.reachedRoundChangeLimit() {
+			// Check if the same peer is sending us a "logical duplicate" message, reject message to punish.
+			e := ErrDuplicatedMessage
+			e.reject = true
+			e.got = fmt.Sprintf("round change, having %v", signerState.Peer(receivedFrom).SeenMsgTypes.String())
+			return e
+		}
+		if signerState.World.SeenMsgTypes.reachedRoundChangeLimit() {
+			// Check if a different peer is sending us a "logical duplicate" message, ignore message since this
+			// is expected occasionally.
+			e := ErrDuplicatedMessage
+			e.got = fmt.Sprintf("round change, having %v", signerState.World.SeenMsgTypes.String())
+			return e
+		}
+	default:
+		return fmt.Errorf("unexpected signed message type: %v", msg.MsgType)
+	}
+
+	return nil
 }
 
 func (mv *messageValidator) roundBelongsToAllowedSpread(

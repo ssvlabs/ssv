@@ -47,15 +47,9 @@ type validatorStore interface {
 	Committee(id spectypes.CommitteeID) (*registrystorage.Committee, bool)
 }
 
-type peerIDWithMessageID struct {
-	peerID    peer.ID
-	messageID spectypes.MessageID
-}
-
 type messageValidator struct {
 	logger         *zap.Logger
 	netCfg         *networkconfig.Network
-	state          *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
 	validatorStore validatorStore
 	operators      operators
 	dutyStore      *dutystore.Store
@@ -65,12 +59,14 @@ type messageValidator struct {
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
 	// the same ID apply any state modifications (during message validation - which is not
 	// stateless) in an isolated synchronized manner with respect to each other.
-	validationLockCache *ttlcache.Cache[peerIDWithMessageID, *sync.Mutex]
+	validationLockCache *ttlcache.Cache[spectypes.MessageID, *sync.Mutex]
 	// validationLocksInflight helps us prevent generating 2 different validation locks
 	// for messages that must lock on the same lock (messages with the same ID) when undergoing
 	// validation (that validation is not stateless - it often requires messageValidator to
 	// update some state).
-	validationLocksInflight singleflight.Group[peerIDWithMessageID, *sync.Mutex]
+	validationLocksInflight singleflight.Group[spectypes.MessageID, *sync.Mutex]
+	// states keeps track of signers(individual runners, of which every operator has multiple) per validator.
+	states *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 
 	selfPID    peer.ID
 	selfAccept bool
@@ -89,7 +85,7 @@ func New(
 	mv := &messageValidator{
 		logger:              zap.NewNop(),
 		netCfg:              netCfg,
-		validationLockCache: ttlcache.New[peerIDWithMessageID, *sync.Mutex](),
+		validationLockCache: ttlcache.New[spectypes.MessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
 		operators:           operators,
 		dutyStore:           dutyStore,
@@ -97,8 +93,8 @@ func New(
 	}
 
 	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
-	mv.state = ttlcache.New(
-		ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
+	mv.states = ttlcache.New(
+		ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
 	)
 
 	for _, opt := range opts {
@@ -107,8 +103,8 @@ func New(
 
 	// Start automatic expired item deletion for validationLockCache.
 	go mv.validationLockCache.Start()
-	// Start automatic expired item deletion for state.
-	go mv.state.Start()
+	// Start automatic expired item deletion for states.
+	go mv.states.Start()
 
 	return mv
 }
@@ -190,12 +186,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	key := peerIDWithMessageID{
-		peerID:    receivedFrom,
-		messageID: signedSSVMessage.SSVMessage.GetID(),
-	}
-
-	validationMu := mv.getValidationLock(key)
+	validationMu := mv.getValidationLock(signedSSVMessage.SSVMessage.GetID())
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
@@ -239,7 +230,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	return nil
 }
 
-func (mv *messageValidator) getValidationLock(key peerIDWithMessageID) *sync.Mutex {
+func (mv *messageValidator) getValidationLock(key spectypes.MessageID) *sync.Mutex {
 	lock, _, _ := mv.validationLocksInflight.Do(key, func() (*sync.Mutex, error) {
 		cachedLock := mv.validationLockCache.Get(key)
 		if cachedLock != nil {
@@ -315,16 +306,23 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
 }
 
-func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {
-	if v := mv.state.Get(key); v != nil {
-		return v.Value()
+func (mv *messageValidator) validatorState(key spectypes.MessageID, committeeInfo CommitteeInfo) *ValidatorState {
+	if v := mv.states.Get(key); v != nil {
+		// Since mv.states keeps track of validator-state per operator-runner, it is possible that validator
+		// has changed the committee/operator-cluster that manages this validator such that the state stored
+		// in mv.states under this key is no longer relevant ... and so we need re-initialize the cached-state
+		// entry in mv.states map from scratch whenever we spot the committee ID change.
+		if v.Value().committeeID == committeeInfo.committeeID {
+			return v.Value()
+		}
 	}
 
 	cs := &ValidatorState{
-		operators:       make([]*OperatorState, len(committee)),
+		committeeID:     committeeInfo.committeeID,
+		operators:       make([]*OperatorState, len(committeeInfo.committee)),
 		storedSlotCount: mv.maxStoredSlots(),
 	}
-	mv.state.Set(key, cs, ttlcache.DefaultTTL)
+	mv.states.Set(key, cs, ttlcache.DefaultTTL)
 	return cs
 }
 

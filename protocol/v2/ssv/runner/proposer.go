@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -169,18 +170,13 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("get beacon block: %w", err)
 	}
 	// Log essentials about the retrieved block.
-	logFields := []zap.Field{
-		zap.String("version", vBlk.Version.String()),
-		zap.Bool("blinded", vBlk.Blinded),
+	logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
+	logFields = append(
+		logFields,
 		zap.Duration("proposer_delay", r.proposerDelay),
 		fields.Took(time.Since(start)),
-	}
-	blockHash, err := extractBlockHash(vBlk)
-	if err != nil {
-		logFields = append(logFields, zap.NamedError("blockHash_err", err))
-	} else {
-		logFields = append(logFields, fields.BlockHash(blockHash))
-	}
+	)
+
 	feeRecipient, err := vBlk.FeeRecipient()
 	if err != nil {
 		logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
@@ -189,10 +185,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 	const eventMsg = "🧊 got beacon block proposal"
 	logger.Info(eventMsg, logFields...)
-	span.AddEvent(eventMsg, trace.WithAttributes(
-		observability.BeaconBlockHashAttribute(blockHash),
-		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
-	))
+	span.AddEvent(eventMsg, trace.WithAttributes(proposalTraceAttrs...))
 
 	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
 	// block, convert it to blinded form by swapping the execution payload with
@@ -398,17 +391,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		}
 	}
 
-	loggerFields := []zap.Field{
-		zap.String("version", vBlk.Version.String()),
-		zap.Bool("blinded", vBlk.Blinded),
-	}
-
-	blockHash, err := extractBlockHash(vBlk)
-	if err != nil {
-		loggerFields = append(loggerFields, zap.NamedError("blockHash_err", err))
-	} else {
-		loggerFields = append(loggerFields, fields.BlockHash(blockHash))
-	}
+	loggerFields, proposalTraceAttrs := proposalCommonFields(vBlk)
 
 	logger = logger.With(loggerFields...)
 
@@ -419,12 +402,11 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	}
 	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()), spectypes.BNRoleProposer)
 	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"
-	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(
+	submittedAttrs := append([]attribute.KeyValue{
 		observability.BeaconSlotAttribute(r.BaseRunner.State.CurrentDuty.DutySlot()),
 		observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
-		observability.BeaconBlockHashAttribute(blockHash),
-		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
-	))
+	}, proposalTraceAttrs...)
+	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
 	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
 
 	r.state().Finished = true
@@ -626,11 +608,17 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-// extractBlockHash extracts the block hash from a VersionedProposal.
+type executionInfo struct {
+	BlockHash   phase0.Hash32
+	ParentHash  phase0.Hash32
+	BlockNumber uint64
+}
+
+// extractExecutionInfo extracts execution-layer info (hashes and block number) from a VersionedProposal.
 // It handles both regular and blinded blocks across all supported versions.
-func extractBlockHash(vBlk *api.VersionedProposal) (phase0.Hash32, error) {
+func extractExecutionInfo(vBlk *api.VersionedProposal) (executionInfo, error) {
 	if vBlk == nil {
-		return phase0.Hash32{}, fmt.Errorf("block is nil")
+		return executionInfo{}, fmt.Errorf("block is nil")
 	}
 
 	switch vBlk.Version {
@@ -638,59 +626,113 @@ func extractBlockHash(vBlk *api.VersionedProposal) (phase0.Hash32, error) {
 		if vBlk.Blinded {
 			if vBlk.CapellaBlinded == nil || vBlk.CapellaBlinded.Body == nil ||
 				vBlk.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("capella blinded block data missing")
+				return executionInfo{}, fmt.Errorf("capella blinded block data missing")
 			}
-			return vBlk.CapellaBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.CapellaBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Capella == nil || vBlk.Capella.Body == nil ||
 			vBlk.Capella.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("capella block data missing")
+			return executionInfo{}, fmt.Errorf("capella block data missing")
 		}
-		return vBlk.Capella.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Capella.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	case spec.DataVersionDeneb:
 		if vBlk.Blinded {
 			if vBlk.DenebBlinded == nil || vBlk.DenebBlinded.Body == nil ||
 				vBlk.DenebBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("deneb blinded block data missing")
+				return executionInfo{}, fmt.Errorf("deneb blinded block data missing")
 			}
-			return vBlk.DenebBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.DenebBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Deneb == nil || vBlk.Deneb.Block == nil || vBlk.Deneb.Block.Body == nil ||
 			vBlk.Deneb.Block.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("deneb block data missing")
+			return executionInfo{}, fmt.Errorf("deneb block data missing")
 		}
-		return vBlk.Deneb.Block.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Deneb.Block.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	case spec.DataVersionElectra:
 		if vBlk.Blinded {
 			if vBlk.ElectraBlinded == nil || vBlk.ElectraBlinded.Body == nil ||
 				vBlk.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("electra blinded block data missing")
+				return executionInfo{}, fmt.Errorf("electra blinded block data missing")
 			}
-			return vBlk.ElectraBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.ElectraBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Electra == nil || vBlk.Electra.Block == nil || vBlk.Electra.Block.Body == nil ||
 			vBlk.Electra.Block.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("electra block data missing")
+			return executionInfo{}, fmt.Errorf("electra block data missing")
 		}
-		return vBlk.Electra.Block.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Electra.Block.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	case spec.DataVersionFulu:
 		if vBlk.Blinded {
 			if vBlk.FuluBlinded == nil || vBlk.FuluBlinded.Body == nil ||
 				vBlk.FuluBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("fulu blinded block data missing")
+				return executionInfo{}, fmt.Errorf("fulu blinded block data missing")
 			}
-			return vBlk.FuluBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.FuluBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Fulu == nil || vBlk.Fulu.Block == nil || vBlk.Fulu.Block.Body == nil ||
 			vBlk.Fulu.Block.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("fulu block data missing")
+			return executionInfo{}, fmt.Errorf("fulu block data missing")
 		}
-		return vBlk.Fulu.Block.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Fulu.Block.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	default:
-		return phase0.Hash32{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
+		return executionInfo{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
 	}
+}
+
+func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, []attribute.KeyValue) {
+	if vBlk == nil {
+		err := fmt.Errorf("proposal is nil")
+		return []zap.Field{zap.NamedError("proposal_err", err)}, []attribute.KeyValue{observability.BeaconBlockIsBlindedAttribute(false)}
+	}
+
+	logFields := []zap.Field{
+		zap.String("version", vBlk.Version.String()),
+		zap.Bool("blinded", vBlk.Blinded),
+	}
+	traceAttrs := []attribute.KeyValue{
+		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
+	}
+
+	blockRoot, err := vBlk.Root()
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("blockRoot_err", err))
+	} else {
+		logFields = append(logFields, fields.BlockRoot(blockRoot))
+		traceAttrs = append(traceAttrs, observability.BeaconBlockRootAttribute(blockRoot))
+	}
+
+	parentRoot, err := vBlk.ParentRoot()
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("parentRoot_err", err))
+	} else {
+		logFields = append(logFields, zap.String("parent_root", hex.EncodeToString(parentRoot[:])))
+		traceAttrs = append(traceAttrs, observability.BeaconBlockParentRootAttribute(parentRoot))
+	}
+
+	execInfo, err := extractExecutionInfo(vBlk)
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("execution_err", err))
+	} else {
+		logFields = append(
+			logFields,
+			fields.BlockHash(execInfo.BlockHash),
+			zap.String("execution_parent_hash", hex.EncodeToString(execInfo.ParentHash[:])),
+			zap.Uint64("execution_block_number", execInfo.BlockNumber),
+		)
+		traceAttrs = append(traceAttrs, observability.BeaconBlockHashAttribute(execInfo.BlockHash))
+	}
+
+	return logFields, traceAttrs
 }

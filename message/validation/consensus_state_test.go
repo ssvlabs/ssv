@@ -20,10 +20,10 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState := &SignerState{Slot: slot}
+		signerState := &SignerStateForSlotRound{Slot: slot}
 
-		os.SetSignerState(slot, epoch, signerState)
-		retrievedState := os.GetSignerState(slot)
+		os.SetSignerStateForSlot(slot, epoch, signerState)
+		retrievedState := os.GetSignerStateForSlot(slot)
 
 		require.NotNil(t, retrievedState)
 		require.EqualValues(t, retrievedState.Slot, slot)
@@ -34,7 +34,7 @@ func TestOperatorState(t *testing.T) {
 		os := newOperatorState(size)
 
 		const slot = 5
-		retrievedState := os.GetSignerState(slot)
+		retrievedState := os.GetSignerStateForSlot(slot)
 
 		require.Nil(t, retrievedState)
 	})
@@ -45,9 +45,9 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState := &SignerState{Slot: slot}
+		signerState := &SignerStateForSlotRound{Slot: slot}
 
-		os.SetSignerState(slot, epoch, signerState)
+		os.SetSignerStateForSlot(slot, epoch, signerState)
 		require.EqualValues(t, os.MaxSlot(), slot)
 	})
 
@@ -57,18 +57,18 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState1 := &SignerState{Slot: slot}
+		signerState1 := &SignerStateForSlotRound{Slot: slot}
 
-		os.SetSignerState(slot, epoch, signerState1)
+		os.SetSignerStateForSlot(slot, epoch, signerState1)
 
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
 		require.Equal(t, os.DutyCount(epoch-1), uint64(0))
 
 		const slot2 = 6
 		const epoch2 = 2
-		signerState2 := &SignerState{Slot: slot2}
+		signerState2 := &SignerStateForSlotRound{Slot: slot2}
 
-		os.SetSignerState(slot2, epoch2, signerState2)
+		os.SetSignerStateForSlot(slot2, epoch2, signerState2)
 
 		require.Equal(t, os.DutyCount(epoch2), uint64(1))
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
@@ -81,14 +81,14 @@ func TestOperatorState(t *testing.T) {
 
 		const slot = 5
 		const epoch = 1
-		signerState1 := &SignerState{Slot: slot}
+		signerState1 := &SignerStateForSlotRound{Slot: slot}
 
-		os.SetSignerState(slot, epoch, signerState1)
+		os.SetSignerStateForSlot(slot, epoch, signerState1)
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
 
 		const slot2 = 6
-		signerState2 := &SignerState{Slot: slot2}
-		os.SetSignerState(slot2, epoch, signerState2)
+		signerState2 := &SignerStateForSlotRound{Slot: slot2}
+		os.SetSignerStateForSlot(slot2, epoch, signerState2)
 
 		require.Equal(t, os.DutyCount(epoch), uint64(2))
 	})

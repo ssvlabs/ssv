@@ -25,10 +25,8 @@ jobs:
           cache: true
           cache-dependency-path: |
             go.sum
+            tool.sum
             ssvsigner/go.sum
-
-      - name: Run tools
-        run: make tools
 
       - name: Run make lint
         run: make lint

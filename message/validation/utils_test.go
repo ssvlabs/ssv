@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -110,7 +111,7 @@ func TestRecordConsensusMessage(t *testing.T) {
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.MessageType(12345)},
 			expectedSeen:     SeenMsgTypes{},
-			expectedError:    fmt.Errorf("unexpected signed message type"),
+			expectedError:    fmt.Errorf("unexpected signed message type: 12345"),
 		},
 	}
 
@@ -132,7 +133,7 @@ func TestRecordConsensusMessage(t *testing.T) {
 
 func TestValidateConsensusMessage(t *testing.T) {
 	type input struct {
-		seenMsgTypes     *SeenMsgTypes
+		signerState      *SignerStateForSlotRound
 		signedSSVMessage *spectypes.SignedSSVMessage
 		msg              *specqbft.Message
 	}
@@ -145,52 +146,82 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "ProposalMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b10},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b10},
+					},
+				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got proposal, having proposal"),
+			expectedError: fmt.Errorf("got duplicate message, got proposal, having proposal"),
 		},
 		{
 			name: "PrepareMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b100},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b100},
+					},
+				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got prepare, having prepare"),
+			expectedError: fmt.Errorf("got duplicate message, got prepare, having prepare"),
 		},
 		{
 			name: "CommitMessageWithSingleOperator_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b1000},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b1000},
+					},
+				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1}},
 				msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got commit, having commit"),
+			expectedError: fmt.Errorf("got duplicate message, got commit, having commit"),
 		},
 		{
 			name: "RoundChangeMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b10000},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b10000},
+					},
+				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got round change, having round change"),
+			expectedError: fmt.Errorf("got duplicate message, got round change, having round change"),
 		},
 		{
 			name: "UnexpectedMessageType_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{},
+					},
+				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.MessageType(12345)},
 			},
-			expectedError: fmt.Errorf("unexpected signed message type"),
+			expectedError: fmt.Errorf("unexpected signed message type: 12345"),
 		},
 		{
 			name: "ValidProposalMessage_HappyFlow",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b0},
+				signerState: &SignerStateForSlotRound{
+					Peers: make(map[peer.ID]*SignerState),
+					World: SignerState{
+						SeenMsgTypes: SeenMsgTypes{v: 0b0},
+					},
+				},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
 			},
@@ -200,7 +231,12 @@ func TestValidateConsensusMessage(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.input.seenMsgTypes.ValidateConsensusMessage(tc.input.signedSSVMessage, tc.input.msg)
+			err := validateConsensusMessageLimit(
+				tc.input.signedSSVMessage,
+				tc.input.msg,
+				"some_peer_id",
+				tc.input.signerState,
+			)
 
 			if tc.expectedError != nil {
 				require.EqualError(t, err, tc.expectedError.Error())

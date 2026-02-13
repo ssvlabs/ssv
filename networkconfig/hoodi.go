@@ -19,8 +19,5 @@ var HoodiSSV = &SSV{
 		"enr:-Ja4QIKlyNFuFtTOnVoavqwmpgSJXfhSmhpdSDOUhf5-FBr7bBxQRvG6VrpUvlkr8MtpNNuMAkM33AseduSaOhd9IeWGAZWjRbnvgmlkgnY0gmlwhCNVVTCJc2VjcDI1NmsxoQNTTyiJPoZh502xOZpHSHAfR-94NaXLvi5J4CNHMh2tjoNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
 	TotalEthereumValidators: 1107955, // active_validators from https://hoodi.beaconcha.in/index/data on Apr 18, 2025
-	Forks: SSVForks{
-		Alan:       0,
-		GasLimit36: 29000, // Jul-24-2025 09:30:00 AM UTC
-	},
+	Forks:                   SSVForks{},
 }
