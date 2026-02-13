@@ -34,6 +34,14 @@ type (
 
 // AttesterDuties returns attester duties for a given epoch.
 func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+	gc.log.Info("fetch AttesterDuties",
+		zap.Any("epoch", epoch),
+		zap.Any("validator_indices", validatorIndices),
+	)
+	defer gc.log.Info("fetch AttesterDuties done",
+		zap.Any("epoch", epoch),
+	)
+
 	start := time.Now()
 	resp, err := gc.multiClient.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
