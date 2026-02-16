@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -29,9 +30,9 @@ const (
 func TestTimeoutForRound(t *testing.T) {
 	roles := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
+		ssvtypes.RoleAggregator,
 		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
+		ssvtypes.RoleSyncCommitteeContribution,
 	}
 
 	for _, role := range roles {

@@ -66,7 +66,8 @@ func (n *p2pNetwork) BroadcastAtSlot(msg *spectypes.SignedSSVMessage, slot phase
 	}
 
 	var topic string
-	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+	role := msg.SSVMessage.MsgID.GetRoleType()
+	if role == spectypes.RoleCommittee || role == spectypes.RoleAggregatorCommittee {
 		committeeID := spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
 		if n.cfg.NetworkConfig.BooleForkAtSlot(slot) {
 			val, exists := n.nodeStorage.ValidatorStore().Committee(committeeID)

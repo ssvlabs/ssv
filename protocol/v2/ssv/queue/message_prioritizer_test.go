@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -52,7 +52,7 @@ var messagePriorityTests = []struct {
 			// 2.1.4. Consensus/<Other>
 			mockConsensusMessage{Height: 100, Type: specqbft.RoundChangeMsgType},
 			// 2.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 64, Type: ssvtypes.SelectionProofPartialSig},
 			// 2.3. Post-consensus
 			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
 
@@ -60,7 +60,7 @@ var messagePriorityTests = []struct {
 			// 3.1 Decided
 			mockConsensusMessage{Height: 101, Decided: true},
 			// 3.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 65, Type: ssvtypes.SelectionProofPartialSig},
 			// 3.3. Consensus
 			mockConsensusMessage{Height: 101},
 			// 3.4. Post-consensus
@@ -72,7 +72,7 @@ var messagePriorityTests = []struct {
 			// 4.2. Commit
 			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 4.3. Pre-consensus
-			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 63, Type: ssvtypes.SelectionProofPartialSig},
 		},
 	},
 	{
@@ -86,7 +86,7 @@ var messagePriorityTests = []struct {
 		messages: []mockMessage{
 			// 1. Current height/slot:
 			// 1.1. Pre-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 64, Type: ssvtypes.SelectionProofPartialSig},
 			// 1.2. Post-consensus
 			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
 			// 1.3. Consensus
@@ -103,7 +103,7 @@ var messagePriorityTests = []struct {
 			// 2.1 Decided
 			mockConsensusMessage{Height: 101, Decided: true},
 			// 2.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 65, Type: ssvtypes.SelectionProofPartialSig},
 			// 2.3. Consensus
 			mockConsensusMessage{Height: 101},
 			// 2.4. Post-consensus
@@ -115,7 +115,7 @@ var messagePriorityTests = []struct {
 			// 3.2. Commit
 			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 3.3. Pre-consensus
-			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 63, Type: ssvtypes.SelectionProofPartialSig},
 		},
 	},
 }
@@ -256,15 +256,15 @@ type mockExecuteDutyMessage struct {
 }
 
 func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
-	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.ValidatorDuty{
+	edd, err := json.Marshal(ssvtypes.ExecuteDutyData{Duty: &spectypes.ValidatorDuty{
 		Type: m.Role,
 		Slot: m.Slot,
 	}})
 	if err != nil {
 		panic(err)
 	}
-	data, err := (&types.EventMsg{
-		Type: types.ExecuteDuty,
+	data, err := (&ssvtypes.EventMsg{
+		Type: ssvtypes.ExecuteDuty,
 		Data: edd,
 	}).Encode()
 	if err != nil {
@@ -288,13 +288,13 @@ type mockTimeoutMessage struct {
 }
 
 func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
-	td := types.TimeoutData{Height: m.Height}
+	td := ssvtypes.TimeoutData{Height: m.Height}
 	data, err := json.Marshal(td)
 	if err != nil {
 		panic(err)
 	}
-	eventMsgData, err := (&types.EventMsg{
-		Type: types.Timeout,
+	eventMsgData, err := (&ssvtypes.EventMsg{
+		Type: ssvtypes.Timeout,
 		Data: data,
 	}).Encode()
 	if err != nil {
@@ -406,9 +406,9 @@ func ssvMessageFactory(role spectypes.RunnerRole) func(*spectypes.SignedSSVMessa
 		return testingutils.SSVMsgAttester
 	case spectypes.RoleProposer:
 		return testingutils.SSVMsgProposer
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		return testingutils.SSVMsgAggregator
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		return testingutils.SSVMsgSyncCommitteeContribution
 	case spectypes.RoleValidatorRegistration:
 		return testingutils.SSVMsgValidatorRegistration

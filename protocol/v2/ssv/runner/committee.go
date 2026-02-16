@@ -613,6 +613,12 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 				defer wg.Done()
 
 				share := r.BaseRunner.Share[validatorIndex]
+				// Operators might have diverging views on which validators they have in a committee
+				// (e.g., an operator might have not yet seen an ValidatorAdded event,
+				// or failed to process it and moved on). Hence, we need to check for this explicitly every time.
+				if share == nil {
+					return
+				}
 				pubKey := share.ValidatorPubKey
 
 				vLogger := logger.With(
@@ -1027,12 +1033,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 }
 
 func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.BeaconSlotAttribute(duty.DutySlot())))
-	defer span.End()
+	span := trace.SpanFromContext(ctx)
 
 	r.measurements.StartDutyFlow()
 

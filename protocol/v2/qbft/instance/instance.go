@@ -48,7 +48,7 @@ func NewInstance(
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
 ) *Instance {
-	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
+	runnerRole := spectypes.RoleUnknown // RoleUnknown is of int type, hence have to type-cast
 	if len(identifier) == 56 {
 		runnerRole = spectypes.MessageID(identifier).GetRoleType()
 	}

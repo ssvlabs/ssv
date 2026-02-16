@@ -89,15 +89,24 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		c.mtx.RLock() // read-lock for c.Queues, c.Runners
 		defer c.mtx.RUnlock()
 
-		dr := c.Runners[phase0.Slot(height)]
-		if dr == nil { // only happens when we prune expired runners
-			logger.Debug("❗no committee runner found for slot")
-			return
-		}
-
-		hasDuty := dr.HasRunningDuty()
-		if !hasDuty {
-			return
+		if identifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
+			dr := c.AggregatorRunners[phase0.Slot(height)]
+			if dr == nil { // only happens when we prune expired runners
+				logger.Debug("❗no aggregator committee runner found for slot")
+				return
+			}
+			if !dr.HasRunningDuty() {
+				return
+			}
+		} else {
+			dr := c.Runners[phase0.Slot(height)]
+			if dr == nil { // only happens when we prune expired runners
+				logger.Debug("❗no committee runner found for slot")
+				return
+			}
+			if !dr.HasRunningDuty() {
+				return
+			}
 		}
 
 		msg, err := c.createTimerMessage(identifier, height, round)
@@ -111,7 +120,13 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 
-		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
+		var qc queueContainer
+		if identifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
+			qc = c.AggregatorQueues[phase0.Slot(height)]
+		} else {
+			qc = c.Queues[phase0.Slot(height)]
+		}
+		if pushed := qc.Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
 		}
 	}

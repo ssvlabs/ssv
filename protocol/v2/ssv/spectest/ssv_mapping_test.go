@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -32,6 +33,7 @@ import (
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -218,44 +220,13 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]any) *StartNewRunne
 	runnerMap := m["Runner"].(map[string]any)
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
-	var testDuty spectypes.Duty
-	if _, ok := m["CommitteeDuty"]; ok {
-		byts, err := json.Marshal(m["CommitteeDuty"])
-		if err != nil {
-			panic("cant marshal committee duty")
-		}
-		committeeDuty := &spectypes.CommitteeDuty{}
-		err = json.Unmarshal(byts, committeeDuty)
-		if err != nil {
-			panic("cant unmarshal committee duty")
-		}
-		testDuty = committeeDuty
-	} else if _, ok := m["ValidatorDuty"]; ok {
-		byts, err := json.Marshal(m["ValidatorDuty"])
-		if err != nil {
-			panic("cant marshal beacon duty")
-		}
-		validatorDuty := &spectypes.ValidatorDuty{}
-		err = json.Unmarshal(byts, validatorDuty)
-		if err != nil {
-			panic("cant unmarshal beacon duty")
-		}
-		testDuty = validatorDuty
-	} else {
+	testDuty, err := decodeDutyFromMap(m)
+	if err != nil {
 		panic("no beacon or committee duty")
 	}
 
-	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
-	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]any) {
-			byts, err := json.Marshal(msg)
-			require.NoError(t, err)
-			typedMsg := &spectypes.PartialSignatureMessages{}
-			require.NoError(t, json.Unmarshal(byts, typedMsg))
-			outputMsgs = append(outputMsgs, typedMsg)
-		}
-	}
+	outputMsgs, err := decodeOutputMessages(m["OutputMessages"])
+	require.NoError(t, err)
 
 	shareInstance := &spectypes.Share{}
 	for _, share := range baseRunnerMap["Share"].(map[string]any) {
@@ -271,7 +242,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]any) *StartNewRunne
 
 	ks := spectestingutils.KeySetForShare(shareInstance)
 
-	r := fixRunnerForRun(t, runnerMap, ks)
+	r := fixRunnerForRun(t, runnerMap, ks, networkconfig.TestNetwork)
 
 	return &StartNewRunnerDutySpecTest{
 		Name:                    m["Name"].(string),
@@ -288,30 +259,8 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 	runnerMap := m["Runner"].(map[string]any)
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
-	var duty spectypes.Duty
-	if _, ok := m["CommitteeDuty"]; ok {
-		byts, err := json.Marshal(m["CommitteeDuty"])
-		if err != nil {
-			panic("cant marshal committee duty")
-		}
-		committeeDuty := &spectypes.CommitteeDuty{}
-		err = json.Unmarshal(byts, committeeDuty)
-		if err != nil {
-			panic("cant unmarshal committee duty")
-		}
-		duty = committeeDuty
-	} else if _, ok := m["ValidatorDuty"]; ok {
-		byts, err := json.Marshal(m["ValidatorDuty"])
-		if err != nil {
-			panic("cant marshal validator duty")
-		}
-		beaconDuty := &spectypes.ValidatorDuty{}
-		err = json.Unmarshal(byts, beaconDuty)
-		if err != nil {
-			panic("cant unmarshal validator duty")
-		}
-		duty = beaconDuty
-	} else {
+	duty, err := decodeDutyFromMap(m)
+	if err != nil {
 		panic("no beacon or committee duty")
 	}
 
@@ -325,24 +274,11 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 		msgs = append(msgs, typedMsg)
 	}
 
-	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
-	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]any) {
-			byts, err := json.Marshal(msg)
-			require.NoError(t, err)
-			typedMsg := &spectypes.PartialSignatureMessages{}
-			require.NoError(t, json.Unmarshal(byts, typedMsg))
-			outputMsgs = append(outputMsgs, typedMsg)
-		}
-	}
+	outputMsgs, err := decodeOutputMessages(m["OutputMessages"])
+	require.NoError(t, err)
 
-	beaconBroadcastedRoots := make([]string, 0)
-	if m["BeaconBroadcastedRoots"] != nil {
-		for _, r := range m["BeaconBroadcastedRoots"].([]any) {
-			beaconBroadcastedRoots = append(beaconBroadcastedRoots, r.(string))
-		}
-	}
+	beaconBroadcastedRoots, err := decodeBeaconRoots(m["BeaconBroadcastedRoots"])
+	require.NoError(t, err)
 
 	shareInstance := &spectypes.Share{}
 	for _, share := range baseRunnerMap["Share"].(map[string]any) {
@@ -359,7 +295,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 	ks := spectestingutils.KeySetForShare(shareInstance)
 
 	// runner
-	r := fixRunnerForRun(t, runnerMap, ks)
+	r := fixRunnerForRun(t, runnerMap, ks, networkconfig.TestNetwork)
 
 	return &MsgProcessingSpecTest{
 		Name:                    m["Name"].(string),
@@ -375,7 +311,12 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 	}
 }
 
-func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutils.TestKeySet) runner.Runner {
+func fixRunnerForRun(
+	t *testing.T,
+	runnerMap map[string]any,
+	ks *spectestingutils.TestKeySet,
+	netCfg *networkconfig.Network,
+) runner.Runner {
 	logger := log.TestLogger(t)
 
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
@@ -384,7 +325,10 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutil
 	byts, err := json.Marshal(baseRunnerMap)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(byts, &baseRunner))
-	baseRunner.NetworkConfig = networkconfig.TestNetwork
+	if netCfg == nil {
+		netCfg = networkconfig.TestNetwork
+	}
+	baseRunner.NetworkConfig = netCfg
 
 	ret := createRunnerWithBaseRunner(logger, baseRunner.RunnerRoleType, baseRunner, ks)
 
@@ -463,7 +407,7 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 		ret := ssvtesting.CommitteeRunner(logger, ks)
 		ret.(*runner.CommitteeRunner).BaseRunner = base
 		return ret
-	case spectypes.RoleAggregator:
+	case ssvtypes.RoleAggregator:
 		ret := ssvtesting.AggregatorRunner(logger, ks)
 		ret.(*runner.AggregatorRunner).BaseRunner = base
 		return ret
@@ -471,13 +415,17 @@ func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, b
 		ret := ssvtesting.ProposerRunner(logger, ks)
 		ret.(*runner.ProposerRunner).BaseRunner = base
 		return ret
-	case spectypes.RoleSyncCommitteeContribution:
+	case ssvtypes.RoleSyncCommitteeContribution:
 		ret := ssvtesting.SyncCommitteeContributionRunner(logger, ks)
 		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
+		return ret
+	case spectypes.RoleAggregatorCommittee:
+		ret := ssvtesting.AggregatorCommitteeRunner(logger, ks)
+		ret.(*runner.AggregatorCommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleVoluntaryExit:
 		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
@@ -496,6 +444,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 	committeeMap := m["Committee"].(map[string]any)
 
 	inputs := make([]any, 0)
+	needsAggRunners := false
 	for _, input := range m["Input"].([]any) {
 		byts, err := json.Marshal(input)
 		if err != nil {
@@ -511,6 +460,18 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		committeeDuty := &spectypes.CommitteeDuty{}
 		err = getDecoder().Decode(&committeeDuty)
 		if err == nil {
+			if len(committeeDuty.ValidatorDuties) > 0 {
+				firstDuty := committeeDuty.ValidatorDuties[0]
+				if firstDuty.Type == spectypes.BNRoleAggregator || firstDuty.Type == spectypes.BNRoleSyncCommitteeContribution {
+					aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{}
+					err = json.Unmarshal(byts, &aggregatorCommitteeDuty)
+					if err == nil {
+						needsAggRunners = true
+						inputs = append(inputs, aggregatorCommitteeDuty)
+						continue
+					}
+				}
+			}
 			inputs = append(inputs, committeeDuty)
 			continue
 		}
@@ -525,6 +486,9 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		msg := &spectypes.SignedSSVMessage{}
 		err = getDecoder().Decode(&msg)
 		if err == nil {
+			if msg.SSVMessage != nil && msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleAggregatorCommittee {
+				needsAggRunners = true
+			}
 			inputs = append(inputs, msg)
 			continue
 		}
@@ -532,26 +496,13 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		panic(fmt.Sprintf("Unsupported input: %T\n", input))
 	}
 
-	outputMsgs := make([]*spectypes.PartialSignatureMessages, 0)
-	// Handle null/empty OutputMessages from spec (empty arrays are now null in JSON)
-	if m["OutputMessages"] != nil {
-		for _, msg := range m["OutputMessages"].([]any) {
-			byts, err := json.Marshal(msg)
-			require.NoError(t, err)
-			typedMsg := &spectypes.PartialSignatureMessages{}
-			require.NoError(t, json.Unmarshal(byts, typedMsg))
-			outputMsgs = append(outputMsgs, typedMsg)
-		}
-	}
+	outputMsgs, err := decodeOutputMessages(m["OutputMessages"])
+	require.NoError(t, err)
 
-	beaconBroadcastedRoots := make([]string, 0)
-	if m["BeaconBroadcastedRoots"] != nil {
-		for _, r := range m["BeaconBroadcastedRoots"].([]any) {
-			beaconBroadcastedRoots = append(beaconBroadcastedRoots, r.(string))
-		}
-	}
+	beaconBroadcastedRoots, err := decodeBeaconRoots(m["BeaconBroadcastedRoots"])
+	require.NoError(t, err)
 
-	c := fixCommitteeForRun(t, logger, committeeMap)
+	c := fixCommitteeForRun(t, logger, committeeMap, needsAggRunners)
 
 	return &CommitteeSpecTest{
 		Name:                   m["Name"].(string),
@@ -561,22 +512,44 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]any
 		OutputMessages:         outputMsgs,
 		BeaconBroadcastedRoots: beaconBroadcastedRoots,
 		ExpectedErrorCode:      int(m["ExpectedErrorCode"].(float64)),
+		NeedsAggRunners:        needsAggRunners,
 	}
 }
 
-func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[string]any) *validator.Committee {
+func fixCommitteeForRun(
+	t *testing.T,
+	logger *zap.Logger,
+	committeeMap map[string]any,
+	needsAggRunners bool,
+) *validator.Committee {
 	byts, err := json.Marshal(committeeMap)
 	require.NoError(t, err)
 	specCommittee := &specssv.Committee{}
 	require.NoError(t, json.Unmarshal(byts, specCommittee))
 
+	netCfg := testNetworkConfig(needsAggRunners)
 	c := validator.NewCommittee(
 		logger,
-		networkconfig.TestNetwork,
+		netCfg,
 		&specCommittee.CommitteeMember,
-		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
-			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
-			return r.(*runner.CommitteeRunner), nil
+		func(
+			duty spectypes.Duty,
+			shareMap map[phase0.ValidatorIndex]*spectypes.Share,
+			_ []phase0.BLSPubKey,
+			_ runner.CommitteeDutyGuard,
+		) (runner.Runner, error) {
+			switch duty.(type) {
+			case *spectypes.CommitteeDuty:
+				r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)
+				applyRunnerNetworkConfig(r, netCfg)
+				return r, nil
+			case *spectypes.AggregatorCommitteeDuty:
+				r := ssvtesting.AggregatorCommitteeRunnerWithShareMap(logger, shareMap)
+				applyRunnerNetworkConfig(r, netCfg)
+				return r, nil
+			default:
+				return nil, fmt.Errorf("unknown duty type: %T", duty)
+			}
 		},
 		specCommittee.Share,
 		validator.NewCommitteeDutyGuard(),
@@ -584,17 +557,54 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 	tmpSsvCommittee := &validator.Committee{}
 	require.NoError(t, json.Unmarshal(byts, tmpSsvCommittee))
 
-	c.Runners = tmpSsvCommittee.Runners
+	committeeRunnersMap, _ := committeeMap["CommitteeRunners"].(map[string]any)
+	aggregatorRunnersMap, _ := committeeMap["AggregatorCommitteeRunners"].(map[string]any)
+	ks := keySetFromShares(c.Shares)
+	if (committeeRunnersMap != nil || aggregatorRunnersMap != nil) && ks == nil {
+		require.Fail(t, "no shares for runner keyset")
+	}
 
-	for slot := range c.Runners {
-		var shareInstance *spectypes.Share
-		for _, share := range c.Runners[slot].BaseRunner.Share {
-			shareInstance = share
-			break
+	if committeeRunnersMap != nil {
+		c.Runners = make(map[phase0.Slot]*runner.CommitteeRunner, len(committeeRunnersMap))
+		for slotStr, rawRunner := range committeeRunnersMap {
+			runnerMap, ok := rawRunner.(map[string]any)
+			require.True(t, ok, "committee runner entry is not a map")
+
+			slot, err := strconv.ParseUint(slotStr, 10, 64)
+			require.NoError(t, err)
+
+			fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
+			if cr, ok := fixedRunner.(*runner.CommitteeRunner); ok {
+				c.Runners[phase0.Slot(slot)] = cr
+			}
 		}
+	} else {
+		c.Runners = tmpSsvCommittee.Runners
+	}
 
-		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]any)[fmt.Sprintf("%v", slot)].(map[string]any), spectestingutils.KeySetForShare(shareInstance))
-		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
+	if aggregatorRunnersMap != nil {
+		c.AggregatorRunners = make(map[phase0.Slot]*runner.AggregatorCommitteeRunner, len(aggregatorRunnersMap))
+		for slotStr, rawRunner := range aggregatorRunnersMap {
+			runnerMap, ok := rawRunner.(map[string]any)
+			require.True(t, ok, "aggregator committee runner entry is not a map")
+
+			slot, err := strconv.ParseUint(slotStr, 10, 64)
+			require.NoError(t, err)
+
+			fixedRunner := fixRunnerForRun(t, runnerMap, ks, netCfg)
+			if acr, ok := fixedRunner.(*runner.AggregatorCommitteeRunner); ok {
+				c.AggregatorRunners[phase0.Slot(slot)] = acr
+			}
+		}
+	} else {
+		c.AggregatorRunners = tmpSsvCommittee.AggregatorRunners
+	}
+
+	for _, cr := range c.Runners {
+		applyRunnerNetworkConfig(cr, netCfg)
+	}
+	for _, ar := range c.AggregatorRunners {
+		applyRunnerNetworkConfig(ar, netCfg)
 	}
 
 	return c

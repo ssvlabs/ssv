@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -75,66 +76,50 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	}
 
 	valCheck := createValueChecker(test.Runner)
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.AggregatorRunner:
-		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.ProposerRunner:
-		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	}
+	setRunnerValueCheckersIfNil(test.Runner, valCheck)
 
 	var v *validator.Validator
 	var c *validator.Committee
 	var lastErr error
 
 	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
+	case *runner.CommitteeRunner, *runner.AggregatorCommitteeRunner:
 		guard := validator.NewCommitteeDutyGuard()
-		c = baseCommitteeWithRunnerSample(logger, keySetMap, test.Runner.(*runner.CommitteeRunner), guard)
+		c = baseCommitteeWithRunner(logger, keySetMap, test.Runner, guard)
 
 		if test.DontStartDuty {
-			r := test.Runner.(*runner.CommitteeRunner)
-			r.DutyGuard = guard
-			c.Runners[test.Duty.DutySlot()] = r
-
-			// Inform the duty guard of the running duty, if any, so that it won't reject it.
-			if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
-				duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
-				if !ok {
-					panic("starting duty not found")
+			switch test.Runner.(type) {
+			case *runner.CommitteeRunner:
+				r := test.Runner.(*runner.CommitteeRunner)
+				r.DutyGuard = guard
+				// Ensure ValCheck is set when StartDuty is skipped so consensus processing can validate.
+				if r.ValCheck == nil {
+					r.ValCheck = protocoltesting.TestingValueChecker{}
 				}
-				for _, validatorDuty := range duty.ValidatorDuties {
-					err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
-					if err != nil {
-						panic(err)
+				c.Runners[test.Duty.DutySlot()] = r
+				// Inform the duty guard of the running duty, if any, so that it won't reject it.
+				if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
+					duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
+					if !ok {
+						panic("starting duty not found")
 					}
-					err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
-					if err != nil {
-						panic(err)
+					for _, validatorDuty := range duty.ValidatorDuties {
+						err := guard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+						if err != nil {
+							panic(err)
+						}
+						err = guard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.Slot)
+						if err != nil {
+							panic(err)
+						}
 					}
 				}
+			case *runner.AggregatorCommitteeRunner:
+				r := test.Runner.(*runner.AggregatorCommitteeRunner)
+				c.AggregatorRunners[test.Duty.DutySlot()] = r
 			}
 		} else {
-			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
+			_, _, lastErr = c.StartDuty(ctx, logger, test.Duty)
 		}
 
 		for _, msg := range test.Messages {
@@ -196,6 +181,15 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		network = runnerInstance.GetNetwork().(*protocoltesting.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		committee = c.CommitteeMember.Committee
+	case *runner.AggregatorCommitteeRunner:
+		var runnerInstance *runner.AggregatorCommitteeRunner
+		for _, runner := range c.AggregatorRunners {
+			runnerInstance = runner
+			break
+		}
+		network = runnerInstance.GetNetwork().(*protocoltesting.TestingNetwork)
+		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		committee = c.CommitteeMember.Committee
 	default:
 		network = v.Network.(*protocoltesting.TestingNetwork)
 		committee = v.Operator.Committee
@@ -241,10 +235,18 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
 }
 
-var baseCommitteeWithRunnerSample = func(
+type mockDGHandler struct{}
+
+func (m mockDGHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
+	return true
+}
+
+func (m mockDGHandler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {}
+
+var baseCommitteeWithRunner = func(
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
-	runnerSample *runner.CommitteeRunner,
+	runnerSample runner.Runner,
 	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
 	var keySetSample *spectestingutils.TestKeySet
@@ -258,36 +260,69 @@ var baseCommitteeWithRunnerSample = func(
 		shareMap[valIdx] = spectestingutils.TestingShare(ks, valIdx)
 	}
 
+	var baseRunner *runner.BaseRunner
+	var dgHandler runner.DoppelgangerProvider
+	switch r := runnerSample.(type) {
+	case *runner.CommitteeRunner:
+		baseRunner = r.BaseRunner
+		dgHandler = r.GetDoppelgangerHandler()
+	case *runner.AggregatorCommitteeRunner:
+		baseRunner = r.BaseRunner
+		dgHandler = mockDGHandler{}
+	}
+
 	createRunnerF := func(
-		_ phase0.Slot,
+		duty spectypes.Duty,
 		shareMap map[phase0.ValidatorIndex]*spectypes.Share,
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
-	) (*runner.CommitteeRunner, error) {
-		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			attestingValidators,
-			controller.NewController(
-				runnerSample.BaseRunner.QBFTController.Identifier,
-				runnerSample.BaseRunner.QBFTController.CommitteeMember,
-				runnerSample.BaseRunner.QBFTController.GetConfig(),
-				spectestingutils.TestingOperatorSigner(keySetSample),
-				false,
-			),
-			runnerSample.GetBeaconNode(),
-			runnerSample.GetNetwork(),
-			runnerSample.GetSigner(),
-			runnerSample.GetOperatorSigner(),
-			committeeDutyGuard,
-			runnerSample.GetDoppelgangerHandler(),
-		)
-		return r.(*runner.CommitteeRunner), err
+	) (runner.Runner, error) {
+		switch duty.(type) {
+		case *spectypes.CommitteeDuty:
+			r, err := runner.NewCommitteeRunner(
+				networkconfig.TestNetwork,
+				shareMap,
+				attestingValidators,
+				controller.NewController(
+					baseRunner.QBFTController.Identifier,
+					baseRunner.QBFTController.CommitteeMember,
+					baseRunner.QBFTController.GetConfig(),
+					spectestingutils.TestingOperatorSigner(keySetSample),
+					false,
+				),
+				runnerSample.GetBeaconNode(),
+				runnerSample.GetNetwork(),
+				runnerSample.GetSigner(),
+				runnerSample.GetOperatorSigner(),
+				committeeDutyGuard,
+				dgHandler,
+			)
+			return r, err
+		case *spectypes.AggregatorCommitteeDuty:
+			r, err := runner.NewAggregatorCommitteeRunner(
+				networkconfig.TestNetwork,
+				shareMap,
+				controller.NewController(
+					baseRunner.QBFTController.Identifier,
+					baseRunner.QBFTController.CommitteeMember,
+					baseRunner.QBFTController.GetConfig(),
+					spectestingutils.TestingOperatorSigner(keySetSample),
+					false,
+				),
+				runnerSample.GetBeaconNode(),
+				runnerSample.GetNetwork(),
+				runnerSample.GetSigner(),
+				runnerSample.GetOperatorSigner(),
+			)
+			return r, err
+		default:
+			return nil, fmt.Errorf("invalid duty type %T", duty)
+		}
 	}
 
 	c := validator.NewCommittee(
 		logger,
-		runnerSample.BaseRunner.NetworkConfig,
+		baseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

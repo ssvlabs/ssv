@@ -117,7 +117,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			Ctx:                     opts.Context,
 			BeaconNode:              schedulerBeacon,
 			ExecutionClient:         opts.ExecutionClient,
-			BeaconConfig:            opts.NetworkConfig.Beacon,
+			NetworkConfig:           opts.NetworkConfig,
 			ValidatorProvider:       validatorProvider,
 			ValidatorController:     opts.ValidatorController,
 			DutyExecutor:            dutyExecutor,

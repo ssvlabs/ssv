@@ -62,7 +62,7 @@ func NewSyncCommitteeAggregatorRunner(
 
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleSyncCommitteeContribution,
+			RunnerRoleType:     ssvtypes.RoleSyncCommitteeContribution,
 			NetworkConfig:      networkConfig,
 			Share:              share,
 			QBFTController:     qbftController,
@@ -107,7 +107,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	r.measurements.EndPreConsensus()
-	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleSyncCommitteeContribution)
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), ssvtypes.RoleSyncCommitteeContribution)
 
 	// Collect selection proofs and subnets. We must iterate the
 	//nolint: prealloc
@@ -150,7 +150,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	if len(selectionProofs) == 0 {
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, 0)
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleSyncCommitteeContribution, 0)
 		const dutyFinishedNoProofsEvent = "✔️successfully finished duty processing (no selection proofs)"
 		logger.Info(dutyFinishedNoProofsEvent,
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -175,7 +175,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	// create consensus object
-	input := &spectypes.ValidatorConsensusData{
+	input := &spectypes.ProposerConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: byts,
@@ -194,7 +194,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("processing QBFT consensus msg")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ProposerConsensusData{})
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -205,15 +205,15 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	}
 
 	r.measurements.EndConsensus()
-	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleSyncCommitteeContribution)
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), ssvtypes.RoleSyncCommitteeContribution)
 
-	cd := decidedValue.(*spectypes.ValidatorConsensusData)
+	cd := decidedValue.(*spectypes.ProposerConsensusData)
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
-	contributions, err := cd.GetSyncCommitteeContributions()
+	contributions, err := ssvtypes.GetSyncCommitteeContributions(cd)
 	if err != nil {
 		return fmt.Errorf("could not get contributions: %w", err)
 	}
@@ -307,15 +307,15 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	}
 
 	r.measurements.EndPostConsensus()
-	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleSyncCommitteeContribution)
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), ssvtypes.RoleSyncCommitteeContribution)
 
 	// get contributions
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err = validatorConsensusData.Decode(r.state().DecidedValue)
 	if err != nil {
 		return fmt.Errorf("could not decode decided validator consensus data: %w", err)
 	}
-	contributions, err := validatorConsensusData.GetSyncCommitteeContributions()
+	contributions, err := ssvtypes.GetSyncCommitteeContributions(validatorConsensusData)
 	if err != nil {
 		return fmt.Errorf("could not get contributions: %w", err)
 	}
@@ -334,7 +334,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			for _, root := range roots {
 				r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
-			return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
+			return spectypes.WrapError(
+				spectypes.PostConsensusQuorumWithInvalidSignatures,
+				fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err),
+			)
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
@@ -395,7 +398,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 	r.state().Finished = true
 	r.measurements.EndDutyFlow()
-	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, r.state().RunningInstance.State.Round)
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), ssvtypes.RoleSyncCommitteeContribution, r.state().RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -450,12 +453,12 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	// get contributions
-	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	validatorConsensusData := &spectypes.ProposerConsensusData{}
 	err := validatorConsensusData.Decode(r.state().DecidedValue)
 	if err != nil {
 		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
 	}
-	contributions, err := validatorConsensusData.GetSyncCommitteeContributions()
+	contributions, err := ssvtypes.GetSyncCommitteeContributions(validatorConsensusData)
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get contributions")
 	}
@@ -484,7 +487,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 
 	// sign selection proofs
 	msgs := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.ContributionProofs,
+		Type:     ssvtypes.ContributionProofs,
 		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}

@@ -77,7 +77,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgCommittee1, msgCommittee1Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
 		msgCommittee3, msgCommittee3Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
 		msgProposer, msgProposerSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
-		msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
+		msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
 		msgRoleVoluntaryExit, msgRoleVoluntaryExitSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
 		require.NoError(t, node1.BroadcastAtSlot(msgCommittee1, msgCommittee1Slot))
@@ -102,7 +102,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgCommittee2, msgCommittee2Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 2)
 		msgCommittee3, msgCommittee3Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
 		msgProposer, msgProposerSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
-		msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
+		msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
 		msgRoleVoluntaryExit, msgRoleVoluntaryExitSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
 		require.NoError(t, err)

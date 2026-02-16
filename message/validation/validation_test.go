@@ -53,9 +53,9 @@ func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
 		return "PostConsensusPartialSig"
 	case spectypes.RandaoPartialSig:
 		return "RandaoPartialSig"
-	case spectypes.SelectionProofPartialSig:
+	case ssvtypes.SelectionProofPartialSig:
 		return "SelectionProofPartialSig"
-	case spectypes.ContributionProofs:
+	case ssvtypes.ContributionProofs:
 		return "ContributionProofs"
 	case spectypes.ValidatorRegistrationPartialSig:
 		return "ValidatorRegistrationPartialSig"
@@ -73,10 +73,21 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
-	require.NoError(t, err)
+	cfgWithBooleEpoch := func(booleEpoch phase0.Epoch) *networkconfig.Network {
+		cfg := *networkconfig.TestNetwork
+		beaconCfg := *networkconfig.TestNetwork.Beacon
+		ssvCfg := *networkconfig.TestNetwork.SSV
+		ssvCfg.Forks.Boole = booleEpoch
+		cfg.Beacon = &beaconCfg
+		cfg.SSV = &ssvCfg
+		return &cfg
+	}
+	currentEpoch := networkconfig.TestNetwork.EstimatedCurrentEpoch()
+	netCfg := cfgWithBooleEpoch(currentEpoch + 100)
+	postBooleCfg := cfgWithBooleEpoch(0)
 
-	netCfg := networkconfig.TestNetwork
+	ns, err := storage.NewNodeStorage(netCfg.Beacon, logger, db)
+	require.NoError(t, err)
 
 	ks := spectestingutils.Testing4SharesSet()
 	shares := generateShares(t, ks, ns, netCfg)
@@ -169,7 +180,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	wrongSignatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("test")).AnyTimes()
 
 	committeeRole := spectypes.RoleCommittee
-	nonCommitteeRole := spectypes.RoleAggregator
+	nonCommitteeRole := ssvtypes.RoleAggregator
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, committeeRole)
@@ -300,7 +311,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		topic := commons.AlanCommitteeSubnet(committeeID).AlanTopic()
-		msgSize := maxSignedMsgSize*2 + MessageOffset
+		msgSize := MaxEncodedMsgSize + 1
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -389,7 +400,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		signedSSVMessage := generateSignedMessage(leaderCtx, ks, committeeIdentifier, defaultSlot)
-		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadDataSize)
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxEncodedConsensusMsgSize)
 
 		receivedAt := netCfg.SlotStartTime(defaultSlot)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
@@ -460,14 +471,57 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send message with a value that refers to a non-existent role
 	t.Run("invalid role", func(t *testing.T) {
-		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		t.Run("unknown role value", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, math.MaxInt32)
-		signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, defaultSlot)
+			badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], math.MaxInt32)
+			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, defaultSlot)
 
-		receivedAt := netCfg.SlotStartTime(defaultSlot)
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorIs(t, err, ErrInvalidRole)
+			receivedAt := netCfg.SlotStartTime(defaultSlot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
+
+		t.Run("aggregator committee pre-fork", func(t *testing.T) {
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			slot := netCfg.FirstSlotAtEpoch(1)
+
+			badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
+
+			receivedAt := netCfg.SlotStartTime(slot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
+
+		t.Run("aggregator post-fork", func(t *testing.T) {
+			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			slot := postBooleCfg.FirstSlotAtEpoch(1)
+
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
+			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
+			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.SSV.Name)
+
+			receivedAt := postBooleCfg.SlotStartTime(slot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, booleTopicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
+
+		t.Run("sync committee contribution post-fork", func(t *testing.T) {
+			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+			slot := postBooleCfg.FirstSlotAtEpoch(1)
+
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
+			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
+			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.SSV.Name)
+
+			receivedAt := postBooleCfg.SlotStartTime(slot)
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, booleTopicID, peerID, receivedAt)
+			require.ErrorIs(t, err, ErrInvalidRole)
+		})
 	})
 
 	// Perform validator registration or voluntary exit with a consensus type message will give an error
@@ -584,7 +638,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			{Slot: slot + 8, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
 		})
 
-		role := spectypes.RoleAggregator
+		role := ssvtypes.RoleAggregator
 		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), role)
 		signedSSVMessage := generateSignedMessage(leaderCtx, ks, identifier, slot)
 
@@ -632,12 +686,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	const epoch1 = 1
 
-	beaconConfigEpoch1 := *networkconfig.TestNetwork.Beacon
+	beaconConfigEpoch1 := *netCfg.Beacon
 	beaconConfigEpoch1.GenesisTime = time.Now().Add(-epoch1 * beaconConfigEpoch1.EpochDuration())
 
 	netCfgEpoch1 := &networkconfig.Network{
 		Beacon: &beaconConfigEpoch1,
-		SSV:    networkconfig.TestNetwork.SSV,
+		SSV:    netCfg.SSV,
 	}
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
@@ -696,12 +750,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//// Get error when receiving a message with over 13 partial signatures
 	t.Run("partial message too big", func(t *testing.T) {
 		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
-		for i := 0; i < 1512; i++ {
+		for i := 0; i < 5048; i++ {
 			msg.Messages = append(msg.Messages, msg.Messages[0])
 		}
 
 		_, err := msg.Encode()
-		require.ErrorContains(t, err, "max expected 1512 and 1513 found")
+		require.ErrorContains(t, err, "max expected 5048 and 5049 found")
 	})
 
 	// Get error when receiving message from operator who is not affiliated with the validator
@@ -790,12 +844,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// Check happy flow of a duty for each committeeRole
 		t.Run("valid", func(t *testing.T) {
 			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
-				spectypes.RoleCommittee:                 {spectypes.PostConsensusPartialSig},
-				spectypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, spectypes.SelectionProofPartialSig},
-				spectypes.RoleProposer:                  {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
-				spectypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
-				spectypes.RoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
+				spectypes.RoleCommittee:                {spectypes.PostConsensusPartialSig},
+				ssvtypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, ssvtypes.SelectionProofPartialSig},
+				spectypes.RoleProposer:                 {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
+				ssvtypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, ssvtypes.ContributionProofs},
+				spectypes.RoleValidatorRegistration:    {spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleVoluntaryExit:            {spectypes.VoluntaryExitPartialSig},
 			}
 
 			for role, msgTypes := range tests {
@@ -866,12 +920,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// Get error when sending an unexpected message type for the required duty (sending randao for attestor duty)
 		t.Run("mismatch", func(t *testing.T) {
 			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
-				spectypes.RoleCommittee:                 {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleAggregator:                {spectypes.RandaoPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleProposer:                  {spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleValidatorRegistration:     {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
-				spectypes.RoleVoluntaryExit:             {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
+				spectypes.RoleCommittee:                {spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
+				ssvtypes.RoleAggregator:                {spectypes.RandaoPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleProposer:                 {ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
+				ssvtypes.RoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleValidatorRegistration:    {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs},
+				spectypes.RoleVoluntaryExit:            {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, ssvtypes.SelectionProofPartialSig, ssvtypes.ContributionProofs},
 			}
 
 			for role, msgTypes := range tests {
@@ -918,12 +972,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// IGNORE or REJECT duplicate messages depending on which peers they come from
 		t.Run("duplicate messages", func(t *testing.T) {
 			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
-				spectypes.RoleCommittee:                 {spectypes.PostConsensusPartialSig},
-				spectypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, spectypes.SelectionProofPartialSig},
-				spectypes.RoleProposer:                  {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
-				spectypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
-				spectypes.RoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
+				spectypes.RoleCommittee:                {spectypes.PostConsensusPartialSig},
+				ssvtypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, ssvtypes.SelectionProofPartialSig},
+				spectypes.RoleProposer:                 {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
+				ssvtypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, ssvtypes.ContributionProofs},
+				spectypes.RoleValidatorRegistration:    {spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleVoluntaryExit:            {spectypes.VoluntaryExitPartialSig},
 			}
 
 			for role, msgTypes := range tests {
@@ -960,8 +1014,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
 						receivedAt := netCfg.SlotStartTime(spectestingutils.TestingDutySlot)
-
-						topicID := commons.CommitteeTopicID(committeeID)[0]
 
 						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 						require.NoError(t, err)
@@ -1229,10 +1281,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		tests := map[spectypes.RunnerRole]time.Time{
-			spectypes.RoleCommittee:                 netCfg.SlotStartTime(slot + 35),
-			spectypes.RoleAggregator:                netCfg.SlotStartTime(slot + 35),
-			spectypes.RoleProposer:                  netCfg.SlotStartTime(slot + 4),
-			spectypes.RoleSyncCommitteeContribution: netCfg.SlotStartTime(slot + 4),
+			spectypes.RoleCommittee:                netCfg.SlotStartTime(slot + 35),
+			ssvtypes.RoleAggregator:                netCfg.SlotStartTime(slot + 35),
+			spectypes.RoleProposer:                 netCfg.SlotStartTime(slot + 4),
+			ssvtypes.RoleSyncCommitteeContribution: netCfg.SlotStartTime(slot + 4),
 		}
 
 		for role, receivedAt := range tests {
@@ -1249,6 +1301,23 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 			})
 		}
+
+		t.Run(message.RunnerRoleToString(spectypes.RoleAggregatorCommittee), func(t *testing.T) {
+			validator := New(postBooleCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+
+			postSlot := postBooleCfg.FirstSlotAtEpoch(epoch)
+			msgID := spectypes.NewMsgID(postBooleCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+			committeeInfo, err := validator.getCommitteeAndValidatorIndices(msgID)
+			require.NoError(t, err)
+
+			leader := qbft.RoundRobinProposer(specqbft.Height(postSlot), specqbft.FirstRound, committeeInfo.committee, postBooleCfg)
+			signedSSVMessage := generateSignedMessageWithLeader(ks, msgID, postSlot, leader)
+			receivedAt := postBooleCfg.SlotStartTime(postSlot + 35)
+			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.SSV.Name)
+
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, booleTopicID, peerID, receivedAt)
+			require.ErrorContains(t, err, ErrLateSlotMessage.Error())
+		})
 	})
 
 	// Send early message for all roles before the duty start and receive early message error
@@ -1588,10 +1657,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		tests := map[spectypes.RunnerRole]specqbft.Round{
-			spectypes.RoleCommittee:                 13,
-			spectypes.RoleAggregator:                13,
-			spectypes.RoleProposer:                  7,
-			spectypes.RoleSyncCommitteeContribution: 7,
+			spectypes.RoleCommittee:                13,
+			ssvtypes.RoleAggregator:                13,
+			spectypes.RoleProposer:                 7,
+			ssvtypes.RoleSyncCommitteeContribution: 7,
 		}
 
 		for role, round := range tests {
@@ -1911,7 +1980,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.SlotStartTime(defaultSlot)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
-		require.ErrorContains(t, err, ErrTripleValidatorIndexInPartialSignatures.Error())
+		require.ErrorContains(t, err, ErrTooManyEqualValidatorIndicesInPartialSignatures.Error())
 	})
 
 	// Receive a partial signature message with validator index mismatch
@@ -2077,6 +2146,37 @@ func generateSignedMessage(
 	}
 
 	leader := leaderForTest(ctx, qbftMessage.Height, qbftMessage.Round)
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+	signedSSVMessage.FullData = fullData
+
+	return signedSSVMessage
+}
+
+func generateSignedMessageWithLeader(
+	ks *spectestingutils.TestKeySet,
+	identifier spectypes.MessageID,
+	slot phase0.Slot,
+	leader spectypes.OperatorID,
+	opts ...func(message *specqbft.Message),
+) *spectypes.SignedSSVMessage {
+	fullData := spectestingutils.TestingQBFTFullData
+	height := specqbft.Height(slot)
+
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
+		Height:     height,
+		Round:      specqbft.FirstRound,
+		Identifier: identifier[:],
+		Root:       sha256.Sum256(fullData),
+
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+
+	for _, opt := range opts {
+		opt(qbftMessage)
+	}
+
 	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 	signedSSVMessage.FullData = fullData
 
