@@ -280,6 +280,19 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 	beaconBroadcastedRoots, err := decodeBeaconRoots(m["BeaconBroadcastedRoots"])
 	require.NoError(t, err)
 
+	beaconAggregators := make([]phase0.CommitteeIndex, 0)
+	if raw, ok := m["BeaconAggregators"]; ok && raw != nil {
+		for _, idx := range raw.([]any) {
+			beaconAggregators = append(beaconAggregators, phase0.CommitteeIndex(idx.(float64)))
+		}
+	}
+	beaconAggregatorsValues := make([]bool, 0)
+	if raw, ok := m["BeaconAggregatorsValues"]; ok && raw != nil {
+		for _, v := range raw.([]any) {
+			beaconAggregatorsValues = append(beaconAggregatorsValues, v.(bool))
+		}
+	}
+
 	shareInstance := &spectypes.Share{}
 	for _, share := range baseRunnerMap["Share"].(map[string]any) {
 		shareBytes, err := json.Marshal(share)
@@ -308,6 +321,8 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 		ExpectedErrorCode:       int(m["ExpectedErrorCode"].(float64)),
 		OutputMessages:          outputMsgs,
 		BeaconBroadcastedRoots:  beaconBroadcastedRoots,
+		BeaconAggregators:       beaconAggregators,
+		BeaconAggregatorsValues: beaconAggregatorsValues,
 	}
 }
 
