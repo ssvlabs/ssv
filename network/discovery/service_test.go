@@ -123,7 +123,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 
 func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig *networkconfig.Network) {
 	currentDomain := netConfig.CurrentDomainType()
-	nextDomain := netConfig.NextDomainTypeAtSlot(netConfig.EstimatedCurrentSlot())
+	nextDomain := netConfig.NextDomainType
 
 	// Check domain entry
 	domainEntry := records.DomainTypeEntry{
@@ -260,9 +260,9 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, currentDomain, spectypes.DomainType{})))
 	require.NoError(t, err)
 
-	// Matching current domain via next-domain entry.
+	// Matching current domain via next-domain entry should not pass outside transition window.
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, currentDomain)))
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "domain type 00000000 doesn't match "+currentDomainHex)
 
 	// Mismatching domains
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))

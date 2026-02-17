@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -147,6 +148,50 @@ func TestCheckPeer(t *testing.T) {
 	}
 }
 
+func TestIsDomainCompatibleInPostForkTransitionWindow(t *testing.T) {
+	domainAlan := spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+	domainBoole := spectypes.DomainType{0x5, 0x6, 0x7, 0x8}
+	netCfg := &networkconfig.Network{
+		Beacon: testBeaconAtEpoch(10),
+		SSV: &networkconfig.SSV{
+			DomainType:     domainAlan,
+			NextDomainType: domainBoole,
+			Forks: networkconfig.SSVForks{
+				Boole: 10,
+			},
+		},
+	}
+	dvs := &DiscV5Service{netCfg: netCfg}
+
+	slot := netCfg.EstimatedCurrentSlot()
+	require.True(t, netCfg.BooleForkAtSlot(slot))
+	require.True(t, netCfg.InBooleTransitionWindow(slot))
+	require.True(t, dvs.isDomainCompatible(domainAlan, spectypes.DomainType{}))
+	require.True(t, dvs.isDomainCompatible(domainBoole, spectypes.DomainType{}))
+}
+
+func TestIsDomainCompatibleOutsidePostForkTransitionWindow(t *testing.T) {
+	domainAlan := spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+	domainBoole := spectypes.DomainType{0x5, 0x6, 0x7, 0x8}
+	netCfg := &networkconfig.Network{
+		Beacon: testBeaconAtEpoch(11),
+		SSV: &networkconfig.SSV{
+			DomainType:     domainAlan,
+			NextDomainType: domainBoole,
+			Forks: networkconfig.SSVForks{
+				Boole: 10,
+			},
+		},
+	}
+	dvs := &DiscV5Service{netCfg: netCfg}
+
+	slot := netCfg.EstimatedCurrentSlot()
+	require.True(t, netCfg.BooleForkAtSlot(slot))
+	require.False(t, netCfg.InBooleTransitionWindow(slot))
+	require.False(t, dvs.isDomainCompatible(domainAlan, spectypes.DomainType{}))
+	require.True(t, dvs.isDomainCompatible(domainBoole, spectypes.DomainType{}))
+}
+
 type checkPeerTest struct {
 	name           string
 	domainType     *spectypes.DomainType
@@ -162,4 +207,11 @@ func mockSubnets(active ...commons.Subnet) commons.Subnets {
 		subnets.Set(subnet)
 	}
 	return subnets
+}
+
+func testBeaconAtEpoch(epoch phase0.Epoch) *networkconfig.Beacon {
+	beacon := *networkconfig.TestNetwork.Beacon
+	slotsSinceGenesis := uint64(epoch) * beacon.SlotsPerEpoch
+	beacon.GenesisTime = time.Now().Add(-time.Duration(slotsSinceGenesis) * beacon.SlotDuration)
+	return &beacon
 }

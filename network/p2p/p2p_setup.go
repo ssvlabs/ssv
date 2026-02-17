@@ -222,10 +222,13 @@ func (n *p2pNetwork) setupPeerServices() error {
 		currentDomain := n.cfg.NetworkConfig.DomainTypeAtSlot(currentSlot)
 		allowedDomains := []string{"0x" + hex.EncodeToString(currentDomain[:])}
 		if n.cfg.NetworkConfig.InBooleTransitionWindow(currentSlot) {
-			nextDomain := n.cfg.NetworkConfig.NextDomainTypeAtSlot(currentSlot)
-			nextDomainString := "0x" + hex.EncodeToString(nextDomain[:])
-			if nextDomainString != allowedDomains[0] {
-				allowedDomains = append(allowedDomains, nextDomainString)
+			// During transition we accept both configured fork domains for peer compatibility.
+			domainString := "0x" + hex.EncodeToString(n.cfg.NetworkConfig.DomainType[:])
+			nextDomainString := "0x" + hex.EncodeToString(n.cfg.NetworkConfig.NextDomainType[:])
+			if domainString == nextDomainString {
+				allowedDomains = []string{domainString}
+			} else {
+				allowedDomains = []string{domainString, nextDomainString}
 			}
 		}
 
