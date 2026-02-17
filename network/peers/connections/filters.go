@@ -8,19 +8,8 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 )
 
-// NetworkIDFilter determines whether we will connect to the given node by the network ID
-func NetworkIDFilter(networkID string) HandshakeFilter {
-	return func(sender peer.ID, ni *records.NodeInfo) error {
-		nid := ni.GetNodeInfo().NetworkID
-		if networkID != nid {
-			return errors.Errorf("mismatching domain type (want %s, got %s)", networkID, nid)
-		}
-		return nil
-	}
-}
-
-// NetworkIDFilterAny determines whether we will connect to the given node by any matching network ID.
-func NetworkIDFilterAny(networkIDs ...string) HandshakeFilter {
+// NetworkIDFilter determines whether we will connect to the given node by any matching network ID.
+func NetworkIDFilter(networkIDs ...string) HandshakeFilter {
 	allowed := make(map[string]struct{}, len(networkIDs))
 	for _, id := range networkIDs {
 		allowed[id] = struct{}{}

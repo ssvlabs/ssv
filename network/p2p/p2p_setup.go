@@ -229,12 +229,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			}
 		}
 
-		var networkFilter connections.HandshakeFilter
-		if len(allowedDomains) == 1 {
-			networkFilter = connections.NetworkIDFilter(allowedDomains[0])
-		} else {
-			networkFilter = connections.NetworkIDFilterAny(allowedDomains...)
-		}
+		networkFilter := connections.NetworkIDFilter(allowedDomains...)
 		return []connections.HandshakeFilter{
 			networkFilter,
 			connections.BadPeerFilter(n.idx),
