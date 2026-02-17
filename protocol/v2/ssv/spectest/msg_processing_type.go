@@ -165,7 +165,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
+	actualErr := adjustActualErrorForRunner(adjustActualError(lastErr), test.Runner)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
 
 	var network *protocoltesting.TestingNetwork
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
