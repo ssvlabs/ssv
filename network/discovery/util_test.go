@@ -46,7 +46,7 @@ func currentTestDomain() spectypes.DomainType {
 }
 
 func nextTestDomain() spectypes.DomainType {
-	return testNetConfig.NextDomainTypeAtSlot(testNetConfig.EstimatedCurrentSlot())
+	return testNetConfig.NextDomainType
 }
 
 // Options for the discovery service

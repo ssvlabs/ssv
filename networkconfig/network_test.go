@@ -129,7 +129,15 @@ func TestDomainTypeAtSlot(t *testing.T) {
 		expectedNext    spectypes.DomainType
 	}{
 		{
-			name:            "pre_fork_uses_alan_and_next_boole",
+			name:            "pre_fork_uses_alan",
+			booleEpoch:      10,
+			nextDomainType:  domainBoole,
+			slot:            TestNetwork.FirstSlotAtEpoch(8),
+			expectedCurrent: domainAlan,
+			expectedNext:    domainBoole,
+		},
+		{
+			name:            "pre_fork_near_fork_uses_next_boole",
 			booleEpoch:      10,
 			nextDomainType:  domainBoole,
 			slot:            TestNetwork.FirstSlotAtEpoch(9),
@@ -158,7 +166,7 @@ func TestDomainTypeAtSlot(t *testing.T) {
 			}
 
 			require.Equal(t, test.expectedCurrent, netCfg.DomainTypeAtSlot(test.slot))
-			require.Equal(t, test.expectedNext, netCfg.NextDomainTypeAtSlot(test.slot))
+			require.Equal(t, test.expectedNext, netCfg.NextDomainType)
 		})
 	}
 }

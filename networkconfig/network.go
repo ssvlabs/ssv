@@ -44,12 +44,6 @@ func (n Network) CurrentDomainType() spectypes.DomainType {
 	return n.DomainTypeAtSlot(n.EstimatedCurrentSlot())
 }
 
-func (n Network) NextDomainTypeAtSlot(slot phase0.Slot) spectypes.DomainType {
-	if n.BooleForkAtSlot(slot) {
-		return n.DomainTypeAtSlot(slot)
-	}
-	return n.NextDomainType
-}
 func (n Network) BooleFork() bool {
 	return n.BooleForkAtEpoch(n.EstimatedCurrentEpoch())
 }
