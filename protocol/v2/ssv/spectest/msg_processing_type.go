@@ -218,9 +218,10 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
 
-	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
+	actualPostRoot := hex.EncodeToString(postRoot[:])
+	if test.PostDutyRunnerStateRoot != actualPostRoot {
 		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
-		logger.Error("post runner state not equal", zap.String("state", diff))
+		require.EqualValues(t, test.PostDutyRunnerStateRoot, actualPostRoot, "post runner state not equal\n%s\n", diff)
 	}
 }
 
