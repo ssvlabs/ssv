@@ -103,6 +103,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		netCfg:    netCfg,
 		committee: committee,
 	}
+	postBooleLeaderCtx := &leaderTestCtx{
+		netCfg:    postBooleCfg,
+		committee: committee,
+	}
 
 	committeeID := shares.active.CommitteeID()
 	defaultSlot := phase0.Slot(spectestingutils.TestingDutySlot)
@@ -464,7 +468,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrWrongDomain
 		expectedErr.got = hex.EncodeToString(wrongDomain[:])
-		domain := netCfg.DomainType
+		domain := netCfg.DomainTypeAtSlot(defaultSlot)
 		expectedErr.want = hex.EncodeToString(domain[:])
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -498,10 +502,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("aggregator post-fork", func(t *testing.T) {
 			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-			slot := postBooleCfg.FirstSlotAtEpoch(1)
+			slot := postBooleCfg.FirstSlotAtEpoch(postBooleCfg.SSV.Forks.Boole)
 
-			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
-			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleAggregator)
+			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, badIdentifier, slot)
 			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.SSV.Name)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
@@ -512,10 +516,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("sync committee contribution post-fork", func(t *testing.T) {
 			validator := New(postBooleCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
-			slot := postBooleCfg.FirstSlotAtEpoch(1)
+			slot := postBooleCfg.FirstSlotAtEpoch(postBooleCfg.SSV.Forks.Boole)
 
-			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainType, shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
-			signedSSVMessage := generateSignedMessage(leaderCtx, ks, badIdentifier, slot)
+			badIdentifier := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), shares.active.ValidatorPubKey[:], ssvtypes.RoleSyncCommitteeContribution)
+			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, badIdentifier, slot)
 			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.SSV.Name)
 
 			receivedAt := postBooleCfg.SlotStartTime(slot)
@@ -1304,15 +1308,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		t.Run(message.RunnerRoleToString(spectypes.RoleAggregatorCommittee), func(t *testing.T) {
 			validator := New(postBooleCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
+			slot := postBooleCfg.FirstSlotAtEpoch(postBooleCfg.SSV.Forks.Boole)
 
-			postSlot := postBooleCfg.FirstSlotAtEpoch(epoch)
-			msgID := spectypes.NewMsgID(postBooleCfg.DomainType, encodedCommitteeID, spectypes.RoleAggregatorCommittee)
-			committeeInfo, err := validator.getCommitteeAndValidatorIndices(msgID)
-			require.NoError(t, err)
-
-			leader := qbft.RoundRobinProposer(specqbft.Height(postSlot), specqbft.FirstRound, committeeInfo.committee, postBooleCfg)
-			signedSSVMessage := generateSignedMessageWithLeader(ks, msgID, postSlot, leader)
-			receivedAt := postBooleCfg.SlotStartTime(postSlot + 35)
+			msgID := spectypes.NewMsgID(postBooleCfg.DomainTypeAtSlot(slot), encodedCommitteeID, spectypes.RoleAggregatorCommittee)
+			signedSSVMessage := generateSignedMessage(postBooleLeaderCtx, ks, msgID, slot)
+			receivedAt := postBooleCfg.SlotStartTime(slot + 35)
 			booleTopicID := shares.active.BooleCommitteeSubnet().BooleTopic(postBooleCfg.SSV.Name)
 
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, booleTopicID, peerID, receivedAt)
@@ -1806,9 +1806,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					committee: committee,
 				}
 
-				slot := defaultSlot + phase0.Slot(i.Load())
-
-				signedSSVMessage := generateSignedMessage(testLeaderCtx, ks, committeeIdentifier, slot)
+				slot := netCfg.FirstSlotAtEpoch(1) + phase0.Slot(i.Load())
+				msgID := spectypes.NewMsgID(tc.cfg.DomainTypeAtSlot(slot), encodedCommitteeID, committeeRole)
+				signedSSVMessage := generateSignedMessage(testLeaderCtx, ks, msgID, slot)
 
 				receivedAt := netCfg.SlotStartTime(slot)
 
@@ -2146,37 +2146,6 @@ func generateSignedMessage(
 	}
 
 	leader := leaderForTest(ctx, qbftMessage.Height, qbftMessage.Round)
-	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
-	signedSSVMessage.FullData = fullData
-
-	return signedSSVMessage
-}
-
-func generateSignedMessageWithLeader(
-	ks *spectestingutils.TestKeySet,
-	identifier spectypes.MessageID,
-	slot phase0.Slot,
-	leader spectypes.OperatorID,
-	opts ...func(message *specqbft.Message),
-) *spectypes.SignedSSVMessage {
-	fullData := spectestingutils.TestingQBFTFullData
-	height := specqbft.Height(slot)
-
-	qbftMessage := &specqbft.Message{
-		MsgType:    specqbft.ProposalMsgType,
-		Height:     height,
-		Round:      specqbft.FirstRound,
-		Identifier: identifier[:],
-		Root:       sha256.Sum256(fullData),
-
-		RoundChangeJustification: [][]byte{},
-		PrepareJustification:     [][]byte{},
-	}
-
-	for _, opt := range opts {
-		opt(qbftMessage)
-	}
-
 	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 	signedSSVMessage.FullData = fullData
 

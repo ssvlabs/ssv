@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type Network struct {
@@ -30,6 +31,17 @@ const booleSubsequentWindowSlots = phase0.Slot(1) // slots after Boole to keep a
 // It combines the network name with fork name.
 func (n Network) StorageName() string {
 	return fmt.Sprintf("%s:%s", n.SSV.Name, alanForkName) // TODO: decide what forks change DB fork name
+}
+
+func (n Network) DomainTypeAtSlot(slot phase0.Slot) spectypes.DomainType {
+	if n.BooleForkAtSlot(slot) {
+		return n.NextDomainType
+	}
+	return n.DomainType
+}
+
+func (n Network) CurrentDomainType() spectypes.DomainType {
+	return n.DomainTypeAtSlot(n.EstimatedCurrentSlot())
 }
 
 func (n Network) BooleFork() bool {

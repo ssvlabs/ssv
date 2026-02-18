@@ -4,6 +4,7 @@ package validation
 // validator.go contains main code for validation and most of the rule checks.
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -234,6 +235,17 @@ func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, top
 		return e
 	}
 
+	return nil
+}
+
+func (mv *messageValidator) validateDomainAtSlot(msgID spectypes.MessageID, slot phase0.Slot) error {
+	expectedDomain := mv.netCfg.DomainTypeAtSlot(slot)
+	if msgDomain := msgID.GetDomain(); !bytes.Equal(msgDomain, expectedDomain[:]) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(msgDomain)
+		err.want = hex.EncodeToString(expectedDomain[:])
+		return err
+	}
 	return nil
 }
 

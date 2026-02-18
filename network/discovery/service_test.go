@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func TestNewDiscV5Service(t *testing.T) {
 	assert.NotNil(t, dvs.dv5Listener)
 	assert.NotNil(t, dvs.conns)
 	assert.NotNil(t, dvs.subnetsIdx)
-	assert.NotNil(t, dvs.ssvConfig)
+	assert.NotNil(t, dvs.netCfg)
 
 	// Check bootnodes
 	CheckBootnodes(t, dvs, testNetConfig)
@@ -121,6 +122,9 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 }
 
 func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig *networkconfig.Network) {
+	currentDomain := netConfig.CurrentDomainType()
+	nextDomain := netConfig.NextDomainType
+
 	// Check domain entry
 	domainEntry := records.DomainTypeEntry{
 		Key:        records.KeyDomainType,
@@ -128,7 +132,7 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	}
 	err := localNode.Node().Record().Load(&domainEntry)
 	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType, domainEntry.DomainType)
+	require.Equal(t, currentDomain, domainEntry.DomainType)
 
 	// Check next domain entry
 	nextDomainEntry := records.DomainTypeEntry{
@@ -137,14 +141,14 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	}
 	err = localNode.Node().Record().Load(&nextDomainEntry)
 	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType, nextDomainEntry.DomainType)
+	require.Equal(t, nextDomain, nextDomainEntry.DomainType)
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
+	opts := testingDiscoveryOptions(t, testNetConfig)
 	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
@@ -158,7 +162,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.ssvConfig = networkconfig.TestNetwork.SSV
+	dvs.netCfg = networkconfig.TestNetwork
 	// Test PublishENR method
 	dvs.PublishENR()
 
@@ -170,7 +174,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
+	opts := testingDiscoveryOptions(t, testNetConfig)
 
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
@@ -232,6 +236,8 @@ func TestDiscV5Service_Node(t *testing.T) {
 
 func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs := testingDiscovery(t)
+	currentDomain := testNetConfig.DomainTypeAtSlot(testNetConfig.EstimatedCurrentSlot())
+	currentDomainHex := hex.EncodeToString(currentDomain[:])
 
 	defer func() {
 		err := dvs.conn.Close()
@@ -251,16 +257,16 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Matching main domain
-	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, currentDomain, spectypes.DomainType{})))
 	require.NoError(t, err)
 
-	// Matching next domain
-	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
-	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
+	// Matching current domain via next-domain entry should not pass outside transition window.
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, currentDomain)))
+	require.ErrorContains(t, err, "domain type 00000000 doesn't match "+currentDomainHex)
 
 	// Mismatching domains
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
-	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
+	require.ErrorContains(t, err, "domain type 00000000 doesn't match "+currentDomainHex)
 
 	// No subnets
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutSubnets(t)))
@@ -365,7 +371,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			defer cancel()
 
 			// create options with unique ports for parallel testing
-			opts := testingDiscoveryOptions(t, testNetConfig.SSV)
+			opts := testingDiscoveryOptions(t, testNetConfig)
 			opts.DiscV5Opts.Port = uint16(13000 + i*10)
 			opts.DiscV5Opts.TCPPort = uint16(14000 + i*10)
 			opts.HostAddress = tc.hostAddress

@@ -319,6 +319,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		encryptedKey = encryptedKeys[i]
 	}
 
+	// Legacy field kept for storage/spec compatibility; runtime domain selection is slot-based elsewhere.
 	validatorShare.DomainType = eh.networkConfig.DomainType
 	validatorShare.Committee = shareMembers
 

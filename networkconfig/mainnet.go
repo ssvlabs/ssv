@@ -12,6 +12,7 @@ import (
 var MainnetSSV = &SSV{
 	Name:                 "mainnet",
 	DomainType:           spectypes.AlanMainnet,
+	NextDomainType:       spectypes.BooleMainnet,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},

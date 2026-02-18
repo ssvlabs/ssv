@@ -348,7 +348,7 @@ func fixRunnerForRun(
 func fixControllerForRun(logger *zap.Logger, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
 	config := protocoltesting.TestingConfig(logger, ks)
 	newContr := controller.NewController(
-		contr.Identifier,
+		contr.IdentifierFn,
 		contr.CommitteeMember,
 		config,
 		spectestingutils.NewOperatorSigner(ks, 1),
@@ -379,7 +379,7 @@ func fixInstanceForRun(
 		logger,
 		contr.GetConfig(),
 		share,
-		contr.Identifier,
+		contr.GetIdentifier(),
 		contr.Height,
 		signer,
 	)
