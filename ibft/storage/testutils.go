@@ -2,6 +2,7 @@ package storage
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,7 +22,8 @@ import (
 )
 
 var (
-	specModule = "github.com/ssvlabs/ssv-spec"
+	specGoModEnv = "SSV_SPEC_GOMOD"
+	specModule   = "github.com/ssvlabs/ssv-spec"
 )
 
 // TODO: add missing tests
@@ -211,10 +213,81 @@ func GetSpecDir(path, module string) (string, error) {
 }
 
 func GetModulePath(name, version string) (string, error) {
+	cachePath, err := moduleCachePath(name, version)
+	if err == nil {
+		if _, statErr := os.Stat(cachePath); statErr == nil {
+			return cachePath, nil
+		}
+	}
+
+	// Resolve from the selected modfile's build list first.
+	if resolvedPath, err := resolveModuleDirViaGoList(name); err == nil && strings.TrimSpace(resolvedPath) != "" {
+		return resolvedPath, nil
+	}
+
+	// If the module is not present in cache yet, ask Go to download it and
+	// report the extracted module dir.
+	modQuery := name
+	if version != "" {
+		modQuery = fmt.Sprintf("%s@%s", name, version)
+	}
+
+	args := []string{"mod", "download", "-json"}
+	if modfileArg, ok := specGoModArg(); ok {
+		args = append(args, modfileArg)
+	}
+	args = append(args, modQuery)
+	// #nosec G204 -- modQuery is built from parsed go.mod module path/version and executed without a shell.
+	cmd := exec.Command("go", args...)
+	cmd.Env = envWithOptionalGoMod()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("could not resolve module path for %s: %w; output: %s", modQuery, err, strings.TrimSpace(string(out)))
+	}
+
+	var downloaded struct {
+		Dir   string `json:"Dir"`
+		Error string `json:"Error"`
+	}
+	if err := json.Unmarshal(out, &downloaded); err != nil {
+		return "", fmt.Errorf("could not resolve module path for %s: invalid go mod download output: %w; output: %s", modQuery, err, strings.TrimSpace(string(out)))
+	}
+	if downloaded.Error != "" {
+		return "", fmt.Errorf("could not resolve module path for %s: %s", modQuery, downloaded.Error)
+	}
+	if strings.TrimSpace(downloaded.Dir) == "" {
+		// Some Go versions may omit Dir in download output; re-check using go list.
+		if resolvedPath, err := resolveModuleDirViaGoList(name); err == nil && strings.TrimSpace(resolvedPath) != "" {
+			return resolvedPath, nil
+		}
+		if cachePath != "" {
+			if _, statErr := os.Stat(cachePath); statErr == nil {
+				return cachePath, nil
+			}
+		}
+		return "", fmt.Errorf("could not resolve module path for %s: empty module dir", modQuery)
+	}
+	return downloaded.Dir, nil
+}
+
+func moduleCachePath(name, version string) (string, error) {
 	// first we need GOMODCACHE
 	cache, ok := os.LookupEnv("GOMODCACHE")
-	if !ok {
-		cache = path.Join(os.Getenv("GOPATH"), "pkg", "mod")
+	if !ok || strings.TrimSpace(cache) == "" {
+		goPath := strings.TrimSpace(os.Getenv("GOPATH"))
+		if goPath == "" {
+			// #nosec G204 -- fixed command and static arguments.
+			cmd := exec.Command("go", "env", "GOPATH")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return "", fmt.Errorf("could not resolve GOPATH: %w; output: %s", err, strings.TrimSpace(string(out)))
+			}
+			goPath = strings.TrimSpace(string(out))
+		}
+		if goPath == "" {
+			return "", errors.New("could not resolve GOPATH")
+		}
+		cache = path.Join(goPath, "pkg", "mod")
 	}
 
 	// then we need to escape path
@@ -232,24 +305,96 @@ func GetModulePath(name, version string) (string, error) {
 	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
 }
 
-func getGoModFile(path string) (*modfile.File, error) {
-	// find project root path
-	for {
-		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
-			break
-		}
-		path = filepath.Dir(path)
-		if path == "/" {
-			return nil, errors.New("could not find go.mod file")
+func envWithOptionalGoMod() []string {
+	env := os.Environ()
+	if _, ok := specGoModArg(); !ok {
+		return env
+	}
+	// Keep workspace mode disabled when using a selected modfile.
+	return append(env, "GOWORK=off")
+}
+
+func resolveModuleDirViaGoList(name string) (string, error) {
+	args := []string{"list", "-m", "-f", "{{.Dir}}"}
+	if modfileArg, ok := specGoModArg(); ok {
+		args = append(args, modfileArg)
+	}
+	args = append(args, name)
+
+	// #nosec G204 -- name comes from parsed go.mod module path and is passed as an argument (no shell evaluation).
+	cmd := exec.Command("go", args...)
+	cmd.Env = envWithOptionalGoMod()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("go list module dir failed for %s: %w; output: %s", name, err, strings.TrimSpace(string(out)))
+	}
+
+	resolvedPath := strings.TrimSpace(string(out))
+	if resolvedPath == "" || resolvedPath == "<no value>" {
+		return "", fmt.Errorf("go list module dir returned empty path for %s", name)
+	}
+
+	return resolvedPath, nil
+}
+
+func specGoModArg() (string, bool) {
+	modPath := strings.TrimSpace(os.Getenv(specGoModEnv))
+	if modPath == "" {
+		return "", false
+	}
+
+	if !filepath.IsAbs(modPath) {
+		if wd, err := os.Getwd(); err == nil {
+			if root, err := findModuleRoot(wd); err == nil {
+				modPath = filepath.Join(root, modPath)
+			}
 		}
 	}
 
+	return "-modfile=" + modPath, true
+}
+
+func getGoModFile(path string) (*modfile.File, error) {
+	if modPath := os.Getenv(specGoModEnv); modPath != "" {
+		if !filepath.IsAbs(modPath) {
+			root, err := findModuleRoot(path)
+			if err != nil {
+				return nil, err
+			}
+			modPath = filepath.Join(root, modPath)
+		}
+		buf, err := os.ReadFile(filepath.Clean(modPath))
+		if err != nil {
+			return nil, errors.New("could not read go.mod")
+		}
+		return modfile.Parse(modPath, buf, nil)
+	}
+
+	root, err := findModuleRoot(path)
+	if err != nil {
+		return nil, err
+	}
+
 	// read go.mod
-	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), "go.mod"))
+	buf, err := os.ReadFile(filepath.Join(filepath.Clean(root), "go.mod"))
 	if err != nil {
 		return nil, errors.New("could not read go.mod")
 	}
 
 	// parse go.mod
 	return modfile.Parse("go.mod", buf, nil)
+}
+
+func findModuleRoot(path string) (string, error) {
+	for {
+		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+			return path, nil
+		}
+		next := filepath.Dir(path)
+		if next == path || next == "/" {
+			return "", errors.New("could not find go.mod file")
+		}
+		path = next
+	}
 }
