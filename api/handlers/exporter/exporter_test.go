@@ -1553,6 +1553,60 @@ func TestExporterCommitteeTraces(t *testing.T) {
 	}
 }
 
+func TestExporterCommitteeTraces_AggregatorCommitteeScheduleNotEmpty(t *testing.T) {
+	store := newMockTraceStore()
+	validatorStore := newMockValidatorStore()
+	exp := newTestExporterForV2(store, validatorStore)
+
+	var committeeID spectypes.CommitteeID
+	committeeID[0] = 1
+
+	store.GetCommitteeDutiesFunc = func(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*exporter.CommitteeDutyTrace, error) {
+		require.ElementsMatch(t, []spectypes.RunnerRole{spectypes.RoleAggregatorCommittee}, roles)
+		return []*exporter.CommitteeDutyTrace{
+			{
+				Slot:        slot,
+				Role:        spectypes.RoleAggregatorCommittee,
+				CommitteeID: committeeID,
+			},
+		}, nil
+	}
+	store.GetScheduledFunc = func(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+		return map[phase0.ValidatorIndex]rolemask.Mask{
+			1: rolemask.BitAttester | rolemask.BitSyncCommittee,
+		}, nil
+	}
+	store.GetCommitteeDutyLinksFunc = func(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+		return []*exporter.CommitteeDutyLink{
+			{
+				ValidatorIndex: 1,
+				CommitteeID:    committeeID,
+			},
+		}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/traces/committee", buildJSONBody(t, map[string]any{
+		"from":  100,
+		"to":    100,
+		"roles": []string{"AGGREGATOR_COMMITTEE"},
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exp.CommitteeTraces(rec, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp CommitteeTracesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Data, 1)
+	require.Equal(t, "AGGREGATOR_COMMITTEE", resp.Data[0].Role)
+	require.Len(t, resp.Schedule, 1)
+	require.NotEmpty(t, resp.Schedule[0].Roles)
+	require.Contains(t, resp.Schedule[0].Roles, "ATTESTER")
+	require.Contains(t, resp.Schedule[0].Roles, "SYNC_COMMITTEE")
+}
+
 func TestExporterBuildValidatorSchedule_AllIndices(t *testing.T) {
 	store := newMockTraceStore()
 	validatorStore := newMockValidatorStore()
