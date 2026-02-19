@@ -95,6 +95,7 @@ func (c *Controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 	// basis).
 	// Note, we MUST sort shares for the target owner here somehow so that all SSV nodes in the cluster schedule
 	// the "same duty" (otherwise we won't have a majority of the cluster for some duties to work with).
+
 	const scheduledValidatorRegsLimit = 100
 
 	ownerShares := make([]*types.SSVShare, 0)
