@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/storage"
 )
 
@@ -170,6 +171,7 @@ func (e *TestEnv) setup(
 	// Create a client and connect to the simulator
 	e.execClient, err = executionclient.New(
 		ctx,
+		networkconfig.TestNetwork,
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),

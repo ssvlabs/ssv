@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 var _ Provider = &MultiClient{}
@@ -50,18 +51,15 @@ var _ Provider = &MultiClient{}
 // The execution MultiClient switches to EL2, the consensus multi client switches to CL2,
 // This shouldn't cause significant duty misses.
 type MultiClient struct {
+	networkConfig *networkconfig.Network
+
 	logger *zap.Logger
 
-	reqTimeout    time.Duration
-	reqRetryDelay time.Duration
-
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-
+	reqTimeout                 time.Duration
+	reqRetryDelay              time.Duration
 	healthInvalidationInterval time.Duration
-
-	syncDistanceTolerance uint64
+	syncDistanceTolerance      uint64
+	followDistance             uint64
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -75,12 +73,19 @@ type MultiClient struct {
 }
 
 // NewMulti creates a new instance of MultiClient.
-func NewMulti(ctx context.Context, nodeAddrs []string, contractAddr ethcommon.Address, opts ...OptionMulti) (*MultiClient, error) {
+func NewMulti(
+	ctx context.Context,
+	networkConfig *networkconfig.Network,
+	nodeAddrs []string,
+	contractAddr ethcommon.Address,
+	opts ...OptionMulti,
+) (*MultiClient, error) {
 	if len(nodeAddrs) == 0 {
 		return nil, fmt.Errorf("no node address provided")
 	}
 
 	multiClient := &MultiClient{
+		networkConfig:              networkConfig,
 		clientAddrs:                nodeAddrs,
 		clients:                    make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
 		clientsMu:                  make([]sync.Mutex, len(nodeAddrs)),
@@ -144,6 +149,7 @@ func (mc *MultiClient) getClient(ctx context.Context, clientIndex int) (SingleCl
 func (mc *MultiClient) connect(ctx context.Context, clientAddr string) (*ExecutionClient, error) {
 	singleClient, err := New(
 		ctx,
+		mc.networkConfig,
 		clientAddr,
 		mc.contractAddress,
 		WithLogger(mc.logger),
@@ -383,6 +389,20 @@ func (mc *MultiClient) Close() error {
 	}
 
 	return multiErr
+}
+
+// IsFinalizedFork returns whether the currently active EL client considers finality fork active.
+func (mc *MultiClient) IsFinalizedFork(ctx context.Context) bool {
+	f := func(client SingleClientProvider) (any, error) {
+		return client.IsFinalizedFork(ctx), nil
+	}
+	res, err := mc.call(contextWithMethod(ctx, "IsFinalizedFork"), f)
+	if err != nil {
+		mc.logger.Warn("failed to check if using finalized fork, assuming not using it",
+			zap.Error(err))
+		return false
+	}
+	return res.(bool)
 }
 
 // call calls f until it succeeds using MultiClient clients, starting with the most likely healthy client

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 var (
@@ -124,15 +126,24 @@ func (env *testEnv) deployCallableContract() (*bind.BoundContract, error) {
 
 // createClient creates and validates a new execution client with given options.
 func (env *testEnv) createClient(options ...Option) error {
-	return env.createClientWithCleanup(true, options...)
+	return env.createClientWithCleanupAndNetwork(true, networkconfig.TestNetwork, options...)
+}
+
+// createClientWithNetwork creates and validates a new execution client with a custom network config.
+func (env *testEnv) createClientWithNetwork(networkCfg *networkconfig.Network, options ...Option) error {
+	return env.createClientWithCleanupAndNetwork(true, networkCfg, options...)
 }
 
 // createClientWithCleanup creates and initializes an execution client, optionally registering it for cleanup.
 // If registerCleanup is false, the caller is responsible for closing the client.
 func (env *testEnv) createClientWithCleanup(registerCleanup bool, options ...Option) error {
+	return env.createClientWithCleanupAndNetwork(registerCleanup, networkconfig.TestNetwork, options...)
+}
+
+func (env *testEnv) createClientWithCleanupAndNetwork(registerCleanup bool, networkCfg *networkconfig.Network, options ...Option) error {
 	allOptions := append([]Option{}, options...)
 	var err error
-	env.client, err = New(env.ctx, env.wsURL, env.contractAddr, allOptions...)
+	env.client, err = New(env.ctx, networkCfg, env.wsURL, env.contractAddr, allOptions...)
 	if err != nil {
 		return err
 	}
@@ -141,6 +152,15 @@ func (env *testEnv) createClientWithCleanup(registerCleanup bool, options ...Opt
 	}
 
 	return env.client.Healthy(env.ctx)
+}
+
+func cloneTestNetwork() *networkconfig.Network {
+	n := *networkconfig.TestNetwork
+	b := *networkconfig.TestNetwork.Beacon
+	s := *networkconfig.TestNetwork.SSV
+	n.Beacon = &b
+	n.SSV = &s
+	return &n
 }
 
 // createBlocksWithLogs creates a specified number of blocks with Call transactions.
@@ -275,7 +295,39 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, logs)
 		require.Nil(t, fetchErrCh)
-		require.ErrorContains(t, err, "get current block")
+		require.ErrorContains(t, err, "get current head")
+	})
+}
+
+func TestIsFinalizedFork(t *testing.T) {
+	t.Run("pre-fork returns false", func(t *testing.T) {
+		env := setupTestEnv(t, 3*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		network := cloneTestNetwork()
+		network.SSV.Forks = networkconfig.SSVForks{
+			FinalityConsensus: math.MaxUint64,
+		}
+
+		err = env.createClientWithNetwork(network)
+		require.NoError(t, err)
+		require.False(t, env.client.IsFinalizedFork(env.ctx))
+	})
+
+	t.Run("post-fork returns true", func(t *testing.T) {
+		env := setupTestEnv(t, 3*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		network := cloneTestNetwork()
+		network.SSV.Forks = networkconfig.SSVForks{
+			FinalityConsensus: 0,
+		}
+
+		err = env.createClientWithNetwork(network)
+		require.NoError(t, err)
+		require.True(t, env.client.IsFinalizedFork(env.ctx))
 	})
 }
 
@@ -382,6 +434,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			opts := []Option{WithFollowDistance(0)}
 
 			client, err := New(t.Context(),
+				networkconfig.TestNetwork,
 				srv.URL,
 				env.contractAddr,
 				opts...,

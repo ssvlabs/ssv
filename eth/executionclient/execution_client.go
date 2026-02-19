@@ -8,15 +8,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/metrics"
 )
@@ -32,6 +35,7 @@ type Provider interface {
 	Healthy(ctx context.Context) error
 	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error)
 	FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error)
+	IsFinalizedFork(ctx context.Context) bool
 	Close() error
 }
 
@@ -46,6 +50,7 @@ var _ Provider = &ExecutionClient{}
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
+	networkConfig   *networkconfig.Network
 	nodeAddr        string
 	contractAddress ethcommon.Address
 
@@ -54,9 +59,7 @@ type ExecutionClient struct {
 	reqTimeout    time.Duration
 	reqRetryDelay time.Duration
 
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+	followDistance uint64
 
 	syncDistanceTolerance uint64
 	// syncProgressFn is a struct-field so it can be overwritten for testing
@@ -71,8 +74,15 @@ type ExecutionClient struct {
 }
 
 // New creates a new instance of ExecutionClient.
-func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
+func New(
+	ctx context.Context,
+	networkConfig *networkconfig.Network,
+	nodeAddr string,
+	contractAddr ethcommon.Address,
+	opts ...Option,
+) (*ExecutionClient, error) {
 	ec := &ExecutionClient{
+		networkConfig:              networkConfig,
 		nodeAddr:                   nodeAddr,
 		contractAddress:            contractAddr,
 		logger:                     zap.NewNop(),
@@ -131,21 +141,37 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	err error,
 ) {
 	start := time.Now()
-	currentBlock, err := ec.client.BlockNumber(ctx)
-	recordRequest(ctx, ec.logger, "BlockNumber", ec, time.Since(start), err)
+	head, err := ec.client.HeaderByNumber(ctx, nil)
+	recordRequest(ctx, ec.logger, "HeaderByNumber", ec, time.Since(start), err)
 	if err != nil {
-		return nil, nil, ec.errSingleClient(fmt.Errorf("get current block: %w", err), "eth_blockNumber")
+		return nil, nil, ec.errSingleClient(fmt.Errorf("get current head: %w", err), "eth_getBlockByNumber")
 	}
-	if currentBlock < ec.followDistance {
-		return nil, nil, ErrNothingToSync
+
+	currentBlock := head.Number.Uint64()
+	currentEpoch := ec.epochFromBlockHeader(head)
+
+	var toBlock uint64
+	if currentEpoch >= ec.networkConfig.SSV.Forks.FinalityConsensus {
+		// Post-fork: use finalized block
+		toBlock, err = ec.getFinalizedBlock(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+	} else {
+		// Pre-fork: use follow distance
+		if currentBlock < ec.followDistance {
+			return nil, nil, ErrNothingToSync
+		}
+		toBlock = currentBlock - ec.followDistance
 	}
-	toBlock := currentBlock - ec.followDistance
+
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}
 
 	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
-	return
+
+	return logsCh, errsCh, nil
 }
 
 // Calls FilterLogs multiple times (in batches) gradually sending the results on logCh to avoid fetching
@@ -357,18 +383,36 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (lo
 	return logsCh
 }
 
-// Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
+// healthy checks if the execution client is currently in a healthy state.
+// It performs different checks based on whether the finality fork is active:
+//
+// Pre-fork (follow distance approach):
+// - Verifies the client responds to requests
+// - Checks if the sync distance is within the acceptable tolerance
+//
+// Post-fork (finality approach):
+// - Verifies the client responds to requests
+// - Checks if the sync distance is within the acceptable tolerance
+// - Checks if finalized blocks are available
+//
+// The method returns nil if the client is healthy, or an error explaining why it's not.
+// Error types include:
+// - errSyncing: when the client is still synchronizing blocks
+// - network errors: when the client doesn't respond
+// TODO: update for related stuff (names, etc)
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if ec.isClosed() {
 		return ErrClosed
 	}
 
+	// Check if we recently validated health
 	lastHealthyTime := time.Unix(ec.lastHealthyTime.Load(), 0)
 	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
 		// Synced recently, reuse the result (only if ec.healthInvalidationInterval is set).
 		return nil
 	}
 
+	// 1. Check if client is reachable
 	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
 	recordRequest(ctx, ec.logger, "SyncProgress", ec, time.Since(start), err)
@@ -377,6 +421,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return ec.errSingleClient(fmt.Errorf("get sync progress: %w", err), "eth_syncing")
 	}
 
+	// 2. Check sync distance
 	if sp != nil {
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
 		metrics.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
@@ -388,6 +433,24 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		}
 	} else {
 		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+	}
+
+	// 3. Check finalized block availability (post-fork only)
+	start = time.Now()
+	head, err := ec.client.HeaderByNumber(ctx, nil)
+	recordRequest(ctx, ec.logger, "HeaderByNumber", ec, time.Since(start), err)
+	if err != nil {
+		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+		return ec.errSingleClient(fmt.Errorf("get current head: %w", err), "eth_getBlockByNumber")
+	}
+
+	currentEpoch := ec.epochFromBlockHeader(head)
+
+	if currentEpoch >= ec.networkConfig.SSV.Forks.FinalityConsensus {
+		if _, err := ec.getFinalizedBlock(ctx); err != nil {
+			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+			return err
+		}
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
@@ -410,7 +473,7 @@ func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.
 func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error) {
 	start := time.Now()
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
-	recordRequest(ctx, ec.logger, "SubscribeFilterLogs", ec, time.Since(start), err)
+	recordRequest(ctx, ec.logger, "eth_subscribe", ec, time.Since(start), err)
 	if err != nil {
 		return nil, ec.errSingleClient(fmt.Errorf("subscribe to filtered logs (query=%s): %w", q, err), "logs")
 	}
@@ -446,7 +509,7 @@ func (ec *ExecutionClient) streamLogsToChan(
 	logCh chan<- BlockLogs,
 	fromBlock uint64,
 ) (lastBlock uint64, progressed bool, err error) {
-	heads := make(chan *ethtypes.Header)
+	headersCh := make(chan *ethtypes.Header)
 
 	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
 	//
@@ -464,12 +527,14 @@ func (ec *ExecutionClient) streamLogsToChan(
 	// We can revert the tx if there was an error in processing all the events of a block.
 	// So we can restart from this block once everything is good.
 	start := time.Now()
-	sub, err := ec.client.SubscribeNewHead(ctx, heads)
-	recordRequest(ctx, ec.logger, "SubscribeNewHead", ec, time.Since(start), err)
+	sub, err := ec.client.SubscribeNewHead(ctx, headersCh)
+	recordRequest(ctx, ec.logger, "eth_subscribe", ec, time.Since(start), err)
 	if err != nil {
 		return 0, false, ec.errSingleClient(fmt.Errorf("subscribe new head: %w", err), "newHeads")
 	}
 	defer sub.Unsubscribe()
+
+	var lastFinalized uint64
 
 	for {
 		select {
@@ -479,21 +544,60 @@ func (ec *ExecutionClient) streamLogsToChan(
 		case <-ec.closed:
 			return lastBlock, progressed, ErrClosed
 
-		case err := <-sub.Err():
-			if err == nil {
+		case subErr := <-sub.Err():
+			if subErr == nil {
 				return lastBlock, progressed, fmt.Errorf("subscription error: nil error")
 			}
-			return lastBlock, progressed, fmt.Errorf("subscription error: %w", err)
+			return lastBlock, progressed, fmt.Errorf("subscription error: %w", subErr)
 
-		case header := <-heads:
-			if header.Number.Uint64() < ec.followDistance {
-				continue
+		case header := <-headersCh:
+			headerNum := header.Number.Uint64()
+			ec.logger.Debug("new head received",
+				fields.BlockNumber(headerNum),
+				zap.String("head_hash", header.Hash().Hex()),
+				zap.String("head_parent_hash", header.ParentHash.Hex()))
+
+			var toBlock uint64
+
+			// Determine target block based on fork state
+			currentEpoch := ec.epochFromBlockHeader(header)
+
+			if currentEpoch >= ec.networkConfig.SSV.Forks.FinalityConsensus {
+				// Post-fork: use finalized block
+				toBlock, err = ec.getFinalizedBlock(ctx)
+				if err != nil {
+					return lastBlock, progressed, err
+				}
+
+				if toBlock != lastFinalized {
+					finalizedHeader, err := ec.client.HeaderByNumber(ctx, new(big.Int).SetUint64(toBlock))
+					if err == nil {
+						finalizedEpoch := ec.epochFromBlockHeader(finalizedHeader)
+						ec.logger.Info("⏱ finalized block changed",
+							zap.Uint64("new_finalized", toBlock),
+							zap.Uint64("estimated_epoch", uint64(finalizedEpoch)),
+							zap.Uint64("previous_finalized", lastFinalized))
+					}
+					lastFinalized = toBlock
+				}
+			} else {
+				// Pre-fork: follow distance approach
+				if headerNum < ec.followDistance {
+					continue
+				}
+				toBlock = headerNum - ec.followDistance
 			}
-			toBlock := header.Number.Uint64() - ec.followDistance
+
 			if toBlock < fromBlock {
+				isUsingFinalized := currentEpoch >= ec.networkConfig.SSV.Forks.FinalityConsensus
+				ec.logger.Info("waiting for target block to reach fromBlock",
+					fields.FromBlock(fromBlock),
+					fields.ToBlock(toBlock),
+					zap.Bool("finalized_fork", isUsingFinalized))
 				continue
 			}
 
+			// Process logs for this block range
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
 				logCh <- block
@@ -548,4 +652,32 @@ func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	}
 
 	return chainID, nil
+}
+
+// IsFinalizedFork returns whether finalized blocks should be used for event syncing.
+func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
+	start := time.Now()
+	head, err := ec.client.HeaderByNumber(ctx, nil)
+	recordRequest(ctx, ec.logger, "eth_getBlockByNumber", ec, time.Since(start), err)
+	if err != nil {
+		ec.logger.Warn("failed to resolve fork mode, defaulting to pre-finality", zap.Error(err))
+		return false
+	}
+	return ec.epochFromBlockHeader(head) >= ec.networkConfig.SSV.Forks.FinalityConsensus
+}
+
+func (ec *ExecutionClient) getFinalizedBlock(ctx context.Context) (uint64, error) {
+	start := time.Now()
+	header, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	recordRequest(ctx, ec.logger, "eth_getBlockByNumber", ec, time.Since(start), err)
+	if err != nil {
+		return 0, ec.errSingleClient(fmt.Errorf("get finalized block: %w", err), "eth_getBlockByNumber")
+	}
+	return header.Number.Uint64(), nil
+}
+
+func (ec *ExecutionClient) epochFromBlockHeader(header *ethtypes.Header) phase0.Epoch {
+	blockTime := time.Unix(int64(header.Time), 0) // #nosec G115
+	slot := ec.networkConfig.EstimatedSlotAtTime(blockTime)
+	return ec.networkConfig.EstimatedEpochAtSlot(slot)
 }

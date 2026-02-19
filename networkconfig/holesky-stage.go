@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -20,5 +21,7 @@ var HoleskyStageSSV = &SSV{
 		"enr:-Ja4QDRUBjWOvVfGxpxvv3FqaCy3psm7IsKu5ETb1GXiexGYDFppD33t7AHRfmQddoAkBiyb7pt4t7ZN0sNB9CsW4I-GAZGOmChMgmlkgnY0gmlwhAorXxuJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
-	Forks:                   SSVForks{},
+	Forks: SSVForks{
+		FinalityConsensus: math.MaxUint64,
+	},
 }

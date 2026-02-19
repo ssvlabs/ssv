@@ -27,7 +27,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		Forks:                SSVForks{},
+		Forks:                SSVForks{FinalityConsensus: 1},
 	}
 
 	// Marshal to JSON
@@ -66,7 +66,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		Forks:                SSVForks{},
+		Forks:                SSVForks{FinalityConsensus: 1},
 	}
 
 	// Marshal to YAML
@@ -159,7 +159,7 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			Forks:                SSVForks{},
+			Forks:                SSVForks{FinalityConsensus: 1},
 		}
 
 		// Marshal and unmarshal to test preservation
@@ -181,7 +181,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "a6d7d78c5e55f7239587e2261fc27dfb097045e7284286191202f6a3f6c8b605"
+		expectedJSONHash := "ea835a060b5c472791b0c40b9024b3991873461afece91455d3f63dd54f0dedf"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -195,7 +195,7 @@ func TestFieldPreservation(t *testing.T) {
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 			Bootnodes:            []string{"bootnode1", "bootnode2"},
 			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			Forks:                SSVForks{},
+			Forks:                SSVForks{FinalityConsensus: 1},
 		}
 
 		// Marshal and unmarshal to test preservation

@@ -36,6 +36,13 @@ func WithFollowDistance(offset uint64) Option {
 	}
 }
 
+// WithFollowDistanceMulti sets finalization offset for all single clients managed by MultiClient.
+func WithFollowDistanceMulti(offset uint64) OptionMulti {
+	return func(s *MultiClient) {
+		s.followDistance = offset
+	}
+}
+
 // WithReqTimeout sets timeout for RPC requests to eth1 node.
 // The timeout must be positive, otherwise the default value will be used.
 func WithReqTimeout(timeout time.Duration) Option {

@@ -19,6 +19,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 )
 
@@ -39,6 +40,7 @@ func TestNewMulti(t *testing.T) {
 
 		mc, err := NewMulti(
 			ctx,
+			networkconfig.TestNetwork,
 			addresses,
 			contractAddr,
 		)
@@ -66,27 +68,31 @@ func TestNewMulti(t *testing.T) {
 		contractAddr := ethcommon.HexToAddress("0x1234")
 
 		customLogger := zap.NewExample()
+		const customFollowDistance = uint64(10)
 		const customTimeout = 100 * time.Millisecond
 		const customSyncDistanceTolerance = 12
 
 		mc, err := NewMulti(
 			ctx,
+			networkconfig.TestNetwork,
 			addresses,
 			contractAddr,
 			WithLoggerMulti(customLogger),
+			WithFollowDistanceMulti(customFollowDistance),
 			WithReqTimeoutMulti(customTimeout),
 			WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, mc)
 		require.Equal(t, customLogger.Named(log.NameExecutionClientMulti), mc.logger)
+		require.EqualValues(t, customFollowDistance, mc.followDistance)
 		require.EqualValues(t, customTimeout, mc.reqTimeout)
 		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
 	})
 	t.Run("no node addresses", func(t *testing.T) {
 		ctx := t.Context()
 
-		mc, err := NewMulti(ctx, []string{}, ethcommon.Address{})
+		mc, err := NewMulti(ctx, networkconfig.TestNetwork, []string{}, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err, "expected an error due to no node addresses")
@@ -98,7 +104,7 @@ func TestNewMulti(t *testing.T) {
 		addr := "invalid-addr"
 		addresses := []string{addr}
 
-		mc, err := NewMulti(ctx, addresses, ethcommon.Address{})
+		mc, err := NewMulti(ctx, networkconfig.TestNetwork, addresses, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err)

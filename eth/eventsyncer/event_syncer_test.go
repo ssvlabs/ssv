@@ -16,6 +16,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -118,7 +119,7 @@ func TestEventSyncer(t *testing.T) {
 		eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
 
 		addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
-		client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+		client, err := executionclient.New(ctx, networkconfig.TestNetwork, addr, contractAddr, executionclient.WithLogger(logger))
 		require.NoError(t, err)
 
 		err = client.Healthy(ctx)
@@ -156,7 +157,7 @@ func TestEventSyncer(t *testing.T) {
 		eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
 
 		addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
-		client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+		client, err := executionclient.New(ctx, networkconfig.TestNetwork, addr, contractAddr, executionclient.WithLogger(logger))
 		require.NoError(t, err)
 
 		err = client.Healthy(ctx)
@@ -276,10 +277,11 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 	return nodeStorage, operatorData
 }
 
-func TestBlockBelowThreshold(t *testing.T) {
+func TestEnsureBlockAboveThreshold(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := NewMockExecutionClient(ctrl)
 	ctx := t.Context()
+	m.EXPECT().IsFinalizedFork(ctx).Return(false).AnyTimes()
 
 	s := New(nil, m, nil)
 
@@ -302,5 +304,43 @@ func TestBlockBelowThreshold(t *testing.T) {
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
 		err := s.ensureBlockAboveThreshold(ctx, big.NewInt(1))
 		require.NoError(t, err)
+	})
+}
+
+func TestEnsureBlockAboveThreshold_FinalizedFork(t *testing.T) {
+	t.Run("success relative to finalized head", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		m := NewMockExecutionClient(ctrl)
+		ctx := t.Context()
+
+		s := New(nil, m, nil)
+
+		finalizedTime := time.Now().Add(-100 * time.Second)
+		finalizedHeader := &ethtypes.Header{Time: uint64(finalizedTime.Unix()), Number: big.NewInt(100)}
+		processedHeader := &ethtypes.Header{Time: uint64(finalizedTime.Add(-50 * time.Second).Unix()), Number: big.NewInt(90)}
+
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(90)).Return(processedHeader, nil)
+		m.EXPECT().IsFinalizedFork(ctx).Return(true)
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(finalizedHeader, nil)
+
+		require.NoError(t, s.ensureBlockAboveThreshold(ctx, big.NewInt(90)))
+	})
+
+	t.Run("fails when finalized head fetch fails", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		m := NewMockExecutionClient(ctrl)
+		ctx := t.Context()
+
+		s := New(nil, m, nil)
+
+		processedHeader := &ethtypes.Header{Time: uint64(time.Now().Unix()), Number: big.NewInt(1)}
+		expectedErr := errors.New("finalized header error")
+
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(processedHeader, nil)
+		m.EXPECT().IsFinalizedFork(ctx).Return(true)
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(nil, expectedErr)
+
+		err := s.ensureBlockAboveThreshold(ctx, big.NewInt(1))
+		require.ErrorIs(t, err, expectedErr)
 	})
 }
