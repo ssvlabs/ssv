@@ -790,7 +790,6 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		// map pubkey to validator index for internal storage
 		index, found := c.validators.ValidatorIndex(validatorPK)
 		if !found {
-			c.logger.Error("validator not found by pubkey", fields.Validator(validatorPK[:]))
 			return fmt.Errorf("validator not found by pubkey: %x", validatorPK[:])
 		}
 

@@ -168,11 +168,8 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 // hasSignersForRoles checks if the duty has signers for the given beacon role(s).
 // Committee duties are keyed by runner role, but we still use the per-role signer
 // buckets to distinguish between attester vs aggregator and sync committee vs SCC.
+// Callers should handle the "no role filter" case before invoking this helper.
 func hasSignersForRoles(duty *exporter.CommitteeDutyTrace, roles ...spectypes.BeaconRole) bool {
-	if len(roles) == 0 {
-		// No role filter means "match all committee duties".
-		return true
-	}
 	// Signer buckets are role-specific; use them to ensure the duty matches the requested beacon roles.
 	for _, role := range roles {
 		if role == spectypes.BNRoleAttester || role == spectypes.BNRoleAggregator {
@@ -199,7 +196,7 @@ func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, role spectypes.Ru
 	return trace, nil
 }
 
-func runnerRolesForBeaconRoles(roles ...spectypes.BeaconRole) []spectypes.RunnerRole {
+func committeeRunnerRolesForBeaconRoles(roles ...spectypes.BeaconRole) []spectypes.RunnerRole {
 	if len(roles) == 0 {
 		return nil
 	}
@@ -237,7 +234,7 @@ func runnerRoleAllowed(role spectypes.RunnerRole, allowed []spectypes.RunnerRole
 func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]ParticipantsRangeIndexEntry, error) {
 	var errs *multierror.Error
 
-	runnerRoles := runnerRolesForBeaconRoles(roles...)
+	runnerRoles := committeeRunnerRolesForBeaconRoles(roles...)
 	duties, err := c.GetCommitteeDuties(slot, runnerRoles...)
 	errs = multierror.Append(errs, err)
 	if len(duties) == 0 {
@@ -321,7 +318,7 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, index phase0.Validato
 		return nil, fmt.Errorf("get committee ID by slot(%d) and index(%d): %w", slot, index, err)
 	}
 
-	runnerRoles := runnerRolesForBeaconRoles(roles...)
+	runnerRoles := committeeRunnerRolesForBeaconRoles(roles...)
 	if len(runnerRoles) == 0 {
 		runnerRoles = []spectypes.RunnerRole{spectypes.RoleCommittee, spectypes.RoleAggregatorCommittee}
 	}
@@ -335,7 +332,7 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, index phase0.Validato
 			}
 			return nil, fmt.Errorf("get committee duty: %w", dutyErr)
 		}
-		if hasSignersForRoles(d, roles...) {
+		if len(roles) == 0 || hasSignersForRoles(d, roles...) {
 			duty = d
 			break
 		}
