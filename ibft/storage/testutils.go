@@ -22,8 +22,7 @@ import (
 )
 
 var (
-	specGoModEnv = "SSV_SPEC_GOMOD"
-	specModule   = "github.com/ssvlabs/ssv-spec"
+	specModule = "github.com/ssvlabs/ssv-spec"
 )
 
 // TODO: add missing tests
@@ -339,7 +338,7 @@ func resolveModuleDirViaGoList(name string) (string, error) {
 }
 
 func specGoModArg() (string, bool) {
-	modPath := strings.TrimSpace(os.Getenv(specGoModEnv))
+	modPath := specGoModFile
 	if modPath == "" {
 		return "", false
 	}
@@ -356,7 +355,7 @@ func specGoModArg() (string, bool) {
 }
 
 func getGoModFile(path string) (*modfile.File, error) {
-	if modPath := os.Getenv(specGoModEnv); modPath != "" {
+	if modPath := specGoModFile; modPath != "" {
 		if !filepath.IsAbs(modPath) {
 			root, err := findModuleRoot(path)
 			if err != nil {
