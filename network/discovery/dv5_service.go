@@ -244,11 +244,7 @@ func (dvs *DiscV5Service) isDomainCompatible(nodeDomainType spectypes.DomainType
 		return false
 	}
 
-	// During transition, accept either configured fork domain for compatibility.
-	return nodeDomainType == dvs.netCfg.DomainType ||
-		nodeNextDomainType == dvs.netCfg.DomainType ||
-		nodeDomainType == dvs.netCfg.NextDomainType ||
-		nodeNextDomainType == dvs.netCfg.NextDomainType
+	return nodeDomainType == dvs.netCfg.NextDomainType || nodeNextDomainType == dvs.netCfg.NextDomainType
 }
 
 // initDiscV5Listener creates a new listener and starts it
