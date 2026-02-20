@@ -35,5 +35,5 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 			require.EqualValues(t, test.ExpectedRoots[i], r)
 		}
 	}
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), lastErr)
 }
