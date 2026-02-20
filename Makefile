@@ -74,7 +74,7 @@ spec-test:
 spec-test-alan:
 	@echo "Running spec tests against ssv-spec Alan"
 	@$(MAKE) spec-test-alan-deps
-	@SSV_SPEC_GOMOD=go.spec.alan.mod go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
+	@go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
 
 .PHONY: all-spec-test-raceless
 all-spec-test-raceless:
@@ -85,7 +85,7 @@ all-spec-test-raceless:
 all-spec-test-alan-raceless:
 	@echo "Running spec tests against ssv-spec Alan (raceless)"
 	@$(MAKE) spec-test-alan-deps
-	@SSV_SPEC_GOMOD=go.spec.alan.mod go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
+	@go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
 
 .PHONY: spec-test-alan-deps
 spec-test-alan-deps:

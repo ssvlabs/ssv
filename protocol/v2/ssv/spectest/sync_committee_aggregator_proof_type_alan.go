@@ -80,11 +80,28 @@ func normalizeAlanSyncCommitteeDuty(
 		t.Fatalf("sync committee duty is nil")
 	}
 
+	// Alan vectors are generated with sync committee indices [0,1,2].
+	// Newer fixtures may carry [0,129,257], which changes signing roots.
+	alanIndices := []spectypes.ValidatorSyncCommitteeIndex{0, 1, 2}
+
 	sharePubKey := phase0.BLSPubKey(validatorPubKey)
-	if duty.PubKey != sharePubKey || duty.ValidatorIndex != validatorIndex {
+	needsPatch := duty.PubKey != sharePubKey || duty.ValidatorIndex != validatorIndex
+	if len(duty.ValidatorSyncCommitteeIndices) != len(alanIndices) {
+		needsPatch = true
+	} else {
+		for i, idx := range duty.ValidatorSyncCommitteeIndices {
+			if idx != alanIndices[i] {
+				needsPatch = true
+				break
+			}
+		}
+	}
+
+	if needsPatch {
 		patched := *duty
 		patched.PubKey = sharePubKey
 		patched.ValidatorIndex = validatorIndex
+		patched.ValidatorSyncCommitteeIndices = alanIndices
 		return &patched
 	}
 

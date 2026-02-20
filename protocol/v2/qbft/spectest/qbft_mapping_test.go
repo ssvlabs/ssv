@@ -18,7 +18,7 @@ import (
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
-func TestQBFTMapping(t *testing.T) {
+func runQBFTMappingTest(t *testing.T) {
 	path, _ := os.Getwd()
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
@@ -79,13 +79,10 @@ func TestQBFTMapping(t *testing.T) {
 			typedTest := &spectests.RoundRobinSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
-			t.Run(typedTest.TestName(), func(t *testing.T) { // using only spec struct so no need to run our version (TODO: check how we choose leader)
+			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
-				typedTest.Run(t)
+				runRoundRobinSpecTest(t, typedTest)
 			})
-			/*t.Run(typedTest.TestName(), func(t *testing.T) {
-				RunMsg(t, typedTest)
-			})*/
 		case reflect.TypeOf(&timeout.SpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
