@@ -163,6 +163,35 @@ func cloneTestNetwork() *networkconfig.Network {
 	return &n
 }
 
+func rewriteFinalizedAsLatest(base http.Handler, finalizedCalls *atomic.Int32) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+
+		var req map[string]any
+		if err := json.Unmarshal(raw, &req); err == nil && req["method"] == "eth_getBlockByNumber" {
+			params, ok := req["params"].([]any)
+			if ok && len(params) > 0 {
+				if blockTag, ok := params[0].(string); ok && blockTag == "finalized" {
+					finalizedCalls.Add(1)
+					params[0] = "latest"
+					req["params"] = params
+					if updated, marshalErr := json.Marshal(req); marshalErr == nil {
+						raw = updated
+					}
+				}
+			}
+		}
+
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		r.ContentLength = int64(len(raw))
+		base.ServeHTTP(w, r)
+	})
+}
+
 // createBlocksWithLogs creates a specified number of blocks with Call transactions.
 func (env *testEnv) createBlocksWithLogs(contract *bind.BoundContract, count int, delay time.Duration) error {
 	for i := 0; i < count; i++ {
@@ -297,6 +326,92 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.Nil(t, fetchErrCh)
 		require.ErrorContains(t, err, "get current head")
 	})
+}
+
+func TestFetchHistoricalLogs_FinalizedModeUsesFinalizedHead(t *testing.T) {
+	env := setupTestEnv(t, 5*time.Second)
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
+
+	const producedBlocks = 12
+	err = env.createBlocksWithLogs(contract, producedBlocks, 0)
+	require.NoError(t, err)
+
+	rpcSrv, _ := env.sim.Node().RPCHandler()
+	var finalizedCalls atomic.Int32
+	srv := httptest.NewServer(rewriteFinalizedAsLatest(http.Handler(rpcSrv), &finalizedCalls))
+	t.Cleanup(srv.Close)
+
+	network := cloneTestNetwork()
+	network.SSV.Forks = networkconfig.SSVForks{FinalityConsensus: 0}
+
+	// Use a large follow distance so pre-fork logic would return ErrNothingToSync.
+	client, err := New(t.Context(), network, srv.URL, env.contractAddr, WithFollowDistance(100))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	logsCh, errCh, err := client.FetchHistoricalLogs(t.Context(), 0)
+	require.NoError(t, err)
+
+	var logsCount int
+	for block := range logsCh {
+		logsCount += len(block.Logs)
+	}
+
+	require.NoError(t, <-errCh)
+	require.Equal(t, producedBlocks, logsCount)
+	require.Greater(t, finalizedCalls.Load(), int32(0))
+}
+
+func TestFetchHistoricalLogs_ForkBoundarySwitchesBehavior(t *testing.T) {
+	env := setupTestEnv(t, 5*time.Second)
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
+
+	const (
+		producedBlocks = 16
+		followDistance = 8
+	)
+	err = env.createBlocksWithLogs(contract, producedBlocks, 0)
+	require.NoError(t, err)
+
+	rpcSrv, _ := env.sim.Node().RPCHandler()
+	var finalizedCalls atomic.Int32
+	srv := httptest.NewServer(rewriteFinalizedAsLatest(http.Handler(rpcSrv), &finalizedCalls))
+	t.Cleanup(srv.Close)
+
+	preForkNetwork := cloneTestNetwork()
+	preForkNetwork.SSV.Forks = networkconfig.SSVForks{FinalityConsensus: math.MaxUint64}
+	preForkClient, err := New(t.Context(), preForkNetwork, srv.URL, env.contractAddr, WithFollowDistance(followDistance))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, preForkClient.Close()) })
+
+	preForkLogsCh, preForkErrCh, err := preForkClient.FetchHistoricalLogs(t.Context(), 0)
+	require.NoError(t, err)
+
+	preForkLogCount := 0
+	for block := range preForkLogsCh {
+		preForkLogCount += len(block.Logs)
+	}
+	require.NoError(t, <-preForkErrCh)
+	require.Equal(t, producedBlocks-followDistance, preForkLogCount)
+
+	postForkNetwork := cloneTestNetwork()
+	postForkNetwork.SSV.Forks = networkconfig.SSVForks{FinalityConsensus: 0}
+	postForkClient, err := New(t.Context(), postForkNetwork, srv.URL, env.contractAddr, WithFollowDistance(followDistance))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, postForkClient.Close()) })
+
+	postForkLogsCh, postForkErrCh, err := postForkClient.FetchHistoricalLogs(t.Context(), 0)
+	require.NoError(t, err)
+
+	postForkLogCount := 0
+	for block := range postForkLogsCh {
+		postForkLogCount += len(block.Logs)
+	}
+	require.NoError(t, <-postForkErrCh)
+	require.Equal(t, producedBlocks, postForkLogCount)
+	require.Greater(t, finalizedCalls.Load(), int32(0))
 }
 
 func TestIsFinalizedFork(t *testing.T) {

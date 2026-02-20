@@ -21,23 +21,22 @@ The `generate-config` command allows you to generate a YAML configuration file b
 
 ### Flags
 
-| Flag                                 | Type   | Default                           | Description                                                                |
-|--------------------------------------|--------|-----------------------------------|----------------------------------------------------------------------------|
-| `--output-path`                      | string | `./config/config.local.yaml`      | Output path for the generated configuration file.                          |
-| `--log-level`                        | string | `info`                            | Sets the logging level (e.g., `debug`, `info`, `warn`, `error`).           |
-| `--db-path`                          | string | `./data/db`                       | Path to the database directory.                                            |
-| `--discovery`                        | string | `mdns`                            | Discovery method.                                                          |
-| `--consensus-client`                 | string | _Mandatory_                       | Address of the consensus client (e.g., `http://localhost:9000`).           |
-| `--execution-client`                 | string | _Mandatory_                       | Address of the execution client (e.g., `http://localhost:8545`).           |
-| `--operator-private-key`             | string |                                   | Secret key for the operator.                                               |
-| `--metrics-api-port`                 | int    | `0`                               | Port number for the Metrics API (set to `0` to disable).                   |
-| `--ssv-domain`                       | string | Derived from local testnet config | Hex-encoded domain type (prefixed with `0x`).                              |
-| `--ssv-registry-sync-offset`         | uint64 | Derived from local testnet config | Registry sync offset for the network.                                      |
-| `--ssv-registry-contract-addr`       | string | Derived from local testnet config | Ethereum address of the network registry contract (e.g., `0xYourAddress`). |
-| `--ssv-bootnodes`                    | string | Derived from local testnet config | Comma-separated list of network bootnodes.                                 |
-| `--ssv-discovery-protocol-id`        | string | Derived from local testnet config | Hex-encoded discovery protocol ID (prefixed with `0x`).                    |
-| `--ssv-alan-fork-epoch`              | uint64 | Derived from local testnet config | Epoch at which the Alan fork occurs in the network.                        |
-| `--ssv-max-validators-per-committee` | int    | Derived from local testnet config | Max validators per committee.                                              |
+| Flag                             | Type   | Default                           | Description                                                                |
+|----------------------------------|--------|-----------------------------------|----------------------------------------------------------------------------|
+| `--output-path`                  | string | `./config/config.local.yaml`      | Output path for the generated configuration file.                          |
+| `--log-level`                    | string | `info`                            | Sets the logging level (e.g., `debug`, `info`, `warn`, `error`).           |
+| `--db-path`                      | string | `./data/db`                       | Path to the database directory.                                            |
+| `--discovery`                    | string | `mdns`                            | Discovery method.                                                          |
+| `--consensus-client`             | string | _Mandatory_                       | Address of the consensus client (e.g., `http://localhost:9000`).           |
+| `--execution-client`             | string | _Mandatory_                       | Address of the execution client (e.g., `http://localhost:8545`).           |
+| `--operator-private-key`         | string |                                   | Secret key for the operator.                                               |
+| `--metrics-api-port`             | int    | `0`                               | Port number for the Metrics API (set to `0` to disable).                   |
+| `--ssv-domain`                   | string | Derived from local testnet config | Hex-encoded domain type (prefixed with `0x`).                              |
+| `--ssv-registry-sync-offset`     | uint64 | Derived from local testnet config | Registry sync offset for the network.                                      |
+| `--ssv-registry-contract-addr`   | string | Derived from local testnet config | Ethereum address of the network registry contract (e.g., `0xYourAddress`). |
+| `--ssv-bootnodes`                | string | Derived from local testnet config | Comma-separated list of network bootnodes.                                 |
+| `--ssv-discovery-protocol-id`    | string | Derived from local testnet config | Hex-encoded discovery protocol ID (prefixed with `0x`).                    |
+| `--ssv-finality-consensus-epoch` | uint64 | Derived from local testnet config | Epoch at which finality-based event syncing activates.                     |
 
 
 **Note:** The `--consensus-client` and `--execution-client` flags are mandatory and must be provided when running the CLI.
@@ -82,7 +81,7 @@ ssvnode generate-config \
 
 ### Advanced Network Configuration
 
-Customize network settings such as bootnodes, discovery protocol ID, fork epoch, etc:
+Customize network settings such as bootnodes, discovery protocol ID, and finality activation epoch:
 
 ```bash
 ssvnode generate-config \
@@ -93,7 +92,7 @@ ssvnode generate-config \
   --ssv-registry-contract-addr "0xYourRegistryContractAddress" \
   --ssv-bootnodes "enode://bootnode1@127.0.0.1:30303,enode://bootnode2@127.0.0.1:30304" \
   --ssv-discovery-protocol-id "0x1234567890ab" \
-  --ssv-max-validators-per-committee 560
+  --ssv-finality-consensus-epoch 123456
 ```
 
 ## Configuration
@@ -123,6 +122,8 @@ ssv:
       - "enode://bootnode1@127.0.0.1:30303"
       - "enode://bootnode2@127.0.0.1:30304"
     DiscoveryProtocolID: "0x1234567890ab"
+    Forks:
+      FinalityConsensus: 18446744073709551615
 OperatorPrivateKey: your-operator-private-key
 MetricsAPIPort: 8080
 ```
@@ -152,6 +153,7 @@ MetricsAPIPort: 8080
         - `RegistryContractAddr`: Ethereum address of the network registry contract.
         - `Bootnodes`: List of network bootnodes.
         - `DiscoveryProtocolID`: Hex-encoded discovery protocol ID (prefixed with `0x`).
+        - `Forks.FinalityConsensus`: Epoch when finality-based event syncing activates.
 
 - **OperatorPrivateKey**
     - `OperatorPrivateKey`: Secret key for the operator.

@@ -19,10 +19,12 @@ func (n Network) String() string {
 	return string(jsonBytes)
 }
 
-const alanForkName = "alan"
+// storageFormatVersion is the storage compatibility version.
+// Bump it only when on-disk data compatibility changes.
+const storageFormatVersion = "alan"
 
 // StorageName returns a config name used to make sure the stored network doesn't differ.
-// It combines the network name with fork name.
+// It combines the network name with a storage-compatibility version.
 func (n Network) StorageName() string {
-	return fmt.Sprintf("%s:%s", n.SSV.Name, alanForkName) // TODO: decide what forks change DB fork name
+	return fmt.Sprintf("%s:%s", n.SSV.Name, storageFormatVersion)
 }

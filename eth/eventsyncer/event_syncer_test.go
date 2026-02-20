@@ -326,6 +326,29 @@ func TestEnsureBlockAboveThreshold_FinalizedFork(t *testing.T) {
 		require.NoError(t, s.ensureBlockAboveThreshold(ctx, big.NewInt(90)))
 	})
 
+	t.Run("success when processed block is ahead of finalized head", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		m := NewMockExecutionClient(ctrl)
+		ctx := t.Context()
+
+		s := New(nil, m, nil)
+
+		processedHeader := &ethtypes.Header{
+			Time:   uint64(time.Now().Add(-2 * time.Hour).Unix()),
+			Number: big.NewInt(120),
+		}
+		finalizedHeader := &ethtypes.Header{
+			Time:   uint64(time.Now().Unix()),
+			Number: big.NewInt(100),
+		}
+
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(120)).Return(processedHeader, nil)
+		m.EXPECT().IsFinalizedFork(ctx).Return(true)
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(finalizedHeader, nil)
+
+		require.NoError(t, s.ensureBlockAboveThreshold(ctx, big.NewInt(120)))
+	})
+
 	t.Run("fails when finalized head fetch fails", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		m := NewMockExecutionClient(ctrl)

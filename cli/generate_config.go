@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -31,19 +32,20 @@ var (
 )
 
 var (
-	outputPath              string
-	logLevel                string
-	dbPath                  string
-	discovery               string
-	consensusClient         string
-	executionClient         string
-	operatorPrivateKey      string
-	metricsAPIPort          int
-	ssvDomain               string
-	ssvRegistrySyncOffset   uint64
-	ssvRegistryContractAddr string
-	ssvBootnodes            string
-	ssvDiscoveryProtocolID  string
+	outputPath                string
+	logLevel                  string
+	dbPath                    string
+	discovery                 string
+	consensusClient           string
+	executionClient           string
+	operatorPrivateKey        string
+	metricsAPIPort            int
+	ssvDomain                 string
+	ssvRegistrySyncOffset     uint64
+	ssvRegistryContractAddr   string
+	ssvBootnodes              string
+	ssvDiscoveryProtocolID    string
+	ssvFinalityConsensusEpoch uint64
 )
 
 type SSVConfig struct {
@@ -109,6 +111,9 @@ var generateConfigCmd = &cobra.Command{
 			RegistryContractAddr: ethcommon.HexToAddress(ssvRegistryContractAddr),
 			Bootnodes:            bootnodes,
 			DiscoveryProtocolID:  parsedDiscoveryProtocolIDArr,
+			Forks: networkconfig.SSVForks{
+				FinalityConsensus: phase0.Epoch(ssvFinalityConsensusEpoch),
+			},
 		}
 
 		data, err := yaml.Marshal(&config)
@@ -145,6 +150,7 @@ func init() {
 	generateConfigCmd.Flags().StringVar(&ssvBootnodes, "ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")
 	ssvDiscoveryProtocolIDDefault := "0x" + hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:])
 	generateConfigCmd.Flags().StringVar(&ssvDiscoveryProtocolID, "ssv-discovery-protocol-id", ssvDiscoveryProtocolIDDefault, "SSV discovery protocol ID")
+	generateConfigCmd.Flags().Uint64Var(&ssvFinalityConsensusEpoch, "ssv-finality-consensus-epoch", uint64(defaultNetwork.Forks.FinalityConsensus), "SSV finality consensus activation epoch")
 
 	RootCmd.AddCommand(generateConfigCmd)
 }

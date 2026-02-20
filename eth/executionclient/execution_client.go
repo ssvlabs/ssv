@@ -383,7 +383,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (lo
 	return logsCh
 }
 
-// healthy checks if the execution client is currently in a healthy state.
+// Healthy checks if the execution client is currently in a healthy state.
 // It performs different checks based on whether the finality fork is active:
 //
 // Pre-fork (follow distance approach):
@@ -399,7 +399,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) (lo
 // Error types include:
 // - errSyncing: when the client is still synchronizing blocks
 // - network errors: when the client doesn't respond
-// TODO: update for related stuff (names, etc)
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if ec.isClosed() {
 		return ErrClosed
