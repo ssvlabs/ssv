@@ -359,7 +359,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	const submittingBlockProposalEvent = "submitting block proposal"
 	span.AddEvent(submittingBlockProposalEvent)
-	logger.Info(submittingBlockProposalEvent)
+	logger.Info(submittingBlockProposalEvent, zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	// If this operator is the leader of the decided round and it originally
 	// fetched a full (non-blinded) block, prefer submitting the full locally

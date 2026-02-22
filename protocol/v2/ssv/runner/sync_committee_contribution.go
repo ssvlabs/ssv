@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -362,7 +363,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 			const submittingSyncCommitteeEvent = "submitting sync committee contribution"
 			span.AddEvent(submittingSyncCommitteeEvent)
-			logger.Debug(submittingSyncCommitteeEvent)
+			logger.Debug(submittingSyncCommitteeEvent, zap.String("signature", hex.EncodeToString(blsSignedContribAndProof[:])))
 
 			reqStart := time.Now()
 			err = r.GetBeaconNode().SubmitSignedContributionAndProof(ctx, signedContribAndProof)

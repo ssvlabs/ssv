@@ -648,7 +648,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 					return
 				}
 
-				vLogger.Debug("🧩 reconstructed partial signature")
+				vLogger.Debug("🧩 reconstructed partial signature", zap.String("signature", hex.EncodeToString(sig)))
 
 				signatureCh <- signatureResult{
 					validatorIndex: validatorIndex,

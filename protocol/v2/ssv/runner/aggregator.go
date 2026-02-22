@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash"
@@ -163,7 +164,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("failed to submit aggregate and proof: %w", err)
 	}
 	const submittedAggregateAndProofEvent = "submitted aggregate and proof"
-	logger.Debug(submittedAggregateAndProofEvent)
+	logger.Debug(submittedAggregateAndProofEvent, zap.String("signature", hex.EncodeToString(fullSig)))
 	span.AddEvent(submittedAggregateAndProofEvent)
 
 	byts, err := res.MarshalSSZ()
@@ -325,7 +326,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	const submittingSignedAggregateProofEvent = "submitting signed aggregate and proof"
-	logger.Debug(submittingSignedAggregateProofEvent)
+	logger.Debug(submittingSignedAggregateProofEvent, zap.String("signature", hex.EncodeToString(specSig[:])))
 	span.AddEvent(submittingSignedAggregateProofEvent)
 
 	start := time.Now()
