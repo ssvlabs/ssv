@@ -260,9 +260,9 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, currentDomain, spectypes.DomainType{})))
 	require.NoError(t, err)
 
-	// Matching current domain via next-domain entry should not pass outside transition window.
+	// Matching current domain via next-domain entry should pass even outside transition window.
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, currentDomain)))
-	require.ErrorContains(t, err, "domain type 00000000 doesn't match "+currentDomainHex)
+	require.NoError(t, err)
 
 	// Mismatching domains
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))

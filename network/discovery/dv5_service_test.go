@@ -189,6 +189,7 @@ func TestIsDomainCompatibleOutsidePostForkTransitionWindow(t *testing.T) {
 	require.True(t, netCfg.BooleForkAtSlot(slot))
 	require.False(t, netCfg.InBooleTransitionWindow(slot))
 	require.False(t, dvs.isDomainCompatible(domainAlan, spectypes.DomainType{}))
+	require.True(t, dvs.isDomainCompatible(domainAlan, domainBoole))
 	require.True(t, dvs.isDomainCompatible(domainBoole, spectypes.DomainType{}))
 }
 

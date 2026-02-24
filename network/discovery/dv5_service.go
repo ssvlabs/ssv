@@ -236,7 +236,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 }
 
 func (dvs *DiscV5Service) isDomainCompatible(nodeDomainType spectypes.DomainType, nodeNextDomainType spectypes.DomainType) bool {
-	if nodeDomainType == dvs.netCfg.CurrentDomainType() {
+	if nodeDomainType == dvs.netCfg.CurrentDomainType() || nodeNextDomainType == dvs.netCfg.CurrentDomainType() {
 		return true
 	}
 

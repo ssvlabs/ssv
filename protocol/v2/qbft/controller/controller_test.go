@@ -11,8 +11,6 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/observability/log"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
@@ -68,10 +66,9 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
-		Network:      newTestingNetwork(1, keySet.OperatorKeys[1]),
-		Timer:        roundtimer.NewTestingTimer(),
-		CutOffRound:  spectestingutils.TestingCutOffRound,
+		Network:     newTestingNetwork(1, keySet.OperatorKeys[1]),
+		Timer:       roundtimer.NewTestingTimer(),
+		CutOffRound: spectestingutils.TestingCutOffRound,
 	}
 
 	identifier := make([]byte, 56)
