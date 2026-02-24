@@ -685,7 +685,9 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if cfg.BuilderEndpoint.Enabled {
-			srv, err := builderendpoint.New(logger, cfg.BuilderEndpoint)
+			srv, err := builderendpoint.New(cmd.Context(), logger, cfg.BuilderEndpoint, builderendpoint.Dependencies{
+				SlotStartTime: networkConfig.SlotStartTime,
+			})
 			if err != nil {
 				logger.Fatal("failed to create builder endpoint server", zap.Error(err))
 			}

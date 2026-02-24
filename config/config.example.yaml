@@ -32,6 +32,15 @@ builder:
   # NOTE: This is distinct from ProposerDelay, which affects when SSV asks the beacon node for a proposal.
   Enabled: false
   # ListenAddress: 127.0.0.1:18550
+  # Relays:
+  #   - https://relay.example
+  # RelayRequestTimeout: 500ms
+  # BidDeadline: 850ms
+  # BidGap: 50ms
+  # CacheTTL: 4s
+  # PrefetchMaxInFlight: 32
+  # UnblindRetries: 0
+  # UnblindRetryInterval: 250ms
 
 p2p:
   # Optionally specify the external IP address of the node, if it cannot be determined automatically.

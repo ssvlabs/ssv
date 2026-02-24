@@ -6,11 +6,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/mev/builderendpoint/bidcache"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/bidfetcher"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/bidprovider"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/bidstrategy"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/config"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/relayclient"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/unblinder"
 )
 
 // Server is the application-layer entrypoint for the SSV-hosted Builder API endpoint.
@@ -18,21 +25,53 @@ import (
 type Server struct {
 	logger     *zap.Logger
 	httpServer *http.Server
+
+	// Exposed for internal wiring in later steps (prefetch triggers).
+	cache    *bidcache.Cache
+	prefetch *bidcache.Prefetcher
 }
 
-func New(logger *zap.Logger, cfg config.Config) (*Server, error) {
+type Dependencies struct {
+	SlotStartTime func(phase0.Slot) time.Time
+}
+
+func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Dependencies) (*Server, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
+	cache := bidcache.New(cfg.CacheTTL)
+	factory := relayclient.NewFactory(ctx, cfg.RelayRequestTimeout)
+
+	fetcher := &bidfetcher.RelayFetcher{
+		Factory:       factory,
+		Relays:        cfg.Relays,
+		SlotStartTime: deps.SlotStartTime,
+		Strategy: bidstrategy.DeadlineStrategy{
+			Deadline: cfg.BidDeadline,
+			BidGap:   cfg.BidGap,
+		},
+	}
+
+	prefetcher := bidcache.NewPrefetcher(cache, fetcher, cfg.PrefetchMaxInFlight)
+
+	var bidProv domain.BidProvider = &bidprovider.FetchingCached{
+		Cache:   cache,
+		Fetcher: fetcher,
+	}
+
+	unblind := buildUnblinder(factory, cfg)
+
 	handler := httpapi.NewRouter(httpapi.Dependencies{
 		Logger:      logger,
-		BidProvider: domain.NoopBidProvider{},
-		Unblinder:   domain.NoopUnblinder{},
+		BidProvider: bidProv,
+		Unblinder:   unblind,
 	})
 
 	return &Server{
-		logger: logger,
+		logger:   logger,
+		cache:    cache,
+		prefetch: prefetcher,
 		httpServer: &http.Server{
 			Addr:              cfg.ListenAddress,
 			Handler:           handler,
@@ -41,6 +80,28 @@ func New(logger *zap.Logger, cfg config.Config) (*Server, error) {
 			WriteTimeout:      10 * time.Second,
 		},
 	}, nil
+}
+
+func buildUnblinder(factory *relayclient.Factory, cfg config.Config) domain.Unblinder {
+	if factory == nil || len(cfg.Relays) == 0 {
+		return domain.NoopUnblinder{}
+	}
+	providers := make([]unblinder.UnblindProvider, 0, len(cfg.Relays))
+	for _, relay := range cfg.Relays {
+		p, err := factory.FetchUnblindProvider(relay)
+		if err != nil {
+			continue
+		}
+		providers = append(providers, p)
+	}
+	if len(providers) == 0 {
+		return domain.NoopUnblinder{}
+	}
+	return &unblinder.FanoutUnblinder{
+		Providers:     providers,
+		Retries:       cfg.UnblindRetries,
+		RetryInterval: cfg.UnblindRetryInterval,
+	}
 }
 
 // Run serves until ctx is canceled or the underlying server returns an error.
