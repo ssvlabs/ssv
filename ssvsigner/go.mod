@@ -17,7 +17,7 @@ toolchain go1.24.10
 
 require (
 	github.com/alecthomas/kong v1.8.1
-	github.com/attestantio/go-eth2-client v0.27.0
+	github.com/attestantio/go-eth2-client v0.27.1
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/docker/docker v28.3.2+incompatible
 	github.com/docker/go-connections v0.5.0
