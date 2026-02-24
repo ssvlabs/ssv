@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -44,6 +45,7 @@ var (
 	ssvRegistryContractAddr string
 	ssvBootnodes            string
 	ssvDiscoveryProtocolID  string
+	ssvBooleForkEpoch       uint64
 )
 
 type SSVConfig struct {
@@ -110,7 +112,7 @@ var generateConfigCmd = &cobra.Command{
 			Bootnodes:            bootnodes,
 			DiscoveryProtocolID:  parsedDiscoveryProtocolIDArr,
 			Forks: networkconfig.SSVForks{
-				Boole: 0,
+				Boole: phase0.Epoch(ssvBooleForkEpoch),
 			},
 		}
 
@@ -148,6 +150,7 @@ func init() {
 	generateConfigCmd.Flags().StringVar(&ssvBootnodes, "ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")
 	ssvDiscoveryProtocolIDDefault := "0x" + hex.EncodeToString(defaultNetwork.DiscoveryProtocolID[:])
 	generateConfigCmd.Flags().StringVar(&ssvDiscoveryProtocolID, "ssv-discovery-protocol-id", ssvDiscoveryProtocolIDDefault, "SSV discovery protocol ID")
+	generateConfigCmd.Flags().Uint64Var(&ssvBooleForkEpoch, "ssv-boole-fork-epoch", uint64(defaultNetwork.Forks.Boole), "Epoch at which the Boole fork occurs in the network")
 
 	RootCmd.AddCommand(generateConfigCmd)
 }
