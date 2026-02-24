@@ -19,30 +19,39 @@ import (
 func TestCachePutGetAndTTLEviction(t *testing.T) {
 	t.Parallel()
 
+	const relayA = "relay-a"
+
 	now := time.Unix(1, 0)
 	c := bidcache.New(10*time.Second, bidcache.WithNow(func() time.Time { return now }))
 	key := bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
 
+	execBlockHash := phase0.Hash32{7}
 	bid := &builderspec.VersionedSignedBuilderBid{
 		Version: consensusspec.DataVersionDeneb,
 		Deneb: &builderdeneb.SignedBuilderBid{
 			Message: &builderdeneb.BuilderBid{
-				Header: &consensusdeneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0)},
+				Header: &consensusdeneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0), BlockHash: execBlockHash},
 				Value:  uint256.NewInt(1),
 			},
 		},
 	}
 
-	c.Put(key, bid, "relay-a")
+	c.Put(key, bid, relayA)
 	ent, ok := c.Get(key)
-	if !ok || ent.Bid == nil || ent.Provenance != "relay-a" {
+	if !ok || ent.Bid == nil || ent.Provenance != relayA {
 		t.Fatalf("expected cache hit")
+	}
+	if prov, ok2 := c.GetProvenanceByBlockHash(key.Slot, execBlockHash); !ok2 || prov != relayA {
+		t.Fatalf("expected provenance hit")
 	}
 
 	now = now.Add(11 * time.Second)
 	_, ok = c.Get(key)
 	if ok {
 		t.Fatalf("expected cache miss after TTL")
+	}
+	if _, ok := c.GetProvenanceByBlockHash(key.Slot, execBlockHash); ok {
+		t.Fatalf("expected provenance miss after TTL")
 	}
 }
 

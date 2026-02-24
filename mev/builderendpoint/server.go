@@ -61,7 +61,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		Fetcher: fetcher,
 	}
 
-	unblind := buildUnblinder(factory, cfg)
+	unblind := buildUnblinder(cache, factory, cfg)
 
 	handler := httpapi.NewRouter(httpapi.Dependencies{
 		Logger:      logger,
@@ -84,7 +84,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 	}, nil
 }
 
-func buildUnblinder(factory *relayclient.Factory, cfg config.Config) domain.Unblinder {
+func buildUnblinder(cache *bidcache.Cache, factory *relayclient.Factory, cfg config.Config) domain.Unblinder {
 	if factory == nil || len(cfg.Relays) == 0 {
 		return domain.NoopUnblinder{}
 	}
@@ -99,10 +99,12 @@ func buildUnblinder(factory *relayclient.Factory, cfg config.Config) domain.Unbl
 	if len(providers) == 0 {
 		return domain.NoopUnblinder{}
 	}
-	return &unblinder.FanoutUnblinder{
-		Providers:     providers,
-		Retries:       cfg.UnblindRetries,
-		RetryInterval: cfg.UnblindRetryInterval,
+	return &unblinder.ProvenanceRoutingUnblinder{
+		Cache:            cache,
+		Providers:        providers,
+		PrimaryHeadStart: cfg.UnblindProvenanceHeadStart,
+		Retries:          cfg.UnblindRetries,
+		RetryInterval:    cfg.UnblindRetryInterval,
 	}
 }
 

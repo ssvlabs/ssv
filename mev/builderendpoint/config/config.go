@@ -34,6 +34,9 @@ type Config struct {
 	// UnblindRetries controls per-relay retries for unblinding.
 	UnblindRetries       int           `yaml:"UnblindRetries" env:"UNBLIND_RETRIES" env-default:"0" env-description:"Number of per-relay unblind retries"`
 	UnblindRetryInterval time.Duration `yaml:"UnblindRetryInterval" env:"UNBLIND_RETRY_INTERVAL" env-default:"250ms" env-description:"Delay between unblind retries"`
+
+	// UnblindProvenanceHeadStart controls how long the provenance relay gets to unblind before we fall back.
+	UnblindProvenanceHeadStart time.Duration `yaml:"UnblindProvenanceHeadStart" env:"UNBLIND_PROVENANCE_HEAD_START" env-default:"25ms" env-description:"Head start for the provenance relay before falling back to other relays for unblinding"`
 }
 
 func (c Config) Validate() error {

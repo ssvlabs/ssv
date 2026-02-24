@@ -41,6 +41,7 @@ builder:
   # PrefetchMaxInFlight: 32
   # UnblindRetries: 0
   # UnblindRetryInterval: 250ms
+  # UnblindProvenanceHeadStart: 25ms
 
 p2p:
   # Optionally specify the external IP address of the node, if it cannot be determined automatically.
