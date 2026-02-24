@@ -133,3 +133,28 @@ func (c *Cache) GetProvenanceByBlockHash(slot phase0.Slot, blockHash phase0.Hash
 	}
 	return ent.Provenance, true
 }
+
+// CleanupExpired proactively removes expired entries from the cache.
+//
+// Expired entries are also removed lazily when accessed via Get(), but prefetching may insert keys
+// that are never requested again. Periodic cleanup prevents unbounded growth of expired entries.
+func (c *Cache) CleanupExpired() {
+	if c == nil {
+		return
+	}
+
+	now := c.now()
+
+	c.mu.Lock()
+	for k, ent := range c.m {
+		if !ent.ExpiresAt.IsZero() && now.After(ent.ExpiresAt) {
+			delete(c.m, k)
+		}
+	}
+	for k, ent := range c.byExecBlockHash {
+		if !ent.ExpiresAt.IsZero() && now.After(ent.ExpiresAt) {
+			delete(c.byExecBlockHash, k)
+		}
+	}
+	c.mu.Unlock()
+}

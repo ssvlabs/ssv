@@ -29,6 +29,8 @@ type Server struct {
 	cache    *bidcache.Cache
 	prefetch *bidcache.Prefetcher
 	fetcher  bidcache.Fetcher
+
+	cacheCleanupInterval time.Duration
 }
 
 type Dependencies struct {
@@ -64,11 +66,18 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 
 	handler := httpapi.NewRouter(logger, bidProvider, unblind, buildRegistrar(factory, cfg))
 
+	cleanupInterval := cfg.CacheCleanupInterval
+	if cfg.CacheTTL <= 0 {
+		// No TTL eviction configured, so periodic cleanup would be a no-op.
+		cleanupInterval = 0
+	}
+
 	return &Server{
-		logger:   logger,
-		cache:    cache,
-		prefetch: prefetcher,
-		fetcher:  fetcher,
+		logger:               logger,
+		cache:                cache,
+		prefetch:             prefetcher,
+		fetcher:              fetcher,
+		cacheCleanupInterval: cleanupInterval,
 		httpServer: &http.Server{
 			Addr:              cfg.ListenAddress,
 			Handler:           handler,
@@ -119,6 +128,10 @@ func buildRegistrar(factory *relayclient.Factory, cfg config.Config) httpapi.Val
 func (s *Server) Run(ctx context.Context) error {
 	errCh := make(chan error, 1)
 
+	if s.cache != nil && s.cacheCleanupInterval > 0 {
+		go s.runCacheJanitor(ctx, s.cacheCleanupInterval)
+	}
+
 	go func() {
 		if s.logger != nil {
 			s.logger.Info("serving builder endpoint", zap.String("addr", s.httpServer.Addr))
@@ -137,6 +150,24 @@ func (s *Server) Run(ctx context.Context) error {
 			return nil
 		}
 		return err
+	}
+}
+
+func (s *Server) runCacheJanitor(ctx context.Context, interval time.Duration) {
+	if s == nil || s.cache == nil || interval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.cache.CleanupExpired()
+		}
 	}
 }
 

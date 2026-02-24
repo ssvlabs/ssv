@@ -28,6 +28,12 @@ type Config struct {
 	// CacheTTL controls how long we keep bids/provenance in memory.
 	CacheTTL time.Duration `yaml:"CacheTTL" env:"CACHE_TTL" env-default:"4s" env-description:"TTL for cached bids (slot-scoped eviction)"`
 
+	// CacheCleanupInterval controls how often we proactively remove expired entries from the in-memory cache.
+	//
+	// Cache eviction also happens lazily on reads, but prefetching can populate the cache with keys that are
+	// never subsequently requested, so a periodic cleanup avoids unbounded growth of expired entries.
+	CacheCleanupInterval time.Duration `yaml:"CacheCleanupInterval" env:"CACHE_CLEANUP_INTERVAL" env-default:"1s" env-description:"Interval for proactive cleanup of expired cache entries"`
+
 	// PrefetchEnabled controls whether the node will try to warm bids during proposer duty execution.
 	// Note: this does not affect serving the Builder API; it only affects internal prefetch triggers.
 	PrefetchEnabled bool `yaml:"PrefetchEnabled" env:"PREFETCH_ENABLED" env-default:"true" env-description:"Enable internal bid prefetching during proposer duties"`

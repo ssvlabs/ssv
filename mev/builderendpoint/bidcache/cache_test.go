@@ -55,6 +55,43 @@ func TestCachePutGetAndTTLEviction(t *testing.T) {
 	}
 }
 
+func TestCacheCleanupExpiredRemovesEntriesEvenWithoutReads(t *testing.T) {
+	t.Parallel()
+
+	const relayA = "relay-a"
+
+	now := time.Unix(1, 0)
+	c := bidcache.New(10*time.Second, bidcache.WithNow(func() time.Time { return now }))
+	key := bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
+
+	execBlockHash := phase0.Hash32{7}
+	bid := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderdeneb.SignedBuilderBid{
+			Message: &builderdeneb.BuilderBid{
+				Header: &consensusdeneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0), BlockHash: execBlockHash},
+				Value:  uint256.NewInt(1),
+			},
+		},
+	}
+
+	c.Put(key, bid, relayA)
+
+	// Advance time past TTL to make entries expired, then run proactive cleanup.
+	now = now.Add(11 * time.Second)
+	c.CleanupExpired()
+
+	// Move time backwards: without cleanup, the entry would appear valid again and Get() would hit.
+	// Cleanup should have removed it already.
+	now = time.Unix(5, 0)
+	if _, ok := c.Get(key); ok {
+		t.Fatalf("expected cache miss after cleanup")
+	}
+	if _, ok := c.GetProvenanceByBlockHash(key.Slot, execBlockHash); ok {
+		t.Fatalf("expected provenance miss after cleanup")
+	}
+}
+
 type fakeFetcher struct {
 	calls int32
 	bid   *builderspec.VersionedSignedBuilderBid
