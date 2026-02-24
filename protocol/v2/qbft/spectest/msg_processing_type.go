@@ -28,7 +28,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
-	logger := spectestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(

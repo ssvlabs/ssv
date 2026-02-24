@@ -39,7 +39,7 @@ func TestSSVMapping(t *testing.T) {
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
-	logger := spectestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	untypedTests := map[string]any{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -375,7 +375,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 }
 
 func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutils.TestKeySet) runner.Runner {
-	logger := spectestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 

@@ -50,7 +50,7 @@ func (test *CommitteeSpecTest) FullName() string {
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
-	logger := spectestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	lastErr := test.runPreTesting(logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 

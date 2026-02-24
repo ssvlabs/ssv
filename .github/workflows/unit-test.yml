@@ -25,6 +25,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
+          # behavior is consistent across workflows.
           cache: false
 
       - name: Restore Go cache (ssv)
@@ -59,7 +61,9 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: ssvsigner/go.mod
+          # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
+          # behavior is consistent across workflows.
           cache: false
 
       - name: Restore Go cache (ssvsigner)

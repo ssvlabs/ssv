@@ -94,7 +94,7 @@ func TestQBFTMapping(t *testing.T) {
 			// a little trick we do to instantiate all the internal instance params
 
 			preByts, _ := typedTest.Pre.Encode()
-			logger := spectestLogger(t)
+			logger := protocoltesting.SpectestLogger(t)
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(

@@ -53,7 +53,7 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := spectestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
 }

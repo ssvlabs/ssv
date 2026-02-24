@@ -30,7 +30,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	//temporary to override state comparisons from file not inputted one
 	overrideStateComparisonForControllerSpecTest(t, test)
 
-	logger := spectestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	contr := generateController(logger)
 
 	if test.StartHeight != nil {

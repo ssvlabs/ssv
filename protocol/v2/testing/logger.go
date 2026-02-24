@@ -1,8 +1,8 @@
-package spectest
+package testing
 
 import (
 	"os"
-	"testing"
+	stdtesting "testing"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -13,7 +13,7 @@ import (
 
 const specTestLogLevelEnv = "SSV_SPECTEST_LOG_LEVEL"
 
-func spectestLogger(tb testing.TB) *zap.Logger {
+func SpectestLogger(tb stdtesting.TB) *zap.Logger {
 	tb.Helper()
 
 	level := os.Getenv(specTestLogLevelEnv)
