@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/mev/builderendpoint/config"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/registrations"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/relayclient"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/unblinder"
 )
@@ -66,6 +67,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		Logger:      logger,
 		BidProvider: bidProv,
 		Unblinder:   unblind,
+		Registrar:   buildRegistrar(factory, cfg),
 	})
 
 	return &Server{
@@ -101,6 +103,16 @@ func buildUnblinder(factory *relayclient.Factory, cfg config.Config) domain.Unbl
 		Providers:     providers,
 		Retries:       cfg.UnblindRetries,
 		RetryInterval: cfg.UnblindRetryInterval,
+	}
+}
+
+func buildRegistrar(factory *relayclient.Factory, cfg config.Config) domain.RegistrationForwarder {
+	if factory == nil || len(cfg.Relays) == 0 {
+		return domain.NoopRegistrationForwarder{}
+	}
+	return &registrations.Forwarder{
+		Factory: factory,
+		Relays:  cfg.Relays,
 	}
 }
 

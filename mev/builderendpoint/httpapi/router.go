@@ -28,6 +28,7 @@ type Dependencies struct {
 	Logger      *zap.Logger
 	BidProvider domain.BidProvider
 	Unblinder   domain.Unblinder
+	Registrar   domain.RegistrationForwarder
 }
 
 // Router is the HTTP transport layer for the Builder API endpoint.
@@ -36,6 +37,7 @@ type Router struct {
 	logger      *zap.Logger
 	bidProvider domain.BidProvider
 	unblinder   domain.Unblinder
+	registrar   domain.RegistrationForwarder
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -45,6 +47,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		logger:      deps.Logger,
 		bidProvider: deps.BidProvider,
 		unblinder:   deps.Unblinder,
+		registrar:   deps.Registrar,
 	}
 
 	r.Use(middleware.Recoverer)
@@ -54,6 +57,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Get("/eth/v1/builder/status", rt.getStatus)
 	r.Get("/eth/v1/builder/header/{slot}/{parent_hash}/{pubkey}", rt.getHeader)
 	r.Post("/eth/v1/builder/blinded_blocks", rt.postBlindedBlocks)
+	r.Post("/eth/v1/builder/validators", rt.postValidators)
 
 	return r
 }

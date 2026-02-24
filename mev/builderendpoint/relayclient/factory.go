@@ -108,3 +108,15 @@ func (f *Factory) FetchUnblindProvider(address string) (builderclient.UnblindedP
 	}
 	return p, nil
 }
+
+func (f *Factory) FetchSubmitter(address string) (builderclient.ValidatorRegistrationsSubmitter, error) {
+	c, err := f.Fetch(address)
+	if err != nil {
+		return nil, err
+	}
+	p, ok := c.(builderclient.ValidatorRegistrationsSubmitter)
+	if !ok {
+		return nil, fmt.Errorf("relay client for %q does not implement ValidatorRegistrationsSubmitter", address)
+	}
+	return p, nil
+}

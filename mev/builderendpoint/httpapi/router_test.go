@@ -30,6 +30,7 @@ func TestStatusEndpoint(t *testing.T) {
 		Logger:      zap.NewNop(),
 		BidProvider: domain.NoopBidProvider{},
 		Unblinder:   domain.NoopUnblinder{},
+		Registrar:   domain.NoopRegistrationForwarder{},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -61,6 +62,7 @@ func TestGetHeader_InvalidParams(t *testing.T) {
 		Logger:      zap.NewNop(),
 		BidProvider: fakeBidProvider{},
 		Unblinder:   domain.NoopUnblinder{},
+		Registrar:   domain.NoopRegistrationForwarder{},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -91,6 +93,7 @@ func TestGetHeader_NoBid_Returns204(t *testing.T) {
 		Logger:      zap.NewNop(),
 		BidProvider: fakeBidProvider{bid: nil, err: nil},
 		Unblinder:   domain.NoopUnblinder{},
+		Registrar:   domain.NoopRegistrationForwarder{},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -124,6 +127,7 @@ func TestGetHeader_Bid_Returns200AndConsensusHeader(t *testing.T) {
 		Logger:      zap.NewNop(),
 		BidProvider: fakeBidProvider{bid: bid, err: nil},
 		Unblinder:   domain.NoopUnblinder{},
+		Registrar:   domain.NoopRegistrationForwarder{},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -165,6 +169,7 @@ func TestPostBlindedBlocks_MissingConsensusHeader(t *testing.T) {
 		Logger:      zap.NewNop(),
 		BidProvider: domain.NoopBidProvider{},
 		Unblinder:   fakeUnblinder{},
+		Registrar:   domain.NoopRegistrationForwarder{},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -187,6 +192,7 @@ func TestPostBlindedBlocks_NoUnblindedBlock_Returns204(t *testing.T) {
 		Logger:      zap.NewNop(),
 		BidProvider: domain.NoopBidProvider{},
 		Unblinder:   fakeUnblinder{resp: nil, err: nil},
+		Registrar:   domain.NoopRegistrationForwarder{},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -231,6 +237,7 @@ func TestPostBlindedBlocks_Deneb_Returns200WithEnvelope(t *testing.T) {
 		Logger:      zap.NewNop(),
 		BidProvider: domain.NoopBidProvider{},
 		Unblinder:   fakeUnblinder{resp: denebProposal, err: nil},
+		Registrar:   domain.NoopRegistrationForwarder{},
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
