@@ -28,22 +28,38 @@ import (
 
 func main() {
 	var (
-		listen      = flag.String("listen", ":18551", "listen address")
-		relayID     = flag.String("id", "relay", "relay identifier (logging only)")
-		bidEnabled  = flag.Bool("bid-enabled", true, "whether this relay returns bids")
-		bidValueWei = flag.String("bid-value-wei", "0", "bid value in wei (uint256)")
-		bidDelay    = flag.Duration("bid-delay", 0, "optional delay before responding to getHeader")
+		listen           = flag.String("listen", ":18551", "listen address")
+		relayID          = flag.String("id", "relay", "relay identifier (logging only)")
+		bidEnabled       = flag.Bool("bid-enabled", true, "whether this relay returns bids")
+		bidValueWei      = flag.String("bid-value-wei", "0", "bid value in wei (uint256)")
+		bidValueWeiAfter = flag.String("bid-value-wei-after", "", "optional bid value after -bid-value-after duration (wei, uint256)")
+		bidValueAfter    = flag.Duration("bid-value-after", 0, "duration after process start at which bid value switches to -bid-value-wei-after")
+		bidDelay         = flag.Duration("bid-delay", 0, "optional delay before responding to getHeader")
+		bidHang          = flag.Bool("bid-hang", false, "if set, hang getHeader until request context is done")
 
 		unblindEnabled = flag.Bool("unblind-enabled", true, "whether this relay supports unblinding")
 		unblindDelay   = flag.Duration("unblind-delay", 0, "optional delay before responding to blinded_blocks")
+		unblindStatus  = flag.Int("unblind-status", http.StatusOK, "HTTP status code for blinded_blocks")
+
+		validatorsStatus = flag.Int("validators-status", http.StatusOK, "HTTP status code for validators")
 	)
 	flag.Parse()
+
+	startedAt := time.Now()
 
 	value := uint256.NewInt(0)
 	if bidValueWei != nil && *bidValueWei != "" {
 		if err := value.SetFromDecimal(*bidValueWei); err != nil {
 			log.Fatalf("invalid -bid-value-wei: %q", *bidValueWei)
 		}
+	}
+	valueAfter := (*uint256.Int)(nil)
+	if *bidValueWeiAfter != "" {
+		tmp := uint256.NewInt(0)
+		if err := tmp.SetFromDecimal(*bidValueWeiAfter); err != nil {
+			log.Fatalf("invalid -bid-value-wei-after: %q", *bidValueWeiAfter)
+		}
+		valueAfter = tmp
 	}
 
 	emptyTransactionsRoot := toRoot(sszutil.EmptyListRoot(1 << 20)) // 1048576
@@ -56,6 +72,11 @@ func main() {
 	})
 
 	mux.HandleFunc("/eth/v1/builder/header/", func(w http.ResponseWriter, r *http.Request) {
+		if *bidHang {
+			<-r.Context().Done()
+			return
+		}
+
 		if *bidDelay > 0 {
 			time.Sleep(*bidDelay)
 		}
@@ -88,6 +109,11 @@ func main() {
 			return
 		}
 
+		bidValue := value
+		if valueAfter != nil && *bidValueAfter > 0 && time.Since(startedAt) >= *bidValueAfter {
+			bidValue = valueAfter
+		}
+
 		// Minimal bid: only needs to be parseable and have correct parent hash.
 		bid := &builderspec.VersionedSignedBuilderBid{
 			Version: consensusspec.DataVersionDeneb,
@@ -100,7 +126,7 @@ func main() {
 						WithdrawalsRoot:  emptyWithdrawalsRoot,
 					},
 					BlobKZGCommitments: []consensusdeneb.KZGCommitment{},
-					Value:              value,
+					Value:              bidValue,
 					Pubkey:             phase0.BLSPubKey{1},
 				},
 				Signature: phase0.BLSSignature{},
@@ -120,8 +146,8 @@ func main() {
 	})
 
 	mux.HandleFunc("/eth/v1/builder/blinded_blocks", func(w http.ResponseWriter, r *http.Request) {
-		if !*unblindEnabled {
-			http.Error(w, "unblind disabled", http.StatusInternalServerError)
+		if !*unblindEnabled || *unblindStatus != http.StatusOK {
+			http.Error(w, "unblind failed", *unblindStatus)
 			return
 		}
 		if *unblindDelay > 0 {
@@ -207,7 +233,7 @@ func main() {
 		// Accept and ignore the registrations; return 200 for success.
 		_, _ = io.Copy(io.Discard, r.Body)
 		_ = r.Body.Close()
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(*validatorsStatus)
 	})
 
 	log.Printf("[%s] listening on %s", *relayID, *listen)

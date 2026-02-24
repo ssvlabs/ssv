@@ -1,0 +1,35 @@
+services:
+  relay_a:
+    command:
+      - /app/mev-mock-relay
+      - -listen=:18551
+      - -id=relay_a
+      - -bid-enabled=true
+      - -bid-value-wei=100
+      - -unblind-status=500
+  relay_b:
+    command:
+      - /app/mev-mock-relay
+      - -listen=:18552
+      - -id=relay_b
+      - -bid-enabled=true
+      - -bid-value-wei=200
+      - -unblind-status=200
+  builder:
+    command:
+      - /app/mev-builder-smoke
+      - -listen=:18550
+      - -relays=http://relay_a:18551,http://relay_b:18552
+      - -relay-timeout=300ms
+      - -bid-deadline=300ms
+      - -bid-gap=50ms
+      - -cache-ttl=2s
+      - -prefetch-max-in-flight=4
+  smoke:
+    command:
+      - /app/mev-smoke-client
+      - -builder-url=http://builder:18550
+      - -expected-best-bid-wei=200
+      - -expected-header-status=200
+      - -test-unblind=true
+

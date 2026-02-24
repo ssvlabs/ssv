@@ -23,3 +23,14 @@ Expected result: the `smoke` container exits `0` after validating:
 - `POST /eth/v1/builder/blinded_blocks` returns `200` and a Deneb response envelope
 - `POST /eth/v1/builder/validators` returns `200`
 
+## Scenarios
+
+Use the base compose file plus a scenario override:
+
+```sh
+docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.no-bid.yml up --build --abort-on-container-exit --exit-code-from smoke
+docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.timeout.yml up --build --abort-on-container-exit --exit-code-from smoke
+docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.polling.yml up --build --abort-on-container-exit --exit-code-from smoke
+docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.unblind-failover.yml up --build --abort-on-container-exit --exit-code-from smoke
+docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.validators-partial.yml up --build --abort-on-container-exit --exit-code-from smoke
+```

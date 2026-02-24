@@ -30,19 +30,31 @@ import (
 
 func main() {
 	var (
-		builderURL      = flag.String("builder-url", "http://builder:18550", "base URL of the builder endpoint")
-		expectedBestWei = flag.String("expected-best-bid-wei", "", "expected best bid value (wei)")
-		timeout         = flag.Duration("timeout", 20*time.Second, "overall smoke timeout")
+		builderURL = flag.String("builder-url", "http://builder:18550", "base URL of the builder endpoint")
+		timeout    = flag.Duration("timeout", 20*time.Second, "overall smoke timeout")
+
+		testHeader     = flag.Bool("test-header", true, "test getHeader path")
+		testUnblind    = flag.Bool("test-unblind", true, "test blinded_blocks path")
+		testValidators = flag.Bool("test-validators", true, "test validators path")
+
+		expectedHeaderStatus = flag.Int("expected-header-status", http.StatusOK, "expected HTTP status for getHeader (200 or 204)")
+		expectedBestWei      = flag.String("expected-best-bid-wei", "", "expected best bid value (wei), required if -expected-header-status=200")
+		maxHeaderLatency     = flag.Duration("max-header-latency", 0, "optional maximum latency for getHeader (0 disables)")
+
+		expectedValidatorsStatus = flag.Int("expected-validators-status", http.StatusOK, "expected HTTP status for validators")
 	)
 	flag.Parse()
 
-	if *expectedBestWei == "" {
-		log.Fatal("-expected-best-bid-wei is required")
+	if *testHeader && *expectedHeaderStatus == http.StatusOK && *expectedBestWei == "" {
+		log.Fatal("-expected-best-bid-wei is required when header status is 200")
 	}
 
-	expected := uint256.NewInt(0)
-	if err := expected.SetFromDecimal(*expectedBestWei); err != nil {
-		log.Fatalf("invalid -expected-best-bid-wei: %q", *expectedBestWei)
+	expected := (*uint256.Int)(nil)
+	if *expectedBestWei != "" {
+		expected = uint256.NewInt(0)
+		if err := expected.SetFromDecimal(*expectedBestWei); err != nil {
+			log.Fatalf("invalid -expected-best-bid-wei: %q", *expectedBestWei)
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
@@ -56,17 +68,28 @@ func main() {
 	parentHash := mustHash32("0x" + strings.Repeat("11", 32))
 	pubkey := mustPubkey("0x" + strings.Repeat("22", 48))
 
-	bid := fetchHeader(ctx, builderURLTrimmed, 1, parentHash, pubkey)
-	value, err := bid.Value()
-	if err != nil {
-		log.Fatalf("bid value: %v", err)
-	}
-	if value.Cmp(expected) != 0 {
-		log.Fatalf("unexpected best bid: got %s want %s", value.ToBig().String(), expected.ToBig().String())
+	if *testHeader {
+		bid := fetchHeader(ctx, builderURLTrimmed, 1, parentHash, pubkey, time.Now(), *expectedHeaderStatus, *maxHeaderLatency)
+		if *expectedHeaderStatus == http.StatusOK {
+			value, err := bid.Value()
+			if err != nil {
+				log.Fatalf("bid value: %v", err)
+			}
+			if expected == nil {
+				log.Fatalf("expected bid value was not set")
+			}
+			if value.Cmp(expected) != 0 {
+				log.Fatalf("unexpected best bid: got %s want %s", value.ToBig().String(), expected.ToBig().String())
+			}
+		}
 	}
 
-	postBlindedBlocks(ctx, builderURLTrimmed, parentHash)
-	postValidators(ctx, builderURLTrimmed, pubkey)
+	if *testUnblind {
+		postBlindedBlocks(ctx, builderURLTrimmed, parentHash)
+	}
+	if *testValidators {
+		postValidators(ctx, builderURLTrimmed, pubkey, *expectedValidatorsStatus)
+	}
 
 	log.Print("smoke OK")
 }
@@ -92,7 +115,16 @@ func waitFor(ctx context.Context, url string) {
 	}
 }
 
-func fetchHeader(ctx context.Context, baseURL string, slot uint64, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) *builderspec.VersionedSignedBuilderBid {
+func fetchHeader(
+	ctx context.Context,
+	baseURL string,
+	slot uint64,
+	parentHash phase0.Hash32,
+	pubkey phase0.BLSPubKey,
+	start time.Time,
+	expectedStatus int,
+	maxLatency time.Duration,
+) *builderspec.VersionedSignedBuilderBid {
 	path := fmt.Sprintf("%s/eth/v1/builder/header/%d/%#x/%#x", baseURL, slot, parentHash[:], pubkey[:])
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
 	resp, err := http.DefaultClient.Do(req)
@@ -101,9 +133,19 @@ func fetchHeader(ctx context.Context, baseURL string, slot uint64, parentHash ph
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
+	if maxLatency > 0 {
+		elapsed := time.Since(start)
+		if elapsed > maxLatency {
+			log.Fatalf("GET header took too long: %s > %s", elapsed, maxLatency)
+		}
+	}
+
+	if resp.StatusCode != expectedStatus {
 		body, _ := io.ReadAll(resp.Body)
-		log.Fatalf("GET header status=%d body=%s", resp.StatusCode, string(body))
+		log.Fatalf("GET header status=%d want=%d body=%s", resp.StatusCode, expectedStatus, string(body))
+	}
+	if resp.StatusCode == http.StatusNoContent {
+		return nil
 	}
 	if got := strings.ToLower(resp.Header.Get(httpapi.EthConsensusVersion)); got != "deneb" {
 		log.Fatalf("unexpected %s: got %q want %q", httpapi.EthConsensusVersion, got, "deneb")
@@ -163,7 +205,7 @@ func postBlindedBlocks(ctx context.Context, baseURL string, parentHash phase0.Ha
 	}
 }
 
-func postValidators(ctx context.Context, baseURL string, pubkey phase0.BLSPubKey) {
+func postValidators(ctx context.Context, baseURL string, pubkey phase0.BLSPubKey, expectedStatus int) {
 	reg := &builderapiv1.SignedValidatorRegistration{
 		Message: &builderapiv1.ValidatorRegistration{
 			FeeRecipient: bellatrix.ExecutionAddress{1},
@@ -185,9 +227,9 @@ func postValidators(ctx context.Context, baseURL string, pubkey phase0.BLSPubKey
 		log.Fatalf("POST validators: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != expectedStatus {
 		b, _ := io.ReadAll(resp.Body)
-		log.Fatalf("POST validators status=%d body=%s", resp.StatusCode, string(b))
+		log.Fatalf("POST validators status=%d want=%d body=%s", resp.StatusCode, expectedStatus, string(b))
 	}
 }
 
