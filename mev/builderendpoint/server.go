@@ -3,7 +3,9 @@ package builderendpoint
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	builderspec "github.com/attestantio/go-builder-client/spec"
@@ -108,7 +110,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		fetcher:              fetcherForPrefetch,
 		cacheCleanupInterval: cleanupInterval,
 		httpServer: &http.Server{
-			Addr:              cfg.ListenAddress,
+			Addr:              net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
 			Handler:           handler,
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       10 * time.Second,

@@ -10,8 +10,14 @@ import (
 // This is intentionally a standalone top-level config tree (see `yaml:"builder"` in `cli/operator/node.go`)
 // to avoid mixing it with beacon/EL/SSV configs.
 type Config struct {
-	Enabled       bool   `yaml:"Enabled" env:"ENABLED" env-default:"false" env-description:"Enable the SSV-hosted Builder API endpoint (mev-boost-compatible)"`
-	ListenAddress string `yaml:"ListenAddress" env:"LISTEN_ADDRESS" env-description:"Listen address for the builder endpoint (e.g. 127.0.0.1:18550)"`
+	Enabled bool `yaml:"Enabled" env:"ENABLED" env-default:"false" env-description:"Enable the SSV-hosted Builder API endpoint (mev-boost-compatible)"`
+
+	// Host and Port define the listen address for the builder endpoint.
+	//
+	// Host defaults to 0.0.0.0 to allow the beacon node (often running in another container/host namespace)
+	// to reach this endpoint when explicitly enabled.
+	Host string `yaml:"Host" env:"HOST" env-default:"0.0.0.0" env-description:"Listen host for the builder endpoint (e.g. 0.0.0.0)"`
+	Port int    `yaml:"Port" env:"PORT" env-default:"18550" env-description:"Listen port for the builder endpoint (e.g. 18550)"`
 
 	// Relay addresses (HTTP) to query for bids/unblind. These should be mev-boost-compatible relay URLs.
 	Relays []string `yaml:"Relays" env:"RELAYS" env-description:"Comma-separated list of relay URLs"`
@@ -60,8 +66,11 @@ func (c Config) Validate() error {
 	if !c.Enabled {
 		return nil
 	}
-	if c.ListenAddress == "" {
-		return fmt.Errorf("builder endpoint enabled but ListenAddress is empty")
+	if c.Host == "" {
+		return fmt.Errorf("builder endpoint enabled but Host is empty")
+	}
+	if c.Port <= 0 || c.Port > 65535 {
+		return fmt.Errorf("builder endpoint enabled but Port is invalid: %d", c.Port)
 	}
 	return nil
 }

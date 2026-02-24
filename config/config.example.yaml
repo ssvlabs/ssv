@@ -31,7 +31,8 @@ builder:
   # Configure your beacon node to use this address as its builder endpoint.
   # NOTE: This is distinct from ProposerDelay, which affects when SSV asks the beacon node for a proposal.
   Enabled: false
-  # ListenAddress: 127.0.0.1:18550
+  # Host: 0.0.0.0
+  # Port: 18550
   # Relays:
   #   - https://relay.example
   # RelayRequestTimeout: 500ms

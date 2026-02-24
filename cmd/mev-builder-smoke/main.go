@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,7 +23,7 @@ import (
 
 func main() {
 	var (
-		listen              = flag.String("listen", ":18550", "listen address")
+		listen              = flag.String("listen", ":18550", "listen address (host:port or :port)")
 		relaysCSV           = flag.String("relays", "", "comma-separated relay URLs (e.g. http://relay_a:18551,http://relay_b:18552)")
 		relayTimeout        = flag.Duration("relay-timeout", 750*time.Millisecond, "per-relay request timeout")
 		bidDeadline         = flag.Duration("bid-deadline", 750*time.Millisecond, "overall bidding deadline")
@@ -47,6 +49,11 @@ func main() {
 		log.Fatal("no relays supplied")
 	}
 
+	host, port, err := parseListenAddr(*listen)
+	if err != nil {
+		log.Fatalf("invalid -listen: %v", err)
+	}
+
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		log.Fatalf("logger: %v", err)
@@ -54,7 +61,8 @@ func main() {
 
 	cfg := config.Config{
 		Enabled:                   true,
-		ListenAddress:             *listen,
+		Host:                      host,
+		Port:                      port,
 		Relays:                    relays,
 		RelayRequestTimeout:       *relayTimeout,
 		BidDeadline:               *bidDeadline,
@@ -115,6 +123,21 @@ func splitCSV(in string) []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+func parseListenAddr(in string) (string, int, error) {
+	host, portStr, err := net.SplitHostPort(in)
+	if err != nil {
+		return "", 0, err
+	}
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return "", 0, err
+	}
+	return host, port, nil
 }
 
 func parseHash32(input string) (phase0.Hash32, error) {
