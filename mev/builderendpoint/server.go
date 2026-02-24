@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint/config"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
 )
 
@@ -24,7 +25,10 @@ func New(logger *zap.Logger, cfg config.Config) (*Server, error) {
 		return nil, err
 	}
 
-	handler := httpapi.NewRouter(logger)
+	handler := httpapi.NewRouter(httpapi.Dependencies{
+		Logger:      logger,
+		BidProvider: domain.NoopBidProvider{},
+	})
 
 	return &Server{
 		logger: logger,

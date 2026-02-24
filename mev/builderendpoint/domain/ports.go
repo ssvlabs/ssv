@@ -4,21 +4,15 @@ import (
 	"context"
 	"io"
 
+	builderspec "github.com/attestantio/go-builder-client/spec"
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-// Bid represents a versioned Builder API bid body along with the associated consensus version.
-// The concrete payload shape will be implemented in Step 2 (v1 getHeader).
-type Bid struct {
-	ConsensusVersion string
-	Body             any
-}
-
 // BidProvider provides Builder API bids (headers) for a given (slot, parent_hash, pubkey).
 // Returning (nil, nil) means "no bid available" and should map to HTTP 204.
 type BidProvider interface {
-	BuilderBid(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*Bid, error)
+	BuilderBid(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error)
 }
 
 // Unblinder reveals/unblinds a signed blinded beacon block by calling relays/builders.
