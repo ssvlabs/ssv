@@ -22,7 +22,8 @@ type DeadlineStrategy struct {
 }
 
 type result struct {
-	bid *builderspec.VersionedSignedBuilderBid
+	provider string
+	bid      *builderspec.VersionedSignedBuilderBid
 }
 
 func (s DeadlineStrategy) BestBid(
@@ -32,9 +33,9 @@ func (s DeadlineStrategy) BestBid(
 	slot phase0.Slot,
 	parentHash phase0.Hash32,
 	pubkey phase0.BLSPubKey,
-) (*builderspec.VersionedSignedBuilderBid, error) {
+) (*builderspec.VersionedSignedBuilderBid, string, error) {
 	if len(providers) == 0 {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	if s.BidGap <= 0 {
@@ -67,6 +68,7 @@ func (s DeadlineStrategy) BestBid(
 	}()
 
 	var best *builderspec.VersionedSignedBuilderBid
+	var bestProvider string
 	for res := range resCh {
 		if res.bid == nil || res.bid.IsEmpty() {
 			continue
@@ -82,19 +84,22 @@ func (s DeadlineStrategy) BestBid(
 
 		if best == nil {
 			best = res.bid
+			bestProvider = res.provider
 			continue
 		}
 		bestValue, err := best.Value()
 		if err != nil {
 			best = res.bid
+			bestProvider = res.provider
 			continue
 		}
 		if value.Cmp(bestValue) > 0 {
 			best = res.bid
+			bestProvider = res.provider
 		}
 	}
 
-	return best, nil
+	return best, bestProvider, nil
 }
 
 func (s DeadlineStrategy) pollProvider(
@@ -109,7 +114,7 @@ func (s DeadlineStrategy) pollProvider(
 	for {
 		bid, err := fetchBid(ctx, provider, slot, parentHash, pubkey)
 		if err == nil {
-			resCh <- result{bid: bid}
+			resCh <- result{provider: provider.Address(), bid: bid}
 		}
 
 		if time.Until(deadline) <= s.BidGap {

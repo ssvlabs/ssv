@@ -16,14 +16,13 @@ import (
 func TestFactoryCachesByAddress(t *testing.T) {
 	t.Parallel()
 
-	f := relayclient.NewFactory(250 * time.Millisecond)
-	ctx := context.Background()
+	f := relayclient.NewFactory(context.Background(), 250*time.Millisecond)
 
-	c1, err := f.Fetch(ctx, "http://example.com")
+	c1, err := f.Fetch("http://example.com")
 	if err != nil {
 		t.Fatalf("fetch 1: %v", err)
 	}
-	c2, err := f.Fetch(ctx, "http://example.com")
+	c2, err := f.Fetch("http://example.com")
 	if err != nil {
 		t.Fatalf("fetch 2: %v", err)
 	}
@@ -31,7 +30,7 @@ func TestFactoryCachesByAddress(t *testing.T) {
 		t.Fatalf("expected cached client instance")
 	}
 
-	c3, err := f.Fetch(ctx, "http://example.net")
+	c3, err := f.Fetch("http://example.net")
 	if err != nil {
 		t.Fatalf("fetch 3: %v", err)
 	}
@@ -51,15 +50,15 @@ func TestFactoryTimeoutIsRespected(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	f := relayclient.NewFactory(50 * time.Millisecond)
-	ctx := context.Background()
+	f := relayclient.NewFactory(context.Background(), 50*time.Millisecond)
 
-	provider, err := f.FetchBidProvider(ctx, srv.URL)
+	provider, err := f.FetchBidProvider(srv.URL)
 	if err != nil {
 		t.Fatalf("fetch provider: %v", err)
 	}
 
 	start := time.Now()
+	ctx := context.Background()
 	_, err = provider.BuilderBid(ctx, &api.BuilderBidOpts{
 		Slot:       1,
 		ParentHash: phase0.Hash32{1},

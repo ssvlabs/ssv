@@ -16,6 +16,8 @@ import (
 // It intentionally hides the concrete HTTP client implementation behind the go-builder-client interfaces.
 // This keeps relay I/O in the infrastructure layer and out of higher-level strategy code.
 type Factory struct {
+	ctx context.Context
+
 	timeout      time.Duration
 	extraHeaders map[string]string
 	enforceJSON  bool
@@ -38,8 +40,12 @@ func WithEnforceJSON(enforce bool) Option {
 	}
 }
 
-func NewFactory(timeout time.Duration, opts ...Option) *Factory {
+func NewFactory(ctx context.Context, timeout time.Duration, opts ...Option) *Factory {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	f := &Factory{
+		ctx:          ctx,
 		timeout:      timeout,
 		extraHeaders: map[string]string{},
 		enforceJSON:  true,
@@ -53,7 +59,7 @@ func NewFactory(timeout time.Duration, opts ...Option) *Factory {
 	return f
 }
 
-func (f *Factory) Fetch(ctx context.Context, address string) (builderclient.Service, error) {
+func (f *Factory) Fetch(address string) (builderclient.Service, error) {
 	if address == "" {
 		return nil, errors.New("address is empty")
 	}
@@ -65,7 +71,7 @@ func (f *Factory) Fetch(ctx context.Context, address string) (builderclient.Serv
 		return c, nil
 	}
 
-	c, err := httpclient.New(ctx,
+	c, err := httpclient.New(f.ctx,
 		httpclient.WithAddress(address),
 		httpclient.WithTimeout(f.timeout),
 		httpclient.WithExtraHeaders(f.extraHeaders),
@@ -79,8 +85,8 @@ func (f *Factory) Fetch(ctx context.Context, address string) (builderclient.Serv
 	return c, nil
 }
 
-func (f *Factory) FetchBidProvider(ctx context.Context, address string) (builderclient.BuilderBidProvider, error) {
-	c, err := f.Fetch(ctx, address)
+func (f *Factory) FetchBidProvider(address string) (builderclient.BuilderBidProvider, error) {
+	c, err := f.Fetch(address)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +97,8 @@ func (f *Factory) FetchBidProvider(ctx context.Context, address string) (builder
 	return p, nil
 }
 
-func (f *Factory) FetchUnblindProvider(ctx context.Context, address string) (builderclient.UnblindedProposalProvider, error) {
-	c, err := f.Fetch(ctx, address)
+func (f *Factory) FetchUnblindProvider(address string) (builderclient.UnblindedProposalProvider, error) {
+	c, err := f.Fetch(address)
 	if err != nil {
 		return nil, err
 	}

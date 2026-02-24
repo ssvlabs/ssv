@@ -79,7 +79,7 @@ func TestDeadlineStrategyPicksBestBidByValue(t *testing.T) {
 		BidGap:   10 * time.Millisecond,
 	}
 
-	best, err := s.BestBid(context.Background(), time.Now(), providers, 1, phase0.Hash32{1}, phase0.BLSPubKey{2})
+	best, prov, err := s.BestBid(context.Background(), time.Now(), providers, 1, phase0.Hash32{1}, phase0.BLSPubKey{2})
 	if err != nil {
 		t.Fatalf("best bid: %v", err)
 	}
@@ -92,6 +92,9 @@ func TestDeadlineStrategyPicksBestBidByValue(t *testing.T) {
 	}
 	if value.Cmp(uint256.NewInt(10)) != 0 {
 		t.Fatalf("unexpected best bid value: got %s want %s", value.String(), uint256.NewInt(10).String())
+	}
+	if prov != "relay-b" {
+		t.Fatalf("unexpected provenance: got %q want %q", prov, "relay-b")
 	}
 }
 
@@ -108,7 +111,7 @@ func TestDeadlineStrategyRespectsMinValue(t *testing.T) {
 		MinValue: uint256.NewInt(2),
 	}
 
-	best, err := s.BestBid(context.Background(), time.Now(), providers, 1, phase0.Hash32{1}, phase0.BLSPubKey{2})
+	best, _, err := s.BestBid(context.Background(), time.Now(), providers, 1, phase0.Hash32{1}, phase0.BLSPubKey{2})
 	if err != nil {
 		t.Fatalf("best bid: %v", err)
 	}
@@ -134,7 +137,7 @@ func TestDeadlineStrategyPollsUntilDeadline(t *testing.T) {
 		BidGap:   10 * time.Millisecond,
 	}
 
-	best, err := s.BestBid(context.Background(), time.Now(), []builderclient.BuilderBidProvider{p}, 1, phase0.Hash32{1}, phase0.BLSPubKey{2})
+	best, _, err := s.BestBid(context.Background(), time.Now(), []builderclient.BuilderBidProvider{p}, 1, phase0.Hash32{1}, phase0.BLSPubKey{2})
 	if err != nil {
 		t.Fatalf("best bid: %v", err)
 	}
