@@ -39,26 +39,13 @@ type Cache struct {
 	byExecBlockHash map[prov.Key]provenanceEntry
 }
 
-type Option func(*Cache)
-
-func WithNow(now func() time.Time) Option {
-	return func(c *Cache) {
-		c.now = now
-	}
-}
-
-func New(ttl time.Duration, opts ...Option) *Cache {
+func New(ttl time.Duration) *Cache {
 	c := &Cache{
 		ttl: ttl,
 		now: time.Now,
 		m:   make(map[Key]Entry),
 
 		byExecBlockHash: make(map[prov.Key]provenanceEntry),
-	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(c)
-		}
 	}
 	return c
 }

@@ -1,4 +1,4 @@
-package bidcache_test
+package bidcache
 
 import (
 	"context"
@@ -12,8 +12,6 @@ import (
 	consensusdeneb "github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
-
-	"github.com/ssvlabs/ssv/mev/builderendpoint/bidcache"
 )
 
 func TestCachePutGetAndTTLEviction(t *testing.T) {
@@ -22,8 +20,9 @@ func TestCachePutGetAndTTLEviction(t *testing.T) {
 	const relayA = "relay-a"
 
 	now := time.Unix(1, 0)
-	c := bidcache.New(10*time.Second, bidcache.WithNow(func() time.Time { return now }))
-	key := bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
+	c := New(10 * time.Second)
+	c.now = func() time.Time { return now }
+	key := Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
 
 	execBlockHash := phase0.Hash32{7}
 	bid := &builderspec.VersionedSignedBuilderBid{
@@ -61,8 +60,9 @@ func TestCacheCleanupExpiredRemovesEntriesEvenWithoutReads(t *testing.T) {
 	const relayA = "relay-a"
 
 	now := time.Unix(1, 0)
-	c := bidcache.New(10*time.Second, bidcache.WithNow(func() time.Time { return now }))
-	key := bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
+	c := New(10 * time.Second)
+	c.now = func() time.Time { return now }
+	key := Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
 
 	execBlockHash := phase0.Hash32{7}
 	bid := &builderspec.VersionedSignedBuilderBid{
@@ -98,7 +98,7 @@ type fakeFetcher struct {
 	block chan struct{}
 }
 
-func (f *fakeFetcher) FetchBestBid(ctx context.Context, _ bidcache.Key) (*builderspec.VersionedSignedBuilderBid, string, error) {
+func (f *fakeFetcher) FetchBestBid(ctx context.Context, _ Key) (*builderspec.VersionedSignedBuilderBid, string, error) {
 	atomic.AddInt32(&f.calls, 1)
 	if f.block != nil {
 		select {
@@ -113,14 +113,14 @@ func (f *fakeFetcher) FetchBestBid(ctx context.Context, _ bidcache.Key) (*builde
 func TestPrefetcherWarmsCache(t *testing.T) {
 	t.Parallel()
 
-	c := bidcache.New(10 * time.Second)
-	key := bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
+	c := New(10 * time.Second)
+	key := Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
 
 	fetcher := &fakeFetcher{
 		bid: &builderspec.VersionedSignedBuilderBid{Version: consensusspec.DataVersionDeneb, Deneb: &builderdeneb.SignedBuilderBid{}},
 	}
 
-	p := bidcache.NewPrefetcher(c, fetcher, 10)
+	p := NewPrefetcher(c, fetcher, 10)
 	p.Prefetch(context.Background(), key)
 
 	deadline := time.Now().Add(1 * time.Second)
@@ -141,16 +141,16 @@ func TestPrefetcherWarmsCache(t *testing.T) {
 func TestPrefetcherInFlightLimit(t *testing.T) {
 	t.Parallel()
 
-	c := bidcache.New(10 * time.Second)
+	c := New(10 * time.Second)
 	block := make(chan struct{})
 	fetcher := &fakeFetcher{
 		bid:   &builderspec.VersionedSignedBuilderBid{Version: consensusspec.DataVersionDeneb, Deneb: &builderdeneb.SignedBuilderBid{}},
 		block: block,
 	}
 
-	p := bidcache.NewPrefetcher(c, fetcher, 1)
-	p.Prefetch(context.Background(), bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}})
-	p.Prefetch(context.Background(), bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{2}, Pubkey: phase0.BLSPubKey{2}})
+	p := NewPrefetcher(c, fetcher, 1)
+	p.Prefetch(context.Background(), Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}})
+	p.Prefetch(context.Background(), Key{Slot: 1, ParentHash: phase0.Hash32{2}, Pubkey: phase0.BLSPubKey{2}})
 
 	time.Sleep(20 * time.Millisecond)
 	if atomic.LoadInt32(&fetcher.calls) != 1 {

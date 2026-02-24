@@ -18,45 +18,21 @@ import (
 type Factory struct {
 	ctx context.Context
 
-	timeout      time.Duration
-	extraHeaders map[string]string
-	enforceJSON  bool
+	timeout time.Duration
 
 	mu      sync.Mutex
 	clients map[string]builderclient.Service
 }
 
-type Option func(*Factory)
-
-func WithExtraHeaders(headers map[string]string) Option {
-	return func(f *Factory) {
-		f.extraHeaders = headers
-	}
-}
-
-func WithEnforceJSON(enforce bool) Option {
-	return func(f *Factory) {
-		f.enforceJSON = enforce
-	}
-}
-
-func NewFactory(ctx context.Context, timeout time.Duration, opts ...Option) *Factory {
+func NewFactory(ctx context.Context, timeout time.Duration) *Factory {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	f := &Factory{
-		ctx:          ctx,
-		timeout:      timeout,
-		extraHeaders: map[string]string{},
-		enforceJSON:  true,
-		clients:      make(map[string]builderclient.Service),
+	return &Factory{
+		ctx:     ctx,
+		timeout: timeout,
+		clients: make(map[string]builderclient.Service),
 	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(f)
-		}
-	}
-	return f
 }
 
 func (f *Factory) Fetch(address string) (builderclient.Service, error) {
@@ -74,8 +50,7 @@ func (f *Factory) Fetch(address string) (builderclient.Service, error) {
 	c, err := httpclient.New(f.ctx,
 		httpclient.WithAddress(address),
 		httpclient.WithTimeout(f.timeout),
-		httpclient.WithExtraHeaders(f.extraHeaders),
-		httpclient.WithEnforceJSON(f.enforceJSON),
+		httpclient.WithEnforceJSON(true),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "create relay client")
