@@ -534,6 +534,11 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 							hasAnyAggregatorForNewQuorum = true
 						}
 					} else {
+						logger.Warn("failed to process sync committee selection proof",
+							zap.Error(err),
+							fields.Slot(vDuty.Slot),
+							fields.ValidatorIndex(vDuty.ValidatorIndex),
+							fields.Root(root))
 						anyErr = fmt.Errorf("failed to process sync committee selection proof: %w", err)
 					}
 				}
