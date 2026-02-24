@@ -28,5 +28,4 @@ services:
       - -test-header=false
       - -test-unblind=false
       - -test-validators=true
-      - -expected-validators-status=400
-
+      - -expected-validators-status=200

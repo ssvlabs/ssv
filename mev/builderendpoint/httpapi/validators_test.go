@@ -40,10 +40,28 @@ func TestPostValidators_OK(t *testing.T) {
 	}
 }
 
-func TestPostValidators_BadRequestOnErrors(t *testing.T) {
+func TestPostValidators_BestEffortOnRelayErrors(t *testing.T) {
 	t.Parallel()
 
 	reg := fakeRegistrar{errs: []string{"boom"}}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, nil, reg.Forward)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Post(srv.URL+"/eth/v1/builder/validators", "application/json", strings.NewReader(`[]`))
+	if err != nil {
+		t.Fatalf("POST validators: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestPostValidators_BadRequestOnInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	reg := fakeRegistrar{err: context.Canceled}
 	handler := httpapi.NewRouter(zap.NewNop(), nil, nil, reg.Forward)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

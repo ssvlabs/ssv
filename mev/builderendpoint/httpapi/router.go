@@ -44,7 +44,7 @@ func NewRouter(logger *zap.Logger, bidProvider BidProviderFunc, unblinder Unblin
 	r.Get("/eth/v1/builder/status", handleStatus())
 	r.Get("/eth/v1/builder/header/{slot}/{parent_hash}/{pubkey}", handleHeader(bidProvider))
 	r.Post("/eth/v1/builder/blinded_blocks", handleBlindedBlocks(unblinder))
-	r.Post("/eth/v1/builder/validators", handleValidators(registrar))
+	r.Post("/eth/v1/builder/validators", handleValidators(logger, registrar))
 
 	return r
 }
