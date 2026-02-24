@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	builderapi "github.com/attestantio/go-builder-client/api"
 	eth2api "github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -79,7 +78,14 @@ func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *et
 	primaryDone := make(chan struct{})
 	go func() {
 		defer close(primaryDone)
-		u.tryProvider(ctx, primary, proposal, respCh)
+		resp := unblindWithRetries(ctx, primary, proposal, u.Retries, u.RetryInterval)
+		if resp == nil {
+			return
+		}
+		select {
+		case respCh <- resp:
+		default:
+		}
 	}()
 
 	headStart := u.PrimaryHeadStart
@@ -116,7 +122,14 @@ func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *et
 		provider := p
 		go func() {
 			defer wg.Done()
-			u.tryProvider(ctx, provider, proposal, respCh)
+			resp := unblindWithRetries(ctx, provider, proposal, u.Retries, u.RetryInterval)
+			if resp == nil {
+				return
+			}
+			select {
+			case respCh <- resp:
+			default:
+			}
 		}()
 	}
 
@@ -135,31 +148,5 @@ func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *et
 		return nil, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	}
-}
-
-func (u *ProvenanceRoutingUnblinder) tryProvider(ctx context.Context, provider UnblindProvider, proposal *eth2api.VersionedSignedBlindedProposal, respCh chan<- *eth2api.VersionedSignedProposal) {
-	attempts := 1 + u.Retries
-	if attempts < 1 {
-		attempts = 1
-	}
-
-	for i := 0; i < attempts; i++ {
-		resp, err := provider.UnblindProposal(ctx, &builderapi.UnblindProposalOpts{Proposal: proposal})
-		if err == nil && resp != nil && resp.Data != nil {
-			select {
-			case respCh <- resp.Data:
-			default:
-			}
-			return
-		}
-		if u.RetryInterval <= 0 {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(u.RetryInterval):
-		}
 	}
 }

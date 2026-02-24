@@ -54,7 +54,14 @@ func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.Versi
 		p := provider
 		go func() {
 			defer wg.Done()
-			u.tryProvider(ctx, p, proposal, respCh)
+			resp := unblindWithRetries(ctx, p, proposal, u.Retries, u.RetryInterval)
+			if resp == nil {
+				return
+			}
+			select {
+			case respCh <- resp:
+			default:
+			}
 		}()
 	}
 
@@ -70,32 +77,6 @@ func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.Versi
 		return nil, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	}
-}
-
-func (u *FanoutUnblinder) tryProvider(ctx context.Context, provider UnblindProvider, proposal *eth2api.VersionedSignedBlindedProposal, respCh chan<- *eth2api.VersionedSignedProposal) {
-	attempts := 1 + u.Retries
-	if attempts < 1 {
-		attempts = 1
-	}
-
-	for i := 0; i < attempts; i++ {
-		resp, err := provider.UnblindProposal(ctx, &builderapi.UnblindProposalOpts{Proposal: proposal})
-		if err == nil && resp != nil && resp.Data != nil {
-			select {
-			case respCh <- resp.Data:
-			default:
-			}
-			return
-		}
-		if u.RetryInterval <= 0 {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(u.RetryInterval):
-		}
 	}
 }
 
