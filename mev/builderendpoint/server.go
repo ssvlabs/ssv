@@ -9,6 +9,7 @@ import (
 	builderspec "github.com/attestantio/go-builder-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint/bidcache"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/bids"
@@ -54,8 +55,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 
 	prefetcher := bidcache.NewPrefetcher(cache, fetcher, cfg.PrefetchMaxInFlight)
 
+	var bidSF singleflight.Group
 	bidProvider := func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
-		return bids.GetBid(ctx, cache, fetcher, bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey})
+		return bids.GetBidSingleflight(ctx, cache, fetcher, &bidSF, bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey})
 	}
 
 	unblind := buildUnblinder(cache, factory, cfg)
