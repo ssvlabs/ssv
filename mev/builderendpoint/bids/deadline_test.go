@@ -1,4 +1,4 @@
-package bidstrategy_test
+package bids_test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
 
-	"github.com/ssvlabs/ssv/mev/builderendpoint/bidstrategy"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/bids"
 )
 
 type fakeProvider struct {
@@ -74,7 +74,7 @@ func TestDeadlineStrategyPicksBestBidByValue(t *testing.T) {
 		&fakeProvider{addr: "relay-b", bids: []*builderspec.VersionedSignedBuilderBid{capellaBidWithValue(10)}},
 	}
 
-	s := bidstrategy.DeadlineStrategy{
+	s := bids.DeadlineStrategy{
 		Deadline: 50 * time.Millisecond,
 		BidGap:   10 * time.Millisecond,
 	}
@@ -105,7 +105,7 @@ func TestDeadlineStrategyRespectsMinValue(t *testing.T) {
 		&fakeProvider{addr: "relay-a", bids: []*builderspec.VersionedSignedBuilderBid{capellaBidWithValue(1)}},
 	}
 
-	s := bidstrategy.DeadlineStrategy{
+	s := bids.DeadlineStrategy{
 		Deadline: 50 * time.Millisecond,
 		BidGap:   10 * time.Millisecond,
 		MinValue: uint256.NewInt(2),
@@ -132,7 +132,7 @@ func TestDeadlineStrategyPollsUntilDeadline(t *testing.T) {
 		},
 	}
 
-	s := bidstrategy.DeadlineStrategy{
+	s := bids.DeadlineStrategy{
 		Deadline: 80 * time.Millisecond,
 		BidGap:   10 * time.Millisecond,
 	}

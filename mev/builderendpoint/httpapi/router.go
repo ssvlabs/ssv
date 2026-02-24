@@ -1,16 +1,19 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"runtime"
 	"time"
 
+	builderspec "github.com/attestantio/go-builder-client/spec"
+	"github.com/attestantio/go-eth2-client/api"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 )
 
 const (
@@ -18,46 +21,36 @@ const (
 	EthConsensusVersion = "Eth-Consensus-Version"
 )
 
-type Dependencies struct {
-	Logger      *zap.Logger
-	BidProvider domain.BidProvider
-	Unblinder   domain.Unblinder
-	Registrar   domain.RegistrationForwarder
-}
+// BidProviderFunc provides Builder API bids (headers) for a given (slot, parent_hash, pubkey).
+// Returning (nil, nil) means "no bid available" and should map to HTTP 204.
+type BidProviderFunc func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error)
 
-// Router is the HTTP transport layer for the Builder API endpoint.
+// UnblinderFunc reveals/unblinds a signed blinded beacon block by calling relays/builders.
+type UnblinderFunc func(ctx context.Context, block *api.VersionedSignedBlindedBeaconBlock) (*api.VersionedSignedProposal, error)
+
+// ValidatorRegistrationsForwarderFunc forwards validator registrations to relays/builders.
+// It must close the body.
+type ValidatorRegistrationsForwarderFunc func(ctx context.Context, body io.ReadCloser) ([]string, error)
+
+// NewRouter creates the Builder API v1 HTTP server.
 // It intentionally contains no application logic beyond request/response wiring.
-type Router struct {
-	logger      *zap.Logger
-	bidProvider domain.BidProvider
-	unblinder   domain.Unblinder
-	registrar   domain.RegistrationForwarder
-}
-
-func NewRouter(deps Dependencies) http.Handler {
+func NewRouter(logger *zap.Logger, bidProvider BidProviderFunc, unblinder UnblinderFunc, registrar ValidatorRegistrationsForwarderFunc) http.Handler {
 	r := chi.NewRouter()
-
-	rt := &Router{
-		logger:      deps.Logger,
-		bidProvider: deps.BidProvider,
-		unblinder:   deps.Unblinder,
-		registrar:   deps.Registrar,
-	}
 
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Throttle(runtime.NumCPU() * 4))
-	r.Use(rt.middlewareLogger())
+	r.Use(middlewareLogger(logger))
 
-	r.Get("/eth/v1/builder/status", rt.getStatus)
-	r.Get("/eth/v1/builder/header/{slot}/{parent_hash}/{pubkey}", rt.getHeader)
-	r.Post("/eth/v1/builder/blinded_blocks", rt.postBlindedBlocks)
-	r.Post("/eth/v1/builder/validators", rt.postValidators)
+	r.Get("/eth/v1/builder/status", handleStatus())
+	r.Get("/eth/v1/builder/header/{slot}/{parent_hash}/{pubkey}", handleHeader(bidProvider))
+	r.Post("/eth/v1/builder/blinded_blocks", handleBlindedBlocks(unblinder))
+	r.Post("/eth/v1/builder/validators", handleValidators(registrar))
 
 	return r
 }
 
-func (rt *Router) middlewareLogger() func(next http.Handler) http.Handler {
-	if rt.logger == nil {
+func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
+	if logger == nil {
 		return func(next http.Handler) http.Handler { return next }
 	}
 	return func(next http.Handler) http.Handler {
@@ -65,7 +58,7 @@ func (rt *Router) middlewareLogger() func(next http.Handler) http.Handler {
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			start := time.Now()
 			defer func() {
-				rt.logger.Debug(
+				logger.Debug(
 					"served builder endpoint request",
 					zap.String("method", r.Method),
 					zap.String("path", r.URL.Path),

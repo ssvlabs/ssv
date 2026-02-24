@@ -1,4 +1,4 @@
-package bidstrategy
+package bids
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/holiman/uint256"
 )
 
+// DeadlineStrategy polls each relay for bids until a deadline (relative to slot start), keeping the best bid by value.
 type DeadlineStrategy struct {
 	Deadline time.Duration
 	BidGap   time.Duration

@@ -10,7 +10,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
 )
 
@@ -19,19 +18,15 @@ type fakeRegistrar struct {
 	err  error
 }
 
-func (r fakeRegistrar) ForwardValidatorRegistrations(context.Context, io.ReadCloser) ([]string, error) {
+func (r fakeRegistrar) Forward(context.Context, io.ReadCloser) ([]string, error) {
 	return r.errs, r.err
 }
 
 func TestPostValidators_OK(t *testing.T) {
 	t.Parallel()
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: domain.NoopBidProvider{},
-		Unblinder:   domain.NoopUnblinder{},
-		Registrar:   fakeRegistrar{},
-	})
+	reg := fakeRegistrar{}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, nil, reg.Forward)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
@@ -48,12 +43,8 @@ func TestPostValidators_OK(t *testing.T) {
 func TestPostValidators_BadRequestOnErrors(t *testing.T) {
 	t.Parallel()
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: domain.NoopBidProvider{},
-		Unblinder:   domain.NoopUnblinder{},
-		Registrar:   fakeRegistrar{errs: []string{"boom"}},
-	})
+	reg := fakeRegistrar{errs: []string{"boom"}}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, nil, reg.Forward)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 

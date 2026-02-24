@@ -1,4 +1,4 @@
-package registrations
+package builderendpoint
 
 import (
 	"context"
@@ -14,17 +14,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-type SubmitterFactory interface {
+type validatorRegistrationsSubmitterFactory interface {
 	FetchSubmitter(address string) (builderclient.ValidatorRegistrationsSubmitter, error)
 }
 
-// Forwarder forwards validator registrations to relays.
-type Forwarder struct {
-	Factory SubmitterFactory
+// RegistrationsForwarder forwards validator registrations to relays.
+type RegistrationsForwarder struct {
+	Factory validatorRegistrationsSubmitterFactory
 	Relays  []string
 }
 
-func (f *Forwarder) ForwardValidatorRegistrations(ctx context.Context, body io.ReadCloser) ([]string, error) {
+func (f *RegistrationsForwarder) ForwardValidatorRegistrations(ctx context.Context, body io.ReadCloser) ([]string, error) {
 	if body == nil {
 		return nil, errors.New("nil body")
 	}

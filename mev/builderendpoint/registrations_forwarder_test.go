@@ -1,4 +1,4 @@
-package registrations_test
+package builderendpoint_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	builderapi "github.com/attestantio/go-builder-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
-	"github.com/ssvlabs/ssv/mev/builderendpoint/registrations"
+	"github.com/ssvlabs/ssv/mev/builderendpoint"
 )
 
 type fakeSubmitter struct {
@@ -42,7 +42,7 @@ func (f fakeFactory) FetchSubmitter(address string) (builderclient.ValidatorRegi
 	return s, nil
 }
 
-func TestForwarderForwardsToAllRelays(t *testing.T) {
+func TestRegistrationsForwarderForwardsToAllRelays(t *testing.T) {
 	t.Parallel()
 
 	var calls int32
@@ -53,7 +53,7 @@ func TestForwarderForwardsToAllRelays(t *testing.T) {
 		},
 	}
 
-	forwarder := &registrations.Forwarder{
+	forwarder := &builderendpoint.RegistrationsForwarder{
 		Factory: f,
 		Relays:  []string{"a", "b"},
 	}

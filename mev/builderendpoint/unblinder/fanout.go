@@ -8,8 +8,6 @@ import (
 	builderapi "github.com/attestantio/go-builder-client/api"
 	eth2api "github.com/attestantio/go-eth2-client/api"
 	"github.com/pkg/errors"
-
-	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 )
 
 // FanoutUnblinder calls multiple relays in parallel and returns the first successful unblinded proposal.
@@ -114,5 +112,3 @@ func toSignedBlindedProposal(block *eth2api.VersionedSignedBlindedBeaconBlock) *
 		Fulu:      block.Fulu,
 	}
 }
-
-var _ domain.Unblinder = (*FanoutUnblinder)(nil)

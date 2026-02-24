@@ -1,4 +1,4 @@
-package bidprovider_test
+package bids_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint/bidcache"
-	"github.com/ssvlabs/ssv/mev/builderendpoint/bidprovider"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/bids"
 )
 
 type countingFetcher struct {
@@ -23,16 +23,15 @@ func (f *countingFetcher) FetchBestBid(context.Context, bidcache.Key) (*builders
 	return f.bid, "relay-a", nil
 }
 
-func TestFetchingCachedStoresOnMiss(t *testing.T) {
+func TestGetBidCachesOnMiss(t *testing.T) {
 	t.Parallel()
 
 	cache := bidcache.New(0)
 	fetcher := &countingFetcher{bid: &builderspec.VersionedSignedBuilderBid{Version: consensusspec.DataVersionDeneb}}
 
-	p := &bidprovider.FetchingCached{Cache: cache, Fetcher: fetcher}
-
 	key := bidcache.Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
-	got, err := p.BuilderBid(context.Background(), key.Slot, key.ParentHash, key.Pubkey)
+
+	got, err := bids.GetBid(context.Background(), cache, fetcher, key)
 	if err != nil {
 		t.Fatalf("bid: %v", err)
 	}
@@ -44,7 +43,7 @@ func TestFetchingCachedStoresOnMiss(t *testing.T) {
 	}
 
 	// Second call should come from cache.
-	got2, err := p.BuilderBid(context.Background(), key.Slot, key.ParentHash, key.Pubkey)
+	got2, err := bids.GetBid(context.Background(), cache, fetcher, key)
 	if err != nil {
 		t.Fatalf("bid2: %v", err)
 	}

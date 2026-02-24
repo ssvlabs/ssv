@@ -19,19 +19,13 @@ import (
 	"github.com/holiman/uint256"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
 )
 
 func TestStatusEndpoint(t *testing.T) {
 	t.Parallel()
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: domain.NoopBidProvider{},
-		Unblinder:   domain.NoopUnblinder{},
-		Registrar:   domain.NoopRegistrationForwarder{},
-	})
+	handler := httpapi.NewRouter(zap.NewNop(), nil, nil, nil)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
@@ -51,19 +45,15 @@ type fakeBidProvider struct {
 	err error
 }
 
-func (p fakeBidProvider) BuilderBid(_ context.Context, _ phase0.Slot, _ phase0.Hash32, _ phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
+func (p fakeBidProvider) Bid(_ context.Context, _ phase0.Slot, _ phase0.Hash32, _ phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
 	return p.bid, p.err
 }
 
 func TestGetHeader_InvalidParams(t *testing.T) {
 	t.Parallel()
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: fakeBidProvider{},
-		Unblinder:   domain.NoopUnblinder{},
-		Registrar:   domain.NoopRegistrationForwarder{},
-	})
+	p := fakeBidProvider{}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
@@ -89,12 +79,8 @@ func TestGetHeader_InvalidParams(t *testing.T) {
 func TestGetHeader_NoBid_Returns204(t *testing.T) {
 	t.Parallel()
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: fakeBidProvider{bid: nil, err: nil},
-		Unblinder:   domain.NoopUnblinder{},
-		Registrar:   domain.NoopRegistrationForwarder{},
-	})
+	p := fakeBidProvider{bid: nil, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
@@ -123,12 +109,8 @@ func TestGetHeader_Bid_Returns200AndConsensusHeader(t *testing.T) {
 		},
 	}
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: fakeBidProvider{bid: bid, err: nil},
-		Unblinder:   domain.NoopUnblinder{},
-		Registrar:   domain.NoopRegistrationForwarder{},
-	})
+	p := fakeBidProvider{bid: bid, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
@@ -158,19 +140,15 @@ type fakeUnblinder struct {
 	err  error
 }
 
-func (u fakeUnblinder) UnblindBlock(_ context.Context, _ *api.VersionedSignedBlindedBeaconBlock) (*api.VersionedSignedProposal, error) {
+func (u fakeUnblinder) Unblind(_ context.Context, _ *api.VersionedSignedBlindedBeaconBlock) (*api.VersionedSignedProposal, error) {
 	return u.resp, u.err
 }
 
 func TestPostBlindedBlocks_MissingConsensusHeader(t *testing.T) {
 	t.Parallel()
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: domain.NoopBidProvider{},
-		Unblinder:   fakeUnblinder{},
-		Registrar:   domain.NoopRegistrationForwarder{},
-	})
+	u := fakeUnblinder{}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
@@ -188,12 +166,8 @@ func TestPostBlindedBlocks_MissingConsensusHeader(t *testing.T) {
 func TestPostBlindedBlocks_NoUnblindedBlock_Returns204(t *testing.T) {
 	t.Parallel()
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: domain.NoopBidProvider{},
-		Unblinder:   fakeUnblinder{resp: nil, err: nil},
-		Registrar:   domain.NoopRegistrationForwarder{},
-	})
+	u := fakeUnblinder{resp: nil, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
@@ -233,12 +207,8 @@ func TestPostBlindedBlocks_Deneb_Returns200WithEnvelope(t *testing.T) {
 		},
 	}
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      zap.NewNop(),
-		BidProvider: domain.NoopBidProvider{},
-		Unblinder:   fakeUnblinder{resp: denebProposal, err: nil},
-		Registrar:   domain.NoopRegistrationForwarder{},
-	})
+	u := fakeUnblinder{resp: denebProposal, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 

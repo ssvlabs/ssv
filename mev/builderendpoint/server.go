@@ -6,17 +6,14 @@ import (
 	"net/http"
 	"time"
 
+	builderspec "github.com/attestantio/go-builder-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint/bidcache"
-	"github.com/ssvlabs/ssv/mev/builderendpoint/bidfetcher"
-	"github.com/ssvlabs/ssv/mev/builderendpoint/bidprovider"
-	"github.com/ssvlabs/ssv/mev/builderendpoint/bidstrategy"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/bids"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/config"
-	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
-	"github.com/ssvlabs/ssv/mev/builderendpoint/registrations"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/relayclient"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/unblinder"
 )
@@ -45,11 +42,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 	cache := bidcache.New(cfg.CacheTTL)
 	factory := relayclient.NewFactory(ctx, cfg.RelayRequestTimeout)
 
-	fetcher := &bidfetcher.RelayFetcher{
+	fetcher := &bids.RelayFetcher{
 		Factory:       factory,
 		Relays:        cfg.Relays,
 		SlotStartTime: deps.SlotStartTime,
-		Strategy: bidstrategy.DeadlineStrategy{
+		Strategy: bids.DeadlineStrategy{
 			Deadline: cfg.BidDeadline,
 			BidGap:   cfg.BidGap,
 		},
@@ -57,19 +54,13 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 
 	prefetcher := bidcache.NewPrefetcher(cache, fetcher, cfg.PrefetchMaxInFlight)
 
-	var bidProv domain.BidProvider = &bidprovider.FetchingCached{
-		Cache:   cache,
-		Fetcher: fetcher,
+	bidProvider := func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
+		return bids.GetBid(ctx, cache, fetcher, bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey})
 	}
 
 	unblind := buildUnblinder(cache, factory, cfg)
 
-	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:      logger,
-		BidProvider: bidProv,
-		Unblinder:   unblind,
-		Registrar:   buildRegistrar(factory, cfg),
-	})
+	handler := httpapi.NewRouter(logger, bidProvider, unblind, buildRegistrar(factory, cfg))
 
 	return &Server{
 		logger:   logger,
@@ -86,9 +77,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 	}, nil
 }
 
-func buildUnblinder(cache *bidcache.Cache, factory *relayclient.Factory, cfg config.Config) domain.Unblinder {
+func buildUnblinder(cache *bidcache.Cache, factory *relayclient.Factory, cfg config.Config) httpapi.UnblinderFunc {
 	if factory == nil || len(cfg.Relays) == 0 {
-		return domain.NoopUnblinder{}
+		return nil
 	}
 	providers := make([]unblinder.UnblindProvider, 0, len(cfg.Relays))
 	for _, relay := range cfg.Relays {
@@ -99,25 +90,27 @@ func buildUnblinder(cache *bidcache.Cache, factory *relayclient.Factory, cfg con
 		providers = append(providers, p)
 	}
 	if len(providers) == 0 {
-		return domain.NoopUnblinder{}
+		return nil
 	}
-	return &unblinder.ProvenanceRoutingUnblinder{
+	u := &unblinder.ProvenanceRoutingUnblinder{
 		Cache:            cache,
 		Providers:        providers,
 		PrimaryHeadStart: cfg.UnblindProvenanceHeadStart,
 		Retries:          cfg.UnblindRetries,
 		RetryInterval:    cfg.UnblindRetryInterval,
 	}
+	return u.UnblindBlock
 }
 
-func buildRegistrar(factory *relayclient.Factory, cfg config.Config) domain.RegistrationForwarder {
+func buildRegistrar(factory *relayclient.Factory, cfg config.Config) httpapi.ValidatorRegistrationsForwarderFunc {
 	if factory == nil || len(cfg.Relays) == 0 {
-		return domain.NoopRegistrationForwarder{}
+		return nil
 	}
-	return &registrations.Forwarder{
+	fwd := &RegistrationsForwarder{
 		Factory: factory,
 		Relays:  cfg.Relays,
 	}
+	return fwd.ForwardValidatorRegistrations
 }
 
 // Run serves until ctx is canceled or the underlying server returns an error.

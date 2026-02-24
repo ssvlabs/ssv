@@ -1,4 +1,4 @@
-package bidfetcher
+package bids
 
 import (
 	"context"
@@ -9,18 +9,18 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint/bidcache"
-	"github.com/ssvlabs/ssv/mev/builderendpoint/bidstrategy"
 )
 
 type BidProviderFactory interface {
 	FetchBidProvider(address string) (builderclient.BuilderBidProvider, error)
 }
 
+// RelayFetcher obtains the best bid across a configured relay set using a strategy.
 type RelayFetcher struct {
 	Factory       BidProviderFactory
 	Relays        []string
 	SlotStartTime func(phase0.Slot) time.Time
-	Strategy      bidstrategy.DeadlineStrategy
+	Strategy      DeadlineStrategy
 }
 
 func (f *RelayFetcher) FetchBestBid(ctx context.Context, key bidcache.Key) (*builderspec.VersionedSignedBuilderBid, string, error) {
@@ -47,3 +47,5 @@ func (f *RelayFetcher) FetchBestBid(ctx context.Context, key bidcache.Key) (*bui
 
 	return f.Strategy.BestBid(ctx, slotStart, providers, key.Slot, key.ParentHash, key.Pubkey)
 }
+
+var _ bidcache.Fetcher = (*RelayFetcher)(nil)

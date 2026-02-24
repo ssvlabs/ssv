@@ -11,32 +11,34 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func (rt *Router) getHeader(w http.ResponseWriter, r *http.Request) {
-	if rt.bidProvider == nil {
-		// Not configured yet; behave as "no bid" rather than hanging or failing.
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
+func handleHeader(bidProvider BidProviderFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if bidProvider == nil {
+			// Not configured yet; behave as "no bid" rather than hanging or failing.
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 
-	slot, parentHash, pubkey, err := parseHeaderParams(r)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
+		slot, parentHash, pubkey, err := parseHeaderParams(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 
-	bid, err := rt.bidProvider.BuilderBid(r.Context(), slot, parentHash, pubkey)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to obtain bid")
-		return
-	}
+		bid, err := bidProvider(r.Context(), slot, parentHash, pubkey)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to obtain bid")
+			return
+		}
 
-	if bid == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
+		if bid == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 
-	w.Header().Set(EthConsensusVersion, bid.Version.String())
-	writeJSON(w, http.StatusOK, bid)
+		w.Header().Set(EthConsensusVersion, bid.Version.String())
+		writeJSON(w, http.StatusOK, bid)
+	}
 }
 
 func parseHeaderParams(r *http.Request) (phase0.Slot, phase0.Hash32, phase0.BLSPubKey, error) {

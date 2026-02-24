@@ -10,7 +10,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 
-	"github.com/ssvlabs/ssv/mev/builderendpoint/domain"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/provenance"
 )
 
@@ -164,5 +163,3 @@ func (u *ProvenanceRoutingUnblinder) tryProvider(ctx context.Context, provider U
 		}
 	}
 }
-
-var _ domain.Unblinder = (*ProvenanceRoutingUnblinder)(nil)
