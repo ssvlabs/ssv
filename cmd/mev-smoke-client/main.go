@@ -40,6 +40,7 @@ func main() {
 		expectedHeaderStatus = flag.Int("expected-header-status", http.StatusOK, "expected HTTP status for getHeader (200 or 204)")
 		expectedBestWei      = flag.String("expected-best-bid-wei", "", "expected best bid value (wei), required if -expected-header-status=200")
 		maxHeaderLatency     = flag.Duration("max-header-latency", 0, "optional maximum latency for getHeader (0 disables)")
+		minHeaderLatency     = flag.Duration("min-header-latency", 0, "optional minimum latency for getHeader (0 disables)")
 
 		expectedValidatorsStatus = flag.Int("expected-validators-status", http.StatusOK, "expected HTTP status for validators")
 	)
@@ -69,7 +70,13 @@ func main() {
 	pubkey := mustPubkey("0x" + strings.Repeat("22", 48))
 
 	if *testHeader {
-		bid := fetchHeader(ctx, builderURLTrimmed, 1, parentHash, pubkey, time.Now(), *expectedHeaderStatus, *maxHeaderLatency)
+		bid, elapsed := fetchHeader(ctx, builderURLTrimmed, 1, parentHash, pubkey, *expectedHeaderStatus)
+		if *minHeaderLatency > 0 && elapsed < *minHeaderLatency {
+			log.Fatalf("GET header was unexpectedly fast: %s < %s", elapsed, *minHeaderLatency)
+		}
+		if *maxHeaderLatency > 0 && elapsed > *maxHeaderLatency {
+			log.Fatalf("GET header took too long: %s > %s", elapsed, *maxHeaderLatency)
+		}
 		if *expectedHeaderStatus == http.StatusOK {
 			value, err := bid.Value()
 			if err != nil {
@@ -121,31 +128,25 @@ func fetchHeader(
 	slot uint64,
 	parentHash phase0.Hash32,
 	pubkey phase0.BLSPubKey,
-	start time.Time,
 	expectedStatus int,
-	maxLatency time.Duration,
-) *builderspec.VersionedSignedBuilderBid {
+) (*builderspec.VersionedSignedBuilderBid, time.Duration) {
 	path := fmt.Sprintf("%s/eth/v1/builder/header/%d/%#x/%#x", baseURL, slot, parentHash[:], pubkey[:])
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
+
+	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
+	elapsed := time.Since(start)
 	if err != nil {
 		log.Fatalf("GET header: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if maxLatency > 0 {
-		elapsed := time.Since(start)
-		if elapsed > maxLatency {
-			log.Fatalf("GET header took too long: %s > %s", elapsed, maxLatency)
-		}
-	}
 
 	if resp.StatusCode != expectedStatus {
 		body, _ := io.ReadAll(resp.Body)
 		log.Fatalf("GET header status=%d want=%d body=%s", resp.StatusCode, expectedStatus, string(body))
 	}
 	if resp.StatusCode == http.StatusNoContent {
-		return nil
+		return nil, elapsed
 	}
 	if got := strings.ToLower(resp.Header.Get(httpapi.EthConsensusVersion)); got != "deneb" {
 		log.Fatalf("unexpected %s: got %q want %q", httpapi.EthConsensusVersion, got, "deneb")
@@ -158,7 +159,7 @@ func fetchHeader(
 	if bid.Version != consensusspec.DataVersionDeneb {
 		log.Fatalf("unexpected bid version: got %v", bid.Version)
 	}
-	return &bid
+	return &bid, elapsed
 }
 
 func postBlindedBlocks(ctx context.Context, baseURL string, parentHash phase0.Hash32) {

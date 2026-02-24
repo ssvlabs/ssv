@@ -34,3 +34,16 @@ docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.polli
 docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.unblind-failover.yml up --build --abort-on-container-exit --exit-code-from smoke
 docker compose -f mev/smoke/docker-compose.yml -f mev/smoke/docker-compose.validators-partial.yml up --build --abort-on-container-exit --exit-code-from smoke
 ```
+
+### Prefetch effectiveness proof
+
+This scenario runs two builder endpoints against the same slow relays:
+
+- `builder_cold`: no prewarm; `getHeader` should be slow (blocks on relays)
+- `builder_warm`: prewarms the `(slot,parent_hash,pubkey)` key before serving; the *first* `getHeader` should be fast (cache hit)
+
+Run:
+
+```sh
+docker compose -f mev/smoke/docker-compose.prefetch-proof.yml up --build --abort-on-container-exit --exit-code-from smoke
+```

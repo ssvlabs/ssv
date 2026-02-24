@@ -30,6 +30,7 @@ type Server struct {
 	// Exposed for internal wiring in later steps (prefetch triggers).
 	cache    *bidcache.Cache
 	prefetch *bidcache.Prefetcher
+	fetcher  bidcache.Fetcher
 }
 
 type Dependencies struct {
@@ -74,6 +75,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		logger:   logger,
 		cache:    cache,
 		prefetch: prefetcher,
+		fetcher:  fetcher,
 		httpServer: &http.Server{
 			Addr:              cfg.ListenAddress,
 			Handler:           handler,
@@ -163,4 +165,29 @@ func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash p
 	}
 
 	s.prefetch.Prefetch(ctx, key)
+}
+
+// PrefetchBidSync fetches and caches the best bid for the given key before returning.
+//
+// This is primarily intended for integration harnesses and one-shot prewarming.
+// The duty pipeline should use PrefetchBid() to avoid blocking.
+func (s *Server) PrefetchBidSync(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) error {
+	if s == nil || s.cache == nil || s.fetcher == nil {
+		return nil
+	}
+
+	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
+	if _, ok := s.cache.Get(key); ok {
+		return nil
+	}
+
+	bid, provenance, err := s.fetcher.FetchBestBid(ctx, key)
+	if err != nil {
+		return err
+	}
+	if bid == nil {
+		return nil
+	}
+	s.cache.Put(key, bid, provenance)
+	return nil
 }

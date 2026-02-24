@@ -1,0 +1,94 @@
+services:
+  relay_a:
+    build:
+      context: ../..
+      dockerfile: mev/smoke/Dockerfile
+    command:
+      - /app/mev-mock-relay
+      - -listen=:18551
+      - -id=relay_a
+      - -bid-enabled=true
+      - -bid-value-wei=100
+      - -bid-delay=700ms
+    expose:
+      - "18551"
+
+  relay_b:
+    build:
+      context: ../..
+      dockerfile: mev/smoke/Dockerfile
+    command:
+      - /app/mev-mock-relay
+      - -listen=:18552
+      - -id=relay_b
+      - -bid-enabled=true
+      - -bid-value-wei=200
+      - -bid-delay=700ms
+    expose:
+      - "18552"
+
+  # Cold builder: no prewarm. getHeader should block on slow relays.
+  builder_cold:
+    build:
+      context: ../..
+      dockerfile: mev/smoke/Dockerfile
+    command:
+      - /app/mev-builder-smoke
+      - -listen=:18560
+      - -relays=http://relay_a:18551,http://relay_b:18552
+      - -relay-timeout=2s
+      - -bid-deadline=900ms
+      - -bid-gap=50ms
+      - -cache-ttl=4s
+      - -prefetch-max-in-flight=4
+    expose:
+      - "18560"
+    depends_on:
+      - relay_a
+      - relay_b
+
+  # Warm builder: prewarm cache before serving. First getHeader should be fast.
+  builder_warm:
+    build:
+      context: ../..
+      dockerfile: mev/smoke/Dockerfile
+    command:
+      - /app/mev-builder-smoke
+      - -listen=:18550
+      - -relays=http://relay_a:18551,http://relay_b:18552
+      - -relay-timeout=2s
+      - -bid-deadline=900ms
+      - -bid-gap=50ms
+      - -cache-ttl=4s
+      - -prefetch-max-in-flight=4
+      - -prewarm=true
+      - -prewarm-timeout=10s
+    expose:
+      - "18550"
+    depends_on:
+      - relay_a
+      - relay_b
+
+  smoke:
+    build:
+      context: ../..
+      dockerfile: mev/smoke/Dockerfile
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        /app/mev-smoke-client \
+          -builder-url=http://builder_cold:18560 \
+          -test-unblind=false -test-validators=false \
+          -expected-header-status=200 -expected-best-bid-wei=200 \
+          -min-header-latency=650ms -max-header-latency=5s
+        /app/mev-smoke-client \
+          -builder-url=http://builder_warm:18550 \
+          -test-unblind=false -test-validators=false \
+          -expected-header-status=200 -expected-best-bid-wei=200 \
+          -max-header-latency=50ms
+        echo "prefetch proof OK"
+    depends_on:
+      - builder_cold
+      - builder_warm
+
