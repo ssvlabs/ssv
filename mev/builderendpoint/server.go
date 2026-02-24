@@ -28,6 +28,7 @@ func New(logger *zap.Logger, cfg config.Config) (*Server, error) {
 	handler := httpapi.NewRouter(httpapi.Dependencies{
 		Logger:      logger,
 		BidProvider: domain.NoopBidProvider{},
+		Unblinder:   domain.NoopUnblinder{},
 	})
 
 	return &Server{

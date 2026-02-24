@@ -90,3 +90,15 @@ func (f *Factory) FetchBidProvider(ctx context.Context, address string) (builder
 	}
 	return p, nil
 }
+
+func (f *Factory) FetchUnblindProvider(ctx context.Context, address string) (builderclient.UnblindedProposalProvider, error) {
+	c, err := f.Fetch(ctx, address)
+	if err != nil {
+		return nil, err
+	}
+	p, ok := c.(builderclient.UnblindedProposalProvider)
+	if !ok {
+		return nil, fmt.Errorf("relay client for %q does not implement UnblindedProposalProvider", address)
+	}
+	return p, nil
+}
