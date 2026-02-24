@@ -38,6 +38,8 @@ builder:
   # BidDeadline: 850ms
   # BidGap: 50ms
   # CacheTTL: 4s
+  # PrefetchEnabled: true
+  # PrefetchParentHashTimeout: 150ms
   # PrefetchMaxInFlight: 32
   # UnblindRetries: 0
   # UnblindRetryInterval: 250ms

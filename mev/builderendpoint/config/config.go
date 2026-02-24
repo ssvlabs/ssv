@@ -28,6 +28,13 @@ type Config struct {
 	// CacheTTL controls how long we keep bids/provenance in memory.
 	CacheTTL time.Duration `yaml:"CacheTTL" env:"CACHE_TTL" env-default:"4s" env-description:"TTL for cached bids (slot-scoped eviction)"`
 
+	// PrefetchEnabled controls whether the node will try to warm bids during proposer duty execution.
+	// Note: this does not affect serving the Builder API; it only affects internal prefetch triggers.
+	PrefetchEnabled bool `yaml:"PrefetchEnabled" env:"PREFETCH_ENABLED" env-default:"true" env-description:"Enable internal bid prefetching during proposer duties"`
+
+	// PrefetchParentHashTimeout bounds how long we wait when querying the execution client for the current head hash.
+	PrefetchParentHashTimeout time.Duration `yaml:"PrefetchParentHashTimeout" env:"PREFETCH_PARENT_HASH_TIMEOUT" env-default:"150ms" env-description:"Timeout for fetching execution head hash used as parent_hash for prefetch"`
+
 	// PrefetchMaxInFlight bounds in-flight prefetch goroutines.
 	PrefetchMaxInFlight int `yaml:"PrefetchMaxInFlight" env:"PREFETCH_MAX_IN_FLIGHT" env-default:"32" env-description:"Maximum in-flight prefetches"`
 

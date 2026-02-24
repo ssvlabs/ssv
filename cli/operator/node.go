@@ -573,6 +573,24 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
+		var builderSrv *builderendpoint.Server
+		if cfg.BuilderEndpoint.Enabled {
+			srv, err := builderendpoint.New(cmd.Context(), logger, cfg.BuilderEndpoint, builderendpoint.Dependencies{
+				SlotStartTime: networkConfig.SlotStartTime,
+			})
+			if err != nil {
+				logger.Fatal("failed to create builder endpoint server", zap.Error(err))
+			}
+			builderSrv = srv
+
+			// If enabled, expose the internal prefetcher to the duty scheduler to warm bids before the
+			// beacon node calls the Builder API.
+			if cfg.BuilderEndpoint.PrefetchEnabled {
+				cfg.SSVOptions.BuilderBidPrefetcher = srv
+				cfg.SSVOptions.BuilderBidPrefetchParentHashTimeout = cfg.BuilderEndpoint.PrefetchParentHashTimeout
+			}
+		}
+
 		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
@@ -684,15 +702,9 @@ var StartNodeCmd = &cobra.Command{
 			}()
 		}
 
-		if cfg.BuilderEndpoint.Enabled {
-			srv, err := builderendpoint.New(cmd.Context(), logger, cfg.BuilderEndpoint, builderendpoint.Dependencies{
-				SlotStartTime: networkConfig.SlotStartTime,
-			})
-			if err != nil {
-				logger.Fatal("failed to create builder endpoint server", zap.Error(err))
-			}
+		if builderSrv != nil {
 			go func() {
-				if err := srv.Run(cmd.Context()); err != nil {
+				if err := builderSrv.Run(cmd.Context()); err != nil {
 					logger.Fatal("failed to run builder endpoint server", zap.Error(err))
 				}
 			}()

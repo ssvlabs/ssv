@@ -142,3 +142,25 @@ func (s *Server) Run(ctx context.Context) error {
 		return err
 	}
 }
+
+// PrefetchBid warms the bid cache for the given (slot, parentHash, pubkey) key.
+//
+// This is intended to be called from the node's duty pipeline so that when the local
+// beacon client calls the Builder API's getHeader endpoint, the response is already
+// cached and fast.
+func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) {
+	if s == nil || s.prefetch == nil {
+		return
+	}
+
+	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
+
+	// Skip duplicate work if the cache is already warm.
+	if s.cache != nil {
+		if _, ok := s.cache.Get(key); ok {
+			return
+		}
+	}
+
+	s.prefetch.Prefetch(ctx, key)
+}

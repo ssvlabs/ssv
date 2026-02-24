@@ -45,16 +45,18 @@ func main() {
 	}
 
 	cfg := config.Config{
-		Enabled:              true,
-		ListenAddress:        *listen,
-		Relays:               relays,
-		RelayRequestTimeout:  *relayTimeout,
-		BidDeadline:          *bidDeadline,
-		BidGap:               *bidGap,
-		CacheTTL:             *cacheTTL,
-		PrefetchMaxInFlight:  *prefetchMaxInflight,
-		UnblindRetries:       *unblindRetries,
-		UnblindRetryInterval: *unblindRetryInt,
+		Enabled:                   true,
+		ListenAddress:             *listen,
+		Relays:                    relays,
+		RelayRequestTimeout:       *relayTimeout,
+		BidDeadline:               *bidDeadline,
+		BidGap:                    *bidGap,
+		CacheTTL:                  *cacheTTL,
+		PrefetchEnabled:           true,
+		PrefetchParentHashTimeout: 150 * time.Millisecond,
+		PrefetchMaxInFlight:       *prefetchMaxInflight,
+		UnblindRetries:            *unblindRetries,
+		UnblindRetryInterval:      *unblindRetryInt,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)

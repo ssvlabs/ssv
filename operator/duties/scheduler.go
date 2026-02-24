@@ -63,6 +63,14 @@ type ExecutionClient interface {
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
 }
 
+// BuilderBidPrefetcher warms builder bids for (slot, parentHash, pubkey) keys.
+//
+// It is used to prefetch relay bids during the proposer duty pipeline so that the beacon
+// client can obtain a header quickly when it calls the local Builder API endpoint.
+type BuilderBidPrefetcher interface {
+	PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey)
+}
+
 // ValidatorProvider represents the component that controls validators via the scheduler
 type ValidatorProvider interface {
 	Validators() []*types.SSVShare
@@ -77,19 +85,21 @@ type ValidatorController interface {
 }
 
 type SchedulerOptions struct {
-	Ctx                     context.Context
-	BeaconNode              BeaconNode
-	ExecutionClient         ExecutionClient
-	BeaconConfig            *networkconfig.Beacon
-	ValidatorProvider       ValidatorProvider
-	ValidatorController     ValidatorController
-	DutyExecutor            DutyExecutor
-	IndicesChg              chan struct{}
-	ValidatorRegistrationCh <-chan RegistrationDescriptor
-	ValidatorExitCh         <-chan ExitDescriptor
-	SlotTickerProvider      slotticker.Provider
-	DutyStore               *dutystore.Store
-	P2PNetwork              network.P2PNetwork
+	Ctx                       context.Context
+	BeaconNode                BeaconNode
+	ExecutionClient           ExecutionClient
+	BeaconConfig              *networkconfig.Beacon
+	BuilderBidPrefetcher      BuilderBidPrefetcher
+	PrefetchParentHashTimeout time.Duration
+	ValidatorProvider         ValidatorProvider
+	ValidatorController       ValidatorController
+	DutyExecutor              DutyExecutor
+	IndicesChg                chan struct{}
+	ValidatorRegistrationCh   <-chan RegistrationDescriptor
+	ValidatorExitCh           <-chan ExitDescriptor
+	SlotTickerProvider        slotticker.Provider
+	DutyStore                 *dutystore.Store
+	P2PNetwork                network.P2PNetwork
 	// ExporterMode disables handlers that make sense only for operators
 	// executing duties (e.g., validator registration). When true, scheduler
 	// still fetches/stores duties for all validators but does not execute them.
@@ -97,14 +107,16 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
-	logger              *zap.Logger
-	beaconNode          BeaconNode
-	executionClient     ExecutionClient
-	beaconConfig        *networkconfig.Beacon
-	validatorProvider   ValidatorProvider
-	validatorController ValidatorController
-	slotTickerProvider  slotticker.Provider
-	dutyExecutor        DutyExecutor
+	logger                    *zap.Logger
+	beaconNode                BeaconNode
+	executionClient           ExecutionClient
+	beaconConfig              *networkconfig.Beacon
+	builderBidPrefetcher      BuilderBidPrefetcher
+	prefetchParentHashTimeout time.Duration
+	validatorProvider         ValidatorProvider
+	validatorController       ValidatorController
+	slotTickerProvider        slotticker.Provider
+	dutyExecutor              DutyExecutor
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -132,16 +144,18 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	}
 
 	s := &Scheduler{
-		logger:              logger.Named(log.NameDutyScheduler),
-		beaconNode:          opts.BeaconNode,
-		executionClient:     opts.ExecutionClient,
-		beaconConfig:        opts.BeaconConfig,
-		slotTickerProvider:  opts.SlotTickerProvider,
-		dutyExecutor:        opts.DutyExecutor,
-		validatorProvider:   opts.ValidatorProvider,
-		validatorController: opts.ValidatorController,
-		indicesChg:          opts.IndicesChg,
-		blockPropagateDelay: blockPropagationDelay,
+		logger:                    logger.Named(log.NameDutyScheduler),
+		beaconNode:                opts.BeaconNode,
+		executionClient:           opts.ExecutionClient,
+		beaconConfig:              opts.BeaconConfig,
+		builderBidPrefetcher:      opts.BuilderBidPrefetcher,
+		prefetchParentHashTimeout: opts.PrefetchParentHashTimeout,
+		slotTickerProvider:        opts.SlotTickerProvider,
+		dutyExecutor:              opts.DutyExecutor,
+		validatorProvider:         opts.ValidatorProvider,
+		validatorController:       opts.ValidatorController,
+		indicesChg:                opts.IndicesChg,
+		blockPropagateDelay:       blockPropagationDelay,
 
 		handlers: []dutyHandler{},
 
@@ -419,6 +433,8 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		return // early return is fine, we don't need to return an error
 	}
 
+	s.maybePrefetchBuilderBids(ctx, duties)
+
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "scheduler.execute_duties"),
 		trace.WithAttributes(observability.DutyCountAttribute(len(duties))),
@@ -458,6 +474,62 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 	}
 
 	span.SetStatus(codes.Ok, "")
+}
+
+type proposerPrefetchRequest struct {
+	slot   phase0.Slot
+	pubkey phase0.BLSPubKey
+}
+
+func (s *Scheduler) maybePrefetchBuilderBids(ctx context.Context, duties []*spectypes.ValidatorDuty) {
+	if s == nil || s.builderBidPrefetcher == nil || s.executionClient == nil || s.beaconConfig == nil {
+		return
+	}
+
+	currentSlot := s.beaconConfig.EstimatedCurrentSlot()
+
+	// Only prefetch for proposer duties in the *current* slot to avoid long-running relay polling.
+	reqs := make([]proposerPrefetchRequest, 0, len(duties))
+	for _, d := range duties {
+		if d == nil {
+			continue
+		}
+		if d.Type != spectypes.BNRoleProposer {
+			continue
+		}
+		if d.Slot != currentSlot {
+			continue
+		}
+		reqs = append(reqs, proposerPrefetchRequest{slot: d.Slot, pubkey: d.PubKey})
+	}
+	if len(reqs) == 0 {
+		return
+	}
+
+	timeout := s.prefetchParentHashTimeout
+	if timeout <= 0 {
+		timeout = 150 * time.Millisecond
+	}
+
+	reqsCopy := append([]proposerPrefetchRequest(nil), reqs...)
+
+	go func() {
+		pctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		header, err := s.executionClient.HeaderByNumber(pctx, nil)
+		if err != nil || header == nil {
+			return
+		}
+
+		var parentHash phase0.Hash32
+		h := header.Hash()
+		copy(parentHash[:], h[:])
+
+		for _, req := range reqsCopy {
+			s.builderBidPrefetcher.PrefetchBid(ctx, req.slot, parentHash, req.pubkey)
+		}
+	}()
 }
 
 // ExecuteCommitteeDuties tries to execute the provided committee duties
