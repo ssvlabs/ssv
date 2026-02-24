@@ -588,6 +588,7 @@ var StartNodeCmd = &cobra.Command{
 			if cfg.BuilderEndpoint.PrefetchEnabled {
 				cfg.SSVOptions.BuilderBidPrefetcher = srv
 				cfg.SSVOptions.BuilderBidPrefetchParentHashTimeout = cfg.BuilderEndpoint.PrefetchParentHashTimeout
+				cfg.SSVOptions.BuilderBidPrefetchLeadTime = cfg.BuilderEndpoint.PrefetchLeadTime
 			}
 		}
 

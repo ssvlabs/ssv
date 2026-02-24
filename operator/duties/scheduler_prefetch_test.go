@@ -256,7 +256,10 @@ func TestSchedulerPrefetchesOncePerBatch(t *testing.T) {
 	prefetchCh := make(chan prefetchCall, 2)
 	prefetcher := &recordingPrefetcher{ch: prefetchCh}
 
-	dutyExec.EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).Times(2)
+	var dutyCalls int32
+	dutyExec.EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).Times(2).Do(func(_ context.Context, _ *zap.Logger, _ *spectypes.ValidatorDuty) {
+		atomic.AddInt32(&dutyCalls, 1)
+	})
 
 	s := NewScheduler(logger, &SchedulerOptions{
 		Ctx:                       context.Background(),
@@ -282,6 +285,14 @@ func TestSchedulerPrefetchesOncePerBatch(t *testing.T) {
 	for atomic.LoadInt32(&prefetcher.calls) < 2 {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for prefetch calls")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	deadline = time.Now().Add(time.Second)
+	for atomic.LoadInt32(&dutyCalls) < 2 {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for duty calls")
 		}
 		time.Sleep(5 * time.Millisecond)
 	}

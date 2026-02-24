@@ -54,10 +54,12 @@ type Options struct {
 	BuilderBidPrefetcher duties.BuilderBidPrefetcher `yaml:"-"`
 	// BuilderBidPrefetchParentHashTimeout bounds execution-head queries used to compute parent_hash for prefetch.
 	BuilderBidPrefetchParentHashTimeout time.Duration `yaml:"-"`
-	DutyStore                           *dutystore.Store
-	ExporterRead                        *exporter2.Exporter
-	WS                                  api.WebSocketServer
-	WsAPIPort                           int
+	// BuilderBidPrefetchLeadTime is how long before slot start we begin prefetching relay bids.
+	BuilderBidPrefetchLeadTime time.Duration `yaml:"-"`
+	DutyStore                  *dutystore.Store
+	ExporterRead               *exporter2.Exporter
+	WS                         api.WebSocketServer
+	WsAPIPort                  int
 }
 
 type Node struct {
@@ -124,6 +126,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			BeaconConfig:              opts.NetworkConfig.Beacon,
 			BuilderBidPrefetcher:      opts.BuilderBidPrefetcher,
 			PrefetchParentHashTimeout: opts.BuilderBidPrefetchParentHashTimeout,
+			PrefetchLeadTime:          opts.BuilderBidPrefetchLeadTime,
 			ValidatorProvider:         validatorProvider,
 			ValidatorController:       opts.ValidatorController,
 			DutyExecutor:              dutyExecutor,

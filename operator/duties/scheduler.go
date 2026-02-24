@@ -91,6 +91,7 @@ type SchedulerOptions struct {
 	BeaconConfig              *networkconfig.Beacon
 	BuilderBidPrefetcher      BuilderBidPrefetcher
 	PrefetchParentHashTimeout time.Duration
+	PrefetchLeadTime          time.Duration
 	ValidatorProvider         ValidatorProvider
 	ValidatorController       ValidatorController
 	DutyExecutor              DutyExecutor
@@ -113,6 +114,7 @@ type Scheduler struct {
 	beaconConfig              *networkconfig.Beacon
 	builderBidPrefetcher      BuilderBidPrefetcher
 	prefetchParentHashTimeout time.Duration
+	prefetchLeadTime          time.Duration
 	validatorProvider         ValidatorProvider
 	validatorController       ValidatorController
 	slotTickerProvider        slotticker.Provider
@@ -135,6 +137,12 @@ type Scheduler struct {
 	previousDutyDependentRoot phase0.Root
 
 	exporterMode bool
+
+	// ctx is the scheduler's base context used for background work such as prefetch scheduling.
+	ctx context.Context
+
+	prefetchMu    sync.Mutex
+	prefetchPlans map[phase0.Slot]*slotPrefetchPlan
 }
 
 func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
@@ -150,6 +158,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		beaconConfig:              opts.BeaconConfig,
 		builderBidPrefetcher:      opts.BuilderBidPrefetcher,
 		prefetchParentHashTimeout: opts.PrefetchParentHashTimeout,
+		prefetchLeadTime:          opts.PrefetchLeadTime,
 		slotTickerProvider:        opts.SlotTickerProvider,
 		dutyExecutor:              opts.DutyExecutor,
 		validatorProvider:         opts.ValidatorProvider,
@@ -162,6 +171,9 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
+
+		ctx:           opts.Ctx,
+		prefetchPlans: make(map[phase0.Slot]*slotPrefetchPlan),
 	}
 
 	s.exporterMode = opts.ExporterMode
@@ -530,6 +542,128 @@ func (s *Scheduler) maybePrefetchBuilderBids(ctx context.Context, duties []*spec
 			s.builderBidPrefetcher.PrefetchBid(ctx, req.slot, parentHash, req.pubkey)
 		}
 	}()
+}
+
+type slotPrefetchPlan struct {
+	timer   *time.Timer
+	pubkeys map[phase0.BLSPubKey]struct{}
+}
+
+// ScheduleBuilderBidPrefetch schedules background bid prefetching for proposer duties.
+//
+// This is intended to be called when proposer duties are fetched (i.e. before the slot begins),
+// and will trigger prefetching shortly before the slot starts to avoid long-running relay polling.
+func (s *Scheduler) ScheduleBuilderBidPrefetch(duties []*spectypes.ValidatorDuty) {
+	if s == nil || s.builderBidPrefetcher == nil || s.executionClient == nil || s.beaconConfig == nil {
+		return
+	}
+	if s.exporterMode {
+		return
+	}
+	if s.ctx == nil {
+		// No base context to run background timers safely.
+		return
+	}
+	if len(duties) == 0 {
+		return
+	}
+
+	currentSlot := s.beaconConfig.EstimatedCurrentSlot()
+
+	// Group proposer duties by slot.
+	pubkeysBySlot := make(map[phase0.Slot]map[phase0.BLSPubKey]struct{})
+	for _, d := range duties {
+		if d == nil {
+			continue
+		}
+		if d.Type != spectypes.BNRoleProposer {
+			continue
+		}
+		if d.Slot < currentSlot {
+			continue
+		}
+		m, ok := pubkeysBySlot[d.Slot]
+		if !ok {
+			m = make(map[phase0.BLSPubKey]struct{})
+			pubkeysBySlot[d.Slot] = m
+		}
+		m[d.PubKey] = struct{}{}
+	}
+	if len(pubkeysBySlot) == 0 {
+		return
+	}
+
+	leadTime := s.prefetchLeadTime
+	if leadTime <= 0 {
+		leadTime = 200 * time.Millisecond
+	}
+
+	for slot, pubkeys := range pubkeysBySlot {
+		fireAt := s.beaconConfig.SlotStartTime(slot).Add(-leadTime)
+		delay := time.Until(fireAt)
+		if delay < 0 {
+			delay = 0
+		}
+
+		s.prefetchMu.Lock()
+		plan, ok := s.prefetchPlans[slot]
+		if !ok {
+			plan = &slotPrefetchPlan{
+				pubkeys: make(map[phase0.BLSPubKey]struct{}),
+			}
+			s.prefetchPlans[slot] = plan
+			plan.timer = time.AfterFunc(delay, func() {
+				s.runSlotPrefetch(slot)
+			})
+		}
+
+		// Merge pubkeys for this slot. Prefetching an extra key is safe; it only warms cache.
+		if plan.pubkeys == nil {
+			plan.pubkeys = make(map[phase0.BLSPubKey]struct{}, len(pubkeys))
+		}
+		for pk := range pubkeys {
+			plan.pubkeys[pk] = struct{}{}
+		}
+		s.prefetchMu.Unlock()
+	}
+}
+
+func (s *Scheduler) runSlotPrefetch(slot phase0.Slot) {
+	if s == nil || s.builderBidPrefetcher == nil || s.executionClient == nil || s.beaconConfig == nil {
+		return
+	}
+
+	// Snapshot and delete the plan early to allow rescheduling on reorg/refetch.
+	s.prefetchMu.Lock()
+	plan, ok := s.prefetchPlans[slot]
+	if ok {
+		delete(s.prefetchPlans, slot)
+	}
+	s.prefetchMu.Unlock()
+	if !ok || plan == nil || len(plan.pubkeys) == 0 {
+		return
+	}
+
+	timeout := s.prefetchParentHashTimeout
+	if timeout <= 0 {
+		timeout = 150 * time.Millisecond
+	}
+
+	pctx, cancel := context.WithTimeout(s.ctx, timeout)
+	defer cancel()
+
+	header, err := s.executionClient.HeaderByNumber(pctx, nil)
+	if err != nil || header == nil {
+		return
+	}
+
+	var parentHash phase0.Hash32
+	h := header.Hash()
+	copy(parentHash[:], h[:])
+
+	for pk := range plan.pubkeys {
+		s.builderBidPrefetcher.PrefetchBid(s.ctx, slot, parentHash, pk)
+	}
 }
 
 // ExecuteCommitteeDuties tries to execute the provided committee duties

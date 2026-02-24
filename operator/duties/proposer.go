@@ -239,6 +239,13 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(epoch, storeDuties)
 
+	// Schedule builder bid prefetching early so bids are likely cached when the beacon client calls getHeader.
+	if s, ok := h.dutiesExecutor.(interface {
+		ScheduleBuilderBidPrefetch(duties []*spectypes.ValidatorDuty)
+	}); ok {
+		s.ScheduleBuilderBidPrefetch(specDuties)
+	}
+
 	truncate := -1
 	if h.exporterMode {
 		truncate = 10
