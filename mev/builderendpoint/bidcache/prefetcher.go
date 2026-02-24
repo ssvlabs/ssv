@@ -37,13 +37,26 @@ func (p *Prefetcher) Prefetch(ctx context.Context, key Key) {
 		return
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	recordPrefetchRequest(ctx)
+
+	// Skip if already warm. Prefetching can be triggered multiple times (e.g. duty refetches).
+	if _, ok := p.cache.Get(key); ok {
+		recordPrefetchSkip(ctx, prefetchSkipReasonWarm)
+		return
+	}
+
 	p.mu.Lock()
 	if _, ok := p.inFlight[key]; ok {
 		p.mu.Unlock()
+		recordPrefetchSkip(ctx, prefetchSkipReasonInFlight)
 		return
 	}
 	if p.maxInFlight > 0 && len(p.inFlight) >= p.maxInFlight {
 		p.mu.Unlock()
+		recordPrefetchSkip(ctx, prefetchSkipReasonLimit)
 		return
 	}
 	p.inFlight[key] = struct{}{}
@@ -58,11 +71,24 @@ func (p *Prefetcher) Prefetch(ctx context.Context, key Key) {
 
 		bid, provenance, err := p.fetcher.FetchBestBid(ctx, key)
 		if err != nil {
+			recordPrefetchResult(ctx, prefetchResultError)
 			return
 		}
 		if bid == nil {
+			recordPrefetchResult(ctx, prefetchResultNoBid)
 			return
 		}
+
 		p.cache.Put(key, bid, provenance)
+		recordPrefetchResult(ctx, prefetchResultCached)
 	}()
+}
+
+func (p *Prefetcher) InFlight() int {
+	if p == nil {
+		return 0
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.inFlight)
 }

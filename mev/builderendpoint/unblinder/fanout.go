@@ -32,6 +32,8 @@ type UnblindProvider interface {
 }
 
 func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.VersionedSignedBlindedBeaconBlock) (*eth2api.VersionedSignedProposal, error) {
+	start := time.Now()
+
 	if u == nil {
 		return nil, nil
 	}
@@ -39,7 +41,9 @@ func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.Versi
 		return nil, nil
 	}
 	if block == nil {
-		return nil, errors.New("nil blinded beacon block")
+		err := errors.New("nil blinded beacon block")
+		recordUnblind(ctx, unblindModeFanout, unblindResultError, time.Since(start))
+		return nil, err
 	}
 
 	proposal := toSignedBlindedProposal(block)
@@ -72,10 +76,13 @@ func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.Versi
 
 	select {
 	case resp := <-respCh:
+		recordUnblind(ctx, unblindModeFanout, unblindResultSuccess, time.Since(start))
 		return resp, nil
 	case <-doneCh:
+		recordUnblind(ctx, unblindModeFanout, unblindResultNoPayload, time.Since(start))
 		return nil, nil
 	case <-ctx.Done():
+		recordUnblind(ctx, unblindModeFanout, unblindResultError, time.Since(start))
 		return nil, ctx.Err()
 	}
 }

@@ -158,3 +158,15 @@ func (c *Cache) CleanupExpired() {
 	}
 	c.mu.Unlock()
 }
+
+// Sizes returns the number of bid entries and provenance entries currently stored.
+func (c *Cache) Sizes() (bidEntries int, provenanceEntries int) {
+	if c == nil {
+		return 0, 0
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return len(c.m), len(c.byExecBlockHash)
+}

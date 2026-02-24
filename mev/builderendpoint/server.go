@@ -45,7 +45,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 	cache := bidcache.New(cfg.CacheTTL)
 	factory := relayclient.NewFactory(ctx, cfg.RelayRequestTimeout)
 
-	fetcher := &bids.RelayFetcher{
+	baseFetcher := &bids.RelayFetcher{
 		Factory:       factory,
 		Relays:        cfg.Relays,
 		SlotStartTime: deps.SlotStartTime,
@@ -55,11 +55,40 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		},
 	}
 
-	prefetcher := bidcache.NewPrefetcher(cache, fetcher, cfg.PrefetchMaxInFlight)
+	fetcherForHeader := &bids.FetcherWithMetrics{Source: "get_header", Next: baseFetcher}
+	fetcherForPrefetch := &bids.FetcherWithMetrics{Source: "prefetch", Next: baseFetcher}
+
+	prefetcher := bidcache.NewPrefetcher(cache, fetcherForPrefetch, cfg.PrefetchMaxInFlight)
 
 	var bidSF singleflight.Group
 	bidProvider := func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
-		return bids.GetBidSingleflight(ctx, cache, fetcher, &bidSF, bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey})
+		if ctx == nil {
+			ctx = context.Background()
+		}
+
+		start := time.Now()
+		key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
+
+		cacheRes := getHeaderCacheMiss
+		if cache != nil {
+			if ent, ok := cache.Get(key); ok {
+				cacheRes = getHeaderCacheHit
+				recordGetHeader(ctx, cacheRes, getHeaderResultBid, time.Since(start))
+				return ent.Bid, nil
+			}
+		}
+
+		bid, err := bids.GetBidSingleflight(ctx, cache, fetcherForHeader, &bidSF, key)
+		if err != nil {
+			recordGetHeader(ctx, cacheRes, getHeaderResultError, time.Since(start))
+			return nil, err
+		}
+		if bid == nil {
+			recordGetHeader(ctx, cacheRes, getHeaderResultNoBid, time.Since(start))
+			return nil, nil
+		}
+		recordGetHeader(ctx, cacheRes, getHeaderResultBid, time.Since(start))
+		return bid, nil
 	}
 
 	unblind := buildUnblinder(cache, factory, cfg)
@@ -76,7 +105,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		logger:               logger,
 		cache:                cache,
 		prefetch:             prefetcher,
-		fetcher:              fetcher,
+		fetcher:              fetcherForPrefetch,
 		cacheCleanupInterval: cleanupInterval,
 		httpServer: &http.Server{
 			Addr:              cfg.ListenAddress,
@@ -167,6 +196,12 @@ func (s *Server) runCacheJanitor(ctx context.Context, interval time.Duration) {
 			return
 		case <-ticker.C:
 			s.cache.CleanupExpired()
+			bidEntries, provenanceEntries := s.cache.Sizes()
+			inFlight := 0
+			if s.prefetch != nil {
+				inFlight = s.prefetch.InFlight()
+			}
+			recordCacheGauges(ctx, bidEntries, provenanceEntries, inFlight)
 		}
 	}
 }
@@ -182,13 +217,6 @@ func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash p
 	}
 
 	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
-
-	// Skip duplicate work if the cache is already warm.
-	if s.cache != nil {
-		if _, ok := s.cache.Get(key); ok {
-			return
-		}
-	}
 
 	s.prefetch.Prefetch(ctx, key)
 }

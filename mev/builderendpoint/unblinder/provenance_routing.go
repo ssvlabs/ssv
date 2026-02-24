@@ -35,6 +35,8 @@ type ProvenanceRoutingUnblinder struct {
 }
 
 func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *eth2api.VersionedSignedBlindedBeaconBlock) (*eth2api.VersionedSignedProposal, error) {
+	start := time.Now()
+
 	if u == nil {
 		return nil, nil
 	}
@@ -42,7 +44,9 @@ func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *et
 		return nil, nil
 	}
 	if block == nil {
-		return nil, errors.New("nil blinded beacon block")
+		err := errors.New("nil blinded beacon block")
+		recordUnblind(ctx, unblindModeProvenance, unblindResultError, time.Since(start))
+		return nil, err
 	}
 
 	// If we can't derive provenance, fall back to fanout behavior.
@@ -52,6 +56,7 @@ func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *et
 	}
 	provRelay, ok := u.Cache.GetProvenanceByBlockHash(key.Slot, key.BlockHash)
 	if !ok || provRelay == "" {
+		recordProvenanceLookup(ctx, false)
 		return (&FanoutUnblinder{Providers: u.Providers, Retries: u.Retries, RetryInterval: u.RetryInterval}).UnblindBlock(ctx, block)
 	}
 
@@ -65,8 +70,10 @@ func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *et
 		others = append(others, p)
 	}
 	if primary == nil {
+		recordProvenanceLookup(ctx, false)
 		return (&FanoutUnblinder{Providers: u.Providers, Retries: u.Retries, RetryInterval: u.RetryInterval}).UnblindBlock(ctx, block)
 	}
+	recordProvenanceLookup(ctx, true)
 
 	proposal := toSignedBlindedProposal(block)
 	ctx, cancel := context.WithCancel(ctx)
@@ -143,10 +150,13 @@ func (u *ProvenanceRoutingUnblinder) UnblindBlock(ctx context.Context, block *et
 	select {
 	case resp := <-respCh:
 		cancel()
+		recordUnblind(ctx, unblindModeProvenance, unblindResultSuccess, time.Since(start))
 		return resp, nil
 	case <-doneCh:
+		recordUnblind(ctx, unblindModeProvenance, unblindResultNoPayload, time.Since(start))
 		return nil, nil
 	case <-ctx.Done():
+		recordUnblind(ctx, unblindModeProvenance, unblindResultError, time.Since(start))
 		return nil, ctx.Err()
 	}
 }
