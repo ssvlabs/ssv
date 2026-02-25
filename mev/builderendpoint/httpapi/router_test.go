@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -163,6 +164,29 @@ func TestPostBlindedBlocks_MissingConsensusHeader(t *testing.T) {
 	}
 }
 
+func TestPostBlindedBlocksV2_MissingConsensusHeader(t *testing.T) {
+	t.Parallel()
+
+	u := fakeUnblinder{}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	// Builder API spec:
+	// https://raw.githubusercontent.com/ethereum/builder-specs/main/apis/builder/blinded_blocks_v2.yaml
+	//
+	// Eth-Consensus-Version header is required for SSZ-encoded requests.
+	resp, err := http.Post(srv.URL+"/eth/v2/builder/blinded_blocks", "application/octet-stream", bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST blinded_blocks v2: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
 func TestPostBlindedBlocks_NoUnblindedBlock_Returns204(t *testing.T) {
 	t.Parallel()
 
@@ -187,6 +211,60 @@ func TestPostBlindedBlocks_NoUnblindedBlock_Returns204(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
+func TestPostBlindedBlocksV2_UnsupportedContentType_Returns415(t *testing.T) {
+	t.Parallel()
+
+	u := fakeUnblinder{resp: nil, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v2/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
+	req.Header.Set("Content-Type", "text/plain")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks v2: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusUnsupportedMediaType)
+	}
+}
+
+func TestPostBlindedBlocksV2_NoUnblindedBlock_Returns500(t *testing.T) {
+	t.Parallel()
+
+	u := fakeUnblinder{resp: nil, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v2/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks v2: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 }
 
@@ -242,6 +320,56 @@ func TestPostBlindedBlocks_Deneb_Returns200WithEnvelope(t *testing.T) {
 	}
 	if _, ok := decoded["data"]; !ok {
 		t.Fatalf("missing top-level data")
+	}
+}
+
+func TestPostBlindedBlocksV2_Deneb_Returns202Empty(t *testing.T) {
+	t.Parallel()
+
+	// Minimal deneb proposal with required payload pointer(s) for JSON marshaling.
+	denebProposal := &api.VersionedSignedProposal{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &apiv1deneb.SignedBlockContents{
+			SignedBlock: &deneb.SignedBeaconBlock{
+				Message: &deneb.BeaconBlock{
+					Body: &deneb.BeaconBlockBody{
+						ExecutionPayload: &deneb.ExecutionPayload{BaseFeePerGas: uint256.NewInt(0)},
+					},
+				},
+			},
+		},
+	}
+
+	u := fakeUnblinder{resp: denebProposal, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v2/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks v2: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusAccepted)
+	}
+
+	// v2 endpoint has an empty response body.
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(data) != 0 {
+		t.Fatalf("expected empty body, got %d bytes", len(data))
 	}
 }
 

@@ -45,7 +45,7 @@ func UnmarshalBlindedBlock(contentType string, consensusVersion string, body io.
 	case "application/json":
 		return unmarshalBlindedBlockJSON(signedBlindedBeaconBlock, body)
 	default:
-		return nil, fmt.Errorf("unsupported content type %s", contentType)
+		return nil, UnsupportedContentTypeError{ContentType: contentType}
 	}
 }
 

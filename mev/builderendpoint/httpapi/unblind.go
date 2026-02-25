@@ -1,11 +1,41 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/api"
+
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi/codec"
 )
+
+type requestError struct {
+	status int
+	msg    string
+}
+
+func (e requestError) Error() string { return e.msg }
+
+func decodeBlindedBlockRequest(r *http.Request) (*api.VersionedSignedBlindedBeaconBlock, error) {
+	consensusVersion := r.Header.Get(EthConsensusVersion)
+	if consensusVersion == "" {
+		return nil, requestError{status: http.StatusBadRequest, msg: "no " + EthConsensusVersion + " header provided"}
+	}
+
+	contentType := codec.NormalizeContentType(r.Header.Get("Content-Type"))
+
+	signedBlindedBeaconBlock, err := codec.UnmarshalBlindedBlock(contentType, consensusVersion, r.Body)
+	if err != nil {
+		var unsupported codec.UnsupportedContentTypeError
+		if errors.As(err, &unsupported) {
+			return nil, requestError{status: http.StatusUnsupportedMediaType, msg: "unsupported content type"}
+		}
+		return nil, requestError{status: http.StatusBadRequest, msg: "unable to obtain blinded block"}
+	}
+
+	return signedBlindedBeaconBlock, nil
+}
 
 func handleBlindedBlocks(unblinder UnblinderFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -16,16 +46,13 @@ func handleBlindedBlocks(unblinder UnblinderFunc) http.HandlerFunc {
 
 		ctx := r.Context()
 
-		consensusVersion := r.Header.Get(EthConsensusVersion)
-		if consensusVersion == "" {
-			writeError(w, http.StatusBadRequest, "no "+EthConsensusVersion+" header provided")
-			return
-		}
-
-		contentType := codec.NormalizeContentType(r.Header.Get("Content-Type"))
-
-		signedBlindedBeaconBlock, err := codec.UnmarshalBlindedBlock(contentType, consensusVersion, r.Body)
+		signedBlindedBeaconBlock, err := decodeBlindedBlockRequest(r)
 		if err != nil {
+			var re requestError
+			if errors.As(err, &re) {
+				writeError(w, re.status, re.msg)
+				return
+			}
 			writeError(w, http.StatusBadRequest, "unable to obtain blinded block")
 			return
 		}
