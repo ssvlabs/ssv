@@ -186,7 +186,7 @@ func toBeaconRoles(rs []api.Role) []spectypes.BeaconRole {
 
 // toRunnerRoles converts an API RunnerRoleSlice into a slice of runner roles.
 // It is used by HTTP adapters when constructing core query models.
-func toRunnerRoles(rs []api.RunnerRole) []spectypes.RunnerRole {
+func toRunnerRoles(rs api.RunnerRoleSlice) []spectypes.RunnerRole {
 	out := make([]spectypes.RunnerRole, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, spectypes.RunnerRole(r))

@@ -26,6 +26,10 @@ const (
 	scheduledDutyKey           = "sd"
 	// slotKeyLen is the number of bytes used to encode a slot in keys.
 	slotKeyLen = 4
+
+	// Stable internal bytes used for role-aware committee-duty key prefixes.
+	committeeRolePrefixByte           byte = 0x00
+	aggregatorCommitteeRolePrefixByte byte = 0x06
 )
 
 type DutyTraceStore struct {
@@ -192,7 +196,10 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[ph
 }
 
 func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.RunnerRole, duties []*exporter.CommitteeDutyTrace) error {
-	prefix := s.makeCommitteeSlotRolePrefix(slot, role)
+	prefix, err := s.makeCommitteeSlotRolePrefix(slot, role)
+	if err != nil {
+		return fmt.Errorf("make committee slot-role prefix (slot=%d role=%d): %w", slot, role, err)
+	}
 
 	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
 		ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", duties[i].Slot, role, duties[i].CommitteeID)
@@ -208,7 +215,10 @@ func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, role spectypes.Ru
 }
 
 func (s *DutyTraceStore) SaveCommitteeDuty(role spectypes.RunnerRole, duty *exporter.CommitteeDutyTrace) error {
-	prefix := s.makeCommitteePrefix(duty.Slot, role, duty.CommitteeID)
+	prefix, err := s.makeCommitteePrefix(duty.Slot, role, duty.CommitteeID)
+	if err != nil {
+		return fmt.Errorf("make committee prefix (slot=%d role=%d committeeID=%x): %w", duty.Slot, role, duty.CommitteeID, err)
+	}
 
 	ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", duty.Slot, role, duty.CommitteeID)
 	value, err := duty.MarshalSSZ()
@@ -235,7 +245,11 @@ func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes
 	}
 
 	for _, role := range roles {
-		prefix := s.makeCommitteeSlotRolePrefix(slot, role)
+		prefix, prefixErr := s.makeCommitteeSlotRolePrefix(slot, role)
+		if prefixErr != nil {
+			errs = multierror.Append(errs, fmt.Errorf("make committee slot-role prefix (slot=%d role=%d): %w", slot, role, prefixErr))
+			continue
+		}
 		ctx := fmt.Sprintf("slot=%d role=%d", slot, role)
 		iterationError := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 			duty := new(exporter.CommitteeDutyTrace)
@@ -255,7 +269,10 @@ func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes
 }
 
 func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) (duty *exporter.CommitteeDutyTrace, err error) {
-	prefix := s.makeCommitteePrefix(slot, role, committeeID)
+	prefix, err := s.makeCommitteePrefix(slot, role, committeeID)
+	if err != nil {
+		return nil, fmt.Errorf("make committee prefix (slot=%d role=%d committeeID=%x): %w", slot, role, committeeID, err)
+	}
 	ctx := fmt.Sprintf("slot=%d role=%d committeeID=%x", slot, role, committeeID)
 
 	obj, found, err := s.db.Get(prefix, nil)
@@ -439,23 +456,43 @@ func (s *DutyTraceStore) makeValidatorPrefix(slot phase0.Slot, role spectypes.Be
 	return prefix
 }
 
-func (s *DutyTraceStore) makeCommitteeSlotRolePrefix(slot phase0.Slot, role spectypes.RunnerRole) []byte {
+func (s *DutyTraceStore) makeCommitteeSlotRolePrefix(slot phase0.Slot, role spectypes.RunnerRole) ([]byte, error) {
+	roleByte, err := CommitteeRunnerRoleToPrefix(role)
+	if err != nil {
+		return nil, err
+	}
 	prefix := make([]byte, 0, len(committeeDutyTraceKey)+4+1)
 	prefix = append(prefix, []byte(committeeDutyTraceKey)...)
 	prefix = append(prefix, slotToByteSlice(slot)...)
 	// Include runner role to avoid collisions between committee and aggregator-committee duties.
-	prefix = append(prefix, byte(role&0xff))
-	return prefix
+	prefix = append(prefix, roleByte)
+	return prefix, nil
 }
 
-func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, role spectypes.RunnerRole, id spectypes.CommitteeID) []byte {
+func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, role spectypes.RunnerRole, id spectypes.CommitteeID) ([]byte, error) {
+	roleByte, err := CommitteeRunnerRoleToPrefix(role)
+	if err != nil {
+		return nil, err
+	}
 	prefix := make([]byte, 0, len(committeeDutyTraceKey)+4+1+32)
 	prefix = append(prefix, []byte(committeeDutyTraceKey)...)
 	prefix = append(prefix, slotToByteSlice(slot)...)
 	// Include runner role to avoid collisions between committee and aggregator-committee duties.
-	prefix = append(prefix, byte(role&0xff))
+	prefix = append(prefix, roleByte)
 	prefix = append(prefix, id[:]...)
-	return prefix
+	return prefix, nil
+}
+
+// CommitteeRunnerRoleToPrefix maps committee runner roles to stable key bytes.
+func CommitteeRunnerRoleToPrefix(role spectypes.RunnerRole) (byte, error) {
+	switch role {
+	case spectypes.RoleCommittee:
+		return committeeRolePrefixByte, nil
+	case spectypes.RoleAggregatorCommittee:
+		return aggregatorCommitteeRolePrefixByte, nil
+	default:
+		return 0, fmt.Errorf("unsupported committee runner role: %s", role)
+	}
 }
 
 func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot) []byte {

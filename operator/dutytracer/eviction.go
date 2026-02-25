@@ -89,7 +89,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		}
 		if err := c.store.SaveCommitteeDuties(slot, role, duties); err != nil {
 			c.logger.Error("save committee duties to disk", zap.Error(err), fields.RunnerRole(role))
-			return 0
+			continue
 		}
 		totalSaved += len(duties)
 	}

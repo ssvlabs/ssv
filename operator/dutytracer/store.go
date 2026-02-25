@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -133,7 +134,7 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 	var errs *multierror.Error
 
 	c.committeeTraces.Range(func(key committeeTraceKey, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
-		if len(roles) > 0 && !runnerRoleAllowed(key.role, roles) {
+		if len(roles) > 0 && !slices.Contains(roles, key.role) {
 			return true
 		}
 		dt, found := committeeSlots.Get(wantSlot)
@@ -172,15 +173,21 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 func hasSignersForRoles(duty *exporter.CommitteeDutyTrace, roles ...spectypes.BeaconRole) bool {
 	// Signer buckets are role-specific; use them to ensure the duty matches the requested beacon roles.
 	for _, role := range roles {
-		if role == spectypes.BNRoleAttester || role == spectypes.BNRoleAggregator {
+		bucket, ok := ssvtypes.CommitteeSignerBucketForBeaconRole(role)
+		if !ok {
+			continue
+		}
+		switch bucket {
+		case ssvtypes.CommitteeSignerBucketAttester:
 			if len(duty.Attester) == 0 {
 				return false
 			}
-		}
-		if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleSyncCommitteeContribution {
+		case ssvtypes.CommitteeSignerBucketSyncCommittee:
 			if len(duty.SyncCommittee) == 0 {
 				return false
 			}
+		case ssvtypes.CommitteeSignerBucketUnknown:
+			// Not a committee signer bucket.
 		}
 	}
 	return true
@@ -203,13 +210,17 @@ func committeeRunnerRolesForBeaconRoles(roles ...spectypes.BeaconRole) []spectyp
 	var wantCommittee bool
 	var wantAggregator bool
 	for _, role := range roles {
-		switch role {
-		case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+		runnerRole, ok := ssvtypes.CommitteeRunnerRoleForBeaconRole(role)
+		if !ok {
+			continue
+		}
+		switch runnerRole {
+		case spectypes.RoleCommittee:
 			wantCommittee = true
-		case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+		case spectypes.RoleAggregatorCommittee:
 			wantAggregator = true
 		default:
-			// Not committee-related beacon roles.
+			// Not a committee runner role.
 		}
 	}
 	out := make([]spectypes.RunnerRole, 0, 2)
@@ -220,15 +231,6 @@ func committeeRunnerRolesForBeaconRoles(roles ...spectypes.BeaconRole) []spectyp
 		out = append(out, spectypes.RoleAggregatorCommittee)
 	}
 	return out
-}
-
-func runnerRoleAllowed(role spectypes.RunnerRole, allowed []spectypes.RunnerRole) bool {
-	for _, candidate := range allowed {
-		if role == candidate {
-			return true
-		}
-	}
-	return false
 }
 
 func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]ParticipantsRangeIndexEntry, error) {

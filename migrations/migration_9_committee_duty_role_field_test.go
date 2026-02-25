@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	estore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -47,7 +48,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		_, oldFound := getCommitteeObj(t, opt.Db, prefix, oldKey)
 		require.False(t, oldFound)
 
-		newKey := testCommitteeRoleAwareKey(slot, role, committeeID)
+		newKey := testCommitteeRoleAwareKey(t, slot, role, committeeID)
 		newValue, found := getCommitteeObj(t, opt.Db, prefix, newKey)
 		require.True(t, found)
 
@@ -78,7 +79,7 @@ func TestMigration9CommitteeDutyRoleField(t *testing.T) {
 		initialValue, err := trace.MarshalSSZ()
 		require.NoError(t, err)
 
-		key := testCommitteeRoleAwareKey(slot, role, committeeID)
+		key := testCommitteeRoleAwareKey(t, slot, role, committeeID)
 		setCommitteeObj(t, opt.Db, prefix, key, initialValue)
 
 		err = migration_9_migrate_committee_duty_role_field.Run(
@@ -155,10 +156,13 @@ func testCommitteeLegacyKey(slot phase0.Slot, committeeID spectypes.CommitteeID)
 	return key
 }
 
-func testCommitteeRoleAwareKey(slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) []byte {
+func testCommitteeRoleAwareKey(t *testing.T, slot phase0.Slot, role spectypes.RunnerRole, committeeID spectypes.CommitteeID) []byte {
+	t.Helper()
+	roleByte, err := estore.CommitteeRunnerRoleToPrefix(role)
+	require.NoError(t, err)
 	key := make([]byte, 0, 4+1+len(committeeID))
 	key = append(key, slotToBytes(slot)...)
-	key = append(key, byte(role&0xff))
+	key = append(key, roleByte)
 	key = append(key, committeeID[:]...)
 	return key
 }

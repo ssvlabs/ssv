@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"
+	estore "github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -81,9 +82,14 @@ var migration_9_migrate_committee_duty_role_field = Migration{
 				return fmt.Errorf("marshal committee duty with role: %w", err)
 			}
 
+			roleByte, err := estore.CommitteeRunnerRoleToPrefix(spectypes.RoleCommittee)
+			if err != nil {
+				return fmt.Errorf("map committee runner role to prefix: %w", err)
+			}
+
 			newKey := make([]byte, 0, newKeyLen)
 			newKey = append(newKey, obj.Key[:slotKeyLen]...)
-			newKey = append(newKey, byte(spectypes.RoleCommittee&0xff))
+			newKey = append(newKey, roleByte)
 			newKey = append(newKey, obj.Key[slotKeyLen:]...)
 			if err := opt.Db.Set(prefix, newKey, value); err != nil {
 				return fmt.Errorf("set committee duty with role: %w", err)

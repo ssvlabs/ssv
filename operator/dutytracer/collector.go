@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -60,6 +61,9 @@ type Collector struct {
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 	syncCommitteeRootsSf    singleflight.Group
 
+	aggregatorSelectionRootsCache *ttlcache.Cache[phase0.Slot, phase0.Root]
+	aggregatorSelectionRootsSf    singleflight.Group
+
 	beacon *networkconfig.Beacon
 
 	store      DutyTraceStore
@@ -106,6 +110,7 @@ func New(
 		validatorTraces:                hashmap.New[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, *validatorDutyTrace]](),
 		validatorIndexToCommitteeLinks: hashmap.New[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, spectypes.CommitteeID]](),
 		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttl)),
+		aggregatorSelectionRootsCache:  ttlcache.New(ttlcache.WithTTL[phase0.Slot, phase0.Root](ttl)),
 		inFlightCommittee:              hashmap.Map[committeeTraceKey, struct{}]{},
 		inFlightValidator:              hashmap.Map[phase0.ValidatorIndex, struct{}]{},
 		decidedListenerFunc:            decidedListenerFunc,
@@ -165,8 +170,9 @@ func (c *Collector) evict(currentSlot phase0.Slot) {
 	evicted = c.dumpLinkToDBPeriodically(threshold)
 	c.logger.Info("evicted validator mappings to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
-	// remove old SC roots
+	// remove expired signing-root caches
 	c.syncCommitteeRootsCache.DeleteExpired()
+	c.aggregatorSelectionRootsCache.DeleteExpired()
 }
 
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*validatorDutyTrace, bool, error) {
@@ -398,9 +404,15 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 	return nil // we're exhausting all cases in the switch
 }
 
-func (c *Collector) processPartialSigCommittee(ctx context.Context, receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID, trace *committeeDutyTrace) {
+func (c *Collector) processPartialSigCommittee(
+	receivedAt uint64,
+	msg *spectypes.PartialSignatureMessages,
+	trace *committeeDutyTrace,
+	aggSelectionRoot phase0.Root,
+	aggSelectionRootReady bool,
+) {
 	// add operator ids to the trace
-	cmt, found := c.validators.Committee(committeeID)
+	cmt, found := c.validators.Committee(trace.CommitteeID)
 	if found && len(cmt.Operators) > 0 {
 		trace.OperatorIDs = cmt.Operators
 	}
@@ -409,17 +421,9 @@ func (c *Collector) processPartialSigCommittee(ctx context.Context, receivedAt u
 	var attIdxs []phase0.ValidatorIndex
 	var scIdxs []phase0.ValidatorIndex
 
-	if msg.Type == spectypes.AggregatorCommitteePartialSig && !trace.aggSelectionRootReady {
-		root, err := c.getAggregatorSelectionRoot(ctx, msg.Slot)
-		if err != nil {
-			c.logger.Warn("failed to compute aggregator selection root",
-				zap.Error(err),
-				fields.Slot(msg.Slot),
-				fields.CommitteeID(committeeID))
-		} else {
-			trace.aggSelectionRoot = root
-			trace.aggSelectionRootReady = true
-		}
+	if msg.Type == spectypes.AggregatorCommitteePartialSig && aggSelectionRootReady && !trace.aggSelectionRootReady {
+		trace.aggSelectionRoot = aggSelectionRoot
+		trace.aggSelectionRootReady = true
 	}
 
 	for _, partialSigMsg := range msg.Messages {
@@ -517,16 +521,33 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 }
 
 func (c *Collector) getAggregatorSelectionRoot(ctx context.Context, slot phase0.Slot) (phase0.Root, error) {
-	epoch := c.beacon.EstimatedEpochAtSlot(slot)
-	domain, err := c.client.DomainData(ctx, epoch, spectypes.DomainSelectionProof)
-	if err != nil {
-		return phase0.Root{}, fmt.Errorf("get aggregator selection domain data: %w", err)
+	if item := c.aggregatorSelectionRootsCache.Get(slot); item != nil {
+		return item.Value(), nil
 	}
-	root, err := spectypes.ComputeETHSigningRoot(spectypes.SSZUint64(slot), domain)
+
+	val, err, _ := c.aggregatorSelectionRootsSf.Do(strconv.FormatUint(uint64(slot), 10), func() (interface{}, error) {
+		if item := c.aggregatorSelectionRootsCache.Get(slot); item != nil {
+			return item.Value(), nil
+		}
+
+		epoch := c.beacon.EstimatedEpochAtSlot(slot)
+		domain, domainErr := c.client.DomainData(ctx, epoch, spectypes.DomainSelectionProof)
+		if domainErr != nil {
+			return phase0.Root{}, fmt.Errorf("get aggregator selection domain data: %w", domainErr)
+		}
+		root, rootErr := spectypes.ComputeETHSigningRoot(spectypes.SSZUint64(slot), domain)
+		if rootErr != nil {
+			return phase0.Root{}, fmt.Errorf("compute aggregator selection root: %w", rootErr)
+		}
+
+		_ = c.aggregatorSelectionRootsCache.Set(slot, root, ttlcache.DefaultTTL)
+		return root, nil
+	})
 	if err != nil {
-		return phase0.Root{}, fmt.Errorf("compute aggregator selection root: %w", err)
+		return phase0.Root{}, err
 	}
-	return root, nil
+
+	return val.(phase0.Root), nil
 }
 
 func (c *Collector) computeAggregatorCommitteePostConsensusRoles(
@@ -873,6 +894,20 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			slot := pSigMessages.Slot
 			role := msg.MsgID.GetRoleType()
+			var aggSelectionRoot phase0.Root
+			aggSelectionRootReady := false
+			if pSigMessages.Type == spectypes.AggregatorCommitteePartialSig {
+				root, err := c.getAggregatorSelectionRoot(ctx, slot)
+				if err != nil {
+					c.logger.Warn("failed to compute aggregator selection root",
+						zap.Error(err),
+						fields.Slot(slot),
+						fields.CommitteeID(committeeID))
+				} else {
+					aggSelectionRoot = root
+					aggSelectionRootReady = true
+				}
+			}
 
 			trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID, role)
 			if err != nil {
@@ -882,7 +917,13 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			trace.Lock()
 			defer trace.Unlock()
 
-			c.processPartialSigCommittee(ctx, startTime, pSigMessages, committeeID, trace)
+			c.processPartialSigCommittee(
+				startTime,
+				pSigMessages,
+				trace,
+				aggSelectionRoot,
+				aggSelectionRootReady,
+			)
 			c.checkAndPublishQuorum(logger, pSigMessages, committeeID, trace)
 
 			if late {
