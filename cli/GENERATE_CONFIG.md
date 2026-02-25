@@ -37,8 +37,7 @@ The `generate-config` command allows you to generate a YAML configuration file b
 | `--ssv-registry-contract-addr`       | string | Derived from local testnet config | Ethereum address of the network registry contract (e.g., `0xYourAddress`). |
 | `--ssv-bootnodes`                    | string | Derived from local testnet config | Comma-separated list of network bootnodes.                                 |
 | `--ssv-discovery-protocol-id`        | string | Derived from local testnet config | Hex-encoded discovery protocol ID (prefixed with `0x`).                    |
-| `--ssv-alan-fork-epoch`              | uint64 | Derived from local testnet config | Epoch at which the Alan fork occurs in the network.                        |
-| `--ssv-max-validators-per-committee` | int    | Derived from local testnet config | Max validators per committee.                                              |
+| `--ssv-boole-fork-epoch`             | uint64 | Derived from local testnet config | Epoch at which the Boole fork occurs in the network.                       |
 
 
 **Note:** The `--consensus-client` and `--execution-client` flags are mandatory and must be provided when running the CLI.
@@ -83,7 +82,7 @@ ssvnode generate-config \
 
 ### Advanced Network Configuration
 
-Customize network settings such as bootnodes, discovery protocol ID, fork epoch, etc:
+Customize network settings such as bootnodes, discovery protocol ID, and Boole fork epoch:
 
 ```bash
 ssvnode generate-config \
@@ -95,7 +94,7 @@ ssvnode generate-config \
   --ssv-registry-contract-addr "0xYourRegistryContractAddress" \
   --ssv-bootnodes "enode://bootnode1@127.0.0.1:30303,enode://bootnode2@127.0.0.1:30304" \
   --ssv-discovery-protocol-id "0x1234567890ab" \
-  --ssv-max-validators-per-committee 560
+  --ssv-boole-fork-epoch 0
 ```
 
 ## Configuration
