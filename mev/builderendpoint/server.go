@@ -44,6 +44,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		return nil, err
 	}
 
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger = logger.Named("MevBuilder")
+
 	cache := bidcache.New(cfg.CacheTTL)
 	factory := relayclient.NewFactory(ctx, cfg.RelayRequestTimeout)
 
@@ -95,7 +100,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 
 	unblind := buildUnblinder(cache, factory, cfg)
 
-	handler := httpapi.NewRouter(logger, bidProvider, unblind, buildRegistrar(factory, cfg))
+	handler := httpapi.NewRouter(logger.Named("HTTP"), bidProvider, unblind, buildRegistrar(factory, cfg))
 
 	cleanupInterval := cfg.CacheCleanupInterval
 	if cfg.CacheTTL <= 0 {
