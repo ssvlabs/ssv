@@ -38,7 +38,7 @@ func (dvs *DiscV5Service) badNodeFilter() func(node *enode.Node) bool {
 	}
 }
 
-// badNodeFilter checks if the node was pruned or have a bad score
+// ssvNodeFilter checks if the node is an SSV node
 func (dvs *DiscV5Service) ssvNodeFilter() func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		var isSSV = new(bool)
