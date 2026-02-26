@@ -81,9 +81,9 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 			{
@@ -104,7 +104,8 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -117,9 +118,9 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 			{
@@ -149,7 +150,8 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -163,9 +165,9 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for no action to be taken
 		ticker.Send(phase0.Slot(0))
@@ -216,7 +218,8 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -229,9 +232,9 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 			{
@@ -299,7 +302,8 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -313,10 +317,10 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+2)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+2)
 		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+2)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
 			{
@@ -379,7 +383,8 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -393,10 +398,10 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+2)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch+2)
 		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch+2)
 		fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
 			{
@@ -478,6 +483,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }

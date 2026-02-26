@@ -661,7 +661,7 @@ var StartNodeCmd = &cobra.Command{
 					[]string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
 					p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					p2pNetwork.(hnode.TopicIndex),
+					p2pNetwork,
 					nodeProber,
 					clNodeName,
 					elNodeName,

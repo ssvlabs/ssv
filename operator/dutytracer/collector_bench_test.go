@@ -13,9 +13,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
@@ -87,11 +86,11 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 
 	for {
 		_, err := r.Read(header[:])
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return result, nil
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read header: %w", err)
 		}
 
 		length := int(header[0])<<8 | int(header[1])
@@ -99,12 +98,12 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 		diskMsgBytes := make([]byte, length)
 		_, err = r.Read(diskMsgBytes)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read disk msg: %w", err)
 		}
 
 		dataMsg := new(exporter.DiskMsg)
 		if err := dataMsg.UnmarshalSSZ(diskMsgBytes); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unmarshal disk msg: %w", err)
 		}
 
 		msg := &queue.SSVMessage{

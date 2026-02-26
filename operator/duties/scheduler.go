@@ -112,7 +112,9 @@ type Scheduler struct {
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
-	pool       *pool.ContextPool
+
+	// pool manages all go-routines spawned by Scheduler.
+	pool *pool.ContextPool
 
 	// waitCond coordinates access to headSlot for different go-routines
 	waitCond *sync.Cond
@@ -221,10 +223,19 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		})
 	}
 
-	go s.SlotTicker(ctx)
+	s.pool.Go(func(ctx context.Context) error {
+		indicesChangeFeed.FanOut(ctx, s.indicesChg)
+		return nil
+	})
+	s.pool.Go(func(ctx context.Context) error {
+		reorgFeed.FanOut(ctx, s.reorg)
+		return nil
+	})
 
-	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
-	go reorgFeed.FanOut(ctx, s.reorg)
+	s.pool.Go(func(ctx context.Context) error {
+		s.SlotTicker(ctx)
+		return nil
+	})
 
 	return nil
 }

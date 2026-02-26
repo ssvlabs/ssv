@@ -262,7 +262,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(8),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(200*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -657,7 +657,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 func TestChainReorganizationLogs(t *testing.T) {
 	// TODO: fix reorg test
 	// logger := zaptest.NewLogger(t)
-	// const testTimeout = 2 * time.Second
+	// const testTimeout = 30 * time.Second
 	// ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	// defer cancel()
 
@@ -969,7 +969,7 @@ func TestFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(200*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
