@@ -104,21 +104,20 @@ func TestHandleDecidedQuery(t *testing.T) {
 		oids = append(oids, o.OperatorID)
 	}
 
-	for _, role := range roles {
-		pk := sks[1].GetPublicKey()
-		ssvConfig := networkconfig.TestNetwork.SSV
-		decided250Seq, err := qbftstorage.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-			return oids, &specqbft.Message{
-				MsgType:    specqbft.CommitMsgType,
-				Height:     height,
-				Round:      1,
-				Identifier: pk.Serialize(),
-				Root:       [32]byte{0x1, 0x2, 0x3},
-			}
-		})
-		require.NoError(t, err)
+	pk := sks[1].GetPublicKey()
+	ssvConfig := networkconfig.TestNetwork.SSV
+	decided250Seq, err := qbftstorage.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     height,
+			Round:      1,
+			Identifier: pk.Serialize(),
+			Root:       [32]byte{0x1, 0x2, 0x3},
+		}
+	})
+	require.NoError(t, err)
 
-		// save participants
+	for _, role := range roles {
 		for _, d := range decided250Seq {
 			_, err := ibftStorage.Get(role).SaveParticipants(
 				spectypes.ValidatorPK(pk.Serialize()),
@@ -128,55 +127,57 @@ func TestHandleDecidedQuery(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		t.Run("valid range", func(t *testing.T) {
-			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
-			require.NotNil(t, nm.Msg.Data)
-			msgs, ok := nm.Msg.Data.([]*ParticipantsAPI)
+		t.Run(role.String(), func(t *testing.T) {
+			t.Run("valid range", func(t *testing.T) {
+				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), role, 0, 250)
+				h := NewHandler(l)
+				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				require.NotNil(t, nm.Msg.Data)
+				msgs, ok := nm.Msg.Data.([]*ParticipantsAPI)
 
-			require.True(t, ok, "expected []*ParticipantsAPI, got %+v", nm.Msg.Data)
-			require.Equal(t, 251, len(msgs)) // seq 0 - 250
-		})
+				require.True(t, ok, "expected []*ParticipantsAPI, got %+v", nm.Msg.Data)
+				require.Equal(t, 251, len(msgs)) // seq 0 - 250
+			})
 
-		t.Run("invalid range", func(t *testing.T) {
-			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
-			require.NotNil(t, nm.Msg.Data)
-			data, ok := nm.Msg.Data.([]string)
-			require.True(t, ok)
-			require.Equal(t, []string{"no messages"}, data)
-		})
+			t.Run("invalid range", func(t *testing.T) {
+				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), role, 400, 404)
+				h := NewHandler(l)
+				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				require.NotNil(t, nm.Msg.Data)
+				data, ok := nm.Msg.Data.([]string)
+				require.True(t, ok)
+				require.Equal(t, []string{"no messages"}, data)
+			})
 
-		t.Run("non-existing validator", func(t *testing.T) {
-			nm := newParticipantsAPIMsg("xxx", spectypes.BNRoleAttester, 400, 404)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
-			require.NotNil(t, nm.Msg.Data)
-			errs, ok := nm.Msg.Data.([]string)
-			require.True(t, ok)
-			require.Equal(t, "internal error - could not read validator key", errs[0])
-		})
+			t.Run("non-existing validator", func(t *testing.T) {
+				nm := newParticipantsAPIMsg("xxx", role, 400, 404)
+				h := NewHandler(l)
+				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				require.NotNil(t, nm.Msg.Data)
+				errs, ok := nm.Msg.Data.([]string)
+				require.True(t, ok)
+				require.Equal(t, "internal error - could not read validator key", errs[0])
+			})
 
-		t.Run("non-existing role", func(t *testing.T) {
-			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
-			require.NotNil(t, nm.Msg.Data)
-			errs, ok := nm.Msg.Data.([]string)
-			require.True(t, ok)
-			require.Equal(t, "role doesn't exist", errs[0])
-		})
+			t.Run("non-existing role", func(t *testing.T) {
+				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
+				h := NewHandler(l)
+				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				require.NotNil(t, nm.Msg.Data)
+				errs, ok := nm.Msg.Data.([]string)
+				require.True(t, ok)
+				require.Equal(t, "role doesn't exist", errs[0])
+			})
 
-		t.Run("non-existing storage", func(t *testing.T) {
-			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
-			require.NotNil(t, nm.Msg.Data)
-			errs, ok := nm.Msg.Data.([]string)
-			require.True(t, ok)
-			require.Equal(t, "internal error - role storage doesn't exist", errs[0])
+			t.Run("non-existing storage", func(t *testing.T) {
+				nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
+				h := NewHandler(l)
+				h.HandleParticipantsQuery(ibftStorage, nm, ssvConfig.DomainType)
+				require.NotNil(t, nm.Msg.Data)
+				errs, ok := nm.Msg.Data.([]string)
+				require.True(t, ok)
+				require.Equal(t, "internal error - role storage doesn't exist", errs[0])
+			})
 		})
 	}
 }

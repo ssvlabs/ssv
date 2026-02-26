@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -98,498 +99,503 @@ func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties [
 }
 
 func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			activeShares = eligibleShares()
+		)
+		dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
 
-	var (
-		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
-		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares = eligibleShares()
-	)
-	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
+		// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		firstSlotOfNextPeriod := phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch)
+		lastSlotOfPeriod := firstSlotOfNextPeriod - 2
+		startSlot := lastSlotOfPeriod - 2
+		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+		waitForSlotN(scheduler.beaconConfig, startSlot)
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, &SafeValue[bool]{})
+		startScheduler(ctx, t, scheduler, schedulerPool)
+
+		// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
+		duties, _ := dutiesMap.Get(0)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, startSlot)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(startSlot)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 2: expect sync committee duties to be executed at the same period
+		waitForSlotN(scheduler.beaconConfig, startSlot+1)
+		duties, _ = dutiesMap.Get(0)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, startSlot+1)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(startSlot + 1)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 3: expect sync committee duties to be executed at the last slot of the period
+		waitForSlotN(scheduler.beaconConfig, lastSlotOfPeriod)
+		duties, _ = dutiesMap.Get(0)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, lastSlotOfPeriod)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(lastSlotOfPeriod)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 4: expect no action to be taken as we are in the next period
+		waitForSlotN(scheduler.beaconConfig, firstSlotOfNextPeriod)
+		ticker.Send(firstSlotOfNextPeriod)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, schedulerPool.Wait())
 	})
-
-	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, &SafeValue[bool]{})
-	startScheduler(ctx, t, scheduler, schedulerPool)
-
-	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
-	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 1)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(1))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// STEP 2: expect sync committee duties to be executed at the same period
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
-	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 2)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(2))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// STEP 3: expect sync committee duties to be executed at the last slot of the period
-	waitForSlotN(scheduler.beaconConfig, scheduler.beaconConfig.LastSlotOfSyncPeriod(0))
-	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.LastSlotOfSyncPeriod(0))
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(scheduler.beaconConfig.LastSlotOfSyncPeriod(0))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.beaconConfig.FirstSlotAtEpoch(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
-	waitForSlotN(scheduler.beaconConfig, firstSlotOfNextPeriod)
-	ticker.Send(firstSlotOfNextPeriod)
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
 }
 
 func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler        = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			waitForDuties  = &SafeValue[bool]{}
+			dutiesMap      = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			eligibleShares = eligibleShares()
+		)
+		dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 4},
+				ValidatorIndex: phase0.ValidatorIndex(2),
+			},
+		})
 
-	var (
-		handler        = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
-		waitForDuties  = &SafeValue[bool]{}
-		dutiesMap      = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		eligibleShares = eligibleShares()
-	)
-	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
+		// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		firstSlotOfNextPeriod := phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch)
+		lastSlotOfPeriod := firstSlotOfNextPeriod - 2
+		startSlot := lastSlotOfPeriod - 2
+		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, startSlot)
+		waitForSlotN(scheduler.beaconConfig, startSlot)
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, eligibleShares, dutiesMap, waitForDuties)
+		startScheduler(ctx, t, scheduler, schedulerPool)
+
+		duties, _ := dutiesMap.Get(0)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, startSlot)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(startSlot)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 2: wait for sync committee duties to be executed
+		waitForSlotN(scheduler.beaconConfig, startSlot+1)
+		duties, _ = dutiesMap.Get(0)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, startSlot+1)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(startSlot + 1)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 3: wait for sync committee duties to be executed
+		waitForSlotN(scheduler.beaconConfig, lastSlotOfPeriod)
+		duties, _ = dutiesMap.Get(0)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, lastSlotOfPeriod)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(lastSlotOfPeriod)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// ...
+
+		// STEP 4: new period, wait for sync committee duties to be executed
+		waitForSlotN(scheduler.beaconConfig, firstSlotOfNextPeriod)
+		duties, _ = dutiesMap.Get(1)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, firstSlotOfNextPeriod)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(firstSlotOfNextPeriod)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, schedulerPool.Wait())
 	})
-	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 4},
-			ValidatorIndex: phase0.ValidatorIndex(2),
-		},
-	})
-
-	// STEP 1: wait for sync committee duties to be fetched (handle initial duties)
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2-1)
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2-1))
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, eligibleShares, dutiesMap, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
-
-	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2-1)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - testSlotsPerEpoch - testSlotsPerEpoch/2 - 1))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// STEP 2: wait for sync committee duties to be executed
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2))
-	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - testSlotsPerEpoch - testSlotsPerEpoch/2))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// STEP 3: wait for sync committee duties to be executed
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2+1))
-	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch-testSlotsPerEpoch-testSlotsPerEpoch/2+1)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - testSlotsPerEpoch - testSlotsPerEpoch/2 + 1))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// ...
-
-	// STEP 4: new period, wait for sync committee duties to be executed
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-	duties, _ = dutiesMap.Get(1)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
 }
 
 func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			waitForDuties = &SafeValue[bool]{}
+			dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			activeShares  = eligibleShares()
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 
-	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
-		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = eligibleShares()
-	)
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
 
-	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
+		// STEP 1: (on startup) wait for sync committee duties to be fetched for the current and next periods
+		waitForDuties.Set(true)
+		startScheduler(ctx, t, scheduler, schedulerPool)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+		// STEP 2: trigger a change in active indices
+		scheduler.indicesChg <- struct{}{}
+		duties, _ := dutiesMap.Get(1)
+		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
+			PubKey:         phase0.BLSPubKey{1, 2, 4},
+			ValidatorIndex: phase0.ValidatorIndex(2),
+		}))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: wait for sync committee duties to be fetched again
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+		// STEP 4: no action should be taken
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 5: execute duties
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
+		duties, _ = dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, schedulerPool.Wait())
 	})
-
-	// STEP 1: (on startup) wait for sync committee duties to be fetched for the current and next periods
-	waitForDuties.Set(true)
-	startScheduler(ctx, t, scheduler, schedulerPool)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 2: trigger a change in active indices
-	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(1)
-	dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
-		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		ValidatorIndex: phase0.ValidatorIndex(2),
-	}))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 3: wait for sync committee duties to be fetched again
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 4: no action should be taken
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 5: execute duties
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
 }
 
 func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			waitForDuties = &SafeValue[bool]{}
+			dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			activeShares  = eligibleShares()
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
+		waitForSlotN(scheduler.beaconConfig, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+		startScheduler(ctx, t, scheduler, schedulerPool)
 
-	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
-		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = eligibleShares()
-	)
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
-	waitForSlotN(scheduler.beaconConfig, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
-	startScheduler(ctx, t, scheduler, schedulerPool)
+		// STEP 1: wait for no action to be taken
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 3))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-	// STEP 1: wait for no action to be taken
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 3))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		// STEP 2: trigger a change in active indices
+		scheduler.indicesChg <- struct{}{}
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-	// STEP 2: trigger a change in active indices
-	scheduler.indicesChg <- struct{}{}
-	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
+		// STEP 3: trigger a change in active indices
+		scheduler.indicesChg <- struct{}{}
+		duties, _ := dutiesMap.Get(1)
+		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
+			PubKey:         phase0.BLSPubKey{1, 2, 4},
+			ValidatorIndex: phase0.ValidatorIndex(2),
+		}))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: wait for sync committee duties to be fetched again
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
+		waitForDuties.Set(true)
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+		// STEP 5: no action should be taken
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 6: The first assigned duty should not be executed, but the second one should
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
+		duties, _ = dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, schedulerPool.Wait())
 	})
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 3: trigger a change in active indices
-	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(1)
-	dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
-		PubKey:         phase0.BLSPubKey{1, 2, 4},
-		ValidatorIndex: phase0.ValidatorIndex(2),
-	}))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 4: wait for sync committee duties to be fetched again
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
-	waitForDuties.Set(true)
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 5: no action should be taken
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 6: The first assigned duty should not be executed, but the second one should
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
 }
 
 // reorg current dependent root changed
 func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			waitForDuties = &SafeValue[bool]{}
+			dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			activeShares  = eligibleShares()
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 
-	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
-		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = eligibleShares()
-	)
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
 
-	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
+		// STEP 1: (on startup) wait for sync committee duties to be fetched for the current and next periods
+		waitForDuties.Set(true)
+		startScheduler(ctx, t, scheduler, schedulerPool)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+		// STEP 2: trigger head event
+		e := &v1.Event{
+			Data: &v1.HeadEvent{
+				Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 3,
+				CurrentDutyDependentRoot: phase0.Root{0x01},
+			},
+		}
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: Ticker with no action
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: trigger reorg
+		e = &v1.Event{
+			Data: &v1.HeadEvent{
+				Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 2,
+				CurrentDutyDependentRoot: phase0.Root{0x02},
+			},
+		}
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 4},
+				ValidatorIndex: phase0.ValidatorIndex(2),
+			},
+		})
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 5: wait for sync committee duties to be fetched again for the current epoch
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+		// STEP 6: The first assigned duty should not be executed, but the second one should
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
+		duties, _ := dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, schedulerPool.Wait())
 	})
-
-	// STEP 1: (on startup) wait for sync committee duties to be fetched for the current and next periods
-	waitForDuties.Set(true)
-	startScheduler(ctx, t, scheduler, schedulerPool)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 2: trigger head event
-	e := &v1.Event{
-		Data: &v1.HeadEvent{
-			Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 3,
-			CurrentDutyDependentRoot: phase0.Root{0x01},
-		},
-	}
-	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 3: Ticker with no action
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 4: trigger reorg
-	e = &v1.Event{
-		Data: &v1.HeadEvent{
-			Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 2,
-			CurrentDutyDependentRoot: phase0.Root{0x02},
-		},
-	}
-	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 4},
-			ValidatorIndex: phase0.ValidatorIndex(2),
-		},
-	})
-	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 6: The first assigned duty should not be executed, but the second one should
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-	duties, _ := dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
 }
 
 // reorg current dependent root changed including indices change in the same slot
 func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			waitForDuties = &SafeValue[bool]{}
+			dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			activeShares  = eligibleShares()
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 
-	var (
-		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
-		waitForDuties = &SafeValue[bool]{}
-		dutiesMap     = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares  = eligibleShares()
-	)
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testEpochsPerSCPeriod*testSlotsPerEpoch-3)
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-3))
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
 
-	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
+		// STEP 1: (on startup) wait for sync committee duties to be fetched for the current and next periods
+		waitForDuties.Set(true)
+		startScheduler(ctx, t, scheduler, schedulerPool)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+		// STEP 2: trigger head event
+		e := &v1.Event{
+			Data: &v1.HeadEvent{
+				Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 3,
+				CurrentDutyDependentRoot: phase0.Root{0x01},
+			},
+		}
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: Ticker with no action
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: trigger reorg
+		e = &v1.Event{
+			Data: &v1.HeadEvent{
+				Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 2,
+				CurrentDutyDependentRoot: phase0.Root{0x02},
+			},
+		}
+		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 4},
+				ValidatorIndex: phase0.ValidatorIndex(2),
+			},
+		})
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: trigger a change in active indices
+		scheduler.indicesChg <- struct{}{}
+		duties, _ := dutiesMap.Get(1)
+		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
+			PubKey:         phase0.BLSPubKey{1, 2, 5},
+			ValidatorIndex: phase0.ValidatorIndex(3),
+		}))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 5: wait for sync committee duties to be fetched again for the current epoch
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+
+		// STEP 6: The first assigned duty should not be executed, but the second and the new from indices change should
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
+		duties, _ = dutiesMap.Get(1)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, schedulerPool.Wait())
 	})
-
-	// STEP 1: (on startup) wait for sync committee duties to be fetched for the current and next periods
-	waitForDuties.Set(true)
-	startScheduler(ctx, t, scheduler, schedulerPool)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 2: trigger head event
-	e := &v1.Event{
-		Data: &v1.HeadEvent{
-			Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 3,
-			CurrentDutyDependentRoot: phase0.Root{0x01},
-		},
-	}
-	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 3: Ticker with no action
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 4: trigger reorg
-	e = &v1.Event{
-		Data: &v1.HeadEvent{
-			Slot:                     testEpochsPerSCPeriod*testSlotsPerEpoch - 2,
-			CurrentDutyDependentRoot: phase0.Root{0x02},
-		},
-	}
-	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 4},
-			ValidatorIndex: phase0.ValidatorIndex(2),
-		},
-	})
-	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 3: trigger a change in active indices
-	scheduler.indicesChg <- struct{}{}
-	duties, _ := dutiesMap.Get(1)
-	dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
-		PubKey:         phase0.BLSPubKey{1, 2, 5},
-		ValidatorIndex: phase0.ValidatorIndex(3),
-	}))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
-
-	// STEP 6: The first assigned duty should not be executed, but the second and the new from indices change should
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch))
-	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, testEpochsPerSCPeriod*testSlotsPerEpoch)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(testEpochsPerSCPeriod * testSlotsPerEpoch))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
 }
 
 func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+			dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
+			activeShares = eligibleShares()
+		)
+		dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
 
-	var (
-		handler      = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
-		dutiesMap    = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
-		activeShares = eligibleShares()
-	)
-	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
-		{
-			PubKey:         phase0.BLSPubKey{1, 2, 3},
-			ValidatorIndex: phase0.ValidatorIndex(1),
-		},
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, &SafeValue[bool]{})
+		startScheduler(ctx, t, scheduler, schedulerPool)
+
+		duties, _ := dutiesMap.Get(0)
+		expected := expectedExecutedSyncCommitteeDuties(handler, duties, 0)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
+		ticker.Send(phase0.Slot(0))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 2: expect sync committee duties to be executed at the same period
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		duties, _ = dutiesMap.Get(0)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, 1)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(1))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration when
+		// Beacon head event is observed (block arrival)
+		startTime := time.Now()
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		duties, _ = dutiesMap.Get(0)
+		expected = expectedExecutedSyncCommitteeDuties(handler, duties, 2)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+		ticker.Send(phase0.Slot(2))
+
+		// STEP 4: trigger head event (block arrival)
+		e := &v1.Event{
+			Data: &v1.HeadEvent{
+				Slot: 2,
+			},
+		}
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+		require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.SlotDuration/3)*0.90))
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, schedulerPool.Wait())
 	})
-
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
-	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, &SafeValue[bool]{})
-	startScheduler(ctx, t, scheduler, schedulerPool)
-
-	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 0)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
-	ticker.Send(phase0.Slot(0))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// STEP 2: expect sync committee duties to be executed at the same period
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
-	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 1)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	ticker.Send(phase0.Slot(1))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-
-	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration when
-	// Beacon head event is observed (block arrival)
-	startTime := time.Now()
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
-	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 2)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-	ticker.Send(phase0.Slot(2))
-
-	// STEP 4: trigger head event (block arrival)
-	e := &v1.Event{
-		Data: &v1.HeadEvent{
-			Slot: 2,
-		},
-	}
-	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
-	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.SlotDuration/3)*0.90))
-
-	// Stop scheduler & wait for graceful exit.
-	cancel()
-	require.NoError(t, schedulerPool.Wait())
 }
 
 func eligibleShares() []*ssvtypes.SSVShare {

@@ -11,9 +11,9 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type SpecTest struct {
@@ -26,7 +26,7 @@ type SpecTest struct {
 }
 
 func RunTimeout(t *testing.T, test *SpecTest) {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	err := test.Pre.UponRoundTimeout(context.TODO(), logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
