@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -38,7 +39,20 @@ func handleValidators(logger *zap.Logger, registrar ValidatorRegistrationsForwar
 		// Best-effort forwarding: do not fail the request when some relays reject registrations.
 		// Some beacon clients may treat non-2xx responses as "builder unhealthy" and circuit-break.
 		if len(registrationErrors) > 0 && logger != nil {
-			logger.Warn("validator registrations forwarding had failures", zap.Int("failures", len(registrationErrors)))
+			failedRelays := make([]string, 0, len(registrationErrors))
+			for _, failure := range registrationErrors {
+				relay, _, ok := strings.Cut(failure, ": ")
+				if ok && relay != "" {
+					failedRelays = append(failedRelays, relay)
+				}
+			}
+
+			logger.Warn(
+				"validator registrations forwarding had failures",
+				zap.Int("failures", len(registrationErrors)),
+				zap.Strings("failed_relays", failedRelays),
+				zap.Strings("relay_failures", registrationErrors),
+			)
 		}
 
 		w.WriteHeader(http.StatusOK)

@@ -33,6 +33,7 @@ type Server struct {
 	fetcher  bidcache.Fetcher
 
 	cacheCleanupInterval time.Duration
+	relaysCount          int
 }
 
 type Dependencies struct {
@@ -114,6 +115,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		prefetch:             prefetcher,
 		fetcher:              fetcherForPrefetch,
 		cacheCleanupInterval: cleanupInterval,
+		relaysCount:          len(cfg.Relays),
 		httpServer: &http.Server{
 			Addr:              net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
 			Handler:           handler,
@@ -170,7 +172,11 @@ func (s *Server) Run(ctx context.Context) error {
 
 	go func() {
 		if s.logger != nil {
-			s.logger.Info("serving builder endpoint", zap.String("addr", s.httpServer.Addr))
+			s.logger.Info(
+				"serving builder endpoint",
+				zap.String("addr", s.httpServer.Addr),
+				zap.Int("relays", s.relaysCount),
+			)
 		}
 		errCh <- s.httpServer.ListenAndServe()
 	}()

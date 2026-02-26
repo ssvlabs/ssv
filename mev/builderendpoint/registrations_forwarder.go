@@ -51,7 +51,7 @@ func (f *RegistrationsForwarder) ForwardValidatorRegistrations(ctx context.Conte
 			submitter, err := f.Factory.FetchSubmitter(relayAddr)
 			if err != nil {
 				mu.Lock()
-				failures = append(failures, fmt.Sprintf("%s: %v", relayAddr, err))
+				failures = append(failures, fmt.Sprintf("%s: %v", sanitizeRelayURLForLog(relayAddr), err))
 				mu.Unlock()
 				return
 			}
@@ -59,7 +59,7 @@ func (f *RegistrationsForwarder) ForwardValidatorRegistrations(ctx context.Conte
 				Registrations: versioned,
 			}); err != nil {
 				mu.Lock()
-				failures = append(failures, fmt.Sprintf("%s: %v", relayAddr, err))
+				failures = append(failures, fmt.Sprintf("%s: %v", sanitizeRelayURLForLog(relayAddr), err))
 				mu.Unlock()
 				return
 			}
