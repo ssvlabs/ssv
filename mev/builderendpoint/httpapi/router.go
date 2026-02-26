@@ -3,11 +3,11 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"runtime"
 	"time"
 
+	apiv1 "github.com/attestantio/go-builder-client/api/v1"
 	builderspec "github.com/attestantio/go-builder-client/spec"
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -29,8 +29,7 @@ type BidProviderFunc func(ctx context.Context, slot phase0.Slot, parentHash phas
 type UnblinderFunc func(ctx context.Context, block *api.VersionedSignedBlindedBeaconBlock) (*api.VersionedSignedProposal, error)
 
 // ValidatorRegistrationsForwarderFunc forwards validator registrations to relays/builders.
-// It must close the body.
-type ValidatorRegistrationsForwarderFunc func(ctx context.Context, body io.ReadCloser) ([]string, error)
+type ValidatorRegistrationsForwarderFunc func(ctx context.Context, registrations []*apiv1.SignedValidatorRegistration) ([]string, error)
 
 // NewRouter creates the Builder API v1 HTTP server.
 // It intentionally contains no application logic beyond request/response wiring.

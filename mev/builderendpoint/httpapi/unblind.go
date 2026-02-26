@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -18,14 +20,30 @@ type requestError struct {
 func (e requestError) Error() string { return e.msg }
 
 func decodeBlindedBlockRequest(r *http.Request) (*api.VersionedSignedBlindedBeaconBlock, error) {
+	contentType := codec.NormalizeContentType(r.Header.Get("Content-Type"))
 	consensusVersion := r.Header.Get(EthConsensusVersion)
-	if consensusVersion == "" {
+
+	// Per builder-specs: Eth-Consensus-Version is required for SSZ encoded requests.
+	if contentType == codec.MediaTypeSSZ && consensusVersion == "" {
 		return nil, requestError{status: http.StatusBadRequest, msg: "no " + EthConsensusVersion + " header provided"}
 	}
 
-	contentType := codec.NormalizeContentType(r.Header.Get("Content-Type"))
+	// For JSON requests, the header is optional. If missing, try best-effort detection.
+	var body io.Reader = r.Body
+	if contentType == codec.MediaTypeJSON && consensusVersion == "" {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, requestError{status: http.StatusBadRequest, msg: "unable to read body"}
+		}
+		ver, err := codec.DetectConsensusVersionFromSignedBlindedBeaconBlockJSON(raw)
+		if err != nil {
+			return nil, requestError{status: http.StatusBadRequest, msg: "unable to determine consensus version"}
+		}
+		consensusVersion = ver
+		body = bytes.NewReader(raw)
+	}
 
-	signedBlindedBeaconBlock, err := codec.UnmarshalBlindedBlock(contentType, consensusVersion, r.Body)
+	signedBlindedBeaconBlock, err := codec.UnmarshalBlindedBlock(contentType, consensusVersion, body)
 	if err != nil {
 		var unsupported codec.UnsupportedContentTypeError
 		if errors.As(err, &unsupported) {
@@ -65,17 +83,38 @@ func handleBlindedBlocks(unblinder UnblinderFunc) http.HandlerFunc {
 		}
 
 		if signedProposal == nil {
-			w.WriteHeader(http.StatusNoContent)
+			writeError(w, http.StatusInternalServerError, "failed to unblind block")
 			return
 		}
 
-		resp, err := codec.MarshalUnblindBlockResponse(signedProposal)
+		respCT, err := codec.PreferredResponseContentType(r.Header.Get("Accept"))
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to generate unblinded response")
+			writeError(w, http.StatusNotAcceptable, "not acceptable")
 			return
 		}
 
-		w.Header().Set(EthConsensusVersion, strings.ToLower(resp.Version.String()))
-		writeJSON(w, http.StatusOK, resp)
+		w.Header().Set(EthConsensusVersion, strings.ToLower(signedProposal.Version.String()))
+
+		switch respCT {
+		case codec.MediaTypeJSON:
+			resp, err := codec.BuildSubmitBlindedBlockResponseJSON(signedProposal)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to generate unblinded response")
+				return
+			}
+			writeJSON(w, http.StatusOK, resp)
+		case codec.MediaTypeSSZ:
+			data, err := codec.MarshalSubmitBlindedBlockResponseSSZ(signedProposal)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to generate unblinded response")
+				return
+			}
+			w.Header().Set("Content-Type", codec.MediaTypeSSZ)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(data)
+		default:
+			writeError(w, http.StatusNotAcceptable, "not acceptable")
+			return
+		}
 	}
 }

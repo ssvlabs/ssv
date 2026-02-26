@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
+	buildercodec "github.com/ssvlabs/ssv/mev/builderendpoint/httpapi/codec"
 )
 
 func TestStatusEndpoint(t *testing.T) {
@@ -131,6 +132,215 @@ func TestGetHeader_Bid_Returns200AndConsensusHeader(t *testing.T) {
 	}
 }
 
+func TestGetHeader_Bid_DefaultJSON_HasEnvelope(t *testing.T) {
+	t.Parallel()
+
+	bid := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderapi.SignedBuilderBid{
+			Message: &builderapi.BuilderBid{
+				Header: &deneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0)},
+				Value:  uint256.NewInt(0),
+			},
+		},
+	}
+
+	p := fakeBidProvider{bid: bid, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	path := "/eth/v1/builder/header/1/0x" + hex32() + "/0x" + hex48()
+	resp, err := http.Get(srv.URL + path)
+	if err != nil {
+		t.Fatalf("GET header: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != buildercodec.MediaTypeJSON {
+		t.Fatalf("unexpected Content-Type: got %q want %q", got, buildercodec.MediaTypeJSON)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if _, ok := decoded["version"]; !ok {
+		t.Fatalf("missing top-level version")
+	}
+	if _, ok := decoded["data"]; !ok {
+		t.Fatalf("missing top-level data")
+	}
+}
+
+func TestGetHeader_Bid_AcceptSSZ_ReturnsOctetStream(t *testing.T) {
+	t.Parallel()
+
+	bid := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderapi.SignedBuilderBid{
+			Message: &builderapi.BuilderBid{
+				Header: &deneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0)},
+				Value:  uint256.NewInt(0),
+			},
+		},
+	}
+
+	p := fakeBidProvider{bid: bid, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	path := "/eth/v1/builder/header/1/0x" + hex32() + "/0x" + hex48()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", buildercodec.MediaTypeSSZ)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET header: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != buildercodec.MediaTypeSSZ {
+		t.Fatalf("unexpected Content-Type: got %q want %q", got, buildercodec.MediaTypeSSZ)
+	}
+
+	want, err := bid.Deneb.MarshalSSZ()
+	if err != nil {
+		t.Fatalf("marshal ssz: %v", err)
+	}
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("unexpected body bytes")
+	}
+}
+
+func TestGetHeader_Bid_AcceptQValues_SelectsSSZ(t *testing.T) {
+	t.Parallel()
+
+	bid := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderapi.SignedBuilderBid{
+			Message: &builderapi.BuilderBid{
+				Header: &deneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0)},
+				Value:  uint256.NewInt(0),
+			},
+		},
+	}
+
+	p := fakeBidProvider{bid: bid, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	path := "/eth/v1/builder/header/1/0x" + hex32() + "/0x" + hex48()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "application/json;q=0.1, application/octet-stream;q=0.9")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET header: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != buildercodec.MediaTypeSSZ {
+		t.Fatalf("unexpected Content-Type: got %q want %q", got, buildercodec.MediaTypeSSZ)
+	}
+}
+
+func TestGetHeader_Bid_AcceptWildcard_DefaultsToJSON(t *testing.T) {
+	t.Parallel()
+
+	bid := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderapi.SignedBuilderBid{
+			Message: &builderapi.BuilderBid{
+				Header: &deneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0)},
+				Value:  uint256.NewInt(0),
+			},
+		},
+	}
+
+	p := fakeBidProvider{bid: bid, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	path := "/eth/v1/builder/header/1/0x" + hex32() + "/0x" + hex48()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "*/*")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET header: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status code: got %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != buildercodec.MediaTypeJSON {
+		t.Fatalf("unexpected Content-Type: got %q want %q", got, buildercodec.MediaTypeJSON)
+	}
+}
+
+func TestGetHeader_Bid_NotAcceptable_Returns406(t *testing.T) {
+	t.Parallel()
+
+	bid := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderapi.SignedBuilderBid{
+			Message: &builderapi.BuilderBid{
+				Header: &deneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0)},
+				Value:  uint256.NewInt(0),
+			},
+		},
+	}
+
+	p := fakeBidProvider{bid: bid, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), p.Bid, nil, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	path := "/eth/v1/builder/header/1/0x" + hex32() + "/0x" + hex48()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "text/plain")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET header: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotAcceptable {
+		t.Fatalf("unexpected status code: got %d, want %d", resp.StatusCode, http.StatusNotAcceptable)
+	}
+}
+
 func hex32() string { return "0000000000000000000000000000000000000000000000000000000000000000" }
 func hex48() string {
 	return "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
@@ -153,7 +363,7 @@ func TestPostBlindedBlocks_MissingConsensusHeader(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Post(srv.URL+"/eth/v1/builder/blinded_blocks", "application/json", strings.NewReader(`{}`))
+	resp, err := http.Post(srv.URL+"/eth/v1/builder/blinded_blocks", buildercodec.MediaTypeJSON, strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatalf("POST blinded_blocks: %v", err)
 	}
@@ -161,6 +371,52 @@ func TestPostBlindedBlocks_MissingConsensusHeader(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestPostBlindedBlocks_SSZ_MissingConsensusHeader_Returns400(t *testing.T) {
+	t.Parallel()
+
+	u := fakeUnblinder{}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Post(srv.URL+"/eth/v1/builder/blinded_blocks", buildercodec.MediaTypeSSZ, bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST blinded_blocks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestPostBlindedBlocks_UnsupportedContentType_Returns415(t *testing.T) {
+	t.Parallel()
+
+	u := fakeUnblinder{}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v1/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
+	req.Header.Set("Content-Type", "text/plain")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusUnsupportedMediaType)
 	}
 }
 
@@ -176,7 +432,7 @@ func TestPostBlindedBlocksV2_MissingConsensusHeader(t *testing.T) {
 	// https://raw.githubusercontent.com/ethereum/builder-specs/main/apis/builder/blinded_blocks_v2.yaml
 	//
 	// Eth-Consensus-Version header is required for SSZ-encoded requests.
-	resp, err := http.Post(srv.URL+"/eth/v2/builder/blinded_blocks", "application/octet-stream", bytes.NewReader(nil))
+	resp, err := http.Post(srv.URL+"/eth/v2/builder/blinded_blocks", buildercodec.MediaTypeSSZ, bytes.NewReader(nil))
 	if err != nil {
 		t.Fatalf("POST blinded_blocks v2: %v", err)
 	}
@@ -187,7 +443,7 @@ func TestPostBlindedBlocksV2_MissingConsensusHeader(t *testing.T) {
 	}
 }
 
-func TestPostBlindedBlocks_NoUnblindedBlock_Returns204(t *testing.T) {
+func TestPostBlindedBlocks_NoUnblindedBlock_Returns500(t *testing.T) {
 	t.Parallel()
 
 	u := fakeUnblinder{resp: nil, err: nil}
@@ -201,7 +457,7 @@ func TestPostBlindedBlocks_NoUnblindedBlock_Returns204(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -209,8 +465,8 @@ func TestPostBlindedBlocks_NoUnblindedBlock_Returns204(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusNoContent)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusInternalServerError)
 	}
 }
 
@@ -255,7 +511,7 @@ func TestPostBlindedBlocksV2_NoUnblindedBlock_Returns500(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -296,7 +552,7 @@ func TestPostBlindedBlocks_Deneb_Returns200WithEnvelope(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -320,6 +576,200 @@ func TestPostBlindedBlocks_Deneb_Returns200WithEnvelope(t *testing.T) {
 	}
 	if _, ok := decoded["data"]; !ok {
 		t.Fatalf("missing top-level data")
+	}
+}
+
+func TestPostBlindedBlocks_Deneb_NoConsensusHeader_Returns200(t *testing.T) {
+	t.Parallel()
+
+	// Minimal deneb proposal with required payload pointer(s) for JSON marshaling.
+	denebProposal := &api.VersionedSignedProposal{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &apiv1deneb.SignedBlockContents{
+			SignedBlock: &deneb.SignedBeaconBlock{
+				Message: &deneb.BeaconBlock{
+					Body: &deneb.BeaconBlockBody{
+						ExecutionPayload: &deneb.ExecutionPayload{BaseFeePerGas: uint256.NewInt(0)},
+					},
+				},
+			},
+		},
+	}
+
+	u := fakeUnblinder{resp: denebProposal, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v1/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	// Intentionally omit Eth-Consensus-Version; the spec allows it for JSON requests.
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestPostBlindedBlocks_Deneb_AcceptSSZ_ReturnsOctetStream(t *testing.T) {
+	t.Parallel()
+
+	// Minimal deneb proposal with required payload pointer(s) for SSZ marshaling.
+	denebProposal := &api.VersionedSignedProposal{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &apiv1deneb.SignedBlockContents{
+			SignedBlock: &deneb.SignedBeaconBlock{
+				Message: &deneb.BeaconBlock{
+					Body: &deneb.BeaconBlockBody{
+						ExecutionPayload: &deneb.ExecutionPayload{BaseFeePerGas: uint256.NewInt(0)},
+					},
+				},
+			},
+		},
+	}
+
+	u := fakeUnblinder{resp: denebProposal, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v1/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
+	req.Header.Set("Accept", buildercodec.MediaTypeSSZ)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != buildercodec.MediaTypeSSZ {
+		t.Fatalf("unexpected Content-Type: got %q want %q", got, buildercodec.MediaTypeSSZ)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatalf("expected non-empty SSZ response")
+	}
+}
+
+func TestPostBlindedBlocks_Deneb_AcceptSSZ_ResponseBytesMatchCodec(t *testing.T) {
+	t.Parallel()
+
+	denebProposal := &api.VersionedSignedProposal{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &apiv1deneb.SignedBlockContents{
+			SignedBlock: &deneb.SignedBeaconBlock{
+				Message: &deneb.BeaconBlock{
+					Body: &deneb.BeaconBlockBody{
+						ExecutionPayload:      &deneb.ExecutionPayload{BaseFeePerGas: uint256.NewInt(0)},
+						BlobKZGCommitments:    []deneb.KZGCommitment{},
+						BLSToExecutionChanges: nil,
+					},
+				},
+			},
+			KZGProofs: []deneb.KZGProof{},
+			Blobs:     []deneb.Blob{},
+		},
+	}
+
+	u := fakeUnblinder{resp: denebProposal, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v1/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
+	req.Header.Set("Accept", "application/octet-stream;q=1,application/json;q=0.9")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != buildercodec.MediaTypeSSZ {
+		t.Fatalf("unexpected Content-Type: got %q want %q", got, buildercodec.MediaTypeSSZ)
+	}
+
+	want, err := buildercodec.MarshalSubmitBlindedBlockResponseSSZ(denebProposal)
+	if err != nil {
+		t.Fatalf("marshal expected ssz: %v", err)
+	}
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("unexpected body bytes")
+	}
+}
+
+func TestPostBlindedBlocks_AcceptNotAcceptable_Returns406(t *testing.T) {
+	t.Parallel()
+
+	denebProposal := &api.VersionedSignedProposal{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &apiv1deneb.SignedBlockContents{
+			SignedBlock: &deneb.SignedBeaconBlock{
+				Message: &deneb.BeaconBlock{
+					Body: &deneb.BeaconBlockBody{
+						ExecutionPayload: &deneb.ExecutionPayload{BaseFeePerGas: uint256.NewInt(0)},
+					},
+				},
+			},
+		},
+	}
+
+	u := fakeUnblinder{resp: denebProposal, err: nil}
+	handler := httpapi.NewRouter(zap.NewNop(), nil, u.Unblind, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body := validDenebSignedBlindedBeaconBlockJSON(t)
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/eth/v1/builder/blinded_blocks", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
+	req.Header.Set("Accept", "text/plain")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST blinded_blocks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotAcceptable {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusNotAcceptable)
 	}
 }
 
@@ -351,7 +801,7 @@ func TestPostBlindedBlocksV2_Deneb_Returns202Empty(t *testing.T) {
 		t.Fatalf("new request: %v", err)
 	}
 	req.Header.Set(httpapi.EthConsensusVersion, "deneb")
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", buildercodec.MediaTypeJSON)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

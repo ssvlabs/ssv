@@ -7,8 +7,12 @@ import (
 	"strconv"
 	"strings"
 
+	builderspec "github.com/attestantio/go-builder-client/spec"
+	consensusspec "github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi/codec"
 )
 
 func handleHeader(bidProvider BidProviderFunc) http.HandlerFunc {
@@ -36,8 +40,65 @@ func handleHeader(bidProvider BidProviderFunc) http.HandlerFunc {
 			return
 		}
 
+		respCT, err := codec.PreferredResponseContentType(r.Header.Get("Accept"))
+		if err != nil {
+			writeError(w, http.StatusNotAcceptable, "not acceptable")
+			return
+		}
+
 		w.Header().Set(EthConsensusVersion, bid.Version.String())
-		writeJSON(w, http.StatusOK, bid)
+
+		switch respCT {
+		case codec.MediaTypeJSON:
+			writeJSON(w, http.StatusOK, bid)
+		case codec.MediaTypeSSZ:
+			data, err := marshalSignedBuilderBidSSZ(bid)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to marshal bid")
+				return
+			}
+			w.Header().Set("Content-Type", codec.MediaTypeSSZ)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(data)
+		default:
+			writeError(w, http.StatusNotAcceptable, "not acceptable")
+		}
+	}
+}
+
+func marshalSignedBuilderBidSSZ(bid *builderspec.VersionedSignedBuilderBid) ([]byte, error) {
+	if bid == nil {
+		return nil, fmt.Errorf("nil bid")
+	}
+
+	switch bid.Version {
+	case consensusspec.DataVersionBellatrix:
+		if bid.Bellatrix == nil {
+			return nil, fmt.Errorf("missing bellatrix bid")
+		}
+		return bid.Bellatrix.MarshalSSZ()
+	case consensusspec.DataVersionCapella:
+		if bid.Capella == nil {
+			return nil, fmt.Errorf("missing capella bid")
+		}
+		return bid.Capella.MarshalSSZ()
+	case consensusspec.DataVersionDeneb:
+		if bid.Deneb == nil {
+			return nil, fmt.Errorf("missing deneb bid")
+		}
+		return bid.Deneb.MarshalSSZ()
+	case consensusspec.DataVersionElectra:
+		if bid.Electra == nil {
+			return nil, fmt.Errorf("missing electra bid")
+		}
+		return bid.Electra.MarshalSSZ()
+	case consensusspec.DataVersionFulu:
+		if bid.Fulu == nil {
+			return nil, fmt.Errorf("missing fulu bid")
+		}
+		return bid.Fulu.MarshalSSZ()
+	default:
+		return nil, fmt.Errorf("unsupported bid version %s", bid.Version.String())
 	}
 }
 

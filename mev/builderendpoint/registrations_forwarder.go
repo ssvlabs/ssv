@@ -2,9 +2,7 @@ package builderendpoint
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"sync"
 
 	builderclient "github.com/attestantio/go-builder-client"
@@ -24,20 +22,11 @@ type RegistrationsForwarder struct {
 	Relays  []string
 }
 
-func (f *RegistrationsForwarder) ForwardValidatorRegistrations(ctx context.Context, body io.ReadCloser) ([]string, error) {
-	if body == nil {
-		return nil, errors.New("nil body")
-	}
-	defer func() { _ = body.Close() }()
-
+func (f *RegistrationsForwarder) ForwardValidatorRegistrations(ctx context.Context, regs []*apiv1.SignedValidatorRegistration) ([]string, error) {
 	if f == nil || f.Factory == nil || len(f.Relays) == 0 {
 		return nil, nil
 	}
 
-	var regs []*apiv1.SignedValidatorRegistration
-	if err := json.NewDecoder(body).Decode(&regs); err != nil {
-		return nil, errors.Wrap(err, "invalid JSON")
-	}
 	versioned := make([]*builderapi.VersionedSignedValidatorRegistration, 0, len(regs))
 	for _, r := range regs {
 		if r == nil {

@@ -1,9 +1,12 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi/codec"
 )
 
 func handleValidators(logger *zap.Logger, registrar ValidatorRegistrationsForwarderFunc) http.HandlerFunc {
@@ -13,10 +16,22 @@ func handleValidators(logger *zap.Logger, registrar ValidatorRegistrationsForwar
 			return
 		}
 
-		registrationErrors, err := registrar(r.Context(), r.Body)
+		contentType := codec.NormalizeContentType(r.Header.Get("Content-Type"))
+
+		registrations, err := codec.UnmarshalValidatorRegistrations(contentType, r.Body)
 		if err != nil {
-			// Request was invalid (e.g. invalid JSON); keep relay issues best-effort below.
+			var unsupported codec.UnsupportedContentTypeError
+			if errors.As(err, &unsupported) {
+				writeError(w, http.StatusUnsupportedMediaType, "unsupported content type")
+				return
+			}
 			writeError(w, http.StatusBadRequest, "invalid validator registrations")
+			return
+		}
+
+		registrationErrors, err := registrar(r.Context(), registrations)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to forward validator registrations")
 			return
 		}
 

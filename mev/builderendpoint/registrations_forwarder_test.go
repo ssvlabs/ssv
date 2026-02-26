@@ -3,13 +3,12 @@ package builderendpoint_test
 import (
 	"context"
 	"errors"
-	"io"
-	"strings"
 	"sync/atomic"
 	"testing"
 
 	builderclient "github.com/attestantio/go-builder-client"
 	builderapi "github.com/attestantio/go-builder-client/api"
+	apiv1 "github.com/attestantio/go-builder-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint"
@@ -58,8 +57,7 @@ func TestRegistrationsForwarderForwardsToAllRelays(t *testing.T) {
 		Relays:  []string{"a", "b"},
 	}
 
-	body := io.NopCloser(strings.NewReader(`[]`))
-	errs, err := forwarder.ForwardValidatorRegistrations(context.Background(), body)
+	errs, err := forwarder.ForwardValidatorRegistrations(context.Background(), []*apiv1.SignedValidatorRegistration{})
 	if err != nil {
 		t.Fatalf("forward: %v", err)
 	}

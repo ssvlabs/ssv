@@ -20,19 +20,19 @@ func UnmarshalBlindedBlock(contentType string, consensusVersion string, body io.
 	signedBlindedBeaconBlock := &api.VersionedSignedBlindedBeaconBlock{}
 
 	switch strings.ToLower(consensusVersion) {
-	case "bellatrix":
+	case ConsensusVersionBellatrix:
 		signedBlindedBeaconBlock.Version = spec.DataVersionBellatrix
 		signedBlindedBeaconBlock.Bellatrix = &apiv1bellatrix.SignedBlindedBeaconBlock{}
-	case "capella":
+	case ConsensusVersionCapella:
 		signedBlindedBeaconBlock.Version = spec.DataVersionCapella
 		signedBlindedBeaconBlock.Capella = &apiv1capella.SignedBlindedBeaconBlock{}
-	case "deneb":
+	case ConsensusVersionDeneb:
 		signedBlindedBeaconBlock.Version = spec.DataVersionDeneb
 		signedBlindedBeaconBlock.Deneb = &apiv1deneb.SignedBlindedBeaconBlock{}
-	case "electra":
+	case ConsensusVersionElectra:
 		signedBlindedBeaconBlock.Version = spec.DataVersionElectra
 		signedBlindedBeaconBlock.Electra = &apiv1electra.SignedBlindedBeaconBlock{}
-	case "fulu":
+	case ConsensusVersionFulu:
 		signedBlindedBeaconBlock.Version = spec.DataVersionFulu
 		signedBlindedBeaconBlock.Fulu = &apiv1electra.SignedBlindedBeaconBlock{}
 	default:
