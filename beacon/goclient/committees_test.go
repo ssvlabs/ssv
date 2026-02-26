@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -47,66 +48,66 @@ func newRunningCache() *ttlcache.Cache[phase0.Epoch, []*eth2apiv1.BeaconCommitte
 }
 
 func TestCommitteesForEpochCachesResults(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		service := &committeeClientMock{resp: []*eth2apiv1.BeaconCommittee{{Slot: 64, Index: 1}}}
+		cache := newRunningCache()
+		defer cache.Stop()
 
-	service := &committeeClientMock{resp: []*eth2apiv1.BeaconCommittee{{Slot: 64, Index: 1}}}
-	cache := newRunningCache()
-	defer cache.Stop()
+		client := &GoClient{
+			log:             zap.NewNop(),
+			multiClient:     service,
+			committeesCache: cache,
+			commonTimeout:   time.Second,
+		}
 
-	client := &GoClient{
-		log:             zap.NewNop(),
-		multiClient:     service,
-		committeesCache: cache,
-		commonTimeout:   time.Second,
-	}
+		ctx := context.Background()
+		epoch := phase0.Epoch(2)
 
-	ctx := context.Background()
-	epoch := phase0.Epoch(2)
+		first, err := client.CommitteesForEpoch(ctx, epoch)
+		require.NoError(t, err)
+		require.Len(t, first, 1)
+		require.Equal(t, 1, service.calls)
 
-	first, err := client.CommitteesForEpoch(ctx, epoch)
-	require.NoError(t, err)
-	require.Len(t, first, 1)
-	require.Equal(t, 1, service.calls)
-
-	second, err := client.CommitteesForEpoch(ctx, epoch)
-	require.NoError(t, err)
-	require.Len(t, second, 1)
-	assert.Equal(t, 1, service.calls, "cached result should avoid second upstream call")
+		second, err := client.CommitteesForEpoch(ctx, epoch)
+		require.NoError(t, err)
+		require.Len(t, second, 1)
+		assert.Equal(t, 1, service.calls, "cached result should avoid second upstream call")
+	})
 }
 
 func TestCommitteesForSlotFiltersBySlot(t *testing.T) {
-	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		targetSlot := phase0.Slot(128)
+		service := &committeeClientMock{
+			resp: []*eth2apiv1.BeaconCommittee{
+				{Slot: targetSlot, Index: 1},
+				{Slot: targetSlot + 1, Index: 2},
+				nil,
+			},
+		}
 
-	targetSlot := phase0.Slot(128)
-	service := &committeeClientMock{
-		resp: []*eth2apiv1.BeaconCommittee{
-			{Slot: targetSlot, Index: 1},
-			{Slot: targetSlot + 1, Index: 2},
-			nil,
-		},
-	}
+		cache := newRunningCache()
+		defer cache.Stop()
 
-	cache := newRunningCache()
-	defer cache.Stop()
+		cfg := *networkconfig.TestNetwork.Beacon
+		client := &GoClient{
+			log:             zap.NewNop(),
+			multiClient:     service,
+			committeesCache: cache,
+			commonTimeout:   time.Second,
+		}
+		client.beaconConfig = &cfg
 
-	cfg := *networkconfig.TestNetwork.Beacon
-	client := &GoClient{
-		log:             zap.NewNop(),
-		multiClient:     service,
-		committeesCache: cache,
-		commonTimeout:   time.Second,
-	}
-	client.beaconConfig = &cfg
+		results, err := client.CommitteesForSlot(context.Background(), targetSlot)
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.Equal(t, targetSlot, results[0].Slot)
+		assert.Equal(t, 1, service.calls)
 
-	results, err := client.CommitteesForSlot(context.Background(), targetSlot)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, targetSlot, results[0].Slot)
-	assert.Equal(t, 1, service.calls)
-
-	// Second invocation hits the cache (CommitteesForEpoch) and should not increase call count.
-	results, err = client.CommitteesForSlot(context.Background(), targetSlot)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, 1, service.calls)
+		// Second invocation hits the cache (CommitteesForEpoch) and should not increase call count.
+		results, err = client.CommitteesForSlot(context.Background(), targetSlot)
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.Equal(t, 1, service.calls)
+	})
 }

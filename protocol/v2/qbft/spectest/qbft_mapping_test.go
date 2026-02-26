@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -92,7 +91,7 @@ func runQBFTMappingTest(t *testing.T) {
 			// a little trick we do to instantiate all the internal instance params
 
 			preByts, _ := typedTest.Pre.Encode()
-			logger := log.TestLogger(t)
+			logger := protocoltesting.SpectestLogger(t)
 			ks := testingutils.Testing4SharesSet()
 			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
