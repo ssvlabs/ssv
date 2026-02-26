@@ -231,7 +231,7 @@ func GetSpecDir(path, module string) (string, error) {
 	}
 	goModFile, err := getGoModFile(path)
 	if err != nil {
-		return "", errors.New("could not get go.mod file")
+		return "", errors.New("could not get mod file")
 	}
 
 	// check if there is a replace
@@ -310,23 +310,26 @@ func GetModulePath(name, version string) (string, error) {
 }
 
 func getGoModFile(path string) (*modfile.File, error) {
+	modFileName := specGoModFilename()
+
 	// find project root path
 	for {
-		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+		if _, err := os.Stat(filepath.Join(path, modFileName)); err == nil {
 			break
 		}
 		path = filepath.Dir(path)
 		if path == "/" {
-			return nil, errors.New("could not find go.mod file")
+			return nil, errors.Errorf("could not find %s file", modFileName)
 		}
 	}
 
-	// read go.mod
-	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), "go.mod"))
+	// read mod file
+	// #nosec G304 -- modFileName is selected by build tags from fixed constants.
+	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), modFileName))
 	if err != nil {
-		return nil, errors.New("could not read go.mod")
+		return nil, errors.Errorf("could not read %s", modFileName)
 	}
 
-	// parse go.mod
-	return modfile.Parse("go.mod", buf, nil)
+	// parse mod file
+	return modfile.Parse(modFileName, buf, nil)
 }
