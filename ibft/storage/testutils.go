@@ -324,6 +324,7 @@ func getGoModFile(path string) (*modfile.File, error) {
 	}
 
 	// read mod file
+	// #nosec G304 -- modFileName is selected by build tags from fixed constants.
 	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), modFileName))
 	if err != nil {
 		return nil, errors.Errorf("could not read %s", modFileName)
