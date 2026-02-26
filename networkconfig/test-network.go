@@ -69,6 +69,7 @@ var TestNetwork = &Network{
 	SSV: &SSV{
 		Name:                 "testnet",
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},
+		NextDomainType:       spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x3},
 		RegistrySyncOffset:   new(big.Int).SetInt64(9015219),
 		RegistryContractAddr: ethcommon.HexToAddress("0x4B133c68A084B8A88f72eDCd7944B69c8D545f03"),
 		Bootnodes: []string{

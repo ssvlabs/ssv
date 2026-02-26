@@ -41,6 +41,7 @@ var (
 	operatorPrivateKey      string
 	metricsAPIPort          int
 	ssvDomain               string
+	ssvNextDomain           string
 	ssvRegistrySyncOffset   uint64
 	ssvRegistryContractAddr string
 	ssvBootnodes            string
@@ -81,6 +82,10 @@ var generateConfigCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Failed to decode network domain: %v", err)
 		}
+		parsedNextDomain, err := hex.DecodeString(strings.TrimPrefix(ssvNextDomain, "0x"))
+		if err != nil {
+			log.Fatalf("Failed to decode next network domain: %v", err)
+		}
 
 		parsedDiscoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(ssvDiscoveryProtocolID, "0x"))
 		if err != nil {
@@ -107,6 +112,7 @@ var generateConfigCmd = &cobra.Command{
 		config.MetricsAPIPort = metricsAPIPort
 		config.SSV.CustomNetwork = &networkconfig.SSV{
 			DomainType:           spectypes.DomainType(parsedDomain),
+			NextDomainType:       spectypes.DomainType(parsedNextDomain),
 			RegistrySyncOffset:   new(big.Int).SetUint64(ssvRegistrySyncOffset),
 			RegistryContractAddr: ethcommon.HexToAddress(ssvRegistryContractAddr),
 			Bootnodes:            bootnodes,
@@ -145,6 +151,8 @@ func init() {
 
 	ssvDomainDefault := "0x" + hex.EncodeToString(defaultNetwork.DomainType[:])
 	generateConfigCmd.Flags().StringVar(&ssvDomain, "ssv-domain", ssvDomainDefault, "SSV domain type")
+	ssvNextDomainDefault := "0x" + hex.EncodeToString(defaultNetwork.NextDomainType[:])
+	generateConfigCmd.Flags().StringVar(&ssvNextDomain, "ssv-next-domain", ssvNextDomainDefault, "SSV next domain type")
 	generateConfigCmd.Flags().Uint64Var(&ssvRegistrySyncOffset, "ssv-registry-sync-offset", defaultNetwork.RegistrySyncOffset.Uint64(), "SSV registry sync offset")
 	generateConfigCmd.Flags().StringVar(&ssvRegistryContractAddr, "ssv-registry-contract-addr", defaultNetwork.RegistryContractAddr.String(), "SSV registry contract addr")
 	generateConfigCmd.Flags().StringVar(&ssvBootnodes, "ssv-bootnodes", strings.Join(defaultNetwork.Bootnodes, sliceSeparator), "SSV bootnodes (comma-separated)")

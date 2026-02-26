@@ -48,6 +48,9 @@ func (mv *messageValidator) validateConsensusMessage(
 	if err := mv.validateTopicAtSlot(committeeInfo, topic, phase0.Slot(consensusMessage.Height)); err != nil {
 		return consensusMessage, err
 	}
+	if err := mv.validateDomainAtSlot(ssvMessage.GetID(), phase0.Slot(consensusMessage.Height)); err != nil {
+		return consensusMessage, err
+	}
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.committee); err != nil {
 		return consensusMessage, err

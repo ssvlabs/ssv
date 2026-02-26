@@ -160,7 +160,7 @@ func runInstanceWithData(
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.GetIdentifier(), runData, contr.CommitteeMember.Committee)
 
 	// test root
 	r, err := contr.GetRoot()

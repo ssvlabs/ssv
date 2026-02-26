@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -73,8 +74,8 @@ type DiscV5Service struct {
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
 
-	ssvConfig *networkconfig.SSV
-	subnets   commons.Subnets
+	netCfg  *networkconfig.Network
+	subnets commons.Subnets
 
 	publishLock chan struct{}
 }
@@ -87,7 +88,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 		cancel:              cancel,
 		conns:               opts.ConnIndex,
 		subnetsIdx:          opts.SubnetsIdx,
-		ssvConfig:           opts.SSVConfig,
+		netCfg:              opts.NetworkConfig,
 		subnets:             opts.DiscV5Opts.Subnets,
 		publishLock:         make(chan struct{}, 1),
 		discoveredPeersPool: opts.DiscoveredPeersPool,
@@ -197,9 +198,10 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	if err != nil {
 		return errors.Wrap(err, "could not read domain type")
 	}
-	if dvs.ssvConfig.DomainType != nodeDomainType {
+	nodeNextDomainType, _ := records.GetDomainTypeEntry(e.Node.Record(), records.KeyNextDomainType)
+	if !dvs.isDomainCompatible(nodeDomainType, nodeNextDomainType) {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
-		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.ssvConfig.DomainType)
+		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.netCfg.CurrentDomainType())
 	}
 
 	// Get the peer's subnets, skipping if it has none.
@@ -233,6 +235,18 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	return nil
 }
 
+func (dvs *DiscV5Service) isDomainCompatible(nodeDomainType spectypes.DomainType, nodeNextDomainType spectypes.DomainType) bool {
+	if nodeDomainType == dvs.netCfg.CurrentDomainType() || nodeNextDomainType == dvs.netCfg.CurrentDomainType() {
+		return true
+	}
+
+	if !dvs.netCfg.InBooleTransitionWindow(dvs.netCfg.EstimatedCurrentSlot()) {
+		return false
+	}
+
+	return nodeDomainType == dvs.netCfg.NextDomainType || nodeNextDomainType == dvs.netCfg.NextDomainType
+}
+
 // initDiscV5Listener creates a new listener and starts it
 func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	opts := discOpts.DiscV5Opts
@@ -254,7 +268,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	}
 
 	// Get the protocol ID, or set to default if not provided
-	protocolID := dvs.ssvConfig.DiscoveryProtocolID
+	protocolID := dvs.netCfg.DiscoveryProtocolID
 	emptyProtocolID := [6]byte{}
 	if protocolID == emptyProtocolID {
 		protocolID = DefaultSSVProtocolID
@@ -279,7 +293,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		fields.BindIP(bindIP),
 		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
-		fields.Domain(discOpts.SSVConfig.DomainType),
+		fields.Domain(dvs.netCfg.CurrentDomainType()),
 		fields.ProtocolID(protocolID),
 	)
 
@@ -298,7 +312,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		fields.BindIP(bindIP),
 		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
-		fields.Domain(discOpts.SSVConfig.DomainType),
+		fields.Domain(dvs.netCfg.CurrentDomainType()),
 	)
 
 	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
@@ -388,13 +402,16 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...commons.Subnet) (updated 
 
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR() {
+	currentDomain := dvs.netCfg.CurrentDomainType()
+	nextDomain := dvs.netCfg.NextDomainType
+
 	// Update own node record.
-	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.ssvConfig.DomainType)
+	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, currentDomain)
 	if err != nil {
 		dvs.logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
-	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.DomainType)
+	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, nextDomain)
 	if err != nil {
 		dvs.logger.Error("could not set next domain type", zap.Error(err))
 		return
@@ -460,8 +477,8 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
-		DecorateWithDomainType(records.KeyDomainType, dvs.ssvConfig.DomainType),
-		DecorateWithDomainType(records.KeyNextDomainType, dvs.ssvConfig.DomainType),
+		DecorateWithDomainType(records.KeyDomainType, dvs.netCfg.CurrentDomainType()),
+		DecorateWithDomainType(records.KeyNextDomainType, dvs.netCfg.NextDomainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
@@ -470,7 +487,7 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 
 	logFields := []zapcore.Field{
 		fields.ENRLocalNode(localNode),
-		fields.Domain(dvs.ssvConfig.DomainType),
+		fields.Domain(dvs.netCfg.CurrentDomainType()),
 	}
 
 	if opts.Subnets.HasActive() {

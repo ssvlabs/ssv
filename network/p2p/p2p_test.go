@@ -149,7 +149,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 
 	fullData := spectestingutils.TestingQBFTFullData
 
-	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), nonCommitteeRole)
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(slot), ks.ValidatorPK.Serialize(), nonCommitteeRole)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -184,7 +184,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainTypeAtSlot(slot), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,

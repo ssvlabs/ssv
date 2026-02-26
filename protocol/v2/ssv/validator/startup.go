@@ -28,7 +28,7 @@ func (v *Validator) Start() (started bool, err error) {
 		if err := n.Subscribe(v.Share.ValidatorPubKey); err != nil {
 			return false, err
 		}
-		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(v.NetworkConfig.CurrentDomainType(), v.Share.ValidatorPubKey[:], role)
 		v.StartQueueConsumer(identifier, v.ProcessMessage)
 	}
 
