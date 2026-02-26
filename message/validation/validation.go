@@ -127,11 +127,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 
 	defer func() {
-		role := spectypes.RunnerRole(spectypes.RoleUnknown)
-		if decodedMessage != nil {
-			role = decodedMessage.GetID().GetRoleType()
-		}
-		recordMessageDuration(ctx, role, time.Since(validationStart))
+		recordMessageDuration(ctx, messageRole(decodedMessage), time.Since(validationStart))
 	}()
 
 	if err != nil {
@@ -141,6 +137,13 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	pmsg.ValidatorData = decodedMessage
 
 	return mv.handleValidationSuccess(ctx, decodedMessage)
+}
+
+func messageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
+	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
+		return spectypes.RunnerRole(spectypes.RoleUnknown)
+	}
+	return decodedMessage.SSVMessage.GetID().GetRoleType()
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
