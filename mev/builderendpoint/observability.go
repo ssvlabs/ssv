@@ -48,6 +48,13 @@ var (
 			metric.WithDescription("duration of get_header handling in seconds"),
 			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
+	getHeaderSlotOffsetHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "get_header.slot_offset"),
+			metric.WithUnit("s"),
+			metric.WithDescription("time since slot start when get_header was handled (seconds into slot)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
 	cacheEntriesGauge = metrics.New(
 		meter.Int64Gauge(
 			observability.InstrumentName(observabilityNamespace, "cache.entries"),
@@ -65,6 +72,19 @@ var (
 			observability.InstrumentName(observabilityNamespace, "prefetch.in_flight"),
 			metric.WithUnit("{prefetch}"),
 			metric.WithDescription("number of in-flight bid prefetch operations")))
+
+	prefetchLeadTimeHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "prefetch.lead_time"),
+			metric.WithUnit("s"),
+			metric.WithDescription("time before slot start when a prefetch request was issued (seconds)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	prefetchLateCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "prefetch.late"),
+			metric.WithUnit("{prefetch}"),
+			metric.WithDescription("number of prefetch requests issued after slot start")))
 )
 
 func getHeaderAttributes(cacheRes getHeaderCacheResult, res getHeaderResult) []attribute.KeyValue {
@@ -80,8 +100,25 @@ func recordGetHeader(ctx context.Context, cacheRes getHeaderCacheResult, res get
 	getHeaderDurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr...))
 }
 
+func recordGetHeaderSlotOffset(ctx context.Context, cacheRes getHeaderCacheResult, res getHeaderResult, offset time.Duration) {
+	attr := getHeaderAttributes(cacheRes, res)
+	// Negative offsets can happen for future slots; clamp to 0 for clearer dashboards.
+	if offset < 0 {
+		offset = 0
+	}
+	getHeaderSlotOffsetHistogram.Record(ctx, offset.Seconds(), metric.WithAttributes(attr...))
+}
+
 func recordCacheGauges(ctx context.Context, bidEntries int, provenanceEntries int, inFlightPrefetch int) {
 	cacheEntriesGauge.Record(ctx, int64(bidEntries))
 	cacheProvenanceEntriesGauge.Record(ctx, int64(provenanceEntries))
 	prefetchInFlightGauge.Record(ctx, int64(inFlightPrefetch))
+}
+
+func recordPrefetchLeadTime(ctx context.Context, lead time.Duration) {
+	if lead < 0 {
+		prefetchLateCounter.Add(ctx, 1)
+		lead = 0
+	}
+	prefetchLeadTimeHistogram.Record(ctx, lead.Seconds())
 }

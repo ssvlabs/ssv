@@ -2,18 +2,19 @@ package bids
 
 import (
 	"context"
+	"math/big"
 	"time"
 
 	builderspec "github.com/attestantio/go-builder-client/spec"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/metrics"
 
 	"github.com/ssvlabs/ssv/mev/builderendpoint/bidcache"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/relayurl"
 )
 
 const (
@@ -50,6 +51,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "bid_fetch.winners"),
 			metric.WithUnit("{winner}"),
 			metric.WithDescription("number of times a relay won bid selection")))
+
+	bidFetchWinningValueETHHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "bid_fetch.winning_value_eth"),
+			metric.WithUnit("ETH"),
+			metric.WithDescription("value of winning bids selected by the builder endpoint (in ETH)")))
 )
 
 func bidFetchAttributes(source string, res bidFetchResult) []attribute.KeyValue {
@@ -57,6 +64,21 @@ func bidFetchAttributes(source string, res bidFetchResult) []attribute.KeyValue 
 		attribute.String("ssv.mev.builder_endpoint.bid_fetch.source", source),
 		attribute.String("ssv.mev.builder_endpoint.bid_fetch.result", string(res)),
 	}
+}
+
+func bidValueETH(bid *builderspec.VersionedSignedBuilderBid) (float64, bool) {
+	if bid == nil {
+		return 0, false
+	}
+	valueWei, err := bid.Value()
+	if err != nil || valueWei == nil {
+		return 0, false
+	}
+
+	weiAsFloat := new(big.Float).SetInt(valueWei.ToBig())
+	ethAsFloat := new(big.Float).Quo(weiAsFloat, big.NewFloat(1e18))
+	eth, _ := ethAsFloat.Float64()
+	return eth, true
 }
 
 // FetcherWithMetrics wraps a bidcache.Fetcher to record bid fetch timings and outcomes.
@@ -89,8 +111,15 @@ func (f *FetcherWithMetrics) FetchBestBid(ctx context.Context, key bidcache.Key)
 	bidFetchDurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr...))
 
 	if err == nil && bid != nil && provenance != "" {
+		relayHost := relayurl.Host(provenance)
+
 		// Relay addresses are configured and low-cardinality for a given operator.
-		bidFetchWinnersCounter.Add(ctx, 1, metric.WithAttributes(append(attr, semconv.ServerAddress(provenance))...))
+		bidFetchWinnersCounter.Add(ctx, 1, metric.WithAttributes(append(attr, attribute.String("ssv.mev.builder_endpoint.relay", relayHost))...))
+
+		if eth, ok := bidValueETH(bid); ok {
+			valAttr := append(attr, attribute.String("ssv.mev.builder_endpoint.relay", relayHost))
+			bidFetchWinningValueETHHistogram.Record(ctx, eth, metric.WithAttributes(valAttr...))
+		}
 	}
 
 	return bid, provenance, err

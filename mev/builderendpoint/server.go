@@ -32,6 +32,8 @@ type Server struct {
 	prefetch *bidcache.Prefetcher
 	fetcher  bidcache.Fetcher
 
+	slotStartTime func(phase0.Slot) time.Time
+
 	cacheCleanupInterval time.Duration
 	relaysCount          int
 }
@@ -74,6 +76,15 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 			ctx = context.Background()
 		}
 
+		slotStart := time.Time{}
+		if deps.SlotStartTime != nil {
+			slotStart = deps.SlotStartTime(slot)
+		}
+		slotOffset := time.Duration(0)
+		if !slotStart.IsZero() {
+			slotOffset = time.Since(slotStart)
+		}
+
 		start := time.Now()
 		key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
 
@@ -81,6 +92,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		if cache != nil {
 			if ent, ok := cache.Get(key); ok {
 				cacheRes = getHeaderCacheHit
+				recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultBid, slotOffset)
 				recordGetHeader(ctx, cacheRes, getHeaderResultBid, time.Since(start))
 				return ent.Bid, nil
 			}
@@ -88,13 +100,16 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 
 		bid, err := bids.GetBidSingleflight(ctx, cache, fetcherForHeader, &bidSF, key)
 		if err != nil {
+			recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultError, slotOffset)
 			recordGetHeader(ctx, cacheRes, getHeaderResultError, time.Since(start))
 			return nil, err
 		}
 		if bid == nil {
+			recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultNoBid, slotOffset)
 			recordGetHeader(ctx, cacheRes, getHeaderResultNoBid, time.Since(start))
 			return nil, nil
 		}
+		recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultBid, slotOffset)
 		recordGetHeader(ctx, cacheRes, getHeaderResultBid, time.Since(start))
 		return bid, nil
 	}
@@ -114,6 +129,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		cache:                cache,
 		prefetch:             prefetcher,
 		fetcher:              fetcherForPrefetch,
+		slotStartTime:        deps.SlotStartTime,
 		cacheCleanupInterval: cleanupInterval,
 		relaysCount:          len(cfg.Relays),
 		httpServer: &http.Server{
@@ -229,6 +245,10 @@ func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash p
 		return
 	}
 
+	if s.slotStartTime != nil {
+		recordPrefetchLeadTime(ctx, time.Until(s.slotStartTime(slot)))
+	}
+
 	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
 
 	s.prefetch.Prefetch(ctx, key)
@@ -241,6 +261,10 @@ func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash p
 func (s *Server) PrefetchBidSync(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) error {
 	if s == nil || s.cache == nil || s.fetcher == nil {
 		return nil
+	}
+
+	if s.slotStartTime != nil {
+		recordPrefetchLeadTime(ctx, time.Until(s.slotStartTime(slot)))
 	}
 
 	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}

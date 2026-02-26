@@ -10,6 +10,8 @@ import (
 	apiv1 "github.com/attestantio/go-builder-client/api/v1"
 	builderspec "github.com/attestantio/go-builder-client/spec"
 	"github.com/pkg/errors"
+
+	"github.com/ssvlabs/ssv/mev/builderendpoint/relayurl"
 )
 
 type validatorRegistrationsSubmitterFactory interface {
@@ -51,7 +53,7 @@ func (f *RegistrationsForwarder) ForwardValidatorRegistrations(ctx context.Conte
 			submitter, err := f.Factory.FetchSubmitter(relayAddr)
 			if err != nil {
 				mu.Lock()
-				failures = append(failures, fmt.Sprintf("%s: %v", sanitizeRelayURLForLog(relayAddr), err))
+				failures = append(failures, fmt.Sprintf("%s: %v", relayurl.StripUserInfo(relayAddr), err))
 				mu.Unlock()
 				return
 			}
@@ -59,7 +61,7 @@ func (f *RegistrationsForwarder) ForwardValidatorRegistrations(ctx context.Conte
 				Registrations: versioned,
 			}); err != nil {
 				mu.Lock()
-				failures = append(failures, fmt.Sprintf("%s: %v", sanitizeRelayURLForLog(relayAddr), err))
+				failures = append(failures, fmt.Sprintf("%s: %v", relayurl.StripUserInfo(relayAddr), err))
 				mu.Unlock()
 				return
 			}
