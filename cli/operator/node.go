@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
@@ -466,8 +464,8 @@ var StartNodeCmd = &cobra.Command{
 			ws := exporterapi.NewWsServer(cmd.Context(), logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
-			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig.DomainType, ws, nodeStorage.ValidatorStore())
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig, ws)
+			decidedStreamPublisherFn = decided.NewDecidedListener(logger, networkConfig, ws, nodeStorage.ValidatorStore())
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -1034,27 +1032,6 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 		ssvConfig = snc
 		logger.Info("found network config by name",
 			zap.String("name", cfg.SSVOptions.NetworkName),
-		)
-	}
-
-	if cfg.SSVOptions.CustomDomainType != "" {
-		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
-			return nil, errors.New("custom domain type must be a hex string")
-		}
-		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to decode custom domain type")
-		}
-		if len(domainBytes) != 4 {
-			return nil, errors.New("custom domain type must be 4 bytes")
-		}
-
-		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
-		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
-		binary.BigEndian.PutUint32(ssvConfig.DomainType[:], postForkDomain)
-
-		logger.Warn("running with custom domain type; it's deprecated, consider using custom network instead",
-			fields.Domain(ssvConfig.DomainType),
 		)
 	}
 

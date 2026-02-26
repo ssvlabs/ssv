@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 // Message represents an exporter message
@@ -33,8 +34,8 @@ type ParticipantsAPI struct {
 }
 
 // NewParticipantsAPIMsg creates a new message in a new format from the given message.
-func NewParticipantsAPIMsg(domainType spectypes.DomainType, msg qbftstorage.Participation) Message {
-	data, err := ParticipantsAPIData(domainType, msg)
+func NewParticipantsAPIMsg(netCfg *networkconfig.Network, msg qbftstorage.Participation) Message {
+	data, err := ParticipantsAPIData(netCfg, msg)
 	if err != nil {
 		return Message{
 			Type: TypeParticipants,
@@ -55,13 +56,14 @@ func NewParticipantsAPIMsg(domainType spectypes.DomainType, msg qbftstorage.Part
 }
 
 // ParticipantsAPIData creates a new message from the given message in a new format.
-func ParticipantsAPIData(domainType spectypes.DomainType, msgs ...qbftstorage.Participation) (any, error) {
+func ParticipantsAPIData(netCfg *networkconfig.Network, msgs ...qbftstorage.Participation) (any, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
 
 	apiMsgs := make([]*ParticipantsAPI, 0)
 	for _, msg := range msgs {
+		domainType := netCfg.DomainTypeAtSlot(msg.Slot)
 		var msgID = legacyNewMsgID(domainType, msg.PubKey[:], msg.Role)
 		blsPubKey := phase0.BLSPubKey{}
 		copy(blsPubKey[:], msg.PubKey[:])

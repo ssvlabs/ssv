@@ -213,7 +213,8 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	domain := r.BaseRunner.NetworkConfig.DomainTypeAtSlot(duty.DutySlot())
+	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode validator registration partial sig message: %w", err)

@@ -1,8 +1,6 @@
 module github.com/ssvlabs/ssv
 
-go 1.24.6
-
-toolchain go1.24.10
+go 1.25
 
 require (
 	github.com/RoaringBitmap/roaring/v2 v2.10.0

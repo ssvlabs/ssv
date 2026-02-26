@@ -1175,15 +1175,16 @@ func prepareController(t *testing.T) (*Controller, *mocks.MockSharesStorage) {
 	mockValidatorsMap := validators.New(ctx)
 
 	validatorCtrl := &Controller{
-		ctx:               ctx,
-		beacon:            mockBeaconNode,
-		logger:            logger,
-		operatorDataStore: operatorDataStore,
-		operatorsStorage:  operatorsStorage,
-		sharesStorage:     mockSharesStorage,
-		validatorsMap:     mockValidatorsMap,
-		networkConfig:     networkconfig.TestNetwork,
-		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
+		ctx:                  ctx,
+		beacon:               mockBeaconNode,
+		logger:               logger,
+		operatorDataStore:    operatorDataStore,
+		operatorsStorage:     operatorsStorage,
+		sharesStorage:        mockSharesStorage,
+		validatorsMap:        mockValidatorsMap,
+		networkConfig:        networkconfig.TestNetwork,
+		indicesChangeCh:      make(chan struct{}, 1), // Buffered channel for each test
+		feeRecipientChangeCh: make(chan struct{}, 1), // Prevent timeout path in tests that trigger metadata updates
 		validatorCommonOpts: &validator.CommonOptions{
 			NetworkConfig: networkconfig.TestNetwork,
 		},

@@ -15,9 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup make
-        run: sudo apt-get update && sudo apt-get install make
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:

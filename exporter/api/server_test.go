@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,55 +19,53 @@ import (
 func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancelServerCtx := context.WithCancel(t.Context())
+	defer cancelServerCtx()
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false).(*wsServer)
-	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
-	var wg sync.WaitGroup
-	wg.Add(1)
+	port := getRandomPort(8001, 14000)
+	addr := fmt.Sprintf(":%d", port)
+	serverErrCh := make(chan error, 1)
 	go func() {
-		go func() {
-			// let the server start
-			time.Sleep(100 * time.Millisecond)
-			wg.Done()
-		}()
-		require.NoError(t, ws.Start(addr))
+		serverErrCh <- ws.Start(addr)
 	}()
-	wg.Wait()
+	waitForCondition(t, 2*time.Second, func() bool { return checkPort(port) == nil })
+	select {
+	case err := <-serverErrCh:
+		require.NoError(t, err)
+		t.Fatal("server exited unexpectedly")
+	default:
+	}
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
 	client := NewWSClient(clientCtx, logger)
-	wg.Add(1)
+	clientErrCh := make(chan error, 1)
 	go func() {
-		// sleep so client setup will be finished
-		time.Sleep(50 * time.Millisecond)
-		go func() {
-			// send 2 messages
-			defer wg.Done()
-			defer cancelClientCtx()
-			time.Sleep(10 * time.Millisecond)
-			client.out <- Message{
-				Type:   TypeOperator,
-				Filter: MessageFilter{From: 1, To: 1},
-			}
-			time.Sleep(10 * time.Millisecond)
-			client.out <- Message{
-				Type:   TypeOperator,
-				Filter: MessageFilter{From: 2, To: 2},
-			}
-			time.Sleep(10 * time.Millisecond)
-		}()
-		require.NoError(t, client.StartQuery(addr, "/query"))
+		clientErrCh <- client.StartQuery(addr, "/query")
 	}()
 
-	wg.Wait()
-	cancelServerCtx()
+	client.out <- Message{
+		Type:   TypeOperator,
+		Filter: MessageFilter{From: 1, To: 1},
+	}
+	client.out <- Message{
+		Type:   TypeOperator,
+		Filter: MessageFilter{From: 2, To: 2},
+	}
+	cancelClientCtx()
+
+	select {
+	case err := <-clientErrCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for query client to finish")
+	}
+
 	// make sure the connection got 2 responses
 	require.Equal(t, 2, client.MessageCount())
-	time.Sleep(10 * time.Millisecond)
 }
 
 func TestHandleStream(t *testing.T) {
@@ -76,44 +73,73 @@ func TestHandleStream(t *testing.T) {
 	ctx := context.Background() // t.Context() breaks the test
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
-	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
+	port := getRandomPort(8001, 14000)
+	addr := fmt.Sprintf(":%d", port)
+	serverErrCh := make(chan error, 1)
 	go func() {
-		require.NoError(t, ws.Start(addr))
+		serverErrCh <- ws.Start(addr)
 	}()
+	waitForCondition(t, 2*time.Second, func() bool { return checkPort(port) == nil })
+	select {
+	case err := <-serverErrCh:
+		require.NoError(t, err)
+		t.Fatal("server exited unexpectedly")
+	default:
+	}
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
 
 	client := NewWSClient(testCtx, logger)
+	clientErrCh := make(chan error, 1)
 	go func() {
-		// sleep so setup will be finished
-		time.Sleep(100 * time.Millisecond)
-		require.NoError(t, client.StartStream(addr, "/stream"))
+		clientErrCh <- client.StartStream(addr, "/stream")
 	}()
 
-	go func() {
-		// sleep so setup will be finished
-		time.Sleep(200 * time.Millisecond)
-		// sending 3 messages in the stream channel
-		ws.out.Send(newTestMessage())
+	// Wait until one stream client is connected and registered.
+	waitForCondition(t, 2*time.Second, func() bool {
+		b := ws.broadcaster.(*broadcaster)
+		b.mut.Lock()
+		defer b.mut.Unlock()
+		return len(b.connections) == 1
+	})
+	select {
+	case err := <-clientErrCh:
+		require.NoError(t, err)
+		t.Fatal("stream client exited unexpectedly")
+	default:
+	}
 
-		msg2 := newTestMessage()
-		msg2.Data = []registrystorage.OperatorData{
-			{PublicKey: "pubkey-operator"},
-		}
-		ws.out.Send(msg2)
+	// send 3 messages in the stream channel
+	ws.out.Send(newTestMessage())
 
-		msg3 := newTestMessage()
-		msg3.Type = TypeValidator
-		msg3.Data = map[string]string{"PublicKey": "pubkey3"}
-		ws.out.Send(msg3)
-	}()
+	msg2 := newTestMessage()
+	msg2.Data = []registrystorage.OperatorData{
+		{PublicKey: "pubkey-operator"},
+	}
+	ws.out.Send(msg2)
 
+	msg3 := newTestMessage()
+	msg3.Type = TypeValidator
+	msg3.Data = map[string]string{"PublicKey": "pubkey3"}
+	ws.out.Send(msg3)
+
+	waitForCondition(t, 2*time.Second, func() bool { return client.MessageCount() == 3 })
+
+	cancelCtx()
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, check func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
 	for {
-		if client.MessageCount() == 3 {
+		if check() {
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met before timeout")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

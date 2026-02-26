@@ -8,8 +8,6 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -31,8 +29,6 @@ func (TestingValueChecker) CheckValue(data []byte) error {
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *qbft.Config {
 	return &qbft.Config{
-		BeaconSigner: ekm.NewTestingKeyManagerAdapter(testingutils.NewTestingKeyManager()),
-		Domain:       testingutils.TestingSSVDomainType,
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
@@ -74,7 +70,9 @@ func NewTestingQBFTController(
 	fullNode bool,
 ) *controller.Controller {
 	ctrl := controller.NewController(
-		identifier,
+		func(specqbft.Height) []byte {
+			return identifier
+		},
 		share,
 		config,
 		testingutils.TestingOperatorSigner(keySet),

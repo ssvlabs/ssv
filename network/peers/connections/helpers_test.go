@@ -5,14 +5,16 @@ import (
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 type TestData struct {
@@ -97,7 +99,9 @@ func getTestingData(t *testing.T) TestData {
 		net:        net,
 		streams:    sc,
 		filters:    func() []HandshakeFilter { return []HandshakeFilter{} },
-		domainType: networkconfig.TestNetwork.DomainType,
+		domainTypeProvider: func() spectypes.DomainType {
+			return networkconfig.TestNetwork.DomainType
+		},
 	}
 
 	mockConn := mock.Conn{

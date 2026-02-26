@@ -736,7 +736,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(
-			r.BaseRunner.NetworkConfig.DomainType,
+			r.BaseRunner.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
 			r.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			r.BaseRunner.RunnerRoleType,
 		),
@@ -1644,7 +1644,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 	}
 
 	msgID := spectypes.NewMsgID(
-		r.BaseRunner.NetworkConfig.DomainType,
+		r.BaseRunner.NetworkConfig.DomainTypeAtSlot(duty.DutySlot()),
 		r.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 		r.BaseRunner.RunnerRoleType,
 	)

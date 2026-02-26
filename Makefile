@@ -47,8 +47,8 @@ deadcode-lint:
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
-	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
 
 .PHONY: unit-test
 unit-test:
@@ -59,6 +59,11 @@ unit-test:
 unit-test-ssv:
 	@echo "Running unit tests"
 	@go test -tags "blst_enabled lfs" -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
+
+.PHONY: unit-test-all
+unit-test-all:
+	@$(MAKE) unit-test
+	@$(MAKE) ssvsigner-test
 
 .PHONY: ssvsigner-test
 ssvsigner-test:

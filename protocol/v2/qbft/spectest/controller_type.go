@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
@@ -31,7 +30,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	//temporary to override state comparisons from file not inputted one
 	overrideStateComparisonForControllerSpecTest(t, test)
 
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	contr := generateController(logger)
 
 	if test.StartHeight != nil {
@@ -160,7 +159,7 @@ func runInstanceWithData(
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.GetIdentifier(), runData, contr.CommitteeMember.Committee)
 
 	// test root
 	r, err := contr.GetRoot()

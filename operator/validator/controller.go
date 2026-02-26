@@ -1043,8 +1043,6 @@ func SetupCommitteeRunners(
 ) validator.CommitteeRunnerFunc {
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				if options.NetworkConfig.BooleForkAtSlot(phase0.Slot(state.Height)) {
 					committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
@@ -1058,8 +1056,15 @@ func SetupCommitteeRunners(
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
+		identifierFn := func(height specqbft.Height) []byte {
+			msgID := spectypes.NewMsgID(
+				options.NetworkConfig.DomainTypeAtSlot(phase0.Slot(height)),
+				options.Operator.CommitteeID[:],
+				role,
+			)
+			return msgID[:]
+		}
+		qbftCtrl := qbftcontroller.NewController(identifierFn, options.Operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
 
@@ -1128,8 +1133,6 @@ func SetupRunners(
 
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				if options.NetworkConfig.BooleForkAtSlot(phase0.Slot(state.Height)) {
 					committee := ssvtypes.OperatorIDsFromOperators(state.CommitteeMember.Committee)
@@ -1143,8 +1146,15 @@ func SetupRunners(
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], operator, config, options.OperatorSigner, options.FullNode)
+		identifierFn := func(height specqbft.Height) []byte {
+			msgID := spectypes.NewMsgID(
+				options.NetworkConfig.DomainTypeAtSlot(phase0.Slot(height)),
+				share.ValidatorPubKey[:],
+				role,
+			)
+			return msgID[:]
+		}
+		qbftCtrl := qbftcontroller.NewController(identifierFn, operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
 

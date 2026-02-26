@@ -22,7 +22,8 @@ func (v *Validator) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *s
 	isBooleFork := v.NetworkConfig.BooleForkAtSlot(duty.Slot)
 	role := types.RunnerRoleForValidatorDuty(duty, isBooleFork)
 
-	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, v.NetworkConfig.DomainType, role)
+	domain := v.NetworkConfig.DomainTypeAtSlot(duty.Slot)
+	ssvMsg, err := createDutyExecuteMsg(duty, duty.PubKey, domain, role)
 	if err != nil {
 		return fmt.Errorf("create duty execute msg: %w", err)
 	}
