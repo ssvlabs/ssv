@@ -44,7 +44,7 @@ type Options struct {
 	SubnetsIdx          peers.SubnetsIndex
 	HostAddress         string
 	HostDNS             string
-	SSVConfig           *networkconfig.SSV
+	NetworkConfig       *networkconfig.Network
 	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
 	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
 }

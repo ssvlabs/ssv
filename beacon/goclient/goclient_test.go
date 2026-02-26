@@ -188,6 +188,7 @@ func TestTimeouts(t *testing.T) {
 	const (
 		commonTimeout = 100 * time.Millisecond
 		longTimeout   = 500 * time.Millisecond
+		timeoutMargin = 20 * time.Millisecond
 		// mockServerEpoch is the epoch to use in requests to the mock server.
 		mockServerEpoch = 132502
 	)
@@ -195,7 +196,7 @@ func TestTimeouts(t *testing.T) {
 	// Too slow to dial.
 	{
 		undialableServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			time.Sleep(commonTimeout * 2)
+			time.Sleep(commonTimeout + timeoutMargin)
 			return resp, nil
 		})
 		_, err := New(t.Context(), zap.NewNop(), Options{
@@ -211,9 +212,9 @@ func TestTimeouts(t *testing.T) {
 		unresponsiveServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
-				time.Sleep(longTimeout / 2)
+				time.Sleep(longTimeout / 4)
 			case "/eth/v1/beacon/states/head/validators":
-				time.Sleep(longTimeout * 2)
+				time.Sleep(longTimeout + timeoutMargin)
 			}
 			return resp, nil
 		})
@@ -245,7 +246,7 @@ func TestTimeouts(t *testing.T) {
 		unresponsiveServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
-				time.Sleep(longTimeout * 2)
+				time.Sleep(longTimeout + timeoutMargin)
 			}
 			return resp, nil
 		})
@@ -263,14 +264,14 @@ func TestTimeouts(t *testing.T) {
 	// Fast enough.
 	{
 		fastServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			time.Sleep(commonTimeout / 2)
+			time.Sleep(commonTimeout / 4)
 			switch r.URL.Path {
 			case "/eth/v1/config/spec":
 			case "/eth/v1/beacon/genesis":
 			case "/eth/v1/node/syncing":
 			case "/eth/v1/node/version":
 			case "/eth/v2/debug/beacon/states/head":
-				time.Sleep(longTimeout / 2)
+				time.Sleep(longTimeout / 4)
 			}
 			return resp, nil
 		})

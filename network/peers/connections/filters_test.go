@@ -9,15 +9,48 @@ import (
 )
 
 func TestNetworkIDFilter(t *testing.T) {
-	f := NetworkIDFilter("xxx")
+	tests := []struct {
+		name       string
+		allowed    []string
+		received   string
+		shouldPass bool
+	}{
+		{
+			name:       "single allowed domain match",
+			allowed:    []string{"xxx"},
+			received:   "xxx",
+			shouldPass: true,
+		},
+		{
+			name:       "single allowed domain mismatch",
+			allowed:    []string{"xxx"},
+			received:   "bbb",
+			shouldPass: false,
+		},
+		{
+			name:       "multiple allowed domains match",
+			allowed:    []string{"xxx", "yyy"},
+			received:   "yyy",
+			shouldPass: true,
+		},
+		{
+			name:       "multiple allowed domains mismatch",
+			allowed:    []string{"xxx", "yyy"},
+			received:   "zzz",
+			shouldPass: false,
+		},
+	}
 
-	err := f("", &records.NodeInfo{
-		NetworkID: "xxx",
-	})
-	require.NoError(t, err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := NetworkIDFilter(tc.allowed...)
+			err := f("", &records.NodeInfo{NetworkID: tc.received})
 
-	err = f("", &records.NodeInfo{
-		NetworkID: "bbb",
-	})
-	require.Error(t, err)
+			if tc.shouldPass {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+		})
+	}
 }

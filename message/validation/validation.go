@@ -4,6 +4,7 @@ package validation
 // validator.go contains main code for validation and most of the rule checks.
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -172,6 +173,9 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
 		return decodedMessage, err
 	}
+	if err := mv.validateDomainAllowlist(signedSSVMessage.SSVMessage.GetID()); err != nil {
+		return decodedMessage, err
+	}
 
 	// TODO: leverage the validatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
@@ -234,6 +238,31 @@ func (mv *messageValidator) validateTopicAtSlot(committeeInfo CommitteeInfo, top
 		return e
 	}
 
+	return nil
+}
+
+func (mv *messageValidator) validateDomainAllowlist(msgID spectypes.MessageID) error {
+	msgDomain := msgID.GetDomain()
+	currentDomain := mv.netCfg.DomainType[:]
+	nextDomain := mv.netCfg.NextDomainType[:]
+	if !bytes.Equal(msgDomain, currentDomain) && !bytes.Equal(msgDomain, nextDomain) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(msgDomain)
+		err.want = fmt.Sprintf("%s or %s", hex.EncodeToString(currentDomain), hex.EncodeToString(nextDomain))
+		return err
+	}
+
+	return nil
+}
+
+func (mv *messageValidator) validateDomainAtSlot(msgID spectypes.MessageID, slot phase0.Slot) error {
+	expectedDomain := mv.netCfg.DomainTypeAtSlot(slot)
+	if msgDomain := msgID.GetDomain(); !bytes.Equal(msgDomain, expectedDomain[:]) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(msgDomain)
+		err.want = hex.EncodeToString(expectedDomain[:])
+		return err
+	}
 	return nil
 }
 

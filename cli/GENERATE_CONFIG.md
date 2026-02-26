@@ -32,12 +32,12 @@ The `generate-config` command allows you to generate a YAML configuration file b
 | `--operator-private-key`             | string |                                   | Secret key for the operator.                                               |
 | `--metrics-api-port`                 | int    | `0`                               | Port number for the Metrics API (set to `0` to disable).                   |
 | `--ssv-domain`                       | string | Derived from local testnet config | Hex-encoded domain type (prefixed with `0x`).                              |
+| `--ssv-next-domain`                  | string | Derived from local testnet config | Hex-encoded next domain type (prefixed with `0x`).                         |
 | `--ssv-registry-sync-offset`         | uint64 | Derived from local testnet config | Registry sync offset for the network.                                      |
 | `--ssv-registry-contract-addr`       | string | Derived from local testnet config | Ethereum address of the network registry contract (e.g., `0xYourAddress`). |
 | `--ssv-bootnodes`                    | string | Derived from local testnet config | Comma-separated list of network bootnodes.                                 |
 | `--ssv-discovery-protocol-id`        | string | Derived from local testnet config | Hex-encoded discovery protocol ID (prefixed with `0x`).                    |
-| `--ssv-alan-fork-epoch`              | uint64 | Derived from local testnet config | Epoch at which the Alan fork occurs in the network.                        |
-| `--ssv-max-validators-per-committee` | int    | Derived from local testnet config | Max validators per committee.                                              |
+| `--ssv-boole-fork-epoch`             | uint64 | Derived from local testnet config | Epoch at which the Boole fork occurs in the network.                       |
 
 
 **Note:** The `--consensus-client` and `--execution-client` flags are mandatory and must be provided when running the CLI.
@@ -82,18 +82,19 @@ ssvnode generate-config \
 
 ### Advanced Network Configuration
 
-Customize network settings such as bootnodes, discovery protocol ID, fork epoch, etc:
+Customize network settings such as bootnodes, discovery protocol ID, and Boole fork epoch:
 
 ```bash
 ssvnode generate-config \
   --consensus-client "http://consensus.example.com:9000" \
   --execution-client "http://execution.example.com:8545" \
   --ssv-domain "0x12345678" \
+  --ssv-next-domain "0x9abcdef0" \
   --ssv-registry-sync-offset 50 \
   --ssv-registry-contract-addr "0xYourRegistryContractAddress" \
   --ssv-bootnodes "enode://bootnode1@127.0.0.1:30303,enode://bootnode2@127.0.0.1:30304" \
   --ssv-discovery-protocol-id "0x1234567890ab" \
-  --ssv-max-validators-per-committee 560
+  --ssv-boole-fork-epoch 0
 ```
 
 ## Configuration
@@ -117,6 +118,7 @@ ssv:
   Network: LocalTestnetSSV
   CustomNetwork:
     DomainType: "0x12345678"
+    NextDomainType: "0x9abcdef0"
     RegistrySyncOffset: 0
     RegistryContractAddr: "0xYourRegistryContractAddress"
     Bootnodes:
@@ -148,6 +150,7 @@ MetricsAPIPort: 8080
     - `Network`: Name of the network.
     - `CustomNetwork`: Contains custom network parameters.
         - `DomainType`: Hex-encoded domain type (prefixed with `0x`).
+        - `NextDomainType`: Hex-encoded next domain type (prefixed with `0x`).
         - `RegistrySyncOffset`: Registry sync offset for the network.
         - `RegistryContractAddr`: Ethereum address of the network registry contract.
         - `Bootnodes`: List of network bootnodes.

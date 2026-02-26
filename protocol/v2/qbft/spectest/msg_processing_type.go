@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -29,7 +28,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
@@ -59,7 +58,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 			lastErr = err
 		}
 	}
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), lastErr)
 
 	postRoot, err := preInstance.State.GetRoot()
 	require.NoError(t, err)

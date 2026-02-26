@@ -176,7 +176,8 @@ func (test *MsgProcessingSpecTest) BeaconAggregatorsMap() map[phase0.CommitteeIn
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
+	actualErr := adjustActualErrorForRunner(adjustActualError(lastErr), test.Runner)
+	spectests.AssertErrorCode(t, adjustExpectedErrorCode(test.ExpectedErrorCode), actualErr)
 
 	var network *protocoltesting.TestingNetwork
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
@@ -290,17 +291,18 @@ var baseCommitteeWithRunner = func(
 	) (runner.Runner, error) {
 		switch duty.(type) {
 		case *spectypes.CommitteeDuty:
+			ctrl := controller.NewController(
+				baseRunner.QBFTController.IdentifierFn,
+				baseRunner.QBFTController.CommitteeMember,
+				baseRunner.QBFTController.GetConfig(),
+				spectestingutils.TestingOperatorSigner(keySetSample),
+				false,
+			)
 			r, err := runner.NewCommitteeRunner(
 				networkconfig.TestNetwork,
 				shareMap,
 				attestingValidators,
-				controller.NewController(
-					baseRunner.QBFTController.Identifier,
-					baseRunner.QBFTController.CommitteeMember,
-					baseRunner.QBFTController.GetConfig(),
-					spectestingutils.TestingOperatorSigner(keySetSample),
-					false,
-				),
+				ctrl,
 				runnerSample.GetBeaconNode(),
 				runnerSample.GetNetwork(),
 				runnerSample.GetSigner(),
@@ -310,16 +312,17 @@ var baseCommitteeWithRunner = func(
 			)
 			return r, err
 		case *spectypes.AggregatorCommitteeDuty:
+			ctrl := controller.NewController(
+				baseRunner.QBFTController.IdentifierFn,
+				baseRunner.QBFTController.CommitteeMember,
+				baseRunner.QBFTController.GetConfig(),
+				spectestingutils.TestingOperatorSigner(keySetSample),
+				false,
+			)
 			r, err := runner.NewAggregatorCommitteeRunner(
 				networkconfig.TestNetwork,
 				shareMap,
-				controller.NewController(
-					baseRunner.QBFTController.Identifier,
-					baseRunner.QBFTController.CommitteeMember,
-					baseRunner.QBFTController.GetConfig(),
-					spectestingutils.TestingOperatorSigner(keySetSample),
-					false,
-				),
+				ctrl,
 				runnerSample.GetBeaconNode(),
 				runnerSample.GetNetwork(),
 				runnerSample.GetSigner(),

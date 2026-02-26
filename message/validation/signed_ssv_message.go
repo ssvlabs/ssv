@@ -1,8 +1,6 @@
 package validation
 
 import (
-	"bytes"
-	"encoding/hex"
 	"fmt"
 	"slices"
 
@@ -119,15 +117,6 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 		e := ErrUnknownSSVMessageType
 		e.got = ssvMessage.MsgType
 		return e
-	}
-
-	// Rule: If domain is different then self domain
-	domain := mv.netCfg.DomainType
-	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(domain[:])
-		return err
 	}
 
 	return nil

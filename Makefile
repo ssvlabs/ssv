@@ -47,8 +47,8 @@ deadcode-lint:
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
-	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
 
 .PHONY: unit-test
 unit-test:
@@ -60,6 +60,11 @@ unit-test-ssv:
 	@echo "Running unit tests"
 	@go test -tags "blst_enabled lfs" -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
 
+.PHONY: unit-test-all
+unit-test-all:
+	@$(MAKE) unit-test
+	@$(MAKE) ssvsigner-test
+
 .PHONY: ssvsigner-test
 ssvsigner-test:
 	@echo "Running ssv-signer unit tests"
@@ -70,10 +75,27 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
 
+.PHONY: spec-test-alan
+spec-test-alan:
+	@echo "Running spec tests against ssv-spec Alan"
+	@$(MAKE) spec-test-alan-deps
+	@go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
+
 .PHONY: all-spec-test-raceless
 all-spec-test-raceless:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
+
+.PHONY: all-spec-test-alan-raceless
+all-spec-test-alan-raceless:
+	@echo "Running spec tests against ssv-spec Alan (raceless)"
+	@$(MAKE) spec-test-alan-deps
+	@go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
+
+.PHONY: spec-test-alan-deps
+spec-test-alan-deps:
+	@echo "Downloading Alan modfile dependencies"
+	@go mod download -modfile=go.spec.alan.mod
 
 .PHONY: spec-test-raceless
 spec-test-raceless:

@@ -1,4 +1,4 @@
-name: Spec tests (raceless)
+name: Spec tests (Alan)
 
 on:
   push:
@@ -13,6 +13,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -25,5 +26,6 @@ jobs:
         with:
           go-version: "1.24.x"
 
-      - name: Run all spec tests
-        run: make all-spec-test-raceless
+      - name: Run spec tests (Alan)
+        run: make spec-test-alan
+        timeout-minutes: 80

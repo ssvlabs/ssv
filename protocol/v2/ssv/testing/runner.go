@@ -93,6 +93,8 @@ var ConstructBaseRunner = func(
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	dgHandler := doppelganger.NoOpHandler{}
+	validatorPK := share.ValidatorPubKey
+	validatorIndex := share.ValidatorIndex
 
 	var valCheck ssv.ValueChecker
 	switch role {
@@ -103,14 +105,14 @@ var ConstructBaseRunner = func(
 		valCheck = ssv.NewAggregatorCommitteeChecker()
 	case spectypes.RoleProposer:
 		valCheck = ssv.NewProposerChecker(km, networkconfig.TestNetwork.Beacon,
-			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex,
+			validatorPK, validatorIndex,
 			phase0.BLSPubKey(share.SharePubKey))
 	case ssvtypes.RoleAggregator:
 		valCheck = ssv.NewAggregatorChecker(networkconfig.TestNetwork.Beacon,
-			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
+			validatorPK, validatorIndex)
 	case ssvtypes.RoleSyncCommitteeContribution:
 		valCheck = ssv.NewSyncCommitteeContributionChecker(networkconfig.TestNetwork.Beacon,
-			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
+			validatorPK, validatorIndex)
 	default:
 		valCheck = nil
 	}
@@ -120,7 +122,6 @@ var ConstructBaseRunner = func(
 		return 1
 	}
 	config.Network = net
-	config.BeaconSigner = km
 
 	contr := protocoltesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),

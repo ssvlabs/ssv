@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -111,6 +112,61 @@ func TestBooleFork(t *testing.T) {
 			}
 
 			require.Equal(t, test.expectedForked, netCfg.BooleFork())
+		})
+	}
+}
+
+func TestDomainTypeAtSlot(t *testing.T) {
+	domainAlan := spectypes.DomainType{0x01, 0x02, 0x03, 0x04}
+	domainBoole := spectypes.DomainType{0x05, 0x06, 0x07, 0x08}
+
+	tests := []struct {
+		name            string
+		booleEpoch      phase0.Epoch
+		nextDomainType  spectypes.DomainType
+		slot            phase0.Slot
+		expectedCurrent spectypes.DomainType
+		expectedNext    spectypes.DomainType
+	}{
+		{
+			name:            "pre_fork_uses_alan",
+			booleEpoch:      10,
+			nextDomainType:  domainBoole,
+			slot:            TestNetwork.FirstSlotAtEpoch(8),
+			expectedCurrent: domainAlan,
+			expectedNext:    domainBoole,
+		},
+		{
+			name:            "pre_fork_near_fork_uses_next_boole",
+			booleEpoch:      10,
+			nextDomainType:  domainBoole,
+			slot:            TestNetwork.FirstSlotAtEpoch(9),
+			expectedCurrent: domainAlan,
+			expectedNext:    domainBoole,
+		},
+		{
+			name:            "post_fork_uses_boole",
+			booleEpoch:      10,
+			nextDomainType:  domainBoole,
+			slot:            TestNetwork.FirstSlotAtEpoch(10),
+			expectedCurrent: domainBoole,
+			expectedNext:    domainBoole,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			netCfg := Network{
+				Beacon: TestNetwork.Beacon,
+				SSV: &SSV{
+					DomainType:     domainAlan,
+					NextDomainType: test.nextDomainType,
+					Forks:          SSVForks{Boole: test.booleEpoch},
+				},
+			}
+
+			require.Equal(t, test.expectedCurrent, netCfg.DomainTypeAtSlot(test.slot))
+			require.Equal(t, test.expectedNext, netCfg.NextDomainType)
 		})
 	}
 }
