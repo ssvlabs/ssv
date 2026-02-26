@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -45,14 +46,16 @@ type MockSlotTicker interface {
 type mockSlotTicker struct {
 	slotChan chan phase0.Slot
 	timeChan chan time.Time
+	done     <-chan struct{}
 	slot     phase0.Slot
 	mu       sync.Mutex
 }
 
-func NewMockSlotTicker() MockSlotTicker {
+func NewMockSlotTicker(ctx context.Context) MockSlotTicker {
 	ticker := &mockSlotTicker{
 		slotChan: make(chan phase0.Slot),
 		timeChan: make(chan time.Time),
+		done:     ctx.Done(),
 	}
 	ticker.start()
 	return ticker
@@ -60,11 +63,23 @@ func NewMockSlotTicker() MockSlotTicker {
 
 func (m *mockSlotTicker) start() {
 	go func() {
-		for slot := range m.slotChan {
-			m.mu.Lock()
-			m.slot = slot
-			m.mu.Unlock()
-			m.timeChan <- time.Now()
+		for {
+			select {
+			case <-m.done:
+				return
+			case slot, ok := <-m.slotChan:
+				if !ok {
+					return
+				}
+				m.mu.Lock()
+				m.slot = slot
+				m.mu.Unlock()
+				select {
+				case m.timeChan <- time.Now():
+				case <-m.done:
+					return
+				}
+			}
 		}
 	}()
 }
@@ -155,7 +170,7 @@ func setupSchedulerAndMocksWithParams(
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
 		SlotTickerProvider: func() slotticker.SlotTicker {
-			ticker := NewMockSlotTicker()
+			ticker := NewMockSlotTicker(ctx)
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
 		},
@@ -400,99 +415,109 @@ func (sv *SafeValue[T]) Get() T {
 }
 
 func TestScheduler_Run(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	logger := log.TestLogger(t)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		logger := log.TestLogger(t)
 
-	mockBeaconNode := NewMockBeaconNode(ctrl)
-	mockValidatorProvider := NewMockValidatorProvider(ctrl)
-	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
-	// create multiple mock duty handlers
-	mockDutyHandler1 := NewMockdutyHandler(ctrl)
-	mockDutyHandler2 := NewMockdutyHandler(ctrl)
+		mockBeaconNode := NewMockBeaconNode(ctrl)
+		mockValidatorProvider := NewMockValidatorProvider(ctrl)
+		mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
+		// create multiple mock duty handlers
+		mockDutyHandler1 := NewMockdutyHandler(ctrl)
+		mockDutyHandler2 := NewMockdutyHandler(ctrl)
 
-	mockDutyHandler1.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
-	mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
+		mockDutyHandler1.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
+		mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
 
-	opts := &SchedulerOptions{
-		Ctx:               ctx,
-		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.Beacon,
-		ValidatorProvider: mockValidatorProvider,
-		SlotTickerProvider: func() slotticker.SlotTicker {
-			return mockTicker
-		},
-	}
+		opts := &SchedulerOptions{
+			Ctx:               ctx,
+			BeaconNode:        mockBeaconNode,
+			BeaconConfig:      networkconfig.TestNetwork.Beacon,
+			ValidatorProvider: mockValidatorProvider,
+			SlotTickerProvider: func() slotticker.SlotTicker {
+				return mockTicker
+			},
+		}
 
-	s := NewScheduler(logger, opts)
-	// add multiple mock duty handlers
-	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
+		s := NewScheduler(logger, opts)
+		// add multiple mock duty handlers
+		s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
-	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
-	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
+		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
+		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 
-	// setup mock duty handler expectations
-	for _, mockDutyHandler := range s.handlers {
-		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
-			DoAndReturn(func(ctx context.Context) {
-				<-ctx.Done()
-			}).
-			Times(1)
-		mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
-	}
+		// setup mock duty handler expectations
+		for _, mockDutyHandler := range s.handlers {
+			mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+			mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
+				DoAndReturn(func(ctx context.Context) {
+					<-ctx.Done()
+				}).
+				Times(1)
+			mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
+		}
 
-	require.NoError(t, s.Start(ctx))
+		require.NoError(t, s.Start(ctx))
 
-	// Cancel the context and test that the scheduler stops.
-	cancel()
-	require.NoError(t, s.Wait())
+		// Cancel the context and test that the scheduler stops.
+		cancel()
+		require.NoError(t, s.Wait())
+	})
 }
 
 func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	defer cancel()
-	logger := log.TestLogger(t)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		logger := log.TestLogger(t)
 
-	mockBeaconNode := NewMockBeaconNode(ctrl)
-	mockValidatorProvider := NewMockValidatorProvider(ctrl)
-	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
-	// create multiple mock duty handlers
+		mockBeaconNode := NewMockBeaconNode(ctrl)
+		mockValidatorProvider := NewMockValidatorProvider(ctrl)
+		mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
+		// create multiple mock duty handlers
 
-	opts := &SchedulerOptions{
-		Ctx:               ctx,
-		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.Beacon,
-		ValidatorProvider: mockValidatorProvider,
-		SlotTickerProvider: func() slotticker.SlotTicker {
-			return mockTicker
-		},
-		IndicesChg: make(chan struct{}),
-	}
+		opts := &SchedulerOptions{
+			Ctx:               ctx,
+			BeaconNode:        mockBeaconNode,
+			BeaconConfig:      networkconfig.TestNetwork.Beacon,
+			ValidatorProvider: mockValidatorProvider,
+			SlotTickerProvider: func() slotticker.SlotTicker {
+				return mockTicker
+			},
+			IndicesChg: make(chan struct{}),
+		}
 
-	s := NewScheduler(logger, opts)
+		s := NewScheduler(logger, opts)
 
-	// add multiple mock duty handlers
-	s.handlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
-	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
-	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
-	err := s.Start(ctx)
-	require.NoError(t, err)
+		// add multiple mock duty handlers
+		s.handlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
+		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
+		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
+		err := s.Start(ctx)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, s.Wait())
+		})
 
-	s.indicesChg <- struct{}{} // first time make fanout stuck
-	select {
-	case s.indicesChg <- struct{}{}: // second send should hang
-		break
-	case <-time.After(timeout):
-		t.Fatal("Channel is jammed")
-	}
+		s.indicesChg <- struct{}{} // first time make fanout stuck
+		select {
+		case s.indicesChg <- struct{}{}: // second send should hang
+			break
+		case <-time.After(timeout):
+			t.Fatal("Channel is jammed")
+		}
+
+		// Ensure in-flight fanout work is drained before cleanup cancels the scheduler.
+		synctest.Wait()
+	})
 }

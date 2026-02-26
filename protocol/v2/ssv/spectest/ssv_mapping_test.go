@@ -25,7 +25,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -40,7 +39,7 @@ func TestSSVMapping(t *testing.T) {
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	untypedTests := map[string]any{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -376,7 +375,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 }
 
 func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutils.TestKeySet) runner.Runner {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 

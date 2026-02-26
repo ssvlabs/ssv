@@ -47,13 +47,17 @@ deadcode-lint:
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
-	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
 
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
 	@go test -tags "blst_enabled lfs" -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|ssv/scripts/"`
+
+.PHONY: unit-test-all
+unit-test-all:
+	@$(MAKE) unit-test
 	@$(MAKE) ssvsigner-test
 
 .PHONY: ssvsigner-test
@@ -64,17 +68,8 @@ ssvsigner-test:
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
-
-.PHONY: all-spec-test-raceless
-all-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
-
-.PHONY: spec-test-raceless
-spec-test-raceless:
-	@echo "Running spec tests without race flag"
-	@go test -tags blst_enabled -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
+	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -p 1 ./protocol/v2/qbft/spectest
+	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -p 1 ./protocol/v2/ssv/spectest
 
 .PHONY: benchmark
 benchmark:
