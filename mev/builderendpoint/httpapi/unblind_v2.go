@@ -8,7 +8,7 @@ import (
 func handleBlindedBlocksV2(unblinder UnblinderFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if unblinder == nil {
-			w.WriteHeader(http.StatusNoContent)
+			writeError(w, http.StatusServiceUnavailable, "builder not configured")
 			return
 		}
 

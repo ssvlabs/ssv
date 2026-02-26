@@ -58,7 +58,7 @@ func decodeBlindedBlockRequest(r *http.Request) (*api.VersionedSignedBlindedBeac
 func handleBlindedBlocks(unblinder UnblinderFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if unblinder == nil {
-			w.WriteHeader(http.StatusNoContent)
+			writeError(w, http.StatusServiceUnavailable, "builder not configured")
 			return
 		}
 

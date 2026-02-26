@@ -374,6 +374,24 @@ func TestPostBlindedBlocks_MissingConsensusHeader(t *testing.T) {
 	}
 }
 
+func TestPostBlindedBlocks_UnblinderNotConfigured_Returns503(t *testing.T) {
+	t.Parallel()
+
+	handler := httpapi.NewRouter(zap.NewNop(), nil, nil, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Post(srv.URL+"/eth/v1/builder/blinded_blocks", buildercodec.MediaTypeJSON, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("POST blinded_blocks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+}
+
 func TestPostBlindedBlocks_SSZ_MissingConsensusHeader_Returns400(t *testing.T) {
 	t.Parallel()
 
@@ -440,6 +458,24 @@ func TestPostBlindedBlocksV2_MissingConsensusHeader(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+}
+
+func TestPostBlindedBlocksV2_UnblinderNotConfigured_Returns503(t *testing.T) {
+	t.Parallel()
+
+	handler := httpapi.NewRouter(zap.NewNop(), nil, nil, nil)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Post(srv.URL+"/eth/v2/builder/blinded_blocks", buildercodec.MediaTypeJSON, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("POST blinded_blocks v2: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unexpected status: got %d want %d", resp.StatusCode, http.StatusServiceUnavailable)
 	}
 }
 
