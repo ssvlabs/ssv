@@ -120,6 +120,12 @@ func (c *Controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 		}
 	}
 
+	if len(ownerShares) > scheduledValidatorRegsLimit {
+		logger.Info("throttling validator registration duties (too many to process immediately)",
+			zap.Int("desired", len(ownerShares)),
+			zap.Int("scheduled", scheduledValidatorRegsLimit))
+	}
+
 	for _, s := range ownerShares[:min(scheduledValidatorRegsLimit, len(ownerShares))] {
 		pk := phase0.BLSPubKey(s.ValidatorPubKey)
 
@@ -137,11 +143,13 @@ func (c *Controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 
 	// Notify (without blocking) the fee recipient controller about the fee recipient address change
 	// so it can submit updated proposal preparations with the new fee recipient.
-	go func() {
-		if !c.reportFeeRecipientChange(c.ctx) {
-			logger.Error("failed to notify fee recipient change")
-		}
-	}()
+	if len(ownerShares) > 0 {
+		go func() {
+			if !c.reportFeeRecipientChange(c.ctx) {
+				logger.Error("failed to notify fee recipient change")
+			}
+		}()
+	}
 
 	return nil
 }
