@@ -31,8 +31,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 FROM preparer AS builder
 
-# Copy files and install app
-COPY .. .
+# Copy repository files from build context and install app
+COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
