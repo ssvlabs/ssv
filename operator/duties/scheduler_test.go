@@ -97,15 +97,19 @@ func (m *MockSlotTicker) WaitShutdown() {
 
 type mockSlotTickerService struct {
 	event.Feed
-	ticker *MockSlotTicker
+
+	// tickers keeps track of mocked tickers so we can gracefully shut them down.
+	tickers []*MockSlotTicker
 }
 
 func (m *mockSlotTickerService) RegisterTicker(ticker *MockSlotTicker) {
-	m.ticker = ticker
+	m.tickers = append(m.tickers, ticker)
 }
 
 func (m *mockSlotTickerService) WaitShutdown() {
-	m.ticker.WaitShutdown()
+	for _, ticker := range m.tickers {
+		ticker.WaitShutdown()
+	}
 }
 
 func waitForSlotN(beaconCfg *networkconfig.Beacon, slots phase0.Slot) {
