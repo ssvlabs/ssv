@@ -455,7 +455,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		go func() {
+		s.pool.Go(func(ctx context.Context) error {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -465,7 +465,9 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 			}
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
-		}()
+
+			return nil
+		})
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -507,7 +509,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		go func() {
+		s.pool.Go(func(ctx context.Context) error {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -518,7 +520,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
-		}()
+
+			return nil
+		})
 	}
 
 	span.SetStatus(codes.Ok, "")
