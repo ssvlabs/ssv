@@ -47,9 +47,9 @@ deadcode-lint:
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage1.out -count=1 -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/\|/network/p2p"`
+	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage1.out -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/\|/network/p2p"`
 	# running tests in `./network/p2p` separately because they get flaky when run concurrently with others for some reason
-	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage2.out -count=1 -p 16 -parallel 256 ./network/p2p
+	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage2.out -p 16 -parallel 256 ./network/p2p
 	@cat coverage1.out > coverage.out && tail -n +2 coverage2.out >> coverage.out
 
 .PHONY: unit-test-all
@@ -60,13 +60,13 @@ unit-test-all:
 .PHONY: ssvsigner-test
 ssvsigner-test:
 	@echo "Running ssv-signer unit tests"
-	@cd ssvsigner && go test -tags blst_enabled -timeout 10m -race -covermode=atomic -coverprofile=coverage.out -count=1 -p 16 -parallel 256 `go list ./... | grep -ve "ssvsigner/e2e"`
+	@cd ssvsigner && go test -tags blst_enabled -timeout 10m -race -covermode=atomic -coverprofile=coverage.out -p 16 -parallel 256 `go list ./... | grep -ve "ssvsigner/e2e"`
 
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -count=1 -p 16 -parallel 256 ./protocol/v2/qbft/spectest
-	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -count=1 -p 16 -parallel 256 ./protocol/v2/ssv/spectest
+	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
+	@go test -tags blst_enabled -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
 
 .PHONY: benchmark
 benchmark:
