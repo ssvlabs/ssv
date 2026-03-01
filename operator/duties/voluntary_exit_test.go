@@ -152,6 +152,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	cancel()
 	close(exitCh)
 	require.NoError(t, scheduler.Wait())
+	ticker.WaitShutdown()
 }
 
 func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
