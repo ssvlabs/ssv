@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -459,7 +460,7 @@ func newMockShares(shares []*types.SSVShare) *mockShares {
 // List returns shares that match all the given filters.
 func (m *mockShares) List(_ basedb.Reader, filters ...storage.SharesFilter) []*types.SSVShare {
 	if len(filters) == 0 {
-		return m.shares
+		return slices.Clone(m.shares)
 	}
 
 	var result []*types.SSVShare
@@ -628,4 +629,139 @@ func TestValidatorsList(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidatorsList_Pagination(t *testing.T) {
+	t.Parallel()
+
+	makeShare := func(pubKeyFirstByte byte) *types.SSVShare {
+		share := mockFullShare()
+		share.ValidatorPubKey[0] = pubKeyFirstByte
+		share.ValidatorIndex = phase0.ValidatorIndex(pubKeyFirstByte)
+		return share
+	}
+
+	shares := []*types.SSVShare{
+		makeShare(5),
+		makeShare(1),
+		makeShare(3),
+		makeShare(2),
+		makeShare(4),
+	}
+
+	t.Run("backwards compatible without pagination params", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := http.NewRequest("GET", "/validators", strings.NewReader(`{}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler := &Validators{Shares: newMockShares(shares)}
+
+		err = handler.List(rr, req)
+		require.NoError(t, err)
+
+		var raw map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &raw))
+		_, hasPagination := raw["pagination"]
+		require.False(t, hasPagination)
+	})
+
+	t.Run("page and per_page", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := http.NewRequest("GET", "/validators", strings.NewReader(`{"pagination":{"page":1,"per_page":2}}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler := &Validators{Shares: newMockShares(shares)}
+
+		err = handler.List(rr, req)
+		require.NoError(t, err)
+
+		var response struct {
+			Data       []*validatorJSON `json:"data"`
+			Pagination struct {
+				Page       uint64 `json:"page"`
+				PerPage    uint64 `json:"per_page"`
+				Total      uint64 `json:"total"`
+				TotalPages uint64 `json:"total_pages"`
+			} `json:"pagination"`
+		}
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+
+		require.Len(t, response.Data, 2)
+		require.Equal(t, uint64(1), response.Pagination.Page)
+		require.Equal(t, uint64(2), response.Pagination.PerPage)
+		require.Equal(t, uint64(5), response.Pagination.Total)
+		require.Equal(t, uint64(3), response.Pagination.TotalPages)
+
+		// Sorted by public key, so 1 then 2.
+		require.Equal(t, byte(1), response.Data[0].PubKey[0])
+		require.Equal(t, byte(2), response.Data[1].PubKey[0])
+	})
+
+	t.Run("per_page without page defaults to page 1", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := http.NewRequest("GET", "/validators", strings.NewReader(`{"pagination":{"per_page":2}}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler := &Validators{Shares: newMockShares(shares)}
+
+		err = handler.List(rr, req)
+		require.NoError(t, err)
+
+		var response struct {
+			Pagination struct {
+				Page    uint64 `json:"page"`
+				PerPage uint64 `json:"per_page"`
+			} `json:"pagination"`
+		}
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+		require.Equal(t, uint64(1), response.Pagination.Page)
+		require.Equal(t, uint64(2), response.Pagination.PerPage)
+	})
+
+	t.Run("page without per_page defaults to per_page 1000", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := http.NewRequest("GET", "/validators", strings.NewReader(`{"pagination":{"page":1}}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler := &Validators{Shares: newMockShares(shares)}
+
+		err = handler.List(rr, req)
+		require.NoError(t, err)
+
+		var response struct {
+			Pagination struct {
+				Page    uint64 `json:"page"`
+				PerPage uint64 `json:"per_page"`
+			} `json:"pagination"`
+		}
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+		require.Equal(t, uint64(1), response.Pagination.Page)
+		require.Equal(t, uint64(1000), response.Pagination.PerPage)
+	})
+
+	t.Run("page 0 is invalid when provided", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := http.NewRequest("GET", "/validators", strings.NewReader(`{"pagination":{"page":0,"per_page":2}}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		rr := httptest.NewRecorder()
+		handler := &Validators{Shares: newMockShares(shares)}
+
+		err = handler.List(rr, req)
+		require.Error(t, err)
+	})
 }

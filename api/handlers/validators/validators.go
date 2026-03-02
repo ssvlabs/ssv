@@ -2,7 +2,9 @@ package validators
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -18,21 +20,37 @@ type Validators struct {
 }
 
 func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
-	var request struct {
-		Owners      api.HexSlice    `json:"owners" form:"owners"`
-		Operators   api.Uint64Slice `json:"operators" form:"operators"`
-		Clusters    requestClusters `json:"clusters" form:"clusters"`
-		Subclusters requestClusters `json:"subclusters" form:"subclusters"`
-		PubKeys     api.HexSlice    `json:"pubkeys" form:"pubkeys"`
-		Indices     api.Uint64Slice `json:"indices" form:"indices"`
+	const (
+		defaultPerPage = uint64(1000)
+		maxPerPage     = uint64(10000)
+	)
+
+	if r.URL.Query().Has("page") || r.URL.Query().Has("per_page") || r.URL.Query().Has("pagination") {
+		return api.BadRequestError(fmt.Errorf("pagination must be provided in request body"))
 	}
-	var response struct {
-		Data []*validatorJSON `json:"data"`
+
+	var request struct {
+		Owners      api.HexSlice           `json:"owners" form:"owners"`
+		Operators   api.Uint64Slice        `json:"operators" form:"operators"`
+		Clusters    requestClusters        `json:"clusters" form:"clusters"`
+		Subclusters requestClusters        `json:"subclusters" form:"subclusters"`
+		PubKeys     api.HexSlice           `json:"pubkeys" form:"pubkeys"`
+		Indices     api.Uint64Slice        `json:"indices" form:"indices"`
+		Pagination  api.OptionalPagination `json:"pagination" form:"pagination"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
-		return err
+		return api.BadRequestError(err)
 	}
+
+	paginationRequest, err := request.Pagination.ToRequest(api.PaginationOptions{
+		DefaultPerPage: defaultPerPage,
+		MaxPerPage:     maxPerPage,
+	})
+	if err != nil {
+		return api.BadRequestError(err)
+	}
+	paginationRequested := paginationRequest != nil
 
 	var filters []registrystorage.SharesFilter
 	if len(request.Owners) > 0 {
@@ -55,10 +73,40 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	shares := h.Shares.List(nil, filters...)
-	response.Data = make([]*validatorJSON, len(shares))
-	for i, share := range shares {
+
+	// If no pagination requested, keep retro-compatibility with old response format
+	if !paginationRequested {
+		var response struct {
+			Data []*validatorJSON `json:"data"`
+		}
+		response.Data = make([]*validatorJSON, len(shares))
+		for i, share := range shares {
+			response.Data[i] = validatorFromShare(share)
+		}
+		return api.Render(w, r, response)
+	}
+
+	// Ensure deterministic ordering for pagination.
+	sort.Slice(shares, func(i, j int) bool {
+		return bytes.Compare(shares[i].ValidatorPubKey[:], shares[j].ValidatorPubKey[:]) < 0
+	})
+
+	total := uint64(len(shares))
+	start, end := paginationRequest.SliceBounds(total)
+
+	var response struct {
+		Data       []*validatorJSON `json:"data"`
+		Pagination api.Pagination   `json:"pagination"`
+	}
+
+	pagedShares := shares[start:end]
+	response.Data = make([]*validatorJSON, len(pagedShares))
+	for i, share := range pagedShares {
 		response.Data[i] = validatorFromShare(share)
 	}
+
+	response.Pagination = api.PaginationFromRequest(*paginationRequest, total)
+
 	return api.Render(w, r, response)
 }
 
