@@ -195,7 +195,7 @@ func migrateBadgerToPebbleIfNeeded(
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
 	}
 
-	copied, err := copyBadgerToPebble(badgerPath, db, hook)
+	copied, err := copyBadgerToPebble(logger, badgerPath, db, hook)
 	if err != nil {
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
 	}
@@ -226,11 +226,7 @@ func badgerDirState(path string) (exists bool, nonEmpty bool, err error) {
 		return exists, false, err
 	}
 
-	opt := badgerdb.DefaultOptions(path)
-	opt.ReadOnly = true
-	opt.Logger = nil
-
-	bdb, err := badgerdb.Open(opt)
+	bdb, _, err := openBadgerForImport(path)
 	if err != nil {
 		return true, false, err
 	}
@@ -272,16 +268,18 @@ func hasBadgerFiles(path string) (bool, error) {
 	return false, nil
 }
 
-func copyBadgerToPebble(badgerPath string, db *pebble.DB, hook importBatchCommitHook) (int, error) {
-	opt := badgerdb.DefaultOptions(badgerPath)
-	opt.ReadOnly = true
-	opt.Logger = nil
-
-	bdb, err := badgerdb.Open(opt)
+func copyBadgerToPebble(logger *zap.Logger, badgerPath string, db *pebble.DB, hook importBatchCommitHook) (int, error) {
+	bdb, recovered, err := openBadgerForImport(badgerPath)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = bdb.Close() }()
+	if recovered && logger != nil {
+		logger.Warn(
+			"badger value log required truncation during pebble import; proceeding with recovered badger state",
+			zap.String("badger_path", badgerPath),
+		)
+	}
 
 	batchSize := defaultImportBatchSize
 	copied := 0
@@ -347,6 +345,41 @@ func copyBadgerToPebble(badgerPath string, db *pebble.DB, hook importBatchCommit
 	}
 
 	return copied, nil
+}
+
+func openBadgerForImport(path string) (*badgerdb.DB, bool, error) {
+	opt := badgerdb.DefaultOptions(path)
+	opt.ReadOnly = true
+	opt.Logger = nil
+
+	bdb, err := badgerdb.Open(opt)
+	if err == nil {
+		return bdb, false, nil
+	}
+	if !isBadgerTruncateRequiredError(err) {
+		return nil, false, err
+	}
+
+	recoverOpt := badgerdb.DefaultOptions(path)
+	recoverOpt.ReadOnly = false
+	recoverOpt.Logger = nil
+
+	recoveredDB, recoverErr := badgerdb.Open(recoverOpt)
+	if recoverErr != nil {
+		return nil, false, fmt.Errorf("open badger read-only failed: %w; recovery open with truncate failed: %v", err, recoverErr)
+	}
+
+	return recoveredDB, true, nil
+}
+
+func isBadgerTruncateRequiredError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, badgerdb.ErrTruncateNeeded) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "log truncate required to run db")
 }
 
 func canUsePebbleAlongsideBadger(pebblePath string, badgerPath string) (bool, error) {
