@@ -19,6 +19,18 @@ type Validators struct {
 	Shares registrystorage.Shares
 }
 
+// List godoc
+// @Summary Get validators
+// @Description Returns the list of validators managed by the SSV node. Pagination is provided via the JSON request body under "pagination".
+// @Tags Validators
+// @Accept json
+// @Produce json
+// @Param request body ValidatorsRequest false "Filters and pagination as JSON body"
+// @Success 200 {object} ValidatorsResponse
+// @Failure 400 {object} api.ErrorResponse
+// @Failure 429 {object} api.ErrorResponse "Too Many Requests"
+// @Failure 500 {object} api.ErrorResponse
+// @Router /v1/validators [get]
 func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	const (
 		defaultPerPage = uint64(1000)
@@ -29,21 +41,12 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("pagination must be provided in request body"))
 	}
 
-	var request struct {
-		Owners            api.HexSlice          `json:"owners" form:"owners"`
-		Operators         api.Uint64Slice       `json:"operators" form:"operators"`
-		Clusters          requestClusters       `json:"clusters" form:"clusters"`
-		Subclusters       requestClusters       `json:"subclusters" form:"subclusters"`
-		PubKeys           api.HexSlice          `json:"pubkeys" form:"pubkeys"`
-		Indices           api.Uint64Slice       `json:"indices" form:"indices"`
-		PaginationRequest api.PaginationRequest `json:"pagination" form:"pagination"`
-	}
-
+	var request ValidatorsRequest
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
 	}
 
-	pagination, err := request.PaginationRequest.ToPagination(api.PaginationOptions{
+	pagination, err := request.Pagination.ToPagination(api.PaginationOptions{
 		DefaultPerPage: defaultPerPage,
 		MaxPerPage:     maxPerPage,
 	})
@@ -74,12 +77,10 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 
 	shares := h.Shares.List(nil, filters...)
 
-	// If no pagination requested, keep retro-compatibility with old response format
+	var response ValidatorsResponse
+
 	if !paginationRequested {
-		var response struct {
-			Data []*validatorJSON `json:"data"`
-		}
-		response.Data = make([]*validatorJSON, len(shares))
+		response.Data = make([]*Validator, len(shares))
 		for i, share := range shares {
 			response.Data[i] = validatorFromShare(share)
 		}
@@ -94,18 +95,14 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	total := uint64(len(shares))
 	start, end := pagination.SliceBounds(total)
 
-	var response struct {
-		Data               []*validatorJSON       `json:"data"`
-		PaginationResponse api.PaginationResponse `json:"pagination"`
-	}
-
 	pagedShares := shares[start:end]
-	response.Data = make([]*validatorJSON, len(pagedShares))
+	response.Data = make([]*Validator, len(pagedShares))
 	for i, share := range pagedShares {
 		response.Data[i] = validatorFromShare(share)
 	}
 
-	response.PaginationResponse = api.PaginationResponseFromPagination(*pagination, total)
+	p := api.PaginationResponseFromPagination(*pagination, total)
+	response.Pagination = &p
 
 	return api.Render(w, r, response)
 }
@@ -135,7 +132,7 @@ func byOperators(operators []uint64) registrystorage.SharesFilter {
 }
 
 // byClusters returns a filter that matches shares that match or contain any of the given clusters.
-func byClusters(clusters requestClusters, contains bool) registrystorage.SharesFilter {
+func byClusters(clusters Clusters, contains bool) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		shareCommittee := make([]string, len(share.Committee))
 		for i, c := range share.Committee {

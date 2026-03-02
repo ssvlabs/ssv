@@ -91,49 +91,49 @@ func TestByClusters(t *testing.T) {
 
 	testCases := []struct {
 		name      string
-		clusters  requestClusters
+		clusters  Clusters
 		contains  bool
 		shares    []*types.SSVShare
 		expectRes []bool
 	}{
 		{
 			name:      "exact match",
-			clusters:  requestClusters{{10, 20, 30}},
+			clusters:  Clusters{{10, 20, 30}},
 			contains:  false,
 			shares:    []*types.SSVShare{mockShare(10, 20, 30), mockShare(40, 50, 60)},
 			expectRes: []bool{true, false},
 		},
 		{
 			name:      "substring match",
-			clusters:  requestClusters{{10, 20}},
+			clusters:  Clusters{{10, 20}},
 			contains:  true,
 			shares:    []*types.SSVShare{mockShare(10, 20, 30), mockShare(40, 50, 60)},
 			expectRes: []bool{true, false},
 		},
 		{
 			name:      "no match",
-			clusters:  requestClusters{{40, 50}},
+			clusters:  Clusters{{40, 50}},
 			contains:  false,
 			shares:    []*types.SSVShare{mockShare(10, 20, 30), mockShare(40, 50, 60)},
 			expectRes: []bool{false, false},
 		},
 		{
 			name:      "no match with contains",
-			clusters:  requestClusters{{70, 80}},
+			clusters:  Clusters{{70, 80}},
 			contains:  true,
 			shares:    []*types.SSVShare{mockShare(10, 20, 30), mockShare(40, 50, 60)},
 			expectRes: []bool{false, false},
 		},
 		{
 			name:      "mismatch lengths",
-			clusters:  requestClusters{{10, 20, 30}},
+			clusters:  Clusters{{10, 20, 30}},
 			contains:  false,
 			shares:    []*types.SSVShare{mockShare(10, 20), mockShare(40, 50, 60)},
 			expectRes: []bool{false, false},
 		},
 		{
 			name:     "multiple clusters",
-			clusters: requestClusters{{20, 30, 40}, {80, 90, 100}},
+			clusters: Clusters{{20, 30, 40}, {80, 90, 100}},
 			contains: false,
 			shares: []*types.SSVShare{
 				mockShare(20, 30, 40),
@@ -147,7 +147,7 @@ func TestByClusters(t *testing.T) {
 		},
 		{
 			name:     "multiple clusters with contains",
-			clusters: requestClusters{{20, 30, 40}, {80, 90, 100}},
+			clusters: Clusters{{20, 30, 40}, {80, 90, 100}},
 			contains: true,
 			shares: []*types.SSVShare{
 				mockShare(10, 20, 30, 40, 50),
@@ -395,15 +395,15 @@ func TestValidatorFromShare(t *testing.T) {
 	})
 }
 
-// TestRequestClustersBind tests the Bind method of requestClusters.
-func TestRequestClustersBind(t *testing.T) {
+// TestClustersBind tests the Bind method of Clusters.
+func TestClustersBind(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name      string
 		input     string
 		wantError bool
-		expected  requestClusters
+		expected  Clusters
 	}{
 		{
 			name:      "empty string",
@@ -415,13 +415,13 @@ func TestRequestClustersBind(t *testing.T) {
 			name:      "single cluster",
 			input:     "1,2,3",
 			wantError: false,
-			expected:  requestClusters{{1, 2, 3}},
+			expected:  Clusters{{1, 2, 3}},
 		},
 		{
 			name:      "multiple clusters",
 			input:     "1,2,3 4,5,6 7,8,9",
 			wantError: false,
-			expected:  requestClusters{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
+			expected:  Clusters{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}},
 		},
 		{
 			name:      "invalid number",
@@ -434,7 +434,7 @@ func TestRequestClustersBind(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var clusters requestClusters
+			var clusters Clusters
 			err := clusters.Bind(tt.input)
 
 			if tt.wantError {
@@ -603,7 +603,7 @@ func TestValidatorsList(t *testing.T) {
 			require.Equal(t, tc.wantStatus, rr.Code)
 
 			var response struct {
-				Data []*validatorJSON `json:"data"`
+				Data []*Validator `json:"data"`
 			}
 
 			err = json.Unmarshal(rr.Body.Bytes(), &response)
@@ -682,7 +682,7 @@ func TestValidatorsList_Pagination(t *testing.T) {
 		require.NoError(t, err)
 
 		var response struct {
-			Data       []*validatorJSON `json:"data"`
+			Data       []*Validator `json:"data"`
 			Pagination struct {
 				Page       uint64 `json:"page"`
 				PerPage    uint64 `json:"per_page"`
