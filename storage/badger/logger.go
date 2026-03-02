@@ -14,8 +14,8 @@ type badgerLogger struct {
 	logger *zap.Logger
 }
 
-// newLogger creates a new instance of logger
-func newLogger(l *zap.Logger) badger.Logger {
+// NewLogger creates a new instance of logger.
+func NewLogger(l *zap.Logger) badger.Logger {
 	return &badgerLogger{l.Named(log.NameBadgerDBLog)}
 }
 

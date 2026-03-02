@@ -47,11 +47,11 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*DB, e
 	}
 
 	// TODO: we should set the default logger here to log Error and higher levels
-	opt.Logger = newLogger(zap.NewNop())
+	opt.Logger = NewLogger(zap.NewNop())
 	if logger != nil && options.Reporting {
-		opt.Logger = newLogger(logger)
+		opt.Logger = NewLogger(logger)
 	} else {
-		opt.Logger = newLogger(zap.NewNop()) // TODO: we should allow only errors to be logged
+		opt.Logger = NewLogger(zap.NewNop()) // TODO: we should allow only errors to be logged
 	}
 
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size

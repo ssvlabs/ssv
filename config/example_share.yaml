@@ -1,5 +1,4 @@
 db:
   Path: <path-to-db e.g. {./data/db/[1..n]}>
-  Type: badger-db
 
 OperatorPrivateKey:

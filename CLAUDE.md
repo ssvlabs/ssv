@@ -87,7 +87,7 @@ make docker-debug
     - Event-driven updates trigger validator lifecycle changes
 
 6. **Storage** (`registry/storage/`): Persistent state management
-    - BadgerDB for validator shares and metadata
+    - Pebble-backed KV storage for validator shares and metadata
     - In-memory caches for performance
     - SSZ encoding for efficient storage
 

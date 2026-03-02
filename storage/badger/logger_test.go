@@ -17,19 +17,19 @@ func setupLoggerTest(t *testing.T) (*badgerLogger, *observer.ObservedLogs) {
 	t.Helper()
 	core, recorded := observer.New(zapcore.DebugLevel)
 	logger := zap.New(core)
-	bLogger := newLogger(logger).(*badgerLogger)
+	bLogger := NewLogger(logger).(*badgerLogger)
 	return bLogger, recorded
 }
 
-// Test_newLogger verifies that newLogger correctly creates a badgerLogger with proper naming.
-func Test_newLogger(t *testing.T) {
+// Test_NewLogger verifies that NewLogger correctly creates a badgerLogger with proper naming.
+func Test_NewLogger(t *testing.T) {
 	t.Parallel()
 
 	t.Run("with regular logger", func(t *testing.T) {
 		t.Parallel()
 
 		logger := zap.NewExample()
-		bl := newLogger(logger)
+		bl := NewLogger(logger)
 
 		require.NotNil(t, bl)
 		require.IsType(t, &badgerLogger{}, bl)
@@ -40,7 +40,7 @@ func Test_newLogger(t *testing.T) {
 		t.Parallel()
 
 		logger := zap.NewNop()
-		bl := newLogger(logger)
+		bl := NewLogger(logger)
 
 		require.NotNil(t, bl)
 		require.IsType(t, &badgerLogger{}, bl)
