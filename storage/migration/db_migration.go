@@ -366,7 +366,7 @@ func openBadgerForImport(path string) (*badgerdb.DB, bool, error) {
 
 	recoveredDB, recoverErr := badgerdb.Open(recoverOpt)
 	if recoverErr != nil {
-		return nil, false, fmt.Errorf("open badger read-only failed: %w; recovery open with truncate failed: %v", err, recoverErr)
+		return nil, false, fmt.Errorf("open badger read-only failed: %w; recovery open with truncate failed: %w", err, recoverErr)
 	}
 
 	return recoveredDB, true, nil

@@ -2,6 +2,7 @@ package pebble
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/pebble"
@@ -19,6 +20,22 @@ func setupTestDB(t *testing.T) *DB {
 	require.NoError(t, err)
 
 	return db
+}
+
+func TestPebbleDB_NewTemporary_RemovesDirectoryOnClose(t *testing.T) {
+	db, err := NewTemporary(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+
+	tempDir := db.cleanupPath
+	require.NotEmpty(t, tempDir)
+	_, err = os.Stat(tempDir)
+	require.NoError(t, err)
+
+	require.NoError(t, db.Close())
+
+	_, err = os.Stat(tempDir)
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestPebbleDB_GetDelete(t *testing.T) {

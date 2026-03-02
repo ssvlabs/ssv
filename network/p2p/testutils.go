@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"time"
 
-	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -27,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 	storagepebble "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/format"
 )
@@ -141,20 +140,14 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		return nil, err
 	}
 
-	dbPath, err := os.MkdirTemp("", "ssv-p2p-test-db-*")
+	db, err := storagepebble.NewTemporary(logger, basedb.Options{})
 	if err != nil {
-		return nil, err
-	}
-	db, err := storagepebble.New(logger, dbPath, &cockroachdb.Options{})
-	if err != nil {
-		_ = os.RemoveAll(dbPath)
 		return nil, err
 	}
 	if ctx != nil {
 		go func() {
 			<-ctx.Done()
 			_ = db.Close()
-			_ = os.RemoveAll(dbPath)
 		}()
 	}
 
