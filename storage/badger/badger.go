@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -201,12 +200,7 @@ func (b *DB) Close() error {
 func (b *DB) report() {
 	logger := b.logger.Named(log.NameBadgerDBReporting)
 	lsm, vlog := b.db.Size()
-	blockCache := b.db.BlockCacheMetrics()
-	indexCache := b.db.IndexCacheMetrics()
-
-	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
-		fields.BlockCacheMetrics(blockCache),
-		fields.IndexCacheMetrics(indexCache))
+	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog))
 }
 
 func (b *DB) periodicallyReport(interval time.Duration) {

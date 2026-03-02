@@ -14,7 +14,6 @@ import (
 	badgerdb "github.com/dgraph-io/badger/v4"
 	"go.uber.org/zap"
 
-	storagebadger "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
@@ -54,7 +53,7 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 		return PebbleDBPlan{}, fmt.Errorf("check legacy pebble path %q: %w", legacyPebblePath, err)
 	}
 
-	badgerExists, badgerNonEmpty, err := storagebadger.DirState(basePath)
+	badgerExists, badgerNonEmpty, err := badgerDirState(basePath)
 	if err != nil {
 		return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
 	}
@@ -155,7 +154,7 @@ func migrateBadgerToPebbleIfNeeded(
 		return false, 0, err
 	}
 
-	hasBadgerData, badgerNonEmpty, err := storagebadger.DirState(badgerPath)
+	hasBadgerData, badgerNonEmpty, err := badgerDirState(badgerPath)
 	if err != nil {
 		return false, 0, err
 	}
@@ -221,10 +220,62 @@ func isPebbleEmpty(db *pebble.DB) (bool, error) {
 	return !hasEntry, nil
 }
 
+func badgerDirState(path string) (exists bool, nonEmpty bool, err error) {
+	exists, err = hasBadgerFiles(path)
+	if err != nil || !exists {
+		return exists, false, err
+	}
+
+	opt := badgerdb.DefaultOptions(path)
+	opt.ReadOnly = true
+	opt.Logger = nil
+
+	bdb, err := badgerdb.Open(opt)
+	if err != nil {
+		return true, false, err
+	}
+	defer func() { _ = bdb.Close() }()
+
+	err = bdb.View(func(txn *badgerdb.Txn) error {
+		itOpts := badgerdb.DefaultIteratorOptions
+		itOpts.PrefetchValues = false
+		it := txn.NewIterator(itOpts)
+		defer it.Close()
+
+		it.Rewind()
+		nonEmpty = it.Valid()
+
+		return nil
+	})
+	if err != nil {
+		return true, false, err
+	}
+
+	return true, nonEmpty, nil
+}
+
+func hasBadgerFiles(path string) (bool, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	for _, entry := range entries {
+		if entry.Name() == "KEYREGISTRY" || strings.HasSuffix(entry.Name(), ".vlog") {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func copyBadgerToPebble(badgerPath string, db *pebble.DB, hook importBatchCommitHook) (int, error) {
 	opt := badgerdb.DefaultOptions(badgerPath)
 	opt.ReadOnly = true
-	opt.Logger = storagebadger.NewLogger(zap.NewNop())
+	opt.Logger = nil
 
 	bdb, err := badgerdb.Open(opt)
 	if err != nil {
@@ -367,7 +418,7 @@ func markerExistsForSource(path string, badgerPath string) (bool, error) {
 }
 
 func writeMarker(path string, marker badgerImportMarker) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("create marker directory: %w", err)
 	}
 
@@ -377,7 +428,8 @@ func writeMarker(path string, marker badgerImportMarker) error {
 	}
 
 	tmpPath := path + ".tmp"
-	tempFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	// #nosec G304 -- marker path is derived from configured DB path plus fixed marker filenames.
+	tempFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open marker temp file: %w", err)
 	}
@@ -403,6 +455,7 @@ func writeMarker(path string, marker badgerImportMarker) error {
 }
 
 func syncDirectory(path string) error {
+	// #nosec G304 -- directory path is derived from configured DB path plus fixed marker filenames.
 	dirFile, err := os.Open(path)
 	if err != nil {
 		return err
@@ -442,6 +495,7 @@ func isNoSpaceError(err error) bool {
 }
 
 func readMarker(path string) (badgerImportMarker, bool, error) {
+	// #nosec G304 -- marker path is derived from configured DB path plus fixed marker filenames.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

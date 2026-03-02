@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	storagebadger "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
@@ -360,7 +359,7 @@ func createBadgerDB(t *testing.T, path string, data map[string][]byte) {
 	t.Helper()
 
 	opt := badgerdb.DefaultOptions(path)
-	opt.Logger = storagebadger.NewLogger(zap.NewNop())
+	opt.Logger = nil
 
 	db, err := badgerdb.Open(opt)
 	require.NoError(t, err)
