@@ -11,23 +11,23 @@ type PaginationOptions struct {
 	MaxPerPage     uint64
 }
 
-type OptionalPagination struct {
+type PaginationRequest struct {
 	Set bool `json:"-"`
 
 	Page    *uint64 `json:"page,omitempty"`
 	PerPage *uint64 `json:"per_page,omitempty"`
 }
 
-func (p *OptionalPagination) Bind(value string) error {
+func (p *PaginationRequest) Bind(value string) error {
 	if value == "" {
 		return nil
 	}
 	return fmt.Errorf("pagination must be provided in request body")
 }
 
-func (p *OptionalPagination) UnmarshalJSON(data []byte) error {
+func (p *PaginationRequest) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
-		*p = OptionalPagination{}
+		*p = PaginationRequest{}
 		return nil
 	}
 
@@ -45,45 +45,45 @@ func (p *OptionalPagination) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (p OptionalPagination) ToRequest(opts PaginationOptions) (*PaginationRequest, error) {
+func (p PaginationRequest) ToPagination(opts PaginationOptions) (*Pagination, error) {
 	if !p.Set {
 		return nil, nil
 	}
 
-	var req PaginationRequest
+	var pagination Pagination
 
 	if p.Page != nil {
 		if *p.Page == 0 {
 			return nil, fmt.Errorf("page must be >= 1")
 		}
-		req.Page = *p.Page
+		pagination.Page = *p.Page
 	}
 	if p.PerPage != nil {
 		if *p.PerPage == 0 {
 			return nil, fmt.Errorf("per_page must be >= 1")
 		}
-		req.PerPage = *p.PerPage
+		pagination.PerPage = *p.PerPage
 	}
 
-	if req.Page == 0 {
-		req.Page = 1
+	if pagination.Page == 0 {
+		pagination.Page = 1
 	}
-	if req.PerPage == 0 {
-		req.PerPage = opts.DefaultPerPage
+	if pagination.PerPage == 0 {
+		pagination.PerPage = opts.DefaultPerPage
 	}
-	if opts.MaxPerPage > 0 && req.PerPage > opts.MaxPerPage {
+	if opts.MaxPerPage > 0 && pagination.PerPage > opts.MaxPerPage {
 		return nil, fmt.Errorf("per_page must be <= %d", opts.MaxPerPage)
 	}
 
-	return &req, nil
+	return &pagination, nil
 }
 
-type PaginationRequest struct {
+type Pagination struct {
 	Page    uint64
 	PerPage uint64
 }
 
-type Pagination struct {
+type PaginationResponse struct {
 	Page       uint64 `json:"page"`
 	PerPage    uint64 `json:"per_page"`
 	Total      uint64 `json:"total"`
@@ -91,7 +91,7 @@ type Pagination struct {
 }
 
 // SliceBounds returns safe [start,end) bounds for slicing a collection with the given total length.
-func (p PaginationRequest) SliceBounds(total uint64) (start, end uint64) {
+func (p Pagination) SliceBounds(total uint64) (start, end uint64) {
 	if p.Page == 0 || p.PerPage == 0 {
 		return 0, 0
 	}
@@ -110,8 +110,8 @@ func (p PaginationRequest) SliceBounds(total uint64) (start, end uint64) {
 	return start, end
 }
 
-func PaginationFromRequest(p PaginationRequest, total uint64) Pagination {
-	out := Pagination{
+func PaginationResponseFromPagination(p Pagination, total uint64) PaginationResponse {
+	out := PaginationResponse{
 		Page:    p.Page,
 		PerPage: p.PerPage,
 		Total:   total,

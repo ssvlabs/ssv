@@ -30,27 +30,27 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var request struct {
-		Owners      api.HexSlice           `json:"owners" form:"owners"`
-		Operators   api.Uint64Slice        `json:"operators" form:"operators"`
-		Clusters    requestClusters        `json:"clusters" form:"clusters"`
-		Subclusters requestClusters        `json:"subclusters" form:"subclusters"`
-		PubKeys     api.HexSlice           `json:"pubkeys" form:"pubkeys"`
-		Indices     api.Uint64Slice        `json:"indices" form:"indices"`
-		Pagination  api.OptionalPagination `json:"pagination" form:"pagination"`
+		Owners            api.HexSlice          `json:"owners" form:"owners"`
+		Operators         api.Uint64Slice       `json:"operators" form:"operators"`
+		Clusters          requestClusters       `json:"clusters" form:"clusters"`
+		Subclusters       requestClusters       `json:"subclusters" form:"subclusters"`
+		PubKeys           api.HexSlice          `json:"pubkeys" form:"pubkeys"`
+		Indices           api.Uint64Slice       `json:"indices" form:"indices"`
+		PaginationRequest api.PaginationRequest `json:"pagination" form:"pagination"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
 	}
 
-	paginationRequest, err := request.Pagination.ToRequest(api.PaginationOptions{
+	pagination, err := request.PaginationRequest.ToPagination(api.PaginationOptions{
 		DefaultPerPage: defaultPerPage,
 		MaxPerPage:     maxPerPage,
 	})
 	if err != nil {
 		return api.BadRequestError(err)
 	}
-	paginationRequested := paginationRequest != nil
+	paginationRequested := pagination != nil
 
 	var filters []registrystorage.SharesFilter
 	if len(request.Owners) > 0 {
@@ -92,11 +92,11 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	total := uint64(len(shares))
-	start, end := paginationRequest.SliceBounds(total)
+	start, end := pagination.SliceBounds(total)
 
 	var response struct {
-		Data       []*validatorJSON `json:"data"`
-		Pagination api.Pagination   `json:"pagination"`
+		Data               []*validatorJSON       `json:"data"`
+		PaginationResponse api.PaginationResponse `json:"pagination"`
 	}
 
 	pagedShares := shares[start:end]
@@ -105,7 +105,7 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		response.Data[i] = validatorFromShare(share)
 	}
 
-	response.Pagination = api.PaginationFromRequest(*paginationRequest, total)
+	response.PaginationResponse = api.PaginationResponseFromPagination(*pagination, total)
 
 	return api.Render(w, r, response)
 }
