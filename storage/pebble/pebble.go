@@ -164,6 +164,7 @@ func (pdb *DB) DropPrefix(prefix []byte) error {
 
 func (pdb *DB) Update(fn func(basedb.Txn) error) error {
 	batch := pdb.NewIndexedBatch()
+	defer func() { _ = batch.Close() }()
 	txn := newTxn(pdb.logger, batch)
 	if err := fn(txn); err != nil {
 		return err
@@ -173,6 +174,7 @@ func (pdb *DB) Update(fn func(basedb.Txn) error) error {
 
 func (pdb *DB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
 	batch := pdb.NewBatch()
+	defer func() { _ = batch.Close() }()
 	txn := newTxn(pdb.logger, batch)
 	if err := txn.SetMany(prefix, n, next); err != nil {
 		return err
