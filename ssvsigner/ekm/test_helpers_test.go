@@ -10,6 +10,8 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/ssvlabs/ssv/ssvsigner/internal/beaconcfg"
 )
 
 var initBLSOnce sync.Once
@@ -26,17 +28,8 @@ func testLogger(t testing.TB) *zap.Logger {
 	return zaptest.NewLogger(t)
 }
 
-type testBeacon struct {
-	Name                  string
-	SlotDuration          time.Duration
-	SlotsPerEpoch         uint64
-	GenesisTime           time.Time
-	GenesisValidatorsRoot phase0.Root
-	Forks                 map[spec.DataVersion]phase0.Fork
-}
-
-func testBeaconConfig() *testBeacon {
-	return &testBeacon{
+func testBeaconConfig() *beaconcfg.Config {
+	return &beaconcfg.Config{
 		Name:                  "testnet",
 		SlotDuration:          12 * time.Second,
 		SlotsPerEpoch:         32,
@@ -80,55 +73,4 @@ func testBeaconConfig() *testBeacon {
 			},
 		},
 	}
-}
-
-func (b *testBeacon) EstimatedCurrentSlot() phase0.Slot {
-	return b.EstimatedSlotAtTime(time.Now())
-}
-
-func (b *testBeacon) EstimatedCurrentEpoch() phase0.Epoch {
-	return b.EstimatedEpochAtSlot(b.EstimatedCurrentSlot())
-}
-
-func (b *testBeacon) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
-	return phase0.Epoch(uint64(slot) / b.SlotsPerEpoch)
-}
-
-func (b *testBeacon) EstimatedSlotAtTime(ts time.Time) phase0.Slot {
-	return phase0.Slot(ts.Sub(b.GenesisTime) / b.SlotDuration) // #nosec G115
-}
-
-func (b *testBeacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
-}
-
-func (b *testBeacon) EpochDuration() time.Duration {
-	return b.SlotDuration * time.Duration(b.SlotsPerEpoch)
-}
-
-func (b *testBeacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
-	versions := []spec.DataVersion{
-		spec.DataVersionPhase0,
-		spec.DataVersionAltair,
-		spec.DataVersionBellatrix,
-		spec.DataVersionCapella,
-		spec.DataVersionDeneb,
-		spec.DataVersionElectra,
-		spec.DataVersionFulu,
-	}
-
-	for i, v := range versions {
-		if epoch < b.Forks[v].Epoch {
-			if i == 0 {
-				panic("epoch before genesis")
-			}
-			version := versions[i-1]
-			fork := b.Forks[version]
-			return version, &fork
-		}
-	}
-
-	version := versions[len(versions)-1]
-	fork := b.Forks[version]
-	return version, &fork
 }

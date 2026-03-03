@@ -1,27 +1,20 @@
 package common
 
 import (
-	"fmt"
-	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/ssvsigner/internal/beaconcfg"
 )
 
-type BeaconConfig struct {
-	Name                  string
-	SlotDuration          time.Duration
-	SlotsPerEpoch         uint64
-	GenesisTime           time.Time
-	GenesisValidatorsRoot phase0.Root
-	Forks                 map[spec.DataVersion]phase0.Fork
-}
+type BeaconConfig = beaconcfg.Config
 
 // MainnetBeaconConfig is the beacon configuration for the mainnet
-var MainnetBeaconConfig = &BeaconConfig{
+var MainnetBeaconConfig = &beaconcfg.Config{
 	Name:                  string(spectypes.MainNetwork),
 	SlotDuration:          spectypes.MainNetwork.SlotDurationSec(),
 	SlotsPerEpoch:         spectypes.MainNetwork.SlotsPerEpoch(),
@@ -71,61 +64,4 @@ var MainnetBeaconConfig = &BeaconConfig{
 			CurrentVersion:  phase0.Version{0x06, 0x00, 0x00, 0x00}, // FULU_FORK_VERSION: 0x06000000
 		},
 	},
-}
-
-func (b *BeaconConfig) EstimatedCurrentSlot() phase0.Slot {
-	return b.EstimatedSlotAtTime(time.Now())
-}
-
-func (b *BeaconConfig) EstimatedCurrentEpoch() phase0.Epoch {
-	return b.EstimatedEpochAtSlot(b.EstimatedCurrentSlot())
-}
-
-func (b *BeaconConfig) EstimatedSlotAtTime(ts time.Time) phase0.Slot {
-	if ts.Before(b.GenesisTime) {
-		panic(fmt.Sprintf("time %v is before genesis time %v", ts, b.GenesisTime))
-	}
-	return phase0.Slot(ts.Sub(b.GenesisTime) / b.SlotDuration) // #nosec G115
-}
-
-func (b *BeaconConfig) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
-	return phase0.Epoch(uint64(slot) / b.SlotsPerEpoch)
-}
-
-func (b *BeaconConfig) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
-}
-
-func (b *BeaconConfig) EpochDuration() time.Duration {
-	if b.SlotsPerEpoch > math.MaxInt64 {
-		panic("slots per epoch out of range")
-	}
-	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115
-}
-
-func (b *BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
-	versions := []spec.DataVersion{
-		spec.DataVersionPhase0,
-		spec.DataVersionAltair,
-		spec.DataVersionBellatrix,
-		spec.DataVersionCapella,
-		spec.DataVersionDeneb,
-		spec.DataVersionElectra,
-		spec.DataVersionFulu,
-	}
-
-	for i, v := range versions {
-		if epoch < b.Forks[v].Epoch {
-			if i == 0 {
-				panic("epoch before genesis")
-			}
-			version := versions[i-1]
-			fork := b.Forks[version]
-			return version, &fork
-		}
-	}
-
-	version := versions[len(versions)-1]
-	fork := b.Forks[version]
-	return version, &fork
 }
