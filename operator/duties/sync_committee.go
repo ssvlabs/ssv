@@ -8,6 +8,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -38,18 +39,26 @@ type SyncCommitteeHandler struct {
 	// period change at which to prepare the relevant duties.
 	preparationSlots uint64
 	exporterMode     bool
+
+	// pool manages all go-routines spawned by SyncCommitteeHandler.
+	pool *pool.Pool
 }
 
 func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode bool) *SyncCommitteeHandler {
 	h := &SyncCommitteeHandler{
 		duties:       duties,
 		exporterMode: exporterMode,
+		pool:         pool.New(),
 	}
 	return h
 }
 
 func (h *SyncCommitteeHandler) Name() string {
 	return spectypes.BNRoleSyncCommittee.String()
+}
+
+func (h *SyncCommitteeHandler) WaitShutdown() {
+	h.pool.Wait()
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -312,7 +321,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
-	go func() {
+	h.pool.Go(func() {
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
 		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -324,7 +333,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
-	}()
+	})
 
 	span.SetStatus(codes.Ok, "")
 	return nil

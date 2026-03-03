@@ -462,6 +462,7 @@ func TestScheduler_Run(t *testing.T) {
 				}).
 				Times(1)
 			mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
+			mockDutyHandler.(*MockdutyHandler).EXPECT().WaitShutdown().Times(1)
 		}
 
 		require.NoError(t, s.Start(ctx))
