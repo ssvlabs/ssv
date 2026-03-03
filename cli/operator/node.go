@@ -25,13 +25,14 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
+	"github.com/ssvlabs/ssv/ekmadapter"
 
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
@@ -397,7 +398,7 @@ var StartNodeCmd = &cobra.Command{
 				logger,
 				networkConfig.Beacon.Name,
 				networkConfig.Beacon,
-				networkConfig.Beacon.GenesisValidatorsRoot,
+				networkConfig.GenesisValidatorsRoot,
 				ssvSignerClient,
 				ekmDB,
 				operatorDataStore.GetOperatorID,

@@ -29,6 +29,7 @@ func NewPersistentFile(path string) (*Store, error) {
 		path:    path,
 	}
 
+	// #nosec G304 -- test helper path is provided by test code (temp dir / controlled fixture path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -132,6 +133,7 @@ func (s *Store) persistLocked() error {
 	if err != nil {
 		return err
 	}
+	// #nosec G304 -- test helper path is provided by test code (temp dir / controlled fixture path)
 	return os.WriteFile(s.path, data, 0o600)
 }
 
