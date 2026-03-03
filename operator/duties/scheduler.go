@@ -171,9 +171,11 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 }
 
 type ReorgEvent struct {
-	Slot     phase0.Slot
-	Previous bool
-	Current  bool
+	// Slot is the reorg slot.
+	Slot phase0.Slot
+	// Current specifies if the reorg happened in the current epoch, false means the reorg happened in the previous
+	// epoch.
+	Current bool
 }
 
 // Start initializes the Scheduler and begins its operation.
@@ -353,8 +355,8 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     event.Slot,
-						Previous: true,
+						Slot:    event.Slot,
+						Current: false,
 					}
 				}
 			} else {
@@ -367,8 +369,8 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     event.Slot,
-						Previous: true,
+						Slot:    event.Slot,
+						Current: false,
 					}
 				}
 
