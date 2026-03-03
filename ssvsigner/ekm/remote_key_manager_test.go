@@ -25,13 +25,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-var testNetCfg = networkconfig.TestNetwork.Beacon
+var testNetCfg = testBeaconConfig()
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite

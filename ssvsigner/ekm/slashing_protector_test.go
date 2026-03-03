@@ -14,7 +14,6 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -36,8 +35,8 @@ func TestSlashing(t *testing.T) {
 
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
-	currentEpoch := networkconfig.TestNetwork.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
+	currentEpoch := testBeaconConfig().EstimatedEpochAtSlot(currentSlot)
 
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
@@ -131,7 +130,7 @@ func TestSlashing_Attestation(t *testing.T) {
 	require.NoError(t, err)
 
 	km := testKeyManager(t, operatorPrivateKey)
-	netCfg := networkconfig.TestNetwork
+	netCfg := testBeaconConfig()
 
 	var secretKeys [4]*bls.SecretKey
 	for i := range secretKeys {
@@ -265,8 +264,8 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
-	currentEpoch := networkconfig.TestNetwork.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
+	currentEpoch := testBeaconConfig().EstimatedEpochAtSlot(currentSlot)
 
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
@@ -345,7 +344,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	blockContents := testingutils.TestingBlockContentsDeneb
@@ -440,8 +439,8 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
-	currentEpoch := networkconfig.TestNetwork.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
+	currentEpoch := testBeaconConfig().EstimatedEpochAtSlot(currentSlot)
 
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
@@ -545,7 +544,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	blockContents := testingutils.TestingBlockContentsDeneb
@@ -631,7 +630,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, sharePubKey))
 
 	// --- First Block Proposal ---
-	slotToSign := networkconfig.TestNetwork.EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
+	slotToSign := testBeaconConfig().EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
 
 	// Check directly with IsBeaconBlockSlashable
 	err = km.IsBeaconBlockSlashable(sharePubKey, slotToSign)
@@ -710,10 +709,10 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Beacon.Name, logger)
+	netCfg := testBeaconConfig()
+	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
+	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -766,10 +765,10 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Beacon.Name, logger)
+	netCfg := testBeaconConfig()
+	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
+	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -842,10 +841,10 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Beacon.Name, logger)
+	netCfg := testBeaconConfig()
+	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
+	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -921,10 +920,10 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	db, err := kv.New(logger, basedb.Options{Path: dbPath})
 	require.NoError(t, err)
 
-	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Beacon.Name, logger)
+	netCfg := testBeaconConfig()
+	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
+	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -957,9 +956,9 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	require.NoError(t, err)
 	defer db2.Close()
 
-	signerStore2 := NewSignerStorage(newTestDatabaseAdapter(db2), netCfg.Beacon.Name, logger)
+	signerStore2 := NewSignerStorage(newTestDatabaseAdapter(db2), netCfg.Name, logger)
 	protection2 := slashingprotection.NewNormalProtection(signerStore2)
-	protector2 := NewSlashingProtector(logger, netCfg.Beacon, signerStore2, protection2)
+	protector2 := NewSlashingProtector(logger, netCfg, signerStore2, protection2)
 
 	// Attempt to sign the *same* block again - should fail due to persisted data
 	t.Log("Attempting to sign the same block again - should fail")
@@ -979,10 +978,10 @@ func TestSlashingConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Beacon.Name, logger)
+	netCfg := testBeaconConfig()
+	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
+	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))

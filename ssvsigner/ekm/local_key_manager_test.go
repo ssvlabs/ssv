@@ -19,7 +19,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -37,9 +36,9 @@ func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) Ke
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	network := networkconfig.TestNetwork
+	network := testBeaconConfig()
 
-	km, err := NewLocalKeyManager(logger, newTestDatabaseAdapter(db), network.Beacon.Name, network.Beacon, operatorPrivateKey)
+	km, err := NewLocalKeyManager(logger, newTestDatabaseAdapter(db), network.Name, network, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -79,7 +78,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(newTestDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
+	signerStorage := NewSignerStorage(newTestDatabaseAdapter(db), testBeaconConfig().Name, logger)
 	signerStorage.SetEncryptionKey(encryptionKey)
 
 	defer func(db basedb.Database, logger *zap.Logger) {
@@ -144,7 +143,7 @@ func TestSignBeaconObject(t *testing.T) {
 
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {
