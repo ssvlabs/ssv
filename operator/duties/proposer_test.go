@@ -99,7 +99,7 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(0))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// Stop scheduler & wait for graceful exit.
@@ -132,7 +132,7 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 
 		// STEP 1: wait for proposer duties to be fetched
 		ticker.Send(phase0.Slot(0))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: wait for no action to be taken
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
@@ -203,7 +203,7 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 		// STEP 4: wait for proposer duties to be fetched again
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 		ticker.Send(phase0.Slot(2))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		// no execution should happen in slot 2
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -246,7 +246,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 		// STEP 1: wait for proposer duties to be fetched
 		ticker.Send(phase0.Slot(0))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger a change in active indices
 		scheduler.indicesChg <- struct{}{}
@@ -271,7 +271,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		// STEP 4: wait for proposer duties to be fetched again
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: wait for proposer duties to be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
@@ -332,7 +332,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 
 		// STEP 1: wait for proposer duties to be fetched
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 2))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{
@@ -370,7 +370,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		// The first assigned duty should not be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+4))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 4))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 7: The second assigned duty should be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+5))
@@ -413,7 +413,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 
 		// STEP 1: wait for proposer duties to be fetched
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 2))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{
@@ -461,7 +461,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		// The first assigned duty should not be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+4))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 4))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 7: The second assigned duty should be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+5))

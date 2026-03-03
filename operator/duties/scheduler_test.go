@@ -263,7 +263,6 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 func waitForDutiesFetch(
 	t *testing.T,
 	fetchDutiesCall chan struct{},
-	executeDutiesCall chan []*spectypes.ValidatorDuty,
 	timeout time.Duration,
 ) {
 	logger := log.TestLogger(t)
@@ -271,8 +270,6 @@ func waitForDutiesFetch(
 	select {
 	case <-fetchDutiesCall:
 		logger.Debug("duties fetched")
-	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute-duties call")
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duties to be fetched")
 	}

@@ -234,7 +234,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(1))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		// no execution should happen in slot 1
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -301,7 +301,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(2))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 6: wait for attester duties to be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(3))
@@ -356,7 +356,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{
@@ -389,7 +389,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: wait for attester duties to be fetched again for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
@@ -443,7 +443,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{
@@ -476,7 +476,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: trigger indices change
 		scheduler.indicesChg <- struct{}{}
@@ -491,7 +491,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		// STEP 6: wait for attester duties to be fetched again for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 7: The first assigned duty should not be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+2))
@@ -573,7 +573,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: wait for no action to be taken
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
@@ -660,7 +660,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: trigger indices change
 		scheduler.indicesChg <- struct{}{}
@@ -675,7 +675,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 		// STEP 6: wait for attester duties to be fetched again for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 2))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 7: The first assigned duty should not be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+3))
@@ -724,7 +724,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 		// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{
@@ -761,7 +761,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 		// STEP 5: wait for attester duties to be fetched again for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 2))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 6: skip to the next epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
@@ -818,7 +818,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 		// STEP 1: (on startup) wait for attester duties to be fetched for the current epoch
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{
@@ -865,7 +865,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 		// STEP 6: wait for attester duties to be fetched again for the next epoch due to indices change
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 2))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 7: skip to the next epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
@@ -984,8 +984,8 @@ func TestScheduler_Attester_Start_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
 		// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epochs
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout) // current epoch fetch-call
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout) // next epoch fetch-call
+		waitForDutiesFetch(t, fetchDutiesCall, timeout) // current epoch fetch-call
+		waitForDutiesFetch(t, fetchDutiesCall, timeout) // next epoch fetch-call
 
 		// STEP 2: wait for attester duties to be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
@@ -1039,7 +1039,7 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2-1))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 - 1))
-		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 3: wait for attester duties to be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
