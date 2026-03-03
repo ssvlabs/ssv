@@ -14,13 +14,11 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 const (
@@ -38,7 +36,7 @@ func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) Ke
 
 	network := testBeaconConfig()
 
-	km, err := NewLocalKeyManager(logger, newTestDatabaseAdapter(db), network.Name, network, operatorPrivateKey)
+	km, err := NewLocalKeyManager(logger, db, network.Name, network, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -78,15 +76,15 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(newTestDatabaseAdapter(db), testBeaconConfig().Name, logger)
+	signerStorage := NewSignerStorage(db, testBeaconConfig().Name, logger)
 	signerStorage.SetEncryptionKey(encryptionKey)
 
-	defer func(db basedb.Database, logger *zap.Logger) {
+	defer func() {
 		err := db.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
-	}(db, testLogger(t))
+	}()
 
 	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 	require.NoError(t, signerStorage.SaveWallet(hdwallet))

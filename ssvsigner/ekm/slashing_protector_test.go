@@ -15,8 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func TestSlashing(t *testing.T) {
@@ -710,7 +708,7 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 	defer db.Close()
 
 	netCfg := testBeaconConfig()
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
+	signerStore := NewSignerStorage(db, netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
@@ -766,7 +764,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	defer db.Close()
 
 	netCfg := testBeaconConfig()
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
+	signerStore := NewSignerStorage(db, netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
@@ -842,7 +840,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	defer db.Close()
 
 	netCfg := testBeaconConfig()
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
+	signerStore := NewSignerStorage(db, netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
@@ -917,11 +915,11 @@ func TestSlashingDBIntegrity(t *testing.T) {
 
 	// --- Phase 1: Initial Setup, Sign, and Close ---
 	logger := testLogger(t)
-	db, err := kv.New(logger, basedb.Options{Path: dbPath})
+	db, err := newTestPersistentDB(logger, dbPath)
 	require.NoError(t, err)
 
 	netCfg := testBeaconConfig()
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
+	signerStore := NewSignerStorage(db, netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
@@ -952,11 +950,11 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	// --- Phase 2: Reopen DB and Attempt Slashable Signing ---
 	// Make sure it's a fresh instance with the same DB path
 	t.Log("Starting Phase 2 with the same database path")
-	db2, err := kv.New(logger, basedb.Options{Path: dbPath})
+	db2, err := newTestPersistentDB(logger, dbPath)
 	require.NoError(t, err)
 	defer db2.Close()
 
-	signerStore2 := NewSignerStorage(newTestDatabaseAdapter(db2), netCfg.Name, logger)
+	signerStore2 := NewSignerStorage(db2, netCfg.Name, logger)
 	protection2 := slashingprotection.NewNormalProtection(signerStore2)
 	protector2 := NewSlashingProtector(logger, netCfg, signerStore2, protection2)
 
@@ -979,7 +977,7 @@ func TestSlashingConcurrency(t *testing.T) {
 	defer db.Close()
 
 	netCfg := testBeaconConfig()
-	signerStore := NewSignerStorage(newTestDatabaseAdapter(db), netCfg.Name, logger)
+	signerStore := NewSignerStorage(db, netCfg.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg, signerStore, protection)
 
