@@ -56,14 +56,12 @@ type signerClient interface {
 func NewRemoteKeyManager(
 	ctx context.Context,
 	logger *zap.Logger,
-	networkName string,
-	beaconConfig BeaconNetwork,
-	genesisRoot phase0.Root,
+	network NetworkContext,
 	signerClient signerClient,
 	db Database,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
-	signerStore := NewSignerStorage(db, networkName, logger)
+	signerStore := NewSignerStorage(db, network.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
 	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
@@ -78,10 +76,10 @@ func NewRemoteKeyManager(
 
 	return &RemoteKeyManager{
 		logger:            logger,
-		beaconConfig:      beaconConfig,
-		genesisRoot:       genesisRoot,
+		beaconConfig:      network.Beacon,
+		genesisRoot:       network.GenesisValidatorsRoot,
 		signerClient:      signerClient,
-		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, network.Beacon, signerStore, protection),
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,
 		signLocks:         map[signKey]*sync.RWMutex{},

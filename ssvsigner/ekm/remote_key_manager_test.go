@@ -33,18 +33,14 @@ var testNetCfg = testBeaconConfig()
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite
-	client  *MockRemoteSigner
-	db      *MockDatabase
-	txn     *MockTxn
-	readTxn *MockReadTxn
-	logger  *zap.Logger
+	client *MockRemoteSigner
+	db     *MockDatabase
+	logger *zap.Logger
 }
 
 func (s *RemoteKeyManagerTestSuite) SetupTest() {
 	s.client = &MockRemoteSigner{}
 	s.db = &MockDatabase{}
-	s.txn = &MockTxn{}
-	s.readTxn = &MockReadTxn{}
 
 	logger, _ := zap.NewDevelopment()
 	s.logger = logger.Named("test")
@@ -1793,9 +1789,11 @@ QwIDAQAB
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
-		testNetCfg.Name,
-		testNetCfg,
-		testNetCfg.GenesisValidatorsRoot,
+		NetworkContext{
+			Name:                  testNetCfg.Name,
+			Beacon:                testNetCfg,
+			GenesisValidatorsRoot: testNetCfg.GenesisValidatorsRoot,
+		},
 		s.client,
 		s.db,
 		getOperatorId,
@@ -1819,9 +1817,11 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
-		testNetCfg.Name,
-		testNetCfg,
-		testNetCfg.GenesisValidatorsRoot,
+		NetworkContext{
+			Name:                  testNetCfg.Name,
+			Beacon:                testNetCfg,
+			GenesisValidatorsRoot: testNetCfg.GenesisValidatorsRoot,
+		},
 		s.client,
 		s.db,
 		getOperatorId,
@@ -1844,9 +1844,11 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
-		testNetCfg.Name,
-		testNetCfg,
-		testNetCfg.GenesisValidatorsRoot,
+		NetworkContext{
+			Name:                  testNetCfg.Name,
+			Beacon:                testNetCfg,
+			GenesisValidatorsRoot: testNetCfg.GenesisValidatorsRoot,
+		},
 		s.client,
 		s.db,
 		getOperatorId,

@@ -43,3 +43,10 @@ type BeaconNetwork interface {
 	EstimatedSlotAtTime(time time.Time) phase0.Slot
 	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
 }
+
+// NetworkContext groups network parameters used by key managers.
+type NetworkContext struct {
+	Name                  string
+	Beacon                BeaconNetwork
+	GenesisValidatorsRoot phase0.Root
+}

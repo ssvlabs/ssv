@@ -282,3 +282,5 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 
 // SSV fork of go-eth2-client based on upstream v0.27.0 (includes Fulu support) with SSV-specific changes.
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250922150906-26179dd60c9c
+
+replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner

@@ -197,7 +197,12 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), testNetworkConfig.Beacon.Name, testNetworkConfig.Beacon, privateKey)
+	networkCtx := ekm.NetworkContext{
+		Name:                  testNetworkConfig.Beacon.Name,
+		Beacon:                testNetworkConfig.Beacon,
+		GenesisValidatorsRoot: testNetworkConfig.GenesisValidatorsRoot,
+	}
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), networkCtx, privateKey)
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}

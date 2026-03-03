@@ -61,8 +61,7 @@ type LocalKeyManager struct {
 func NewLocalKeyManager(
 	logger *zap.Logger,
 	db Database,
-	networkName string,
-	beaconConfig BeaconNetwork,
+	network NetworkContext,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
 	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
@@ -70,7 +69,7 @@ func NewLocalKeyManager(
 		return nil, fmt.Errorf("get encryption key: %w", err)
 	}
 
-	signerStore := NewSignerStorage(db, networkName, logger)
+	signerStore := NewSignerStorage(db, network.Name, logger)
 	signerStore.SetEncryptionKey(encryptionKey)
 
 	protection := slashingprotection.NewNormalProtection(signerStore)
@@ -94,14 +93,14 @@ func NewLocalKeyManager(
 		}
 	}
 
-	beaconSigner := signer.NewSimpleSigner(wallet, protection, beaconConfig)
+	beaconSigner := signer.NewSimpleSigner(wallet, protection, network.Beacon)
 
 	return &LocalKeyManager{
 		logger:            logger,
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
-		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, network.Beacon, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
 	}, nil
 }

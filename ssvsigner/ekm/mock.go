@@ -106,63 +106,6 @@ func (m *MockDatabase) DropPrefix(prefix []byte) error {
 	return nil
 }
 
-type MockTxn struct {
-	mock.Mock
-}
-
-func (m *MockTxn) Commit() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockTxn) Discard() {
-	m.Called()
-}
-
-func (m *MockTxn) Get(txn ReadTxn, prefix []byte, key []byte) (Obj, bool, error) {
-	args := m.Called(prefix, key)
-	if args.Get(0) == nil {
-		return Obj{}, args.Bool(1), args.Error(2)
-	}
-	return args.Get(0).(Obj), args.Bool(1), args.Error(2)
-}
-
-func (m *MockTxn) Set(txn ReadWriteTxn, prefix []byte, key []byte, value []byte) error {
-	args := m.Called(prefix, key, value)
-	return args.Error(0)
-}
-
-func (m *MockTxn) Delete(txn ReadWriteTxn, prefix []byte, key []byte) error {
-	args := m.Called(prefix, key)
-	return args.Error(0)
-}
-
-func (m *MockTxn) GetAll(txn ReadTxn, prefix []byte, handler func(int, Obj) error) error {
-	args := m.Called(prefix, handler)
-	return args.Error(0)
-}
-
-type MockReadTxn struct {
-	mock.Mock
-}
-
-func (m *MockReadTxn) Discard() {
-	m.Called()
-}
-
-func (m *MockReadTxn) Get(txn ReadTxn, prefix []byte, key []byte) (Obj, bool, error) {
-	args := m.Called(prefix, key)
-	if args.Get(0) == nil {
-		return Obj{}, args.Bool(1), args.Error(2)
-	}
-	return args.Get(0).(Obj), args.Bool(1), args.Error(2)
-}
-
-func (m *MockReadTxn) GetAll(txn ReadTxn, prefix []byte, handler func(int, Obj) error) error {
-	args := m.Called(prefix, handler)
-	return args.Error(0)
-}
-
 type MockOperatorPublicKey struct {
 	mock.Mock
 }
