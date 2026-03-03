@@ -24,7 +24,7 @@ import (
 )
 
 // CreateTestNode builds a test Node using a local network.
-func CreateTestNode() *Node {
+func CreateTestNode(t *testing.T) *Node {
 	nodeMock := &NodeMock{}
 	nodeMock.HealthyMock.Store(nil)
 	nodeProber := nodeprobe.New(zap.L())
@@ -57,21 +57,21 @@ func CreateTestNode() *Node {
 		peerSubnets: commons.AllSubnets,
 	}
 
-	peerID, err := peer.Decode("16Uiu2HAmH9JrTKfYWKB9ewbbE5xRCRrLRkwrNywvMqMk8vo5vqU2")
+	ownPeerID, err := peer.Decode("16Uiu2HAmH9JrTKfYWKB9ewbbE5xRCRrLRkwrNywvMqMk8vo5vqU2")
 	if err != nil {
-		panic(err)
+		require.NoError(t, err)
 	}
 	peer1ID, err := peer.Decode("12D3KooWHMqRy1xSTtoeey9HMYNWkLGToMmTJFccX2zxGQPz2S57")
 	if err != nil {
-		panic(err)
+		require.NoError(t, err)
 	}
 	peer2ID, err := peer.Decode("12D3KooWPxxZ6TgcCjCp8JeEEATAFLtriNLGumBroBYYMXLyNrxH")
 	if err != nil {
-		panic(err)
+		require.NoError(t, err)
 	}
 
 	net := &MockP2PNetwork{
-		LocalPeerValue: peerID,
+		LocalPeerValue: ownPeerID,
 		ListenAddressesValue: []ma.Multiaddr{
 			ma.StringCast("/ip4/1.2.3.4"),
 		},
@@ -130,7 +130,7 @@ type allPeersAndTopics = AllPeersAndTopicsJSON
 
 // TestNodeHandlers verifies the endpoints of the Node (identity, peers, health, topics).
 func TestNodeHandlers(t *testing.T) {
-	node := CreateTestNode()
+	node := CreateTestNode(t)
 
 	tests := []struct {
 		name    string
