@@ -29,7 +29,7 @@ RUN_TOOL=go tool -modfile=tool.mod
 SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
-lint: golangci-lint deadcode-lint openapi-lint
+lint: golangci-lint deadcode-lint openapi-lint ssvsigner-boundary-lint
 
 .PHONY: golangci-lint
 golangci-lint:
@@ -43,6 +43,10 @@ ssvsigner-golangci-lint:
 .PHONY: deadcode-lint
 deadcode-lint:
 	./scripts/deadcode.sh
+
+.PHONY: ssvsigner-boundary-lint
+ssvsigner-boundary-lint:
+	./scripts/ssvsigner_boundary.sh
 
 .PHONY: full-test
 full-test:
