@@ -26,8 +26,8 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -920,8 +920,9 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 }
 
 func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	dutyStore := store.New(db)
 	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
@@ -1168,8 +1169,9 @@ func TestCollector_FlushPending_Timestamps(t *testing.T) {
 }
 
 func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	dutyStore := store.New(db)
 	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)

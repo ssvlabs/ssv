@@ -25,8 +25,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 // testRecipientStorage: in-memory overrides for owner->custom recipient
@@ -313,7 +313,7 @@ func TestSubmitProposal(t *testing.T) {
 
 func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
 	logger := log.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTemporary(logger, basedb.Options{})
 	require.NoError(t, err)
 
 	// Minimal recipients storage just to satisfy SharesStorage init (if needed)

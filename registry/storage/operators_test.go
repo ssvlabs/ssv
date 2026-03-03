@@ -14,8 +14,8 @@ import (
 
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func TestStorage_SaveAndGetOperatorData(t *testing.T) {
@@ -190,7 +190,7 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTemporary(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

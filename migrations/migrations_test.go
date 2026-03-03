@@ -10,19 +10,21 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
-	db, err := kv.NewInMemory(log.TestLogger(t), basedb.Options{
+	db, err := pebble.NewTemporary(log.TestLogger(t), basedb.Options{
 		Reporting: true,
 		Ctx:       ctx,
 	})
 	if err != nil {
 		return Options{}, err
 	}
+	t.Cleanup(func() { _ = db.Close() })
+
 	return Options{
 		Db:     db,
 		DbPath: t.TempDir(),

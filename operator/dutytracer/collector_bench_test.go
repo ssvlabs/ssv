@@ -22,8 +22,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func BenchmarkTracer(b *testing.B) {
@@ -39,10 +39,11 @@ func BenchmarkTracer(b *testing.B) {
 
 	_ = f.Close()
 
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		b.Fatal(err)
 	}
+	b.Cleanup(func() { _ = db.Close() })
 
 	dutyStore := store.New(db)
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)

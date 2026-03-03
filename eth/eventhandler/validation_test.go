@@ -12,15 +12,16 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func Test_validateValidatorAddedEvent(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTemporary(logger, basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	require.NoError(t, err)

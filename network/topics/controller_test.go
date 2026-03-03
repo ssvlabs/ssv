@@ -36,8 +36,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 // TODO: fix this test to run post-fork
@@ -407,8 +407,9 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		// TODO: add mock for peers.ScoreIndex
 	}
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTemporary(logger, basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, func(owner common.Address) (bellatrix.ExecutionAddress, error) {
 		return bellatrix.ExecutionAddress{}, nil

@@ -19,8 +19,8 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -30,7 +30,7 @@ func _byteArray(input string) []byte {
 }
 
 func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
-	return kv.NewInMemory(logger, basedb.Options{})
+	return pebble.NewTemporary(logger, basedb.Options{})
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {

@@ -23,12 +23,12 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func TestRemoveSlot(t *testing.T) {
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	t.Cleanup(func() { _ = db.Close() })
 	assert.NoError(t, err)
 
@@ -110,8 +110,9 @@ func TestSlotCleanupJob(t *testing.T) {
 	// and then on next tick (5) slot 3 will be removed as well keeping back slot 4.
 
 	// setup
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	assert.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	role := spectypes.BNRoleAttester
 

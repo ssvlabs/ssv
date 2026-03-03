@@ -293,7 +293,7 @@ func (env *TestEnvironment) setupPostgreSQLVolume() error {
 	return nil
 }
 
-// setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager BadgerDB data
+// setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager PebbleDB data
 func (env *TestEnvironment) setupKeyManagerVolumes() error {
 	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%s", randomSuffix())
 	if err := os.MkdirAll(env.localKeyManagerPath, dirMode); err != nil {

@@ -17,8 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func TestSlashing(t *testing.T) {
@@ -919,7 +918,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 
 	// --- Phase 1: Initial Setup, Sign, and Close ---
 	logger := log.TestLogger(t)
-	db, err := kv.New(logger, basedb.Options{Path: dbPath})
+	db, err := pebble.New(logger, dbPath, nil)
 	require.NoError(t, err)
 
 	netCfg := networkconfig.TestNetwork
@@ -954,7 +953,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	// --- Phase 2: Reopen DB and Attempt Slashable Signing ---
 	// Make sure it's a fresh instance with the same DB path
 	t.Log("Starting Phase 2 with the same database path")
-	db2, err := kv.New(logger, basedb.Options{Path: dbPath})
+	db2, err := pebble.New(logger, dbPath, nil)
 	require.NoError(t, err)
 	defer db2.Close()
 

@@ -9,8 +9,8 @@ import (
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/observability/log"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 var (
@@ -50,7 +50,7 @@ func TestSetupPrivateKey(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			db, err := kv.NewInMemory(logger, basedb.Options{})
+			db, err := pebble.NewTemporary(logger, basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
@@ -104,7 +104,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	}
 
 	t.Run("NewIdentityStore", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTemporary(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 

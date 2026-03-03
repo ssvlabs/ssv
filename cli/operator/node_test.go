@@ -11,15 +11,16 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func Test_verifyConfig(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTemporary(logger, basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	netCfg := networkconfig.TestNetwork
 	nodeStorage, err := operatorstorage.NewNodeStorage(netCfg.Beacon, logger, db)

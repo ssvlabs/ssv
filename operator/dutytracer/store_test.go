@@ -20,8 +20,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrymocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -32,10 +32,11 @@ func setCommitteeLink(c *Collector, slot phase0.Slot, validatorIndex phase0.Vali
 }
 
 func TestValidatorCommitteeMapping(t *testing.T) {
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
 	dutyStore := store.New(db)
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, dummyGetFeeRecipient, nil)
@@ -123,10 +124,11 @@ func TestCommitteeDutyStore(t *testing.T) {
 	defer ctrl.Finish()
 	vstore := registrymocks.NewMockValidatorStore(ctrl)
 
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 	dutyStore := store.New(db)
 
 	// setup validator index mapping
@@ -305,8 +307,9 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	index1 := phase0.ValidatorIndex(1)
 
 	// Setup db, shares & collector
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 	dutyStore := store.New(db)
 	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
 	require.NoError(t, err)
@@ -369,10 +372,11 @@ func TestValidatorDutyStore(t *testing.T) {
 	defer ctrl.Finish()
 	vstore := registrymocks.NewMockValidatorStore(ctrl)
 
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 	dutyStore := store.New(db)
 
 	// setup validator pubkey -> index mapping
