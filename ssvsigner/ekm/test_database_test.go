@@ -1,11 +1,20 @@
 package ekm
 
 import (
+	"bytes"
+
 	"github.com/ssvlabs/ssv/ssvsigner/internal/testdb"
 )
 
 type testDB struct {
 	store *testdb.Store
+}
+
+func toObj(r testdb.Record) Obj {
+	return Obj{
+		Key:   bytes.Clone(r.Key),
+		Value: bytes.Clone(r.Value),
+	}
 }
 
 func newTestMemoryDB() *testDB {
@@ -25,23 +34,17 @@ func (d *testDB) Close() error {
 }
 
 func (d *testDB) Get(_ ReadTxn, prefix []byte, key []byte) (Obj, bool, error) {
-	r, found := d.store.Get(prefix, key)
+	record, found := d.store.Get(prefix, key)
 	if !found {
 		return Obj{}, false, nil
 	}
-	return Obj{
-		Key:   append([]byte(nil), r.Key...),
-		Value: append([]byte(nil), r.Value...),
-	}, true, nil
+	return toObj(record), true, nil
 }
 
 func (d *testDB) GetAll(_ ReadTxn, prefix []byte, handler func(int, Obj) error) error {
 	list := d.store.GetAll(prefix)
-	for i, r := range list {
-		if err := handler(i, Obj{
-			Key:   append([]byte(nil), r.Key...),
-			Value: append([]byte(nil), r.Value...),
-		}); err != nil {
+	for i, record := range list {
+		if err := handler(i, toObj(record)); err != nil {
 			return err
 		}
 	}

@@ -1,6 +1,7 @@
 package testenv
 
 import (
+	"bytes"
 	"path/filepath"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -9,6 +10,13 @@ import (
 
 type testDB struct {
 	store *testdb.Store
+}
+
+func toEKMObj(r testdb.Record) ekm.Obj {
+	return ekm.Obj{
+		Key:   bytes.Clone(r.Key),
+		Value: bytes.Clone(r.Value),
+	}
 }
 
 func newTestPersistentDB(dir string) (*testDB, error) {
@@ -24,23 +32,17 @@ func (d *testDB) Close() error {
 }
 
 func (d *testDB) Get(_ ekm.ReadTxn, prefix []byte, key []byte) (ekm.Obj, bool, error) {
-	r, found := d.store.Get(prefix, key)
+	record, found := d.store.Get(prefix, key)
 	if !found {
 		return ekm.Obj{}, false, nil
 	}
-	return ekm.Obj{
-		Key:   append([]byte(nil), r.Key...),
-		Value: append([]byte(nil), r.Value...),
-	}, true, nil
+	return toEKMObj(record), true, nil
 }
 
 func (d *testDB) GetAll(_ ekm.ReadTxn, prefix []byte, handler func(int, ekm.Obj) error) error {
 	list := d.store.GetAll(prefix)
-	for i, r := range list {
-		if err := handler(i, ekm.Obj{
-			Key:   append([]byte(nil), r.Key...),
-			Value: append([]byte(nil), r.Value...),
-		}); err != nil {
+	for i, record := range list {
+		if err := handler(i, toEKMObj(record)); err != nil {
 			return err
 		}
 	}

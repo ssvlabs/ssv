@@ -16,29 +16,44 @@ type databaseAdapter struct {
 	db basedb.Database
 }
 
-func (a *databaseAdapter) Get(txn ekm.ReadTxn, prefix []byte, key []byte) (ekm.Obj, bool, error) {
+func asReader(txn ekm.ReadTxn) (basedb.Reader, error) {
 	if txn == nil {
-		obj, found, err := a.db.Get(prefix, key)
-		return ekm.Obj{Key: obj.Key, Value: obj.Value}, found, err
+		return nil, nil
 	}
 
-	r, ok := txn.(basedb.Reader)
+	reader, ok := txn.(basedb.Reader)
 	if !ok {
-		return ekm.Obj{}, false, fmt.Errorf("unexpected read txn type %T", txn)
+		return nil, fmt.Errorf("unexpected read txn type %T", txn)
+	}
+	return reader, nil
+}
+
+func asReadWriter(txn ekm.ReadWriteTxn) (basedb.ReadWriter, error) {
+	if txn == nil {
+		return nil, nil
 	}
 
-	obj, found, err := a.db.UsingReader(r).Get(prefix, key)
+	rw, ok := txn.(basedb.ReadWriter)
+	if !ok {
+		return nil, fmt.Errorf("unexpected write txn type %T", txn)
+	}
+	return rw, nil
+}
+
+func (a *databaseAdapter) Get(txn ekm.ReadTxn, prefix []byte, key []byte) (ekm.Obj, bool, error) {
+	reader, err := asReader(txn)
+	if err != nil {
+		return ekm.Obj{}, false, err
+	}
+
+	obj, found, err := a.db.UsingReader(reader).Get(prefix, key)
 	return ekm.Obj{Key: obj.Key, Value: obj.Value}, found, err
 }
 
 func (a *databaseAdapter) GetAll(txn ekm.ReadTxn, prefix []byte, handler func(int, ekm.Obj) error) error {
-	var reader basedb.Reader
-	if txn != nil {
-		r, ok := txn.(basedb.Reader)
-		if !ok {
-			return fmt.Errorf("unexpected read txn type %T", txn)
-		}
-		reader = r
+	reader, err := asReader(txn)
+	if err != nil {
+		return err
 	}
 
 	return a.db.UsingReader(reader).GetAll(prefix, func(i int, obj basedb.Obj) error {
@@ -47,26 +62,20 @@ func (a *databaseAdapter) GetAll(txn ekm.ReadTxn, prefix []byte, handler func(in
 }
 
 func (a *databaseAdapter) Set(txn ekm.ReadWriteTxn, prefix []byte, key []byte, value []byte) error {
-	if txn == nil {
-		return a.db.Set(prefix, key, value)
+	rw, err := asReadWriter(txn)
+	if err != nil {
+		return err
 	}
 
-	rw, ok := txn.(basedb.ReadWriter)
-	if !ok {
-		return fmt.Errorf("unexpected write txn type %T", txn)
-	}
 	return a.db.Using(rw).Set(prefix, key, value)
 }
 
 func (a *databaseAdapter) Delete(txn ekm.ReadWriteTxn, prefix []byte, key []byte) error {
-	if txn == nil {
-		return a.db.Delete(prefix, key)
+	rw, err := asReadWriter(txn)
+	if err != nil {
+		return err
 	}
 
-	rw, ok := txn.(basedb.ReadWriter)
-	if !ok {
-		return fmt.Errorf("unexpected write txn type %T", txn)
-	}
 	return a.db.Using(rw).Delete(prefix, key)
 }
 
