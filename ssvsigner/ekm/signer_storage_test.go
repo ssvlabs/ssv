@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -41,7 +40,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 		return nil, func() {}
 	}
 
-	s := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
+	s := NewSignerStorage(newTestDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 	return s, func() {
 		db.Close()
 	}
@@ -131,7 +130,7 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 			// Use unexported field to set up test condition - store empty value
 			s := signerStorage.(*storage)
-			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte{})
+			err := s.db.Set(nil, s.objPrefix(walletPrefix), []byte(walletPath), []byte{})
 			require.NoError(t, err)
 
 			// Attempt to open wallet
@@ -147,7 +146,7 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 			// Use unexported field to set up test condition - store invalid JSON
 			s := signerStorage.(*storage)
-			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte("{invalid-json}"))
+			err := s.db.Set(nil, s.objPrefix(walletPrefix), []byte(walletPath), []byte("{invalid-json}"))
 			require.NoError(t, err)
 
 			// Attempt to open wallet
@@ -362,7 +361,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
+		signerStorage := NewSignerStorage(newTestDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
@@ -374,7 +373,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
+		signerStorage := NewSignerStorage(newTestDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 
 		// create a test account
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -529,7 +528,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
+			err := s.db.Set(nil, s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
 			require.NoError(t, err)
 
 			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
@@ -543,7 +542,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte{})
+			err := s.db.Set(nil, s.objPrefix(highestAttPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
 			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
@@ -655,7 +654,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, []byte{})
+			err := s.db.Set(nil, s.objPrefix(highestProposalPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
 			slot, found, err := signerStorage.RetrieveHighestProposal(pubKey)

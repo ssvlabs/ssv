@@ -18,7 +18,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/ekmadapter"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
@@ -42,7 +41,7 @@ func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) Ke
 
 	network := networkconfig.TestNetwork
 
-	km, err := NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), network.Beacon.Name, network.Beacon, operatorPrivateKey)
+	km, err := NewLocalKeyManager(logger, newTestDatabaseAdapter(db), network.Beacon.Name, network.Beacon, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -82,7 +81,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
+	signerStorage := NewSignerStorage(newTestDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 	signerStorage.SetEncryptionKey(encryptionKey)
 
 	defer func(db basedb.Database, logger *zap.Logger) {
