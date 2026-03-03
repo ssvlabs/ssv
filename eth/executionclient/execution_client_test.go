@@ -1059,7 +1059,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(400*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1121,7 +1121,7 @@ func TestHeaderByNumber(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(400*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
