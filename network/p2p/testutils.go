@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
+	networkpeers "github.com/ssvlabs/ssv/network/peers"
 	networktesting "github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -142,12 +143,20 @@ type p2pNetworkWithDB struct {
 	dbCloser *onceCloser
 }
 
+var _ network.P2PNetwork = (*p2pNetworkWithDB)(nil)
+var _ HostProvider = (*p2pNetworkWithDB)(nil)
+var _ PeersIndexProvider = (*p2pNetworkWithDB)(nil)
+
 func (n *p2pNetworkWithDB) Close() error {
 	return errors.Join(n.P2PNetwork.Close(), n.dbCloser.Close())
 }
 
 func (n *p2pNetworkWithDB) Host() host.Host {
 	return n.P2PNetwork.(HostProvider).Host()
+}
+
+func (n *p2pNetworkWithDB) PeersIndex() networkpeers.Index {
+	return n.P2PNetwork.(PeersIndexProvider).PeersIndex()
 }
 
 type onceCloser struct {
