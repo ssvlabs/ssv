@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -36,7 +35,7 @@ type TestEnvironment struct {
 	remoteKeyManager *ekm.RemoteKeyManager
 	localDB          basedb.Database
 	remoteDB         basedb.Database
-	beaconConfig     *networkconfig.Beacon
+	beaconConfig     *common.BeaconConfig
 
 	// Network
 	networkName string
@@ -234,7 +233,7 @@ func (env *TestEnvironment) GetRemoteKeyManager() *ekm.RemoteKeyManager {
 }
 
 // GetBeaconConfig returns the beacon config for test control
-func (env *TestEnvironment) GetBeaconConfig() *networkconfig.Beacon {
+func (env *TestEnvironment) GetBeaconConfig() *common.BeaconConfig {
 	return env.beaconConfig
 }
 
