@@ -72,7 +72,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options p2pv1.
 
 	require.NoError(t, err)
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
+	ln, err := p2pv1.CreateAndStartLocalNet(t, ctx, logger.Named("createNetworkAndSubscribe"), options)
 
 	if err != nil {
 		return nil, nil, err

@@ -22,6 +22,7 @@ const (
 	badgerImportDoneMarkerFileName       = ".ssv-badger-import.done.json"
 	badgerImportInProgressMarkerFileName = ".ssv-badger-import.inprogress.json"
 	defaultImportBatchSize               = 10_000
+	importProgressLogEveryBatches        = 10
 )
 
 type importBatchCommitHook func(committedBatches int, copiedKeys int) error
@@ -315,6 +316,13 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 			return err
 		}
 		committedBatches++
+		if committedBatches%importProgressLogEveryBatches == 0 {
+			logger.Info("badger import in progress",
+				zap.String("badger_path", badgerPath),
+				zap.Int("keys_copied", copied),
+				zap.Int("committed_batches", committedBatches),
+			)
+		}
 		if hook != nil {
 			if err := hook(committedBatches, copied); err != nil {
 				return err

@@ -3,11 +3,15 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"sync"
+	gotesting "testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -18,7 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/network/testing"
+	networktesting "github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
@@ -34,16 +38,16 @@ import (
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
-	NodeKeys []testing.NodeKeys
+	NodeKeys []networktesting.NodeKeys
 	Bootnode *discovery.Bootnode
 	Nodes    []network.P2PNetwork
 
-	udpRand testing.UDPPortsRandomizer
+	udpRand networktesting.UDPPortsRandomizer
 }
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := testing.GenNetworkKey()
+	bnSk, err := networktesting.GenNetworkKey()
 	if err != nil {
 		return err
 	}
@@ -70,9 +74,9 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 // CreateAndStartLocalNet creates a new local network and starts it
 // if any errors occurs during starting local network CreateAndStartLocalNet trying
 // to create and start local net one more time until pCtx is not Done()
-func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
+func CreateAndStartLocalNet(t gotesting.TB, pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	attempt := func(pCtx context.Context) (*LocalNet, error) {
-		ln, err := NewLocalNet(pCtx, logger, options)
+		ln, err := NewLocalNet(t, pCtx, logger, options)
 		if err != nil {
 			return nil, err
 		}
@@ -133,8 +137,38 @@ func (mockSignatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 	return nil
 }
 
+type p2pNetworkWithDB struct {
+	network.P2PNetwork
+	dbCloser *onceCloser
+}
+
+func (n *p2pNetworkWithDB) Close() error {
+	return errors.Join(n.P2PNetwork.Close(), n.dbCloser.Close())
+}
+
+func (n *p2pNetworkWithDB) Host() host.Host {
+	return n.P2PNetwork.(HostProvider).Host()
+}
+
+type onceCloser struct {
+	once sync.Once
+	fn   func() error
+	err  error
+}
+
+func newOnceCloser(fn func() error) *onceCloser {
+	return &onceCloser{fn: fn}
+}
+
+func (c *onceCloser) Close() error {
+	c.once.Do(func() {
+		c.err = c.fn()
+	})
+	return c.err
+}
+
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
+func (ln *LocalNet) NewTestP2pNetwork(t gotesting.TB, ctx context.Context, nodeIndex uint64, keys networktesting.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
 	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
@@ -144,21 +178,23 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	if err != nil {
 		return nil, err
 	}
-	if ctx != nil {
-		go func() {
-			<-ctx.Done()
-			_ = db.Close()
-		}()
+	dbCloser := newOnceCloser(db.Close)
+	t.Cleanup(func() {
+		_ = dbCloser.Close()
+	})
+	closeOnErr := func(err error) (network.P2PNetwork, error) {
+		_ = dbCloser.Close()
+		return nil, err
 	}
 
 	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
-		return nil, err
+		return closeOnErr(err)
 	}
 
 	for _, share := range options.Shares {
 		if err := nodeStorage.Shares().Save(nil, share); err != nil {
-			return nil, err
+			return closeOnErr(err)
 		}
 	}
 
@@ -166,7 +202,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		for _, sm := range share.Committee {
 			_, ok, err := nodeStorage.GetOperatorData(nil, sm.Signer)
 			if err != nil {
-				return nil, err
+				return closeOnErr(err)
 			}
 
 			if !ok {
@@ -176,7 +212,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 					OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
 				})
 				if err != nil {
-					return nil, err
+					return closeOnErr(err)
 				}
 			}
 		}
@@ -185,7 +221,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	cfg := NewNetConfig(keys, format.OperatorPubKeyHash(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	cfg := NewNetConfig(keys, format.OperatorPubKeyHash(operatorPubkey), ln.Bootnode, networktesting.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
@@ -236,13 +272,16 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 
 	p, err := New(logger, cfg)
 	if err != nil {
-		return nil, err
+		return closeOnErr(err)
 	}
 	err = p.Setup()
 	if err != nil {
-		return nil, err
+		return closeOnErr(errors.Join(err, p.Close()))
 	}
-	return p, nil
+	return &p2pNetworkWithDB{
+		P2PNetwork: p,
+		dbCloser:   dbCloser,
+	}, nil
 }
 
 type LocalNetOptions struct {
@@ -257,17 +296,17 @@ type LocalNetOptions struct {
 }
 
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
+func NewLocalNet(t gotesting.TB, ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
-	ln.udpRand = make(testing.UDPPortsRandomizer)
+	ln.udpRand = make(networktesting.UDPPortsRandomizer)
 	if options.UseDiscv5 {
 		if err := ln.WithBootnode(ctx, logger); err != nil {
 			return nil, err
 		}
 	}
-	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
+	nodes, keys, err := networktesting.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys networktesting.NodeKeys) network.P2PNetwork {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
-		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
+		p, err := ln.NewTestP2pNetwork(t, pctx, nodeIndex, keys, logger, options)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
 		}
@@ -283,7 +322,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
+func NewNetConfig(keys networktesting.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {

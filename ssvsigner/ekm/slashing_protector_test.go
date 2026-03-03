@@ -706,9 +706,8 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 
 func TestSlashableBlockDoubleProposal(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := getBaseStorage(logger)
+	db, err := getBaseStorage(t, logger)
 	require.NoError(t, err)
-	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
 	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
@@ -762,9 +761,8 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 
 func TestSlashableAttestationDoubleVote(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := getBaseStorage(logger)
+	db, err := getBaseStorage(t, logger)
 	require.NoError(t, err)
-	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
 	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
@@ -838,9 +836,8 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 
 func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := getBaseStorage(logger)
+	db, err := getBaseStorage(t, logger)
 	require.NoError(t, err)
-	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
 	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
@@ -975,9 +972,8 @@ func TestSlashingDBIntegrity(t *testing.T) {
 
 func TestSlashingConcurrency(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := getBaseStorage(logger)
+	db, err := getBaseStorage(t, logger)
 	require.NoError(t, err)
-	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
 	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)

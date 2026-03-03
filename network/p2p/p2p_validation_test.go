@@ -27,6 +27,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -312,8 +313,11 @@ func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pu
 type NodeIndex int
 
 type VirtualNode struct {
-	Index      NodeIndex
-	Network    *p2pNetwork
+	Index   NodeIndex
+	Network interface {
+		network.P2PNetwork
+		HostProvider
+	}
 	PeerScores atomic.Pointer[map[NodeIndex]*pubsub.PeerScoreSnapshot]
 }
 
@@ -373,9 +377,14 @@ func CreateVirtualNet(
 	require.NotNil(t, ln)
 
 	for i, node := range ln.Nodes {
+		hostNetwork, ok := node.(interface {
+			network.P2PNetwork
+			HostProvider
+		})
+		require.True(t, ok)
 		vn.Nodes = append(vn.Nodes, &VirtualNode{
 			Index:   NodeIndex(i),
-			Network: node.(*p2pNetwork),
+			Network: hostNetwork,
 		})
 	}
 	doneSetup.Store(true)

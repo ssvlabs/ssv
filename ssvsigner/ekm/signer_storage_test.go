@@ -29,21 +29,26 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
-	return pebble.NewTemporary(logger, basedb.Options{})
+func getBaseStorage(t *testing.T, logger *zap.Logger) (basedb.Database, error) {
+	t.Helper()
+
+	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db, nil
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
 	logger := log.TestLogger(t)
-	db, err := getBaseStorage(logger)
+	db, err := getBaseStorage(t, logger)
 	if err != nil {
 		return nil, func() {}
 	}
 
 	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
-	return s, func() {
-		db.Close()
-	}
+	return s, func() {}
 }
 
 func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
@@ -357,9 +362,8 @@ func TestStorageUtilityFunctions(t *testing.T) {
 
 		logger := log.TestLogger(t)
 
-		db, err := getBaseStorage(logger)
+		db, err := getBaseStorage(t, logger)
 		require.NoError(t, err)
-		defer db.Close()
 
 		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
@@ -369,9 +373,8 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		t.Parallel()
 
 		logger := log.TestLogger(t)
-		db, err := getBaseStorage(logger)
+		db, err := getBaseStorage(t, logger)
 		require.NoError(t, err)
-		defer db.Close()
 
 		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 
