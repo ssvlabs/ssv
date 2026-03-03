@@ -28,8 +28,8 @@ func TestPaginationRequest_ToPagination(t *testing.T) {
 
 		pagination, err := p.ToPagination(opts)
 		require.NoError(t, err)
-		require.Equal(t, uint64(1), pagination.Page)
-		require.Equal(t, uint64(1000), pagination.PerPage)
+		require.Equal(t, uint64(1), pagination.Page())
+		require.Equal(t, uint64(1000), pagination.PerPage())
 	})
 
 	t.Run("per_page only defaults page to 1", func(t *testing.T) {
@@ -40,8 +40,8 @@ func TestPaginationRequest_ToPagination(t *testing.T) {
 
 		pagination, err := p.ToPagination(opts)
 		require.NoError(t, err)
-		require.Equal(t, uint64(1), pagination.Page)
-		require.Equal(t, uint64(2), pagination.PerPage)
+		require.Equal(t, uint64(1), pagination.Page())
+		require.Equal(t, uint64(2), pagination.PerPage())
 	})
 
 	t.Run("page only defaults per_page", func(t *testing.T) {
@@ -52,8 +52,8 @@ func TestPaginationRequest_ToPagination(t *testing.T) {
 
 		pagination, err := p.ToPagination(opts)
 		require.NoError(t, err)
-		require.Equal(t, uint64(2), pagination.Page)
-		require.Equal(t, uint64(1000), pagination.PerPage)
+		require.Equal(t, uint64(2), pagination.Page())
+		require.Equal(t, uint64(1000), pagination.PerPage())
 	})
 
 	t.Run("page 0 invalid when provided", func(t *testing.T) {
@@ -96,15 +96,40 @@ func TestPaginationRequest_ToPagination(t *testing.T) {
 		require.NoError(t, err)
 		require.Nil(t, pagination)
 	})
+
+	t.Run("default per_page must be >= 1", func(t *testing.T) {
+		t.Parallel()
+
+		var p PaginationRequest
+		require.NoError(t, json.Unmarshal([]byte(`{}`), &p))
+
+		_, err := p.ToPagination(PaginationOptions{DefaultPerPage: 0, MaxPerPage: 0})
+		require.Error(t, err)
+	})
 }
 
 func TestPagination_SliceBounds(t *testing.T) {
 	t.Parallel()
 
+	mustPagination := func(t *testing.T, page, perPage uint64) Pagination {
+		t.Helper()
+
+		pageCopy := page
+		perPageCopy := perPage
+		req := PaginationRequest{
+			Set:     true,
+			Page:    &pageCopy,
+			PerPage: &perPageCopy,
+		}
+		p, err := req.ToPagination(PaginationOptions{DefaultPerPage: 1, MaxPerPage: 0})
+		require.NoError(t, err)
+		return p
+	}
+
 	t.Run("per_page larger than total", func(t *testing.T) {
 		t.Parallel()
 
-		p := Pagination{Page: 1, PerPage: 10}
+		p := mustPagination(t, 1, 10)
 		start, end := p.SliceBounds(5)
 		require.Equal(t, uint64(0), start)
 		require.Equal(t, uint64(5), end)
@@ -113,7 +138,7 @@ func TestPagination_SliceBounds(t *testing.T) {
 	t.Run("page beyond total returns empty", func(t *testing.T) {
 		t.Parallel()
 
-		p := Pagination{Page: 100, PerPage: 2}
+		p := mustPagination(t, 100, 2)
 		start, end := p.SliceBounds(5)
 		require.Equal(t, uint64(5), start)
 		require.Equal(t, uint64(5), end)
@@ -122,7 +147,7 @@ func TestPagination_SliceBounds(t *testing.T) {
 	t.Run("very large page clamps via overflow protection", func(t *testing.T) {
 		t.Parallel()
 
-		p := Pagination{Page: ^uint64(0), PerPage: 1000}
+		p := mustPagination(t, ^uint64(0), 1000)
 		start, end := p.SliceBounds(5)
 		require.Equal(t, uint64(5), start)
 		require.Equal(t, uint64(5), end)
@@ -131,7 +156,7 @@ func TestPagination_SliceBounds(t *testing.T) {
 	t.Run("total zero always empty", func(t *testing.T) {
 		t.Parallel()
 
-		p := Pagination{Page: 1, PerPage: 2}
+		p := mustPagination(t, 1, 2)
 		start, end := p.SliceBounds(0)
 		require.Equal(t, uint64(0), start)
 		require.Equal(t, uint64(0), end)
@@ -141,17 +166,32 @@ func TestPagination_SliceBounds(t *testing.T) {
 func TestPaginationResponseFromPagination(t *testing.T) {
 	t.Parallel()
 
+	mustPagination := func(t *testing.T, page, perPage uint64) Pagination {
+		t.Helper()
+
+		pageCopy := page
+		perPageCopy := perPage
+		req := PaginationRequest{
+			Set:     true,
+			Page:    &pageCopy,
+			PerPage: &perPageCopy,
+		}
+		p, err := req.ToPagination(PaginationOptions{DefaultPerPage: 1, MaxPerPage: 0})
+		require.NoError(t, err)
+		return p
+	}
+
 	t.Run("total zero", func(t *testing.T) {
 		t.Parallel()
 
-		out := PaginationResponseFromPagination(Pagination{Page: 1, PerPage: 10}, 0)
+		out := PaginationResponseFromPagination(mustPagination(t, 1, 10), 0)
 		require.Equal(t, uint64(0), out.TotalPages)
 	})
 
 	t.Run("ceil division", func(t *testing.T) {
 		t.Parallel()
 
-		out := PaginationResponseFromPagination(Pagination{Page: 1, PerPage: 2}, 5)
+		out := PaginationResponseFromPagination(mustPagination(t, 1, 2), 5)
 		require.Equal(t, uint64(3), out.TotalPages)
 	})
 
@@ -159,7 +199,7 @@ func TestPaginationResponseFromPagination(t *testing.T) {
 		t.Parallel()
 
 		maxUint64 := ^uint64(0)
-		out := PaginationResponseFromPagination(Pagination{Page: 1, PerPage: 2}, maxUint64)
+		out := PaginationResponseFromPagination(mustPagination(t, 1, 2), maxUint64)
 		require.Equal(t, (maxUint64/2)+1, out.TotalPages)
 	})
 }

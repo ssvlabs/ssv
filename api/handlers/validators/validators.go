@@ -102,7 +102,7 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		response.Data[i] = validatorFromShare(share)
 	}
 
-	p := api.PaginationResponseFromPagination(*pagination, total)
+	p := api.PaginationResponseFromPagination(pagination, total)
 	response.Pagination = &p
 
 	return api.Render(w, r, response)

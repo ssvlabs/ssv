@@ -11,6 +11,15 @@ type PaginationOptions struct {
 	MaxPerPage     uint64
 }
 
+// Pagination is the resolved (non-optional) pagination configuration.
+// It is only constructible outside this package via PaginationRequest.ToPagination.
+type Pagination interface {
+	Page() uint64
+	PerPage() uint64
+	// SliceBounds returns safe [start,end) bounds for slicing a collection with the given total length.
+	SliceBounds(total uint64) (start, end uint64)
+}
+
 type PaginationRequest struct {
 	Set bool `json:"-"`
 
@@ -45,42 +54,69 @@ func (p *PaginationRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (p PaginationRequest) ToPagination(opts PaginationOptions) (*Pagination, error) {
+type pagination struct {
+	page    uint64
+	perPage uint64
+}
+
+func (p pagination) Page() uint64    { return p.page }
+func (p pagination) PerPage() uint64 { return p.perPage }
+
+func (p pagination) SliceBounds(total uint64) (start, end uint64) {
+	if p.page == 0 || p.perPage == 0 {
+		// unreachable by construction
+		panic("invalid pagination state with page=0 or per_page=0")
+	}
+
+	pageIndex := p.page - 1
+	hi, start := bits.Mul64(pageIndex, p.perPage)
+	if hi != 0 || start > total {
+		start = total
+	}
+
+	end, carry := bits.Add64(start, p.perPage, 0)
+	if carry != 0 || end > total {
+		end = total
+	}
+
+	return start, end
+}
+
+func (p PaginationRequest) ToPagination(opts PaginationOptions) (Pagination, error) {
 	if !p.Set {
 		return nil, nil
 	}
 
-	var pagination Pagination
+	var page uint64
+	var perPage uint64
 
 	if p.Page != nil {
 		if *p.Page == 0 {
 			return nil, fmt.Errorf("page must be >= 1")
 		}
-		pagination.Page = *p.Page
+		page = *p.Page
 	}
 	if p.PerPage != nil {
 		if *p.PerPage == 0 {
 			return nil, fmt.Errorf("per_page must be >= 1")
 		}
-		pagination.PerPage = *p.PerPage
+		perPage = *p.PerPage
 	}
 
-	if pagination.Page == 0 {
-		pagination.Page = 1
+	if page == 0 {
+		page = 1
 	}
-	if pagination.PerPage == 0 {
-		pagination.PerPage = opts.DefaultPerPage
+	if perPage == 0 {
+		if opts.DefaultPerPage == 0 {
+			return nil, fmt.Errorf("default per_page must be >= 1")
+		}
+		perPage = opts.DefaultPerPage
 	}
-	if opts.MaxPerPage > 0 && pagination.PerPage > opts.MaxPerPage {
+	if opts.MaxPerPage > 0 && perPage > opts.MaxPerPage {
 		return nil, fmt.Errorf("per_page must be <= %d", opts.MaxPerPage)
 	}
 
-	return &pagination, nil
-}
-
-type Pagination struct {
-	Page    uint64
-	PerPage uint64
+	return pagination{page: page, perPage: perPage}, nil
 }
 
 type PaginationResponse struct {
@@ -90,35 +126,20 @@ type PaginationResponse struct {
 	TotalPages uint64 `json:"total_pages"`
 }
 
-// SliceBounds returns safe [start,end) bounds for slicing a collection with the given total length.
-func (p Pagination) SliceBounds(total uint64) (start, end uint64) {
-	if p.Page == 0 || p.PerPage == 0 {
-		return 0, 0
-	}
-
-	pageIndex := p.Page - 1
-	hi, start := bits.Mul64(pageIndex, p.PerPage)
-	if hi != 0 || start > total {
-		start = total
-	}
-
-	end, carry := bits.Add64(start, p.PerPage, 0)
-	if carry != 0 || end > total {
-		end = total
-	}
-
-	return start, end
-}
-
 func PaginationResponseFromPagination(p Pagination, total uint64) PaginationResponse {
+	if p.Page() == 0 || p.PerPage() == 0 {
+		// unreachable by construction
+		panic("invalid pagination state with page=0 or per_page=0")
+	}
+
 	out := PaginationResponse{
-		Page:    p.Page,
-		PerPage: p.PerPage,
+		Page:    p.Page(),
+		PerPage: p.PerPage(),
 		Total:   total,
 	}
-	if total > 0 && p.PerPage > 0 {
-		out.TotalPages = total / p.PerPage
-		if total%p.PerPage != 0 {
+	if total > 0 {
+		out.TotalPages = total / p.PerPage()
+		if total%p.PerPage() != 0 {
 			out.TotalPages++
 		}
 	}
