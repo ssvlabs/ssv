@@ -1,7 +1,7 @@
 package testing
 
 import (
-	"context"
+	"testing"
 
 	"go.uber.org/zap"
 
@@ -12,18 +12,15 @@ import (
 	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
-func newDB(ctx context.Context, logger *zap.Logger) basedb.Database {
+func newDB(t *testing.T, logger *zap.Logger) basedb.Database {
+	t.Helper()
+
 	db, err := pebble.NewTemporary(logger, basedb.Options{})
 	if err != nil {
-		panic(err)
+		t.Fatalf("create temporary pebble db: %v", err)
 	}
 
-	if ctx != nil {
-		go func() {
-			<-ctx.Done()
-			_ = db.Close()
-		}()
-	}
+	t.Cleanup(func() { _ = db.Close() })
 
 	return db
 }
@@ -46,6 +43,7 @@ func newStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectyp
 	return stores
 }
 
-func testingStores(ctx context.Context, logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return newStoresFromRoles(logger, newDB(ctx, logger), allRoles...)
+func testingStores(t *testing.T, logger *zap.Logger) *qbftstorage.ParticipantStores {
+	t.Helper()
+	return newStoresFromRoles(logger, newDB(t, logger), allRoles...)
 }

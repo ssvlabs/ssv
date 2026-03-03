@@ -2,6 +2,7 @@ package testing
 
 import (
 	"context"
+	"testing"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -12,22 +13,24 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
+var BaseValidator = func(t *testing.T, logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
+	t.Helper()
+
 	ctx, cancel := context.WithCancel(context.TODO())
 
 	commonOpts := &validator.CommonOptions{
 		NetworkConfig: networkconfig.TestNetwork,
 		Network:       spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-		Beacon:        testing.NewTestingBeaconNodeWrapped(),
-		Storage:       testingStores(ctx, logger),
+		Beacon:        protocoltesting.NewTestingBeaconNodeWrapped(),
+		Storage:       testingStores(t, logger),
 		Signer:        ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 	}
 
-	return validator.NewValidator(
+	v := validator.NewValidator(
 		ctx,
 		cancel,
 		logger,
@@ -45,4 +48,6 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 				spectypes.RoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
 			}),
 	)
+	t.Cleanup(v.Stop)
+	return v
 }
