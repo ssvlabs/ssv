@@ -18,10 +18,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 func _byteArray(input string) []byte {
@@ -34,7 +32,7 @@ func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
-	logger := log.TestLogger(t)
+	logger := testLogger(t)
 	db, err := getBaseStorage(logger)
 	if err != nil {
 		return nil, func() {}
@@ -47,7 +45,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 }
 
 func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
-	threshold.Init()
+	initBLSTest()
 
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -355,7 +353,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 	t.Run("SetEncryptionKey", func(t *testing.T) {
 		t.Parallel()
 
-		logger := log.TestLogger(t)
+		logger := testLogger(t)
 
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
@@ -368,7 +366,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 	t.Run("DataEncryption", func(t *testing.T) {
 		t.Parallel()
 
-		logger := log.TestLogger(t)
+		logger := testLogger(t)
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
 		defer db.Close()
