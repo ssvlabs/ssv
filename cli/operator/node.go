@@ -829,8 +829,6 @@ func setupPebbleDB(
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
-	warnIgnoredPebbleDBOptions(logger, cfg.DBOptions)
-
 	plan, err := storagemigration.ResolvePebbleDBPlan(
 		cfg.DBOptions.Path,
 	)
@@ -875,23 +873,6 @@ func setupPebbleDB(
 	}
 
 	return db, nil
-}
-
-func warnIgnoredPebbleDBOptions(logger *zap.Logger, dbOptions basedb.Options) {
-	const defaultGCInterval = 6 * time.Minute
-
-	if dbOptions.Reporting {
-		logger.Warn("db reporting option is ignored with pebble backend",
-			zap.Bool("reporting", dbOptions.Reporting),
-		)
-	}
-
-	if dbOptions.GCInterval != defaultGCInterval {
-		logger.Warn("db gc interval option is ignored with pebble backend",
-			zap.Duration("gc_interval", dbOptions.GCInterval),
-			zap.Duration("default_gc_interval", defaultGCInterval),
-		)
-	}
 }
 
 func applyMigrations(

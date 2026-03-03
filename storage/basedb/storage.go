@@ -2,15 +2,12 @@ package basedb
 
 import (
 	"context"
-	"time"
 )
 
 // Options for creating all db type
 type Options struct {
-	Ctx        context.Context
-	Path       string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Database storage directory path"`
-	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Enable database size reporting"`
-	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection runs (0 to disable)"`
+	Ctx  context.Context
+	Path string `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Database storage directory path"`
 }
 
 // Reader is a read-only accessor to the database.
