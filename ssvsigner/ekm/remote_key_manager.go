@@ -18,9 +18,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -34,7 +31,8 @@ import (
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
 	logger       *zap.Logger
-	beaconConfig *networkconfig.Beacon
+	beaconConfig BeaconNetwork
+	genesisRoot  phase0.Root
 	signerClient signerClient
 
 	getOperatorId     func() spectypes.OperatorID
@@ -58,12 +56,14 @@ type signerClient interface {
 func NewRemoteKeyManager(
 	ctx context.Context,
 	logger *zap.Logger,
-	beaconConfig *networkconfig.Beacon,
+	networkName string,
+	beaconConfig BeaconNetwork,
+	genesisRoot phase0.Root,
 	signerClient signerClient,
-	db basedb.Database,
+	db Database,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
-	signerStore := NewSignerStorage(db, beaconConfig, logger)
+	signerStore := NewSignerStorage(db, networkName, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
 	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
@@ -79,6 +79,7 @@ func NewRemoteKeyManager(
 	return &RemoteKeyManager{
 		logger:            logger,
 		beaconConfig:      beaconConfig,
+		genesisRoot:       genesisRoot,
 		signerClient:      signerClient,
 		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
 		getOperatorId:     getOperatorId,
@@ -92,7 +93,7 @@ func NewRemoteKeyManager(
 // fail, returns an error.
 func (km *RemoteKeyManager) AddShare(
 	ctx context.Context,
-	txn basedb.Txn,
+	txn ReadWriteTxn,
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
@@ -140,7 +141,7 @@ func (km *RemoteKeyManager) AddShare(
 // RemoveShare unregisters a validator share with the remote service and removes
 // its highest attestation/proposal data locally. If the remote or local operations
 // fail, returns an error.
-func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	// Similarly to addition, if txn gets rolled back after share is removed,
 	// there will be some inconsistency between syncer state and remote signer.
 	// After restart, it will attempt to delete the same share again, which won't be an issue
@@ -196,7 +197,7 @@ func (km *RemoteKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot
 	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
 }
 
-func (km *RemoteKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (km *RemoteKeyManager) BumpSlashingProtection(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	attLock := km.lock(pubKey, lockAttestation)
 	attLock.Lock()
 	defer attLock.Unlock()
@@ -208,7 +209,7 @@ func (km *RemoteKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
-func (km *RemoteKeyManager) removeHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (km *RemoteKeyManager) removeHighestAttestation(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	attLock := km.lock(pubKey, lockAttestation)
 	attLock.Lock()
 	defer attLock.Unlock()
@@ -216,7 +217,7 @@ func (km *RemoteKeyManager) removeHighestAttestation(txn basedb.Txn, pubKey phas
 	return km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey)
 }
 
-func (km *RemoteKeyManager) removeHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (km *RemoteKeyManager) removeHighestProposal(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	propLock := km.lock(pubKey, lockProposal)
 	propLock.Lock()
 	defer propLock.Unlock()
@@ -458,7 +459,7 @@ func (km *RemoteKeyManager) GetForkInfo(epoch phase0.Epoch) web3signer.ForkInfo 
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
-		GenesisValidatorsRoot: km.beaconConfig.GenesisValidatorsRoot,
+		GenesisValidatorsRoot: km.genesisRoot,
 	}
 }
 

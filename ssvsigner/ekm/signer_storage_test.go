@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	kv "github.com/ssvlabs/ssv/storage/badger"
@@ -40,7 +41,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 		return nil, func() {}
 	}
 
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	s := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 	return s, func() {
 		db.Close()
 	}
@@ -361,7 +362,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
@@ -373,7 +374,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 
 		// create a test account
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})

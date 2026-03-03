@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 
@@ -40,7 +41,8 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 
 	localKeyManager, err := ekm.NewLocalKeyManager(
 		logger,
-		localDB,
+		ekmadapter.NewDatabaseAdapter(localDB),
+		env.beaconConfig.Name,
 		env.beaconConfig,
 		env.operatorKey,
 	)
@@ -68,9 +70,11 @@ func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
 	remoteKeyManager, err := ekm.NewRemoteKeyManager(
 		env.ctx,
 		logger,
+		env.beaconConfig.Name,
 		env.beaconConfig,
+		env.beaconConfig.GenesisValidatorsRoot,
 		env, // TestEnvironment implements signerClient interface by delegating to ssvSignerClient
-		env.remoteDB,
+		ekmadapter.NewDatabaseAdapter(env.remoteDB),
 		func() spectypes.OperatorID { return 1 }, // operator ID getter
 	)
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -712,7 +713,7 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
+	signerStore := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), netCfg.Beacon.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
 
@@ -768,7 +769,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
+	signerStore := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), netCfg.Beacon.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
 
@@ -844,7 +845,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
+	signerStore := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), netCfg.Beacon.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
 
@@ -923,7 +924,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	require.NoError(t, err)
 
 	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
+	signerStore := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), netCfg.Beacon.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
 
@@ -958,7 +959,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	require.NoError(t, err)
 	defer db2.Close()
 
-	signerStore2 := NewSignerStorage(db2, netCfg.Beacon, logger)
+	signerStore2 := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db2), netCfg.Beacon.Name, logger)
 	protection2 := slashingprotection.NewNormalProtection(signerStore2)
 	protector2 := NewSlashingProtector(logger, netCfg.Beacon, signerStore2, protection2)
 
@@ -981,7 +982,7 @@ func TestSlashingConcurrency(t *testing.T) {
 	defer db.Close()
 
 	netCfg := networkconfig.TestNetwork
-	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
+	signerStore := NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), netCfg.Beacon.Name, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 	protector := NewSlashingProtector(logger, netCfg.Beacon, signerStore, protection)
 
