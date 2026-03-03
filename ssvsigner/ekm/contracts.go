@@ -9,12 +9,16 @@ import (
 
 // ReadTxn is a read-only transactional handle supplied by the embedding application.
 // Implementations should allow nil to indicate non-transactional access.
+// When ekmadapter.NewDatabaseAdapter is used in the node, callers must pass a
+// transaction value that is also compatible with basedb.Reader.
 type ReadTxn interface {
 	Discard()
 }
 
 // ReadWriteTxn is a read-write transactional handle supplied by the embedding application.
 // Implementations should allow nil to indicate non-transactional access.
+// When ekmadapter.NewDatabaseAdapter is used in the node, callers must pass a
+// transaction value that is also compatible with basedb.ReadWriter.
 type ReadWriteTxn interface {
 	ReadTxn
 	Commit() error

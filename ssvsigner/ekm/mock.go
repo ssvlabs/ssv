@@ -58,27 +58,6 @@ type MockDatabase struct {
 	mock.Mock
 }
 
-func (m *MockDatabase) Begin() ReadWriteTxn {
-	args := m.Called()
-	if args.Get(0) == nil {
-		return nil
-	}
-	return args.Get(0).(ReadWriteTxn)
-}
-
-func (m *MockDatabase) BeginRead() ReadTxn {
-	args := m.Called()
-	if args.Get(0) == nil {
-		return nil
-	}
-	return args.Get(0).(ReadTxn)
-}
-
-func (m *MockDatabase) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
 func (m *MockDatabase) Get(txn ReadTxn, prefix []byte, key []byte) (Obj, bool, error) {
 	args := m.Called(txn, prefix, key)
 	if args.Get(0) == nil {

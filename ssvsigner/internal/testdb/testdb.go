@@ -124,6 +124,8 @@ func (s *Store) persistLocked() error {
 		return nil
 	}
 
+	// This helper intentionally rewrites the full snapshot on each mutation.
+	// Tests favor deterministic/simple persistence over a WAL-backed implementation.
 	list := make([]Record, 0, len(s.records))
 	for _, r := range s.records {
 		list = append(list, copyRecord(r))

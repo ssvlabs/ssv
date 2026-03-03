@@ -16,6 +16,12 @@ type databaseAdapter struct {
 	db basedb.Database
 }
 
+var (
+	// Node callers are expected to pass basedb.Txn/basedb.ReadTxn values through ekm txn parameters.
+	_ ekm.ReadTxn      = basedb.Txn(nil)
+	_ ekm.ReadWriteTxn = basedb.Txn(nil)
+)
+
 func asReader(txn ekm.ReadTxn) (basedb.Reader, error) {
 	if txn == nil {
 		return nil, nil
