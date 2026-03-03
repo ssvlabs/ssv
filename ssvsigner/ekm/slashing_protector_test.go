@@ -915,7 +915,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 
 	// --- Phase 1: Initial Setup, Sign, and Close ---
 	logger := testLogger(t)
-	db, err := newTestPersistentDB(logger, dbPath)
+	db, err := newTestPersistentDB(dbPath)
 	require.NoError(t, err)
 
 	netCfg := testBeaconConfig()
@@ -950,7 +950,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	// --- Phase 2: Reopen DB and Attempt Slashable Signing ---
 	// Make sure it's a fresh instance with the same DB path
 	t.Log("Starting Phase 2 with the same database path")
-	db2, err := newTestPersistentDB(logger, dbPath)
+	db2, err := newTestPersistentDB(dbPath)
 	require.NoError(t, err)
 	defer db2.Close()
 

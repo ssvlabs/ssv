@@ -23,8 +23,8 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getBaseStorage(logger *zap.Logger) (*testDB, error) {
-	return newTestMemoryDB(logger)
+func getBaseStorage(_ *zap.Logger) (*testDB, error) {
+	return newTestMemoryDB(), nil
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
