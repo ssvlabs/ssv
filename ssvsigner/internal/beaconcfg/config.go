@@ -59,18 +59,33 @@ func (b *Config) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 		spec.DataVersionFulu,
 	}
 
-	for i, v := range versions {
-		if epoch < b.Forks[v].Epoch {
-			if i == 0 {
-				panic("epoch before genesis")
-			}
-			version := versions[i-1]
-			fork := b.Forks[version]
-			return version, &fork
+	var (
+		previousVersion spec.DataVersion
+		previousFork    phase0.Fork
+		hasPrevious     bool
+	)
+
+	for _, v := range versions {
+		fork, ok := b.Forks[v]
+		if !ok {
+			continue
 		}
+
+		if epoch < fork.Epoch {
+			if !hasPrevious {
+				panic("epoch before first configured fork")
+			}
+			return previousVersion, &previousFork
+		}
+
+		previousVersion = v
+		previousFork = fork
+		hasPrevious = true
 	}
 
-	version := versions[len(versions)-1]
-	fork := b.Forks[version]
-	return version, &fork
+	if !hasPrevious {
+		panic("no forks configured")
+	}
+
+	return previousVersion, &previousFork
 }

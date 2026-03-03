@@ -67,3 +67,32 @@ func TestConfigForkAtEpoch(t *testing.T) {
 	version, _ = cfg.ForkAtEpoch(80)
 	require.Equal(t, spec.DataVersionFulu, version)
 }
+
+func TestConfigForkAtEpochMissingForkEntries(t *testing.T) {
+	cfg := &Config{
+		Forks: map[spec.DataVersion]phase0.Fork{
+			spec.DataVersionPhase0: {
+				Epoch: 0,
+			},
+			spec.DataVersionAltair: {
+				Epoch: 10,
+			},
+			// Bellatrix intentionally missing.
+			spec.DataVersionCapella: {
+				Epoch: 30,
+			},
+			spec.DataVersionElectra: {
+				Epoch: 50,
+			},
+		},
+	}
+
+	version, _ := cfg.ForkAtEpoch(25)
+	require.Equal(t, spec.DataVersionAltair, version)
+
+	version, _ = cfg.ForkAtEpoch(35)
+	require.Equal(t, spec.DataVersionCapella, version)
+
+	version, _ = cfg.ForkAtEpoch(80)
+	require.Equal(t, spec.DataVersionElectra, version)
+}

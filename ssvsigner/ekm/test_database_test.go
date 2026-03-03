@@ -51,10 +51,13 @@ func (d *testDB) GetAll(_ ReadTxn, prefix []byte, handler func(int, Obj) error) 
 	return nil
 }
 
+// Set stores key/value data. The txn parameter is intentionally ignored:
+// this helper does not model transactional isolation in tests.
 func (d *testDB) Set(_ ReadWriteTxn, prefix []byte, key []byte, value []byte) error {
 	return d.store.Set(prefix, key, value)
 }
 
+// Delete removes a key. The txn parameter is intentionally ignored (see Set).
 func (d *testDB) Delete(_ ReadWriteTxn, prefix []byte, key []byte) error {
 	return d.store.Delete(prefix, key)
 }
