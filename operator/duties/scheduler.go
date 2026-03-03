@@ -251,11 +251,11 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
-	go func() {
+	s.pool.Go(func(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				return nil
 			case headEvent := <-ch:
 				if headEvent == nil {
 					s.logger.Warn("head event was nil, skipping")
@@ -269,7 +269,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 				headEventHandler(ctx, headEvent)
 			}
 		}
-	}()
+	})
 
 	return nil
 }

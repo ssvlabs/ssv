@@ -39,26 +39,32 @@ const (
 type MockSlotTicker struct {
 	slotChan chan phase0.Slot
 	timeChan chan time.Time
-	done     <-chan struct{}
-	slot     phase0.Slot
-	mu       sync.Mutex
+
+	// done is used to coordinate the graceful termination of MockSlotTicker
+	done chan struct{}
+
+	// mu ensures concurrently safe access to slot
+	mu   sync.Mutex
+	slot phase0.Slot
 }
 
 func NewMockSlotTicker(ctx context.Context) *MockSlotTicker {
 	ticker := &MockSlotTicker{
 		slotChan: make(chan phase0.Slot),
 		timeChan: make(chan time.Time),
-		done:     ctx.Done(),
+		done:     make(chan struct{}),
 	}
-	ticker.start()
+	ticker.start(ctx)
 	return ticker
 }
 
-func (m *MockSlotTicker) start() {
+func (m *MockSlotTicker) start(ctx context.Context) {
 	go func() {
+		defer close(m.done)
+
 		for {
 			select {
-			case <-m.done:
+			case <-ctx.Done():
 				return
 			case slot, ok := <-m.slotChan:
 				if !ok {
@@ -69,7 +75,7 @@ func (m *MockSlotTicker) start() {
 				m.mu.Unlock()
 				select {
 				case m.timeChan <- time.Now():
-				case <-m.done:
+				case <-ctx.Done():
 					return
 				}
 			}
