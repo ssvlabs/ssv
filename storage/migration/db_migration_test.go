@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -124,7 +125,7 @@ func TestMigrateBadgerToPebbleIfNeeded_MigratesWhenPebbleEmpty(t *testing.T) {
 		require.NoError(t, pdb.Close())
 	})
 
-	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(zap.NewNop(), badgerPath, pebblePath, pdb)
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
 	require.NoError(t, err)
 	require.True(t, migrated)
 	require.Equal(t, 2, keys)
@@ -157,7 +158,7 @@ func TestMigrateBadgerToPebbleIfNeeded_SkipsWhenPebbleNotEmptyAndNoBadgerData(t 
 
 	require.NoError(t, pdb.DB.Set([]byte("foo"), []byte("from-pebble"), cockroachdb.Sync))
 
-	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(zap.NewNop(), badgerPath, pebblePath, pdb)
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
 	require.NoError(t, err)
 	require.False(t, migrated)
 	require.Equal(t, 0, keys)
@@ -181,7 +182,7 @@ func TestMigrateBadgerToPebbleIfNeeded_SkipsWhenNoBadgerDB(t *testing.T) {
 		require.NoError(t, pdb.Close())
 	})
 
-	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(zap.NewNop(), badgerPath, pebblePath, pdb)
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
 	require.NoError(t, err)
 	require.False(t, migrated)
 	require.Equal(t, 0, keys)
@@ -208,7 +209,7 @@ func TestMigrateBadgerToPebbleIfNeeded_ResumesWhenInProgressMarkerExists(t *test
 	require.NoError(t, pdb.DB.Set([]byte("foo"), []byte("stale-pebble"), cockroachdb.Sync))
 	require.NoError(t, writeBadgerImportInProgressMarker(pebblePath, badgerPath))
 
-	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(zap.NewNop(), badgerPath, pebblePath, pdb)
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
 	require.NoError(t, err)
 	require.True(t, migrated)
 	require.Equal(t, 2, keys)
@@ -237,7 +238,7 @@ func TestMigrateBadgerToPebbleIfNeeded_FailsOnPotentialPartialMigrationWithoutMa
 		require.NoError(t, pdb.Close())
 	})
 
-	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(zap.NewNop(), badgerPath, pebblePath, pdb)
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "without import markers")
 	require.False(t, migrated)
@@ -262,7 +263,7 @@ func TestMigrateBadgerToPebbleIfNeeded_SkipsAfterCompletionMarker(t *testing.T) 
 		require.NoError(t, pdb.Close())
 	})
 
-	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(zap.NewNop(), badgerPath, pebblePath, pdb)
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
 	require.NoError(t, err)
 	require.False(t, migrated)
 	require.Equal(t, 0, keys)
@@ -285,6 +286,7 @@ func TestMigrateBadgerToPebbleIfNeeded_EndToEndInterruptedThenResumed(t *testing
 	require.NoError(t, err)
 
 	_, _, err = migrateBadgerToPebbleIfNeeded(
+		context.Background(),
 		zap.NewNop(),
 		badgerPath,
 		pebblePath,
@@ -308,7 +310,7 @@ func TestMigrateBadgerToPebbleIfNeeded_EndToEndInterruptedThenResumed(t *testing
 		require.NoError(t, pdb.Close())
 	})
 
-	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(zap.NewNop(), badgerPath, pebblePath, pdb)
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
 	require.NoError(t, err)
 	require.True(t, migrated)
 	require.Equal(t, keyCount, keys)
@@ -323,6 +325,55 @@ func TestMigrateBadgerToPebbleIfNeeded_EndToEndInterruptedThenResumed(t *testing
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, []byte(fmt.Sprintf("v-%05d", keyCount-1)), obj.Value)
+}
+
+func TestMigrateBadgerToPebbleIfNeeded_StopsOnContextCancel(t *testing.T) {
+	root := t.TempDir()
+	badgerPath := filepath.Join(root, "db")
+	pebblePath := filepath.Join(root, "db-pebble")
+
+	keyCount := defaultImportBatchSize + 100
+	data := make(map[string][]byte, keyCount)
+	for i := 0; i < keyCount; i++ {
+		key := fmt.Sprintf("k-%05d", i)
+		data[key] = []byte(fmt.Sprintf("v-%05d", i))
+	}
+	createBadgerDB(t, badgerPath, data)
+
+	pdb, err := pebble.New(zap.NewNop(), pebblePath, &cockroachdb.Options{})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_, _, err = migrateBadgerToPebbleIfNeeded(
+		ctx,
+		zap.NewNop(),
+		badgerPath,
+		pebblePath,
+		pdb,
+		func(committedBatches int, copiedKeys int) error {
+			if committedBatches == 1 {
+				cancel()
+			}
+			return nil
+		},
+	)
+	require.ErrorIs(t, err, context.Canceled)
+	require.FileExists(t, inProgressMarkerPath(pebblePath))
+	require.NoFileExists(t, doneMarkerPath(pebblePath))
+	require.NoError(t, pdb.Close())
+
+	pdb, err = pebble.New(zap.NewNop(), pebblePath, &cockroachdb.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, pdb.Close())
+	})
+
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb)
+	require.NoError(t, err)
+	require.True(t, migrated)
+	require.Equal(t, keyCount, keys)
+	require.NoFileExists(t, inProgressMarkerPath(pebblePath))
+	require.FileExists(t, doneMarkerPath(pebblePath))
 }
 
 func TestWrapNoSpaceImportError_WrapsENOSPC(t *testing.T) {

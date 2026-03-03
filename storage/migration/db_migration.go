@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -125,21 +126,27 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 // MigrateBadgerToPebbleIfNeeded imports legacy Badger keys into Pebble.
 // It is resumable via marker files stored inside pebblePath.
 func MigrateBadgerToPebbleIfNeeded(
+	ctx context.Context,
 	logger *zap.Logger,
 	badgerPath string,
 	pebblePath string,
 	db *pebble.DB,
 ) (bool, int, error) {
-	return migrateBadgerToPebbleIfNeeded(logger, badgerPath, pebblePath, db, nil)
+	return migrateBadgerToPebbleIfNeeded(ctx, logger, badgerPath, pebblePath, db, nil)
 }
 
 func migrateBadgerToPebbleIfNeeded(
+	ctx context.Context,
 	logger *zap.Logger,
 	badgerPath string,
 	pebblePath string,
 	db *pebble.DB,
 	hook importBatchCommitHook,
 ) (bool, int, error) {
+	if err := ctx.Err(); err != nil {
+		return false, 0, err
+	}
+
 	doneMarkerExists, err := badgerImportDoneMarkerExists(pebblePath, badgerPath)
 	if err != nil {
 		return false, 0, err
@@ -191,13 +198,19 @@ func migrateBadgerToPebbleIfNeeded(
 		return false, 0, nil
 	}
 
+	if err := ctx.Err(); err != nil {
+		return false, 0, err
+	}
 	if err := writeBadgerImportInProgressMarker(pebblePath, badgerPath); err != nil {
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
 	}
 
-	copied, err := copyBadgerToPebble(logger, badgerPath, db, hook)
+	copied, err := copyBadgerToPebble(ctx, logger, badgerPath, db, hook)
 	if err != nil {
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
+	}
+	if err := ctx.Err(); err != nil {
+		return false, 0, err
 	}
 	if err := writeBadgerImportDoneMarker(pebblePath, badgerPath, copied); err != nil {
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
@@ -268,7 +281,7 @@ func hasBadgerFiles(path string) (bool, error) {
 	return false, nil
 }
 
-func copyBadgerToPebble(logger *zap.Logger, badgerPath string, db *pebble.DB, hook importBatchCommitHook) (int, error) {
+func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath string, db *pebble.DB, hook importBatchCommitHook) (int, error) {
 	bdb, recovered, err := openBadgerForImport(badgerPath)
 	if err != nil {
 		return 0, err
@@ -292,6 +305,9 @@ func copyBadgerToPebble(logger *zap.Logger, badgerPath string, db *pebble.DB, ho
 		if pending == 0 {
 			return nil
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := batch.Commit(cockroachdb.Sync); err != nil {
 			return err
 		}
@@ -314,6 +330,10 @@ func copyBadgerToPebble(logger *zap.Logger, badgerPath string, db *pebble.DB, ho
 		defer it.Close()
 
 		for it.Rewind(); it.Valid(); it.Next() {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
 			item := it.Item()
 
 			key := item.KeyCopy(nil)

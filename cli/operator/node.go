@@ -850,6 +850,7 @@ func setupPebbleDB(
 
 	if plan.BadgerImportPath != "" {
 		migrated, migratedKeys, err := storagemigration.MigrateBadgerToPebbleIfNeeded(
+			cfg.DBOptions.Ctx,
 			logger,
 			plan.BadgerImportPath,
 			dbPath,
