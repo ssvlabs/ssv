@@ -79,6 +79,7 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 
 	var response ValidatorsResponse
 
+	// if no pagination requested, return retro-compatible response without pagination metadata
 	if !paginationRequested {
 		response.Data = make([]*Validator, len(shares))
 		for i, share := range shares {
