@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -30,13 +29,14 @@ import (
 // encryption of the stored data via SetEncryptionKey.
 
 const (
-	prefix                = "signer_data-"
-	walletPrefix          = prefix + "wallet-"
-	walletPath            = "wallet"
-	accountsPrefix        = prefix + "accounts-"
-	accountsPath          = "accounts_%s"
-	highestAttPrefix      = prefix + "highest_att-"
-	highestProposalPrefix = prefix + "highest_prop-"
+	signerStorageLoggerName = "SignerStorage"
+	prefix                  = "signer_data-"
+	walletPrefix            = prefix + "wallet-"
+	walletPath              = "wallet"
+	accountsPrefix          = prefix + "accounts-"
+	accountsPath            = "accounts_%s"
+	highestAttPrefix        = prefix + "highest_att-"
+	highestProposalPrefix   = prefix + "highest_prop-"
 )
 
 var (
@@ -87,7 +87,7 @@ func NewSignerStorage(db basedb.Database, beaconConfig *networkconfig.Beacon, lo
 	return &storage{
 		db:           db,
 		beaconConfig: beaconConfig,
-		logger:       logger.Named(log.NameSignerStorage).Named(prefix + "storage"),
+		logger:       logger.Named(signerStorageLoggerName).Named(prefix + "storage"),
 		lock:         sync.RWMutex{},
 	}
 }
