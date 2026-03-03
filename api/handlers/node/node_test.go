@@ -58,17 +58,11 @@ func CreateTestNode(t *testing.T) *Node {
 	}
 
 	ownPeerID, err := peer.Decode("16Uiu2HAmH9JrTKfYWKB9ewbbE5xRCRrLRkwrNywvMqMk8vo5vqU2")
-	if err != nil {
-		require.NoError(t, err)
-	}
+	require.NoError(t, err)
 	peer1ID, err := peer.Decode("12D3KooWHMqRy1xSTtoeey9HMYNWkLGToMmTJFccX2zxGQPz2S57")
-	if err != nil {
-		require.NoError(t, err)
-	}
+	require.NoError(t, err)
 	peer2ID, err := peer.Decode("12D3KooWPxxZ6TgcCjCp8JeEEATAFLtriNLGumBroBYYMXLyNrxH")
-	if err != nil {
-		require.NoError(t, err)
-	}
+	require.NoError(t, err)
 
 	net := &MockP2PNetwork{
 		LocalPeerValue: ownPeerID,
