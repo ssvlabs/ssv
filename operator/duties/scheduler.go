@@ -460,7 +460,13 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(_ context.Context) error {
+		s.pool.Go(func(poolCtx context.Context) error {
+			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
+			// not worth the code complexity).
+			if poolCtx.Err() != nil {
+				return nil
+			}
+
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -514,7 +520,13 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(_ context.Context) error {
+		s.pool.Go(func(poolCtx context.Context) error {
+			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
+			// not worth the code complexity).
+			if poolCtx.Err() != nil {
+				return nil
+			}
+
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
