@@ -38,10 +38,9 @@ func (e *Exporter) TraceDecidedsCore(request *DecidedsQuery) (*TraceDecidedsResu
 			var roleParticipantsIdx []dutytracer.ParticipantsRangeIndexEntry
 			var roleErrs *multierror.Error
 
-			switch role {
-			case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+			if e.isCommitteeDutyAtSlot(role, slot) {
 				roleParticipantsIdx, roleErrs = e.getCommitteeDecidedsForRole(slot, indices, role)
-			default:
+			} else {
 				roleParticipantsIdx, roleErrs = e.getValidatorDecidedsForRole(slot, indices, role)
 			}
 

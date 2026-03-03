@@ -89,6 +89,7 @@ type CommitteeTracesQuery struct {
 	From         uint64
 	To           uint64
 	CommitteeIDs []spectypes.CommitteeID
+	Roles        []spectypes.RunnerRole
 }
 
 // CommitteeScheduleEntry represents a single per-committee schedule entry.
