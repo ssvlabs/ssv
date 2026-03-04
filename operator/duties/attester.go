@@ -121,8 +121,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			h.lastTickedSlot = currentSlot
 
 			// 2. Process validator indices changes (if any). We want to process it on the current slot only if we
-			// are still early into the slot, otherwise we might be delaying the next tick (the duties that need
-			// to be executed on the next slot).
+			// are still early into the slot (1 slot-interval is just a guesstimate), otherwise we might be delaying
+			// the next tick (the duties that need to be executed on the next slot).
 
 			indicesChangeDeadline := h.beaconConfig.SlotStartTime(currentSlot).Add(h.beaconConfig.IntervalDuration())
 			select {
