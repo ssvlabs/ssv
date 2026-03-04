@@ -25,7 +25,11 @@ func DirState(path string) (exists bool, nonEmpty bool, err error) {
 	}
 	defer func() { _ = iter.Close() }()
 
-	return true, iter.First(), nil
+	hasEntry := iter.First()
+	if err := iter.Error(); err != nil {
+		return true, false, err
+	}
+	return true, hasEntry, nil
 }
 
 func hasPebbleFiles(path string) (bool, error) {

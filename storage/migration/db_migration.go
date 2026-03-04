@@ -231,6 +231,9 @@ func isPebbleEmpty(db *pebble.DB) (bool, error) {
 	defer func() { _ = iter.Close() }()
 
 	hasEntry := iter.First()
+	if err := iter.Error(); err != nil {
+		return false, err
+	}
 	return !hasEntry, nil
 }
 
@@ -496,10 +499,12 @@ func writeMarker(path string, marker badgerImportMarker) error {
 	}
 	if _, err := tempFile.Write(data); err != nil {
 		_ = tempFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("write marker temp file: %w", err)
 	}
 	if err := tempFile.Sync(); err != nil {
 		_ = tempFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("fsync marker temp file: %w", err)
 	}
 	if err := tempFile.Close(); err != nil {
