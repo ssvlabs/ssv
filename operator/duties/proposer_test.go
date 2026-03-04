@@ -198,7 +198,7 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 		// no execution should happen in slot 1
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: wait for proposer duties to be fetched again
+		// STEP 4: wait for proposer duties to be re-fetched
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 		ticker.Send(phase0.Slot(2))
 		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -265,7 +265,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(3),
 		}))
 
-		// STEP 4: wait for proposer duties to be fetched again
+		// STEP 4: wait for proposer duties to be re-fetched
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -362,7 +362,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 5: wait for proposer duties to be fetched again for the current epoch.
+		// STEP 5: wait for proposer duties to be re-fetched for the current epoch.
 		// The first assigned duty should not be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+4))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 4))
@@ -452,7 +452,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		}))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 6: wait for proposer duties to be fetched again for the current epoch.
+		// STEP 6: wait for proposer duties to be re-fetched for the current epoch.
 		// The first assigned duty should not be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+4))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 4))

@@ -273,7 +273,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		}))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: wait for sync committee duties to be fetched again
+		// STEP 3: wait for sync committee duties to be re-fetched
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
 		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -338,7 +338,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		}))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: wait for sync committee duties to be fetched again
+		// STEP 4: wait for sync committee duties to be re-fetched
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-2))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 2))
@@ -425,7 +425,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 5: wait for sync committee duties to be fetched again for the current epoch
+		// STEP 5: wait for sync committee duties to be re-fetched for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
 		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -514,7 +514,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		}))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 5: wait for sync committee duties to be fetched again for the current epoch
+		// STEP 5: wait for sync committee duties to be re-fetched for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch-1))
 		ticker.Send(phase0.Slot(testEpochsPerSCPeriod*testSlotsPerEpoch - 1))
 		waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)

@@ -65,7 +65,7 @@ func (h *SyncCommitteeHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. ResetEpoch duties for the current period.
+//  2. EraseEpochData duties for the current period.
 //  3. Fetch duties for the current period.
 //  4. If necessary, fetch duties for the next period.
 //

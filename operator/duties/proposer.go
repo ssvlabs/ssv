@@ -50,7 +50,7 @@ func (h *ProposerHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. ResetEpoch duties for the current epoch.
+//  2. EraseEpochData duties for the current epoch.
 //  3. Fetch duties for the current epoch.
 //
 // On Ticker event:
@@ -93,7 +93,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of epoch
 			if uint64(slot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
-				h.duties.ResetEpoch(currentEpoch - 1)
+				h.duties.EraseEpochData(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
@@ -104,7 +104,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Current {
-				h.duties.ResetEpoch(currentEpoch)
+				h.duties.EraseEpochData(currentEpoch)
 				h.fetchFirst = true
 			}
 
