@@ -616,7 +616,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		// wait for attester duties to be fetched again for the current epoch
+		// wait for attester duties to be re-fetched for the current epoch
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		// no execution should happen in slot testSlotsPerEpoch*2
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -719,7 +719,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		attDuties.Delete(phase0.Epoch(2))
 
-		// STEP 6: wait for attester duties to be fetched again for the current epoch
+		// STEP 6: wait for attester duties to be re-fetched for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
 		// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
@@ -810,7 +810,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		// wait for attester duties to be fetched again for the current epoch
+		// wait for attester duties to be re-fetched for the current epoch
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		// no execution should happen in slot testSlotsPerEpoch+1
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
