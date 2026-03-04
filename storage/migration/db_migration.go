@@ -112,11 +112,8 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 	case canonicalPebbleExists:
 		return PebbleDBPlan{PebblePath: basePath}, nil
 	case badgerExists:
-		// Keep Badger as import source and use a separate Pebble path.
-		return PebbleDBPlan{
-			PebblePath:       legacyPebblePath,
-			BadgerImportPath: basePath,
-		}, nil
+		// Keep using a separate Pebble path when basePath has Badger files.
+		return PebbleDBPlan{PebblePath: legacyPebblePath}, nil
 	case legacyPebbleExists:
 		return PebbleDBPlan{PebblePath: legacyPebblePath}, nil
 	default:
@@ -508,9 +505,11 @@ func writeMarker(path string, marker badgerImportMarker) error {
 		return fmt.Errorf("fsync marker temp file: %w", err)
 	}
 	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("close marker temp file: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("publish marker file: %w", err)
 	}
 	if err := syncDirectory(filepath.Dir(path)); err != nil {

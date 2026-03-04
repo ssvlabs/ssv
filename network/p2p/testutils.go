@@ -11,7 +11,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -22,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
-	networkpeers "github.com/ssvlabs/ssv/network/peers"
 	networktesting "github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -138,8 +136,14 @@ func (mockSignatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 	return nil
 }
 
-type p2pNetworkWithDB struct {
+type wrappedTestP2PNetwork interface {
 	network.P2PNetwork
+	HostProvider
+	PeersIndexProvider
+}
+
+type p2pNetworkWithDB struct {
+	wrappedTestP2PNetwork
 	dbCloser *onceCloser
 }
 
@@ -148,15 +152,7 @@ var _ HostProvider = (*p2pNetworkWithDB)(nil)
 var _ PeersIndexProvider = (*p2pNetworkWithDB)(nil)
 
 func (n *p2pNetworkWithDB) Close() error {
-	return errors.Join(n.P2PNetwork.Close(), n.dbCloser.Close())
-}
-
-func (n *p2pNetworkWithDB) Host() host.Host {
-	return n.P2PNetwork.(HostProvider).Host()
-}
-
-func (n *p2pNetworkWithDB) PeersIndex() networkpeers.Index {
-	return n.P2PNetwork.(PeersIndexProvider).PeersIndex()
+	return errors.Join(n.wrappedTestP2PNetwork.Close(), n.dbCloser.Close())
 }
 
 type onceCloser struct {
@@ -288,8 +284,8 @@ func (ln *LocalNet) NewTestP2pNetwork(t gotesting.TB, ctx context.Context, nodeI
 		return closeOnErr(errors.Join(err, p.Close()))
 	}
 	return &p2pNetworkWithDB{
-		P2PNetwork: p,
-		dbCloser:   dbCloser,
+		wrappedTestP2PNetwork: p,
+		dbCloser:              dbCloser,
 	}, nil
 }
 
