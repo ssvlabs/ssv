@@ -634,13 +634,9 @@ func TestFetchLogsInBatches(t *testing.T) {
 
 		logChan, errChan := env.client.fetchLogsInBatches(canceledCtx, 0, 5)
 		err, ok := <-errChan
-		if ok {
-			require.NoError(t, err, "Should not receive error when context is canceled")
-		}
+		require.Falsef(t, ok, "should not receive error when context was canceled: %v", err)
 		_, ok = <-logChan
-		if ok {
-			require.Fail(t, "Should not receive log when context is canceled")
-		}
+		require.Falsef(t, ok, "should not receive log when context was canceled")
 	})
 }
 
