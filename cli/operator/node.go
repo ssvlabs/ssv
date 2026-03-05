@@ -866,6 +866,8 @@ func setupPebbleDB(
 			plan.BadgerImportPath,
 			dbPath,
 			db,
+			plan.BadgerStateKnown,
+			plan.BadgerNonEmpty,
 		)
 		if err != nil {
 			return nil, closeOnSetupError(fmt.Errorf("migrate badger to pebble: %w", err))

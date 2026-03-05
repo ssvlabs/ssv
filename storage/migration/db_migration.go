@@ -39,6 +39,8 @@ type badgerImportMarker struct {
 type PebbleDBPlan struct {
 	PebblePath       string
 	BadgerImportPath string
+	BadgerStateKnown bool
+	BadgerNonEmpty   bool
 }
 
 // ResolvePebbleDBPlan selects the Pebble path and optional Badger import path.
@@ -98,7 +100,12 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 				return PebbleDBPlan{}, err
 			}
 			if ok {
-				return PebbleDBPlan{PebblePath: basePath, BadgerImportPath: basePath}, nil
+				return PebbleDBPlan{
+					PebblePath:       basePath,
+					BadgerImportPath: basePath,
+					BadgerStateKnown: true,
+					BadgerNonEmpty:   true,
+				}, nil
 			}
 		}
 		if legacyPebbleNonEmpty && badgerNonEmpty && !canonicalPebbleNonEmpty {
@@ -107,7 +114,12 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 				return PebbleDBPlan{}, err
 			}
 			if ok {
-				return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerImportPath: basePath}, nil
+				return PebbleDBPlan{
+					PebblePath:       legacyPebblePath,
+					BadgerImportPath: basePath,
+					BadgerStateKnown: true,
+					BadgerNonEmpty:   true,
+				}, nil
 			}
 		}
 
@@ -119,39 +131,45 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 
 	switch {
 	case canonicalPebbleNonEmpty:
-		return PebbleDBPlan{PebblePath: basePath}, nil
+		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
 	case legacyPebbleNonEmpty:
-		return PebbleDBPlan{PebblePath: legacyPebblePath}, nil
+		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
 	case badgerNonEmpty:
 		return PebbleDBPlan{
 			PebblePath:       legacyPebblePath,
 			BadgerImportPath: basePath,
+			BadgerStateKnown: true,
+			BadgerNonEmpty:   true,
 		}, nil
 	}
 
 	switch {
 	case canonicalPebbleExists:
-		return PebbleDBPlan{PebblePath: basePath}, nil
+		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
 	case badgerExists:
 		// Keep using a separate Pebble path when basePath has Badger files.
-		return PebbleDBPlan{PebblePath: legacyPebblePath}, nil
+		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
 	case legacyPebbleExists:
-		return PebbleDBPlan{PebblePath: legacyPebblePath}, nil
+		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
 	default:
-		return PebbleDBPlan{PebblePath: basePath}, nil
+		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
 	}
 }
 
 // MigrateBadgerToPebbleIfNeeded imports legacy Badger keys into Pebble.
 // It is resumable via marker files stored inside pebblePath.
+// badgerStateKnown/badgerNonEmpty can be provided by ResolvePebbleDBPlan to skip
+// an extra badgerDirState probe.
 func MigrateBadgerToPebbleIfNeeded(
 	ctx context.Context,
 	logger *zap.Logger,
 	badgerPath string,
 	pebblePath string,
 	db *pebble.DB,
+	badgerStateKnown bool,
+	badgerNonEmpty bool,
 ) (bool, int, error) {
-	return migrateBadgerToPebbleIfNeeded(ctx, logger, badgerPath, pebblePath, db, nil)
+	return migrateBadgerToPebbleIfNeeded(ctx, logger, badgerPath, pebblePath, db, badgerStateKnown, badgerNonEmpty, nil)
 }
 
 func migrateBadgerToPebbleIfNeeded(
@@ -160,6 +178,8 @@ func migrateBadgerToPebbleIfNeeded(
 	badgerPath string,
 	pebblePath string,
 	db *pebble.DB,
+	badgerStateKnown bool,
+	knownBadgerNonEmpty bool,
 	hook importBatchCommitHook,
 ) (bool, int, error) {
 	if err := ctx.Err(); err != nil {
@@ -191,9 +211,16 @@ func migrateBadgerToPebbleIfNeeded(
 		return false, 0, err
 	}
 
-	hasBadgerData, badgerNonEmpty, err := badgerDirState(badgerPath)
-	if err != nil {
-		return false, 0, err
+	hasBadgerData := false
+	badgerNonEmpty := false
+	if badgerStateKnown {
+		hasBadgerData = knownBadgerNonEmpty
+		badgerNonEmpty = knownBadgerNonEmpty
+	} else {
+		hasBadgerData, badgerNonEmpty, err = badgerDirState(badgerPath)
+		if err != nil {
+			return false, 0, err
+		}
 	}
 
 	if !pebbleEmpty {
@@ -224,8 +251,10 @@ func migrateBadgerToPebbleIfNeeded(
 	if err := ctx.Err(); err != nil {
 		return false, 0, err
 	}
-	if err := writeBadgerImportInProgressMarker(pebblePath, badgerPath); err != nil {
-		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
+	if !inProgressMarkerExists {
+		if err := writeBadgerImportInProgressMarker(pebblePath, badgerPath); err != nil {
+			return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
+		}
 	}
 
 	copied, err := copyBadgerToPebble(ctx, logger, badgerPath, db, hook)
