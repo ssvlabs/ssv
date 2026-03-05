@@ -148,9 +148,12 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 					}
 				case <-time.After(time.Until(indicesChangeDeadline)):
 					// It's too late(risky) to handle indices change on the current slot, we'll do it on the next slot.
+				case <-tickCtx.Done():
+					return
 				}
 
-				// 3. Schedule the duty-fetch for the next epoch, but only if it hasn't been already scheduled/fulfilled.
+				// 3. Schedule the duty-fetch for the next epoch, but only if it hasn't been scheduled already (or
+				// already fulfilled prior).
 				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
 					h.dutyFetchIntents[nextEpoch] = false
 				}
@@ -211,6 +214,10 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 // HandleInitialDuties fetches & prepares the duties for the current and next epochs.
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
+	// initCtx ensures we don't block indefinitely in case we can't fetch the duties on startup.
+	initCtx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
+	defer cancel()
+
 	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
@@ -232,9 +239,9 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 	// corresponding to the 1st slot of the next epoch.
 	if h.atLastSlotOfCurrentEpoch() {
 		delete(h.dutyFetchIntents, currentEpoch) // prune irrelevant intent
-		h.prepareNextEpoch(ctx, logger, currentEpoch, currentSlot)
+		h.prepareNextEpoch(initCtx, logger, currentEpoch, currentSlot)
 	} else {
-		h.prepareCurrentEpoch(ctx, logger, currentEpoch, currentSlot)
+		h.prepareCurrentEpoch(initCtx, logger, currentEpoch, currentSlot)
 	}
 }
 
