@@ -364,10 +364,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	// If already started consensus, ignore pre-consensus messages.
 	// This is important because it avoids redundant processing and prevents the pre-consensus termination checks.
 	if r.HasStartedConsensus() {
-		return spectypes.NewError(
-			spectypes.AggCommPreConsensusIgnoredSinceAlreadyStartedConsensusErrorCode,
-			"ignoring pre-consensus message since consensus already started",
-		)
+		return nil
 	}
 
 	// Mark signer as seen.
@@ -379,8 +376,8 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	}
 	// quorum returns true only once (first time quorum achieved)
 	if !hasNewQuorum {
-		// If no new quorum, didn't start QBFT, and received the last message, then terminate.
-		if r.HasSeenAllPreConsensusSigners() && !r.HasStartedConsensus() {
+		// If didn't get any new quorum, didn't yet start QBFT (checked above), and has received the last message, then terminate.
+		if r.HasSeenAllPreConsensusSigners() {
 			r.BaseRunner.State.Finished = true
 		}
 		return nil
@@ -557,7 +554,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			r.state().Finished = true
 			r.measurements.EndDutyFlow()
 			recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
-			return nil
+			return anyErr
 		}
 
 		// If no validator was selected, but there are more possible messages, keep waiting for more messages.
@@ -1728,18 +1725,10 @@ func (r *AggregatorCommitteeRunner) GetOperatorSigner() ssvtypes.OperatorSigner 
 
 // HasStartedConsensus checks if consensus has already started for the duty slot.
 func (r *AggregatorCommitteeRunner) HasStartedConsensus() bool {
-	if r.BaseRunner.QBFTController == nil {
-		return false
-	}
 	if r.BaseRunner.State == nil {
 		return false
 	}
-	if r.BaseRunner.State.CurrentDuty == nil {
-		return false
-	}
-	return r.BaseRunner.QBFTController.StoredInstances.FindInstance(
-		specqbft.Height(r.BaseRunner.State.CurrentDuty.DutySlot()),
-	) != nil
+	return r.BaseRunner.State.RunningInstance != nil || r.BaseRunner.State.DecidedValue != nil
 }
 
 // MarkPreConsensusSignerAsSeen marks the signer of the given pre-consensus message as seen.
