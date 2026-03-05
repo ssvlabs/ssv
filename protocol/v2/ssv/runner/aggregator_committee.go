@@ -379,6 +379,15 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		// If didn't get any new quorum, didn't yet start QBFT (checked above), and has received the last message, then terminate.
 		if r.HasSeenAllPreConsensusSigners() {
 			r.BaseRunner.State.Finished = true
+			r.measurements.EndDutyFlow()
+			recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
+			const dutyFinishedNoMessages = "✔️successfully finished duty processing (got no quorums in pre-consensus)"
+			logger.Info(dutyFinishedNoMessages,
+				fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+			)
+			span.AddEvent(dutyFinishedNoMessages)
 		}
 		return nil
 	}
@@ -1735,7 +1744,7 @@ func (r *AggregatorCommitteeRunner) HasStartedConsensus() bool {
 func (r *AggregatorCommitteeRunner) MarkPreConsensusSignerAsSeen(signedMsg *spectypes.PartialSignatureMessages) {
 	for _, msg := range signedMsg.Messages {
 		r.preConsensusSeenSigners[msg.Signer] = struct{}{}
-		break // all message signers are equal, no need to inspect more messages
+		break // all messages have the same signer, no need to inspect more messages
 	}
 }
 
