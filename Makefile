@@ -47,9 +47,9 @@ deadcode-lint:
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags "blst_enabled lfs" -timeout 10m -count=1 -race -covermode=atomic -coverprofile=coverage1.out -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/\|/network/p2p"`
+	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage1.out -p 16 -parallel 256 `go list ./... | grep -ve "spectest\|ssv/scripts/\|/network/p2p"`
 	# running tests in `./network/p2p` separately because they get flaky when run concurrently with others for some reason
-	@go test -tags "blst_enabled lfs" -timeout 10m -count=1 -race -covermode=atomic -coverprofile=coverage2.out -p 16 -parallel 256 ./network/p2p
+	@go test -tags "blst_enabled lfs" -timeout 10m -race -covermode=atomic -coverprofile=coverage2.out -p 16 -parallel 256 ./network/p2p
 	@cat coverage1.out > coverage.out && tail -n +2 coverage2.out >> coverage.out
 
 .PHONY: unit-test-all
