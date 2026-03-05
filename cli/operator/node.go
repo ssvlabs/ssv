@@ -541,7 +541,13 @@ var StartNodeCmd = &cobra.Command{
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
-				cfg.SSVOptions.ExporterRead = exporter2.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore())
+				cfg.SSVOptions.ExporterRead = exporter2.NewExporter(
+					logger,
+					storageMap,
+					collector,
+					nodeStorage.ValidatorStore(),
+					networkConfig,
+				)
 			case exporter.ModeStandard:
 				logger.Info("exporter mode: standard")
 			default:
@@ -675,7 +681,13 @@ var StartNodeCmd = &cobra.Command{
 				&hvalidators.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				hexporter.NewExporter(
+					logger,
+					storageMap,
+					collector,
+					nodeStorage.ValidatorStore(),
+					networkConfig,
+				),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {

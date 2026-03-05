@@ -89,7 +89,7 @@ func TestCollector_QuorumAfterFlush(t *testing.T) {
 		require.Len(t, calls, 0, "no quorum should be detected before proposal arrives")
 
 		// Step 2: Proposal arrives with attestation and sync committee roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()
@@ -165,7 +165,7 @@ func TestCollector_RoleSpecificQuorum(t *testing.T) {
 		listener.Reset()
 
 		// Set up roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = attestationRoot
 		trace.syncCommitteeRoot = syncCommitteeRoot
@@ -285,7 +285,7 @@ func TestCollector_MixedTimingQuorum(t *testing.T) {
 		require.Len(t, calls, 0)
 
 		// Step 2: Proposal arrives
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()
@@ -374,7 +374,7 @@ func TestCollector_UnknownRootQuorum(t *testing.T) {
 		listener.Reset()
 
 		// Set up roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = attestationRoot
 		trace.syncCommitteeRoot = syncCommitteeRoot
@@ -417,7 +417,7 @@ func TestCollector_UnknownRootQuorum(t *testing.T) {
 		require.Len(t, calls, 0, "unknown root signatures should not contribute to quorum")
 
 		// Verify unknown root is in pending
-		trace, _, err = collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err = collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.Lock()
 		assert.Contains(t, trace.pendingByRoot, unknownRoot, "unknown root should be in pending")
@@ -477,7 +477,7 @@ func TestCollector_MultipleValidatorsAndRoles(t *testing.T) {
 		listener.Reset()
 
 		// Set up roots
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 		trace.attestationRoot = attestationRoot
 		trace.syncCommitteeRoot = syncCommitteeRoot
@@ -566,7 +566,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		listener.Reset()
 
 		// Manually populate trace with signer data
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()
@@ -598,7 +598,7 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 	t.Run("no duplicate publication on subsequent calls", func(t *testing.T) {
 		listener.Reset()
 
-		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+		trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleCommittee)
 		require.NoError(t, err)
 
 		trace.Lock()
@@ -614,4 +614,165 @@ func TestCollector_checkAndPublishQuorumForRoleByIndex(t *testing.T) {
 		calls := listener.GetCalls()
 		require.Len(t, calls, 0, "second call should not publish (already published)")
 	})
+}
+
+func TestCollector_checkAndPublishQuorumForRoleByIndex_SCCRootScoped(t *testing.T) {
+	logger := zap.NewNop()
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	const (
+		slot      = phase0.Slot(200)
+		vIndex1   = phase0.ValidatorIndex(30)
+		operator1 = spectypes.OperatorID(1)
+		operator2 = spectypes.OperatorID(2)
+		operator3 = spectypes.OperatorID(3)
+		operator4 = spectypes.OperatorID(4)
+	)
+
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("aggregator_committee_pk"), spectypes.RoleAggregatorCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+
+	committee := &storage.Committee{
+		ID:        committeeID,
+		Operators: []spectypes.OperatorID{operator1, operator2, operator3, operator4},
+	}
+
+	var validatorPK1 spectypes.ValidatorPK
+	copy(validatorPK1[:], []byte("validator_pk_1_padded_to_48_bytes_exactly_here"))
+	share1 := &ssvtypes.SSVShare{}
+	share1.ValidatorPubKey = validatorPK1
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+	validators.EXPECT().ValidatorByIndex(vIndex1).Return(share1, true).AnyTimes()
+
+	listener := &mockDecidedListener{}
+	dutyStore := new(mockDutyTraceStore)
+	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided, nil)
+
+	trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+
+	rootA := phase0.Root{1}
+	rootB := phase0.Root{2}
+	threshold := uint64(3)
+
+	trace.Lock()
+	defer trace.Unlock()
+
+	// Aggregate signer bucket includes three signers for the validator, but spread over two roots.
+	trace.SyncCommittee = []*exporter.SignerData{
+		{Signer: operator1, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1},
+		{Signer: operator2, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 2},
+		{Signer: operator3, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 3},
+	}
+	trace.signersByRoot = map[phase0.Root]map[phase0.ValidatorIndex]map[spectypes.OperatorID]struct{}{
+		rootA: {
+			vIndex1: {operator1: {}, operator2: {}},
+		},
+		rootB: {
+			vIndex1: {operator3: {}},
+		},
+	}
+	trace.aggPostConsensusRoles = map[phase0.Root]spectypes.BeaconRole{
+		rootA: spectypes.BNRoleSyncCommitteeContribution,
+		rootB: spectypes.BNRoleSyncCommitteeContribution,
+	}
+
+	collector.checkAndPublishQuorumForRoleByIndexAndRoot(
+		logger,
+		trace,
+		spectypes.BNRoleSyncCommitteeContribution,
+		slot,
+		vIndex1,
+		rootA,
+		threshold,
+	)
+
+	require.Len(t, listener.GetCalls(), 0, "root-scoped SCC quorum must not mix signers from other roots")
+}
+
+func TestCollector_checkQuorumAfterFlush_AggregatorRoleGate(t *testing.T) {
+	logger := zap.NewNop()
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	const (
+		slot      = phase0.Slot(201)
+		vIndex1   = phase0.ValidatorIndex(31)
+		operator1 = spectypes.OperatorID(1)
+		operator2 = spectypes.OperatorID(2)
+		operator3 = spectypes.OperatorID(3)
+		operator4 = spectypes.OperatorID(4)
+	)
+
+	identifier := spectypes.NewMsgID([4]byte{}, []byte("aggregator_committee_pk"), spectypes.RoleAggregatorCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], identifier.GetDutyExecutorID()[16:])
+
+	committee := &storage.Committee{
+		ID:        committeeID,
+		Operators: []spectypes.OperatorID{operator1, operator2, operator3, operator4},
+	}
+
+	var validatorPK1 spectypes.ValidatorPK
+	copy(validatorPK1[:], []byte("validator_pk_1_padded_to_48_bytes_exactly_here"))
+	share1 := &ssvtypes.SSVShare{}
+	share1.ValidatorPubKey = validatorPK1
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().Committee(committeeID).Return(committee, true).AnyTimes()
+	validators.EXPECT().ValidatorByIndex(vIndex1).Return(share1, true).AnyTimes()
+
+	listener := &mockDecidedListener{}
+	dutyStore := new(mockDutyTraceStore)
+	collector := New(logger, validators, nil, dutyStore, networkconfig.TestNetwork.Beacon, listener.OnDecided, nil)
+
+	trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID, spectypes.RoleAggregatorCommittee)
+	require.NoError(t, err)
+
+	aggRoot := phase0.Root{11}
+	sccRoot := phase0.Root{22}
+
+	trace.Lock()
+	// Keep role buckets populated to ensure role gating happens in checkQuorumAfterFlush.
+	trace.Attester = []*exporter.SignerData{
+		{Signer: operator1, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 1},
+		{Signer: operator2, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 2},
+		{Signer: operator3, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 3},
+	}
+	trace.SyncCommittee = []*exporter.SignerData{
+		{Signer: operator1, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 4},
+		{Signer: operator2, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 5},
+		{Signer: operator3, ValidatorIdx: []phase0.ValidatorIndex{vIndex1}, ReceivedTime: 6},
+	}
+	trace.signersByRoot = map[phase0.Root]map[phase0.ValidatorIndex]map[spectypes.OperatorID]struct{}{
+		aggRoot: {
+			vIndex1: {operator1: {}, operator2: {}, operator3: {}},
+		},
+		sccRoot: {
+			vIndex1: {operator1: {}, operator2: {}, operator3: {}},
+		},
+	}
+	trace.aggPostConsensusRoles = map[phase0.Root]spectypes.BeaconRole{
+		aggRoot: spectypes.BNRoleAggregator,
+		sccRoot: spectypes.BNRoleSyncCommitteeContribution,
+	}
+
+	collector.checkQuorumAfterFlush(logger, committeeID, slot, trace)
+	trace.Unlock()
+
+	calls := listener.GetCalls()
+	require.Len(t, calls, 2, "aggregator committee duty should only publish aggregator/SCC roles")
+
+	gotRoles := make([]spectypes.BeaconRole, 0, len(calls))
+	for _, call := range calls {
+		gotRoles = append(gotRoles, call.Role)
+	}
+	assert.ElementsMatch(t, []spectypes.BeaconRole{
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommitteeContribution,
+	}, gotRoles)
 }

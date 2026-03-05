@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
@@ -24,22 +25,30 @@ type Exporter struct {
 	traceStore        dutyTraceStore
 	validators        registrystorage.ValidatorStore
 	logger            *zap.Logger
+	networkConfig     *networkconfig.Network
 }
 
-func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
+func NewExporter(
+	logger *zap.Logger,
+	participantStores *ibftstorage.ParticipantStores,
+	traceStore dutyTraceStore,
+	validators registrystorage.ValidatorStore,
+	networkConfig *networkconfig.Network,
+) *Exporter {
 	return &Exporter{
 		participantStores: participantStores,
 		traceStore:        traceStore,
 		validators:        validators,
 		logger:            logger,
+		networkConfig:     networkConfig,
 	}
 }
 
 type dutyTraceStore interface {
 	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, index phase0.ValidatorIndex) (*exporter.ValidatorDutyTrace, error)
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*exporter.ValidatorDutyTrace, error)
-	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*exporter.CommitteeDutyTrace, error)
-	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*exporter.CommitteeDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role spectypes.RunnerRole) (*exporter.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.RunnerRole) ([]*exporter.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
 	GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]dutytracer.ParticipantsRangeIndexEntry, error)

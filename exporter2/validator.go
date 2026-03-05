@@ -13,11 +13,12 @@ import (
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/rolemask"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // ValidatorTracesCore contains the core logic for ValidatorTraces without any HTTP concerns.
 func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*ValidatorTracesResult, *multierror.Error) {
-	if err := validateValidatorRequest(request); err != nil {
+	if err := e.validateValidatorRequest(request); err != nil {
 		return nil, multierror.Append(nil, &ValidationError{Err: err})
 	}
 
@@ -35,12 +36,13 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
 		for _, role := range request.Roles {
-			providerFunc := e.getValidatorDutiesForRoleAndSlot
-			if isCommitteeDuty(role) {
-				providerFunc = e.getValidatorCommitteeDutiesForRoleAndSlot
+			var duties []ValidatorCommitteeTrace
+			var err error
+			if e.isCommitteeDutyAtSlot(role, slot) {
+				duties, err = e.getValidatorCommitteeDutiesForRoleAndSlot(role, slot, indices)
+			} else {
+				duties, err = e.getValidatorDutiesForRoleAndSlot(role, slot, indices)
 			}
-
-			duties, err := providerFunc(role, slot, indices)
 			results = append(results, duties...)
 			errs = multierror.Append(errs, err)
 		}
@@ -55,7 +57,7 @@ func (e *Exporter) ValidatorTracesCore(request *ValidatorTracesQuery) (*Validato
 	return &ValidatorTracesResult{Traces: results, Schedule: schedule}, errs
 }
 
-func validateValidatorRequest(request *ValidatorTracesQuery) error {
+func (e *Exporter) validateValidatorRequest(request *ValidatorTracesQuery) error {
 	if request.From > request.To {
 		return fmt.Errorf("'from' must be less than or equal to 'to'")
 	}
@@ -67,7 +69,7 @@ func validateValidatorRequest(request *ValidatorTracesQuery) error {
 	// either PubKeys or Indices are required for committee duty roles
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
 		for _, role := range request.Roles {
-			if isCommitteeDuty(role) {
+			if e.isCommitteeDutyInRange(role, phase0.Slot(request.From), phase0.Slot(request.To)) {
 				return fmt.Errorf("role %s is a committee duty, please provide either pubkeys or indices to filter the duty for a specific validators subset or use the /committee endpoint to query all the corresponding duties", role.String())
 			}
 		}
@@ -116,9 +118,18 @@ func (e *Exporter) getValidatorDutiesForRoleAndSlot(role spectypes.BeaconRole, s
 	return duties, errs.ErrorOrNil()
 }
 
+// getValidatorCommitteeDutiesForRoleAndSlot reads committee-backed duties.
+// Callers should route AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION here only on Boole slots
+// (pre-Boole these are validator duties). ATTESTER/SYNC_COMMITTEE are committee duties on all forks.
 func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.BeaconRole, slot phase0.Slot, indices []phase0.ValidatorIndex) ([]ValidatorCommitteeTrace, error) {
 	results := make([]ValidatorCommitteeTrace, 0, len(indices))
 	var errs *multierror.Error
+
+	runnerRole, ok := ssvtypes.CommitteeRunnerRoleForBeaconRole(role)
+	if !ok {
+		return nil, fmt.Errorf("unexpected committee-backed beacon role: %s", role.String())
+	}
+	bucket, _ := ssvtypes.CommitteeSignerBucketForBeaconRole(role)
 
 	for _, index := range indices {
 		committeeID, err := e.traceStore.GetCommitteeID(slot, index)
@@ -128,7 +139,7 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 			continue
 		}
 
-		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
+		duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, runnerRole)
 		if err != nil {
 			e.logger.Error("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.ValidatorIndex(index))
 			errs = multierror.Append(errs, err)
@@ -138,21 +149,22 @@ func (e *Exporter) getValidatorCommitteeDutiesForRoleAndSlot(role spectypes.Beac
 		// Membership gating: only return a validator entry if this index appears
 		// in the role-specific signer data collected for this committee duty.
 		hasIndex := false
-		if role == spectypes.BNRoleAttester {
+		switch bucket {
+		case ssvtypes.CommitteeSignerBucketAttester:
 			for _, sd := range duty.Attester {
 				if slices.Contains(sd.ValidatorIdx, index) {
 					hasIndex = true
 					break
 				}
 			}
-		} else if role == spectypes.BNRoleSyncCommittee {
+		case ssvtypes.CommitteeSignerBucketSyncCommittee:
 			for _, sd := range duty.SyncCommittee {
 				if slices.Contains(sd.ValidatorIdx, index) {
 					hasIndex = true
 					break
 				}
 			}
-		} else {
+		default:
 			// For non-committee roles, should not reach this path; be conservative.
 			hasIndex = true
 		}
@@ -187,7 +199,7 @@ func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesQuery, indices []p
 		roleWanted[r] = struct{}{}
 	}
 
-	// If no filters provided, we’ll include all indices present in the schedule per slot.
+	// If no filters provided, we'll include all indices present in the schedule per slot.
 	filter := req.HasFilters()
 
 	for s := req.From; s <= req.To; s++ {
@@ -238,7 +250,29 @@ func (e *Exporter) buildValidatorSchedule(req *ValidatorTracesQuery, indices []p
 	return out
 }
 
-// === Shared validator traces helpers ===
-func isCommitteeDuty(role spectypes.BeaconRole) bool {
-	return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
+func (e *Exporter) isCommitteeDutyAtSlot(role spectypes.BeaconRole, slot phase0.Slot) bool {
+	runnerRole, ok := ssvtypes.CommitteeRunnerRoleForBeaconRole(role)
+	if !ok {
+		return false
+	}
+	if runnerRole == spectypes.RoleAggregatorCommittee {
+		// Alan: AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION are validator duties.
+		// Boole: AGGREGATOR/SYNC_COMMITTEE_CONTRIBUTION are committee duties.
+		return e.networkConfig.BooleForkAtSlot(slot)
+	}
+	return true
+}
+
+func (e *Exporter) isCommitteeDutyInRange(role spectypes.BeaconRole, from, to phase0.Slot) bool {
+	if from > to {
+		return false
+	}
+	runnerRole, ok := ssvtypes.CommitteeRunnerRoleForBeaconRole(role)
+	if !ok {
+		return false
+	}
+	if runnerRole == spectypes.RoleAggregatorCommittee {
+		return e.networkConfig.BooleForkAtSlot(to)
+	}
+	return true
 }

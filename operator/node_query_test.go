@@ -85,7 +85,7 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	store := newFaultingDutyTraceStore(realStore)
 
 	collector := dutytracer.New(zap.NewNop(), validatorMock, nil, store, networkconfig.TestNetwork.Beacon, nil, nil)
-	coreExporter := exporter2.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock)
+	coreExporter := exporter2.NewExporter(zap.NewNop(), ibftstorage.NewStores(), collector, validatorMock, networkconfig.TestNetwork)
 
 	node := &Node{
 		logger:       logger,
@@ -152,7 +152,7 @@ func (h *wsQueryHarness) SaveCommitteeDutyAttester(slot phase0.Slot, validatorIn
 	for _, s := range signers {
 		duty.Attester = append(duty.Attester, &exporter.SignerData{Signer: s})
 	}
-	require.NoError(h.t, h.store.SaveCommitteeDuty(duty))
+	require.NoError(h.t, h.store.SaveCommitteeDuty(spectypes.RoleCommittee, duty))
 }
 
 func (h *wsQueryHarness) QueryDecided(from, to uint64, pkHex, role string) *api.NetworkMessage {
