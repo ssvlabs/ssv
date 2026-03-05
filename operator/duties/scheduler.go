@@ -27,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -40,8 +39,8 @@ const (
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty)
-	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
+	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty, dutyDeadline time.Time)
+	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap, dutyDeadline time.Time)
 }
 
 // DutyExecutor is an interface for executing duty.
@@ -413,7 +412,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 }
 
 // ExecuteDuties tries to execute the provided validator duties
-func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty, dutyDeadline time.Time) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
 		// Keeping check here to detect programming mistakes.
@@ -447,13 +446,8 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
 		go func() {
-			// Cannot use parent-context itself here, have to create independent instance
-			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+			dutyCtx, cancel := context.WithDeadline(ctx, dutyDeadline)
 			defer cancel()
-			if !withDeadline {
-				logger.Warn("parent-context has no deadline set")
-			}
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
 		}()
@@ -463,7 +457,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 }
 
 // ExecuteCommitteeDuties tries to execute the provided committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap, dutyDeadline time.Time) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
 		// Keeping check here to detect programming mistakes.
@@ -499,13 +493,8 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
 		go func() {
-			// Cannot use parent-context itself here, have to create independent instance
-			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+			dutyCtx, cancel := context.WithDeadline(ctx, dutyDeadline)
 			defer cancel()
-			if !withDeadline {
-				logger.Warn("parent-context has no deadline set")
-			}
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)

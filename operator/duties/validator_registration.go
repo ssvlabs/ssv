@@ -66,12 +66,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
-				defer cancel()
-
-				h.processExecution(tickCtx, currentEpoch, slot)
-			}()
+			h.processExecution(ctx, currentEpoch, slot)
 
 		case regDescriptor, ok := <-h.validatorRegCh:
 			if !ok {
@@ -99,7 +94,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: regDescriptor.ValidatorIndex,
 				PubKey:         regDescriptor.ValidatorPubkey,
 				Slot:           dutySlot,
-			}})
+			}}, h.dutyExecutionDeadline(dutySlot))
 			h.logger.Debug("validator registration duty sent",
 				zap.Uint64("slot", uint64(dutySlot)),
 				zap.Uint64("validator_index", uint64(regDescriptor.ValidatorIndex)),
@@ -145,7 +140,7 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 			zap.String("validator_pubkey", pk.String()))
 	}
 
-	h.dutiesExecutor.ExecuteDuties(ctx, duties)
+	h.dutiesExecutor.ExecuteDuties(ctx, duties, h.dutyExecutionDeadline(slot))
 }
 
 // blockSlot returns slot that happens (corresponds to) at the same time as block.
@@ -175,4 +170,10 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 	}
 
 	return blockSlot, nil
+}
+
+func (h *ValidatorRegistrationHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
+	// 1 slot of time since the target slot should be sufficient for this duty-type.
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	return dutyDeadline
 }

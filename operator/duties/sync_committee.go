@@ -90,13 +90,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
-				defer cancel()
-
-				h.processExecution(tickCtx, period, slot)
-				h.processFetching(tickCtx, epoch, period, true)
-			}()
+			h.processExecution(ctx, period, slot)
+			h.processFetching(ctx, epoch, period, true)
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
 			periodSlots := h.slotsPerPeriod()
@@ -224,7 +219,10 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	}
 	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
-	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+	// Sync committee contributions are rewarded as long as they are included within 1 slot of their target slot
+	// (i.e., from target slot up to and including target + 1).
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
 }

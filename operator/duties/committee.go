@@ -63,12 +63,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			func() {
-				tickCtx, cancel := h.ctxWithDeadlineInOneEpoch(ctx, slot)
-				defer cancel()
-
-				h.processExecution(tickCtx, period, epoch, slot)
-			}()
+			h.processExecution(ctx, period, epoch, slot)
 
 		case <-h.reorg:
 			h.logger.Debug("🛠 reorg event")
@@ -104,7 +99,14 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
 	}
 
-	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
+	// Attestation and aggregation submissions are rewarded as long as they are included within
+	// SLOTS_PER_EPOCH slots of their target slot (i.e., from target slot up to and including target + SLOTS_PER_EPOCH).
+	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
+	// Sync committee duties have to use the same deadline because they are part of the committee role.
+	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
+	slotsPerEpoch := phase0.Slot(h.beaconConfig.SlotsPerEpoch)
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + slotsPerEpoch + 1)
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
 }

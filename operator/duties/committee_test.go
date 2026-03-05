@@ -565,11 +565,10 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			},
 		})
 
-		// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epoch, plus for
-		// sync committee duties to be fetched for the current period.
+		// STEP 1: (on startup) wait for attester duties to be fetched for the next epoch only (since we start at
+		// the last slot of the epoch), plus for sync committee duties to be fetched for the current period.
 		waitForDuties.Set(true)
 		startScheduler(ctx, t, scheduler, schedulerPool)
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) current epoch fetch-call
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
@@ -658,13 +657,12 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 			},
 		})
 
-		// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epoch, plus for
-		// sync committee duties to be fetched for the current period.
+		// STEP 1: (on startup) wait for attester duties to be fetched for the next epoch only (since we start at
+		// the last slot of the epoch), plus for sync committee duties to be fetched for the current period.
 		waitForDuties.Set(true)
 		startScheduler(ctx, t, scheduler, schedulerPool)
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{

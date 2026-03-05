@@ -73,23 +73,18 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
-				defer cancel()
-
-				if h.fetchFirst {
-					h.fetchFirst = false
+			if h.fetchFirst {
+				h.fetchFirst = false
+				h.indicesChanged = false
+				h.processFetching(ctx, currentEpoch)
+				h.processExecution(ctx, currentEpoch, slot)
+			} else {
+				h.processExecution(ctx, currentEpoch, slot)
+				if h.indicesChanged {
 					h.indicesChanged = false
-					h.processFetching(tickCtx, currentEpoch)
-					h.processExecution(tickCtx, currentEpoch, slot)
-				} else {
-					h.processExecution(tickCtx, currentEpoch, slot)
-					if h.indicesChanged {
-						h.indicesChanged = false
-						h.processFetching(tickCtx, currentEpoch)
-					}
+					h.processFetching(ctx, currentEpoch)
 				}
-			}()
+			}
 
 			// last slot of epoch
 			if uint64(slot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
@@ -180,7 +175,10 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	}
 	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
-	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+	// Proposals need to be made within ~4s since the current slot start to be included on-chain, we'll make the
+	// deadline to be 1 slot for simplicity.
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
 }

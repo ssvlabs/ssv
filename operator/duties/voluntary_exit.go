@@ -66,12 +66,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
-				defer cancel()
-
-				h.processExecution(tickCtx, slot)
-			}()
+			h.processExecution(ctx, slot)
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
@@ -142,7 +137,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution)
+		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution, h.dutyExecutionDeadline(slot))
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))
@@ -178,4 +173,10 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 	}
 
 	return blockSlot, nil
+}
+
+func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
+	// 1 slot of time since the target slot should be sufficient for this duty-type.
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	return dutyDeadline
 }
