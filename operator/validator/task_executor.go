@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"sort"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -60,7 +61,7 @@ func (c *Controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 		}
 	}
 	if startedValidators > 0 {
-		// Notify DutyScheduler and FeeRecipientController about the changes in validators without blocking.
+		// Notify (without blocking) DutyScheduler and FeeRecipientController about the changes in validators.
 		go func() {
 			// Notify duty scheduler about validator indices changes so the scheduler can update its duties
 			if !c.reportIndicesChange(c.ctx) {
@@ -81,41 +82,69 @@ func (c *Controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 }
 
 func (c *Controller) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
-	logger := c.taskLogger("UpdateFeeRecipient",
+	logger := c.taskLogger(
+		"UpdateFeeRecipient",
 		zap.String("owner", owner.String()),
-		zap.String("fee_recipient", recipient.String()))
+		zap.String("fee_recipient", recipient.String()),
+	)
 
-	var updated bool
+	// scheduledValidatorRegsLimit limits how many validator-registration duties (per owner) we are allowed to
+	// schedule. Ideally we'd want to schedule them all ... but this self-throttling ensures we do not overwhelm
+	// ourselves and the p2p network with lots of duties/messages (updating fee-recipient via validator-registrations
+	// is a low priority thing compared to other duties validator performs, so we are gonna do it on a best-effort
+	// basis).
+	// Note, we MUST sort shares for the target owner here somehow so that all SSV nodes in the cluster schedule
+	// the "same duty" (otherwise we won't have a majority of the cluster for some duties to work with).
+
+	const scheduledValidatorRegsLimit = 100
+
+	ownerShares := make([]*types.SSVShare, 0)
 	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
-			updated = true
-
-			pk := phase0.BLSPubKey(v.Share.ValidatorPubKey)
-			regDesc := duties.RegistrationDescriptor{
-				ValidatorIndex:  v.Share.ValidatorIndex,
-				ValidatorPubkey: pk,
-				FeeRecipient:    recipient[:],
-				BlockNumber:     blockNumber,
-			}
-
-			go func() {
-				select {
-				case <-c.ctx.Done():
-					logger.Debug("context is done - not gonna schedule validator registration")
-				case c.validatorRegistrationCh <- regDesc:
-					logger.Debug("added validator registration task to pipeline")
-				case <-time.After(2 * c.networkConfig.SlotDuration):
-					logger.Error("failed to schedule validator registration duty!")
-				}
-			}()
+			ownerShares = append(ownerShares, v.Share)
 		}
 		return true
 	})
+	sort.Slice(ownerShares, func(i, j int) bool {
+		return ownerShares[i].ValidatorIndex < ownerShares[j].ValidatorIndex
+	})
 
-	if updated {
+	scheduledValidatorReg := func(logger *zap.Logger, r duties.RegistrationDescriptor) {
+		select {
+		case <-c.ctx.Done():
+			logger.Debug("context is done - not gonna schedule validator registration")
+		case c.validatorRegistrationCh <- r:
+			logger.Debug("added validator registration task to pipeline")
+		case <-time.After(2 * c.networkConfig.SlotDuration):
+			logger.Error("failed to schedule validator registration duty!")
+		}
+	}
+
+	if len(ownerShares) > scheduledValidatorRegsLimit {
+		logger.Info("throttling validator registration duties (too many to process immediately)",
+			zap.Int("desired", len(ownerShares)),
+			zap.Int("scheduled", scheduledValidatorRegsLimit))
+	}
+
+	for _, s := range ownerShares[:min(scheduledValidatorRegsLimit, len(ownerShares))] {
+		pk := phase0.BLSPubKey(s.ValidatorPubKey)
+
+		vLogger := logger.With(zap.String("validator_pubkey", pk.String()))
+
+		r := duties.RegistrationDescriptor{
+			ValidatorIndex:  s.ValidatorIndex,
+			ValidatorPubkey: pk,
+			FeeRecipient:    recipient[:],
+			BlockNumber:     blockNumber,
+		}
+
+		go scheduledValidatorReg(vLogger, r)
+	}
+
+	// Notify (without blocking) the fee recipient controller about the fee recipient address change
+	// so it can submit updated proposal preparations with the new fee recipient.
+	if len(ownerShares) > 0 {
 		go func() {
-			// Notify the fee recipient controller about the fee recipient address change
-			// so it can submit updated proposal preparations with the new fee recipient
 			if !c.reportFeeRecipientChange(c.ctx) {
 				logger.Error("failed to notify fee recipient change")
 			}
