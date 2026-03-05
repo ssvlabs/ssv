@@ -175,16 +175,20 @@ func migrateBadgerToPebbleIfNeeded(
 		return false, 0, err
 	}
 
-	pebbleEmpty, err := isPebbleEmpty(db)
-	if err != nil {
-		return false, 0, err
-	}
-
 	if doneMarkerExists {
+		pebbleEmpty, err := isPebbleEmpty(db)
+		if err != nil {
+			return false, 0, err
+		}
 		if pebbleEmpty {
 			return false, 0, fmt.Errorf("badger import completion marker exists at %q but pebble db at %q is empty; manual recovery required", doneMarkerPath(pebblePath), pebblePath)
 		}
 		return false, 0, nil
+	}
+
+	pebbleEmpty, err := isPebbleEmpty(db)
+	if err != nil {
+		return false, 0, err
 	}
 
 	hasBadgerData, badgerNonEmpty, err := badgerDirState(badgerPath)

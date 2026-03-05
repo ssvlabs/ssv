@@ -289,6 +289,8 @@ func TestMigrateBadgerToPebbleIfNeeded_SkipsAfterCompletionMarker(t *testing.T) 
 }
 
 func TestMigrateBadgerToPebbleIfNeeded_EndToEndInterruptedThenResumed(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
 	badgerPath := filepath.Join(root, "db")
 	pebblePath := filepath.Join(root, "db-pebble")
@@ -347,6 +349,8 @@ func TestMigrateBadgerToPebbleIfNeeded_EndToEndInterruptedThenResumed(t *testing
 }
 
 func TestMigrateBadgerToPebbleIfNeeded_StopsOnContextCancel(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
 	badgerPath := filepath.Join(root, "db")
 	pebblePath := filepath.Join(root, "db-pebble")
