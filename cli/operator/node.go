@@ -841,6 +841,17 @@ func setupPebbleDB(
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
+	closeOnSetupError := func(setupErr error) error {
+		closeErr := db.Close()
+		if closeErr == nil {
+			return setupErr
+		}
+		logger.Warn("failed to close db after setup error",
+			zap.String("path", dbPath),
+			zap.Error(closeErr),
+		)
+		return setupErr
+	}
 	if dbPath != cfg.DBOptions.Path {
 		logger.Warn("using legacy pebble database path",
 			zap.String("configured_path", cfg.DBOptions.Path),
@@ -857,7 +868,7 @@ func setupPebbleDB(
 			db,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("migrate badger to pebble: %w", err)
+			return nil, closeOnSetupError(fmt.Errorf("migrate badger to pebble: %w", err))
 		}
 		if migrated {
 			logger.Info("migrated legacy badger db to pebble",
@@ -869,7 +880,7 @@ func setupPebbleDB(
 	}
 
 	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, dbPath); err != nil {
-		return nil, fmt.Errorf("apply migrations: %w", err)
+		return nil, closeOnSetupError(fmt.Errorf("apply migrations: %w", err))
 	}
 
 	return db, nil

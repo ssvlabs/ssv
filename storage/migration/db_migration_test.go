@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -85,6 +86,24 @@ func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportDoneMarkerExis
 	createBadgerDB(t, basePath, map[string][]byte{"a": []byte("1")})
 	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
 	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
+
+	plan, err := ResolvePebbleDBPlan(basePath)
+	require.NoError(t, err)
+	require.Equal(t, legacyPath, plan.PebblePath)
+	require.Equal(t, basePath, plan.BadgerImportPath)
+}
+
+func TestResolvePebbleDBPlan_FastPathSkipsBadgerOpenAfterDoneMarker(t *testing.T) {
+	t.Parallel()
+
+	basePath := filepath.Join(t.TempDir(), "db")
+	legacyPath := basePath + "-pebble"
+	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
+	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
+
+	require.NoError(t, os.MkdirAll(basePath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(basePath, "KEYREGISTRY"), []byte("not-a-badger-db"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(basePath, "000001.vlog"), []byte("garbage"), 0o600))
 
 	plan, err := ResolvePebbleDBPlan(basePath)
 	require.NoError(t, err)

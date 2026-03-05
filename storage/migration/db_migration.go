@@ -55,6 +55,27 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 		return PebbleDBPlan{}, fmt.Errorf("check legacy pebble path %q: %w", legacyPebblePath, err)
 	}
 
+	// Fast path: post-migration steady state (non-empty pebble + import marker).
+	// This avoids opening legacy Badger on every startup when it is no longer needed.
+	switch {
+	case canonicalPebbleNonEmpty && !legacyPebbleNonEmpty:
+		ok, err := canUsePebbleAlongsideBadger(basePath, basePath)
+		if err != nil {
+			return PebbleDBPlan{}, err
+		}
+		if ok {
+			return PebbleDBPlan{PebblePath: basePath, BadgerImportPath: basePath}, nil
+		}
+	case legacyPebbleNonEmpty && !canonicalPebbleNonEmpty:
+		ok, err := canUsePebbleAlongsideBadger(legacyPebblePath, basePath)
+		if err != nil {
+			return PebbleDBPlan{}, err
+		}
+		if ok {
+			return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerImportPath: basePath}, nil
+		}
+	}
+
 	badgerExists, badgerNonEmpty, err := badgerDirState(basePath)
 	if err != nil {
 		return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
@@ -323,13 +344,13 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 				zap.Int("committed_batches", committedBatches),
 			)
 		}
+		batch = db.NewBatch()
+		pending = 0
 		if hook != nil {
 			if err := hook(committedBatches, copied); err != nil {
 				return err
 			}
 		}
-		batch = db.NewBatch()
-		pending = 0
 		return nil
 	}
 
