@@ -20,8 +20,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -107,10 +105,8 @@ type p2pNetwork struct {
 
 	libConnManager connmgrcore.ConnManager
 
-	nodeStorage             operatorstorage.Storage
-	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
-	operatorSigner          keys.OperatorSigner
-	operatorDataStore       operatordatastore.OperatorDataStore
+	nodeStorage       operatorstorage.Storage
+	operatorDataStore operatordatastore.OperatorDataStore
 
 	// discoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
 	// the best candidates to connect to.
@@ -129,21 +125,19 @@ func New(
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	n := &p2pNetwork{
-		parentCtx:               cfg.Ctx,
-		ctx:                     ctx,
-		cancel:                  cancel,
-		logger:                  logger.Named(log.NameP2PNetwork),
-		cfg:                     cfg,
-		msgRouter:               cfg.Router,
-		msgValidator:            cfg.MessageValidator,
-		state:                   stateClosed,
-		subscribedCommittees:    hashmap.New[string, committeeSubscriptionStatus](),
-		nodeStorage:             cfg.NodeStorage,
-		operatorPKHashToPKCache: hashmap.New[string, []byte](),
-		operatorSigner:          cfg.OperatorSigner,
-		operatorDataStore:       cfg.OperatorDataStore,
-		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
-		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
+		parentCtx:            cfg.Ctx,
+		ctx:                  ctx,
+		cancel:               cancel,
+		logger:               logger.Named(log.NameP2PNetwork),
+		cfg:                  cfg,
+		msgRouter:            cfg.Router,
+		msgValidator:         cfg.MessageValidator,
+		state:                stateClosed,
+		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
+		nodeStorage:          cfg.NodeStorage,
+		operatorDataStore:    cfg.OperatorDataStore,
+		discoveredPeersPool:  ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
+		trimmedRecently:      ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err

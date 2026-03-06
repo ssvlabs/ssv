@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 
@@ -93,14 +94,22 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
 	}
 
-	feeRecipientCtrl := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
-		Ctx:                opts.Context,
-		BeaconClient:       opts.BeaconNode,
-		BeaconConfig:       opts.NetworkConfig.Beacon,
-		ValidatorProvider:  selfValidatorStore,
-		OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
-		SlotTickerProvider: slotTickerProvider,
-	})
+	var (
+		feeRecipientCtrl       fee_recipient.RecipientController
+		proposalPreparationsFn func() ([]*eth2apiv1.ProposalPreparation, error)
+	)
+	if !exporterOpts.Enabled {
+		feeRecipientController := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
+			Ctx:                opts.Context,
+			BeaconClient:       opts.BeaconNode,
+			BeaconConfig:       opts.NetworkConfig.Beacon,
+			ValidatorProvider:  selfValidatorStore,
+			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
+			SlotTickerProvider: slotTickerProvider,
+		})
+		feeRecipientCtrl = feeRecipientController
+		proposalPreparationsFn = feeRecipientController.GetProposalPreparations
+	}
 
 	node := &Node{
 		logger:           logger.Named(log.NameOperator),
@@ -136,12 +145,14 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		exporterRead: opts.ExporterRead,
 	}
 
-	// Wire the beacon client to the fee recipient controller
-	// This allows the beacon client to pull proposal preparations on reconnect
-	opts.BeaconNode.SetProposalPreparationsProvider(feeRecipientCtrl.GetProposalPreparations)
+	if feeRecipientCtrl != nil {
+		// Wire the beacon client to the fee recipient controller
+		// This allows the beacon client to pull proposal preparations on reconnect.
+		opts.BeaconNode.SetProposalPreparationsProvider(proposalPreparationsFn)
 
-	// Subscribe fee recipient controller to validator controller's change notifications
-	feeRecipientCtrl.SubscribeToFeeRecipientChanges(opts.ValidatorController.FeeRecipientChangeChan())
+		// Subscribe fee recipient controller to validator controller's change notifications.
+		feeRecipientCtrl.SubscribeToFeeRecipientChanges(opts.ValidatorController.FeeRecipientChangeChan())
+	}
 
 	return node
 }
@@ -214,16 +225,19 @@ func (n *Node) Start(ctx context.Context) error {
 
 	go n.reportOperators()
 
-	go n.feeRecipientCtrl.Start(ctx)
-
 	go n.validatorsCtrl.HandleMetadataUpdates(ctx)
-	go n.validatorsCtrl.ReportValidatorStatuses(ctx)
+	if n.exporterOptions.Enabled {
+		n.logger.Info("exporter mode: skipping fee recipient, validator status reporting and doppelganger services")
+	} else {
+		go n.feeRecipientCtrl.Start(ctx)
+		go n.validatorsCtrl.ReportValidatorStatuses(ctx)
 
-	go func() {
-		if err := n.validatorOptions.DoppelgangerHandler.Start(ctx); err != nil {
-			n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
-		}
-	}()
+		go func() {
+			if err := n.validatorOptions.DoppelgangerHandler.Start(ctx); err != nil {
+				n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
+			}
+		}()
+	}
 
 	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
 

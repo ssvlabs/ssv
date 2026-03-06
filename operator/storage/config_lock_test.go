@@ -20,7 +20,7 @@ func TestConfigLock(t *testing.T) {
 			UsingSSVSigner:   true,
 		}
 
-		require.NoError(t, c1.ValidateCompatibility(c2))
+		require.NoError(t, c1.ValidateCompatibility(c2, false))
 	})
 
 	t.Run("all fields are different", func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestConfigLock(t *testing.T) {
 			UsingSSVSigner:   true,
 		}
 
-		require.Error(t, c1.ValidateCompatibility(c2))
+		require.Error(t, c1.ValidateCompatibility(c2, false))
 	})
 
 	t.Run("only network name is different", func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestConfigLock(t *testing.T) {
 			UsingSSVSigner:   true,
 		}
 
-		require.Error(t, c1.ValidateCompatibility(c2))
+		require.Error(t, c1.ValidateCompatibility(c2, false))
 	})
 
 	t.Run("only local events usage is different", func(t *testing.T) {
@@ -66,7 +66,7 @@ func TestConfigLock(t *testing.T) {
 			UsingLocalEvents: false,
 		}
 
-		require.Error(t, c1.ValidateCompatibility(c2))
+		require.Error(t, c1.ValidateCompatibility(c2, false))
 	})
 
 	t.Run("only ssv-signer usage is different", func(t *testing.T) {
@@ -82,6 +82,22 @@ func TestConfigLock(t *testing.T) {
 			UsingSSVSigner:   false,
 		}
 
-		require.Error(t, c1.ValidateCompatibility(c2))
+		require.Error(t, c1.ValidateCompatibility(c2, false))
+	})
+
+	t.Run("exporter ignores ssv-signer usage difference", func(t *testing.T) {
+		c1 := &ConfigLock{
+			NetworkName:      "test",
+			UsingLocalEvents: true,
+			UsingSSVSigner:   true,
+		}
+
+		c2 := &ConfigLock{
+			NetworkName:      "test",
+			UsingLocalEvents: true,
+			UsingSSVSigner:   false,
+		}
+
+		require.NoError(t, c1.ValidateCompatibility(c2, true))
 	})
 }
