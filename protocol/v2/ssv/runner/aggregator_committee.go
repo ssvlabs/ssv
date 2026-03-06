@@ -590,17 +590,10 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		consensusData,
 		r.ValCheck,
 	); err != nil {
-		r.measurements.EndConsensus()
 		return fmt.Errorf("failed to start consensus: %w", err)
 	}
 
-	// Raise error if any
-	if anyErr != nil {
-		r.measurements.EndConsensus()
-		return anyErr
-	}
-
-	return nil
+	return anyErr // raise error so it is visible(logged), if any
 }
 
 func (r *AggregatorCommitteeRunner) ProcessConsensus(
@@ -1057,6 +1050,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, r.state().RunningInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
 		logger.Info(dutyFinishedEvent,
+			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.ConsensusTime(r.measurements.ConsensusTime()),
 			fields.ConsensusRounds(uint64(r.state().RunningInstance.State.Round)),
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
@@ -1068,6 +1062,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 	}
 	const dutyFinishedEvent = "✔️finished duty processing (partial success)"
 	logger.Info(dutyFinishedEvent,
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
 		fields.ConsensusRounds(uint64(r.state().RunningInstance.State.Round)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
@@ -1633,12 +1628,8 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 		r.state().Finished = true
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
-		const dutyFinishedNoMessages = "✔️successfully finished duty processing (no messages)"
-		logger.Info(dutyFinishedNoMessages,
-			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
-		)
+		const dutyFinishedNoMessages = "✔️successfully finished duty processing (no selection proofs needed)"
+		logger.Info(dutyFinishedNoMessages, fields.TotalDutyTime(r.measurements.TotalDutyTime()))
 		span.AddEvent(dutyFinishedNoMessages)
 		return nil
 	}
