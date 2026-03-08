@@ -115,8 +115,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 				slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 
-				// Clean up the irrelevant data to prevent infinite memory growth at the 1 slot of the epoch.
-				if uint64(currentSlot+1)%slotsPerEpoch == 0 && currentEpoch >= 1 {
+				// Clean up the irrelevant data to prevent infinite memory growth at the 1st slot of the epoch.
+				if uint64(currentSlot)%slotsPerEpoch == 0 && currentEpoch >= 1 {
 					h.duties.EraseEpochData(currentEpoch - 1)
 					delete(h.dutyFetchIntents, currentEpoch-1)
 				}
@@ -299,7 +299,7 @@ func (h *AttesterHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 
 		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
 		if err != nil {
-			h.logger.Error("failed to prepare duties for current epoch", zap.Error(err))
+			logger.Error("failed to prepare duties for current epoch", zap.Error(err))
 			return
 		}
 		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
@@ -315,7 +315,7 @@ func (h *AttesterHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 
 		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
 		if err != nil {
-			h.logger.Error("failed to prepare duties for next epoch", zap.Error(err))
+			logger.Error("failed to prepare duties for next epoch", zap.Error(err))
 			return
 		}
 		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
