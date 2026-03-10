@@ -379,12 +379,13 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 		// If didn't get any new quorum, didn't yet start QBFT (checked above), and has received the last message, then terminate.
 		if r.HasSeenAllPreConsensusSigners() {
 			r.BaseRunner.State.Finished = true
+			r.measurements.EndPreConsensus()
+			recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregatorCommittee)
 			r.measurements.EndDutyFlow()
 			recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
 			const dutyFinishedNoMessages = "✔️successfully finished duty processing (got no quorums in pre-consensus)"
 			logger.Info(dutyFinishedNoMessages,
 				fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
 			)
 			span.AddEvent(dutyFinishedNoMessages)
@@ -540,11 +541,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 							hasAnyAggregatorForNewQuorum = true
 						}
 					} else {
-						logger.Warn("failed to process sync committee selection proof",
-							zap.Error(err),
-							fields.Slot(vDuty.Slot),
-							fields.ValidatorIndex(vDuty.ValidatorIndex),
-							fields.Root(root))
+						vLogger.Warn("failed to process sync committee selection proof", zap.Error(err))
 						anyErr = fmt.Errorf("failed to process sync committee selection proof: %w", err)
 					}
 				}
@@ -563,6 +560,12 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 			r.state().Finished = true
 			r.measurements.EndDutyFlow()
 			recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
+			const dutyFinishedNoAggregators = "✔️successfully finished duty processing (no validator is aggregator or sync committee contributor)"
+			logger.Info(dutyFinishedNoAggregators,
+				fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+			)
+			span.AddEvent(dutyFinishedNoAggregators)
 			return anyErr
 		}
 
