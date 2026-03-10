@@ -47,12 +47,15 @@ var ErrAuditorDisabled = errors.New("auditor disabled")
 // Finding is a single auditor-detected mismatch with evidence attached.
 // It is persisted (2 weeks retention) and exposed via HTTP for later analysis.
 type Finding struct {
-	Version   uint32     `json:"version"`
-	CreatedAt time.Time  `json:"createdAt"`
-	Slot      uint64     `json:"slot"`
-	Epoch     uint64     `json:"epoch"`
-	Period    *uint64    `json:"period,omitempty"`
-	Reason    ReasonCode `json:"reason"`
+	Version   uint32    `json:"version"`
+	CreatedAt time.Time `json:"createdAt"`
+	// Key is a stable identifier assigned when persisted, intended for
+	// correlation between logs and the findings store.
+	Key    string     `json:"key,omitempty"`
+	Slot   uint64     `json:"slot"`
+	Epoch  uint64     `json:"epoch"`
+	Period *uint64    `json:"period,omitempty"`
+	Reason ReasonCode `json:"reason"`
 
 	Role           *Role   `json:"role,omitempty"`
 	ValidatorIndex *uint64 `json:"validatorIndex,omitempty"`

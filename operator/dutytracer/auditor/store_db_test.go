@@ -23,7 +23,7 @@ func TestDBStore_PutFinding_CapsPerSlotReason(t *testing.T) {
 	reason := ReasonScheduleMissingIndex
 
 	for i := 0; i < 10; i++ {
-		stored, err := s.PutFinding(&Finding{
+		putRes, err := s.PutFinding(&Finding{
 			CreatedAt: time.Now(),
 			Slot:      slot,
 			Epoch:     3,
@@ -31,11 +31,12 @@ func TestDBStore_PutFinding_CapsPerSlotReason(t *testing.T) {
 			Evidence:  Evidence{},
 		})
 		require.NoError(t, err)
-		require.True(t, stored)
+		require.True(t, putRes.Stored)
+		require.NotEmpty(t, putRes.Key)
 	}
 
 	// 11th should be dropped (cap reached) with no error.
-	stored, err := s.PutFinding(&Finding{
+	putRes, err := s.PutFinding(&Finding{
 		CreatedAt: time.Now(),
 		Slot:      slot,
 		Epoch:     3,
@@ -43,7 +44,7 @@ func TestDBStore_PutFinding_CapsPerSlotReason(t *testing.T) {
 		Evidence:  Evidence{},
 	})
 	require.NoError(t, err)
-	require.False(t, stored)
+	require.False(t, putRes.Stored)
 
 	res, err := s.Query(Query{From: phase0.Slot(slot), To: phase0.Slot(slot), Limit: 1000})
 	require.NoError(t, err)
@@ -58,7 +59,7 @@ func TestDBStore_Prune_RemovesOldSlots(t *testing.T) {
 	s := NewDBStore(db)
 
 	put := func(slot uint64) {
-		stored, err := s.PutFinding(&Finding{
+		putRes, err := s.PutFinding(&Finding{
 			CreatedAt: time.Now(),
 			Slot:      slot,
 			Epoch:     1,
@@ -66,7 +67,7 @@ func TestDBStore_Prune_RemovesOldSlots(t *testing.T) {
 			Evidence:  Evidence{},
 		})
 		require.NoError(t, err)
-		require.True(t, stored)
+		require.True(t, putRes.Stored)
 	}
 
 	put(10)

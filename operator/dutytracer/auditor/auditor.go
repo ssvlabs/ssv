@@ -848,13 +848,13 @@ func (a *Auditor) emitFinding(f *Finding) {
 		zap.Any("validator_index", f.ValidatorIndex),
 	)
 
-	stored, err := a.store.PutFinding(f)
+	res, err := a.store.PutFinding(f)
 	if err != nil {
 		droppedFindings.Add(context.Background(), 1, dropWhyAttr("store_error"), reasonAttr(string(f.Reason)))
 		a.logger.Debug("failed to persist finding", zap.Error(err))
 		return
 	}
-	if !stored {
+	if !res.Stored {
 		droppedFindings.Add(context.Background(), 1, dropWhyAttr("cap_reached"), reasonAttr(string(f.Reason)))
 	}
 }

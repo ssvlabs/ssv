@@ -12,9 +12,15 @@ import (
 )
 
 type Store interface {
-	PutFinding(f *Finding) (stored bool, err error)
+	PutFinding(f *Finding) (PutResult, error)
 	Query(q Query) (QueryResult, error)
 	Prune(pruneBefore phase0.Slot) error
+}
+
+type PutResult struct {
+	Stored bool
+	Seq    uint16
+	Key    string
 }
 
 type Query struct {
@@ -56,9 +62,13 @@ func NewDBStore(db basedb.Database) *DBStore {
 	return &DBStore{db: db, maxPerSlotReason: 10}
 }
 
-func (s *DBStore) PutFinding(f *Finding) (bool, error) {
+func findingKey(slot phase0.Slot, reason ReasonCode, seq uint16) string {
+	return fmt.Sprintf("%d/%s/%d", uint64(slot), reason, seq)
+}
+
+func (s *DBStore) PutFinding(f *Finding) (PutResult, error) {
 	if f == nil {
-		return false, fmt.Errorf("nil finding")
+		return PutResult{}, fmt.Errorf("nil finding")
 	}
 	if f.CreatedAt.IsZero() {
 		f.CreatedAt = time.Now().UTC()
@@ -73,51 +83,55 @@ func (s *DBStore) PutFinding(f *Finding) (bool, error) {
 
 	reasonByte := reasonToByte(f.Reason)
 	if reasonByte == 0 {
-		return false, fmt.Errorf("unsupported reason code: %s", f.Reason)
+		return PutResult{}, fmt.Errorf("unsupported reason code: %s", f.Reason)
 	}
 
 	// Enforce max-per-(slot,reason) across restarts using a persisted counter.
 	countKey := []byte{reasonByte}
 	obj, found, err := s.db.Get(prefixCount, countKey)
 	if err != nil {
-		return false, fmt.Errorf("get finding count: %w", err)
+		return PutResult{}, fmt.Errorf("get finding count: %w", err)
 	}
 	var count uint16
 	if found {
 		if len(obj.Value) != 2 {
-			return false, fmt.Errorf("invalid finding count encoding")
+			return PutResult{}, fmt.Errorf("invalid finding count encoding")
 		}
 		count = binary.LittleEndian.Uint16(obj.Value)
 	}
 	if count >= s.maxPerSlotReason {
-		return false, nil
+		return PutResult{Stored: false}, nil
 	}
 
 	// Persist the finding under (slot, reason, seq).
 	if count > 255 {
-		return false, fmt.Errorf("finding count overflow: %d", count)
+		return PutResult{}, fmt.Errorf("finding count overflow: %d", count)
 	}
 	// #nosec G115 -- count is bounded by maxPerSlotReason (default 10) and the overflow check above.
 	seq := uint8(count) // 0..255
 	key := []byte{reasonByte, seq}
+	res := PutResult{Stored: true, Seq: count}
+	res.Key = findingKey(slot, f.Reason, res.Seq)
+	f.Key = res.Key
+
 	value, err := json.Marshal(f)
 	if err != nil {
-		return false, fmt.Errorf("marshal finding: %w", err)
+		return PutResult{}, fmt.Errorf("marshal finding: %w", err)
 	}
 	if err := s.db.Set(prefixFinding, key, value); err != nil {
-		return false, fmt.Errorf("save finding: %w", err)
+		return PutResult{}, fmt.Errorf("save finding: %w", err)
 	}
 
 	// Increment the count.
 	var enc [2]byte
 	binary.LittleEndian.PutUint16(enc[:], count+1)
 	if err := s.db.Set(prefixCount, countKey, enc[:]); err != nil {
-		return false, fmt.Errorf("save finding count: %w", err)
+		return PutResult{}, fmt.Errorf("save finding count: %w", err)
 	}
 
 	// Best-effort slot bounds for prune initialization.
 	_ = s.updateSlotBounds(slot)
-	return true, nil
+	return res, nil
 }
 
 func (s *DBStore) Query(q Query) (QueryResult, error) {

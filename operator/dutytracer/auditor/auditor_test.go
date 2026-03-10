@@ -50,11 +50,11 @@ type memStore struct {
 	findings []*Finding
 }
 
-func (m *memStore) PutFinding(f *Finding) (bool, error) {
+func (m *memStore) PutFinding(f *Finding) (PutResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.findings = append(m.findings, f)
-	return true, nil
+	return PutResult{Stored: true}, nil
 }
 func (m *memStore) Query(q Query) (QueryResult, error) { return QueryResult{}, nil }
 func (m *memStore) Prune(_ phase0.Slot) error          { return nil }
