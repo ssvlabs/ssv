@@ -25,7 +25,9 @@ type AuditorFindingsRequest struct {
 	CommitteeID    string  `json:"committeeID,omitempty" format:"hex"`
 	ValidatorIndex *uint64 `json:"validatorIndex,omitempty" format:"int64"`
 
-	Limit int `json:"limit,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+	Order  string `json:"order,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
 }
 
 type AuditorFindingsResponse struct {
@@ -103,6 +105,15 @@ func toAuditQuery(req *AuditorFindingsRequest, lastAuditedSlot uint64) (audit.Qu
 		From:  phase0.Slot(from),
 		To:    phase0.Slot(to),
 		Limit: limit,
+	}
+	if req.Order != "" {
+		q.Order = strings.TrimSpace(req.Order)
+	} else {
+		q.Order = "desc"
+	}
+	if req.Cursor != "" {
+		c := strings.TrimSpace(req.Cursor)
+		q.Cursor = &c
 	}
 
 	if req.Reason != "" {

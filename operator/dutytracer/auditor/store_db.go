@@ -2,8 +2,12 @@ package auditor
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -34,6 +38,11 @@ type Query struct {
 	ValidatorIndex *uint64
 
 	Limit int
+
+	// Order is either "asc" or "desc". Default is "desc".
+	Order string
+	// Cursor is the exclusive starting point for pagination. Format: "<slot>/<reason>/<seq>".
+	Cursor *string
 }
 
 type QueryResult struct {
@@ -50,6 +59,9 @@ const (
 	findingPrefixKey = "af"  // per-slot prefix: af + slotBytes
 	countPrefixKey   = "afc" // per-slot prefix: afc + slotBytes; key: reasonByte -> uint16 count
 	metaPrefixKey    = "afm"
+	indexVPrefixKey  = "afvi" // per-validator index: afvi + validatorIndex(8)
+	indexCPrefixKey  = "afci" // per-committee index: afci + committeeID(32)
+	indexRPrefixKey  = "afre" // per-reason index: afre + reasonByte(1)
 )
 
 const (
@@ -75,6 +87,86 @@ func (s *DBStore) SlotBounds() (min phase0.Slot, max phase0.Slot, ok bool, err e
 		return 0, 0, false, nil
 	}
 	return minSlot, maxSlot, true, nil
+}
+
+var errStopIteration = errors.New("stop iteration")
+
+func makeValidatorIndexPrefix(index uint64) []byte {
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], index)
+	return append([]byte(indexVPrefixKey), b[:]...)
+}
+
+func makeCommitteePrefix(committeeIDHex string) ([]byte, error) {
+	raw, err := hex.DecodeString(committeeIDHex)
+	if err != nil {
+		return nil, fmt.Errorf("decode committee id: %w", err)
+	}
+	if len(raw) != 32 {
+		return nil, fmt.Errorf("invalid committee id length: %d", len(raw))
+	}
+	return append([]byte(indexCPrefixKey), raw...), nil
+}
+
+func makeReasonPrefix(reasonByte byte) []byte {
+	return append([]byte(indexRPrefixKey), reasonByte)
+}
+
+func makeIndexEntryKey(slot phase0.Slot, reasonByte byte, seq byte) []byte {
+	var b [6]byte
+	// Store slot in descending order using inverted uint32 big-endian.
+	// #nosec G115
+	binary.BigEndian.PutUint32(b[:4], ^uint32(uint64(slot)))
+	b[4] = reasonByte
+	b[5] = seq
+	return b[:]
+}
+
+func decodeIndexEntryKey(key []byte) (slot phase0.Slot, reasonByte byte, seq byte, ok bool) {
+	if len(key) != 6 {
+		return 0, 0, 0, false
+	}
+	v := binary.BigEndian.Uint32(key[:4])
+	orig := ^v
+	return phase0.Slot(orig), key[4], key[5], true
+}
+
+type cursorInfo struct {
+	slot       phase0.Slot
+	reasonByte byte
+	seqByte    byte
+	ok         bool
+}
+
+func parseCursor(cur string) (cursorInfo, error) {
+	// Format: "<slot>/<reason>/<seq>"
+	var ci cursorInfo
+	parts := strings.Split(cur, "/")
+	if len(parts) != 3 {
+		return ci, fmt.Errorf("invalid cursor format")
+	}
+	slotU64, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return ci, fmt.Errorf("invalid cursor slot: %w", err)
+	}
+	reasonStr := parts[1]
+	seqU64, err := strconv.ParseUint(parts[2], 10, 64)
+	if err != nil {
+		return ci, fmt.Errorf("invalid cursor seq: %w", err)
+	}
+
+	rb := reasonToByte(ReasonCode(reasonStr))
+	if rb == 0 {
+		return ci, fmt.Errorf("invalid cursor reason: %s", reasonStr)
+	}
+	if seqU64 > 255 {
+		return ci, fmt.Errorf("invalid cursor seq: %d", seqU64)
+	}
+	ci.slot = phase0.Slot(slotU64)
+	ci.reasonByte = rb
+	ci.seqByte = byte(seqU64)
+	ci.ok = true
+	return ci, nil
 }
 
 func findingKey(slot phase0.Slot, reason ReasonCode, seq uint16) string {
@@ -144,6 +236,28 @@ func (s *DBStore) PutFinding(f *Finding) (PutResult, error) {
 		return PutResult{}, fmt.Errorf("save finding count: %w", err)
 	}
 
+	idxKey := makeIndexEntryKey(slot, reasonByte, seq)
+	// Reason index (always present).
+	if err := s.db.Set(makeReasonPrefix(reasonByte), idxKey, []byte{}); err != nil {
+		return PutResult{}, fmt.Errorf("index reason: %w", err)
+	}
+	// Validator index index (if available).
+	if f.ValidatorIndex != nil {
+		if err := s.db.Set(makeValidatorIndexPrefix(*f.ValidatorIndex), idxKey, []byte{}); err != nil {
+			return PutResult{}, fmt.Errorf("index validator: %w", err)
+		}
+	}
+	// Committee index (if available).
+	if f.CommitteeID != nil && *f.CommitteeID != "" {
+		prefix, err := makeCommitteePrefix(*f.CommitteeID)
+		if err != nil {
+			return PutResult{}, fmt.Errorf("index committee: %w", err)
+		}
+		if err := s.db.Set(prefix, idxKey, []byte{}); err != nil {
+			return PutResult{}, fmt.Errorf("index committee: %w", err)
+		}
+	}
+
 	// Best-effort slot bounds for prune initialization.
 	_ = s.updateSlotBounds(slot)
 	return res, nil
@@ -153,54 +267,250 @@ func (s *DBStore) Query(q Query) (QueryResult, error) {
 	if q.Limit <= 0 {
 		q.Limit = 500
 	}
+	if q.Order == "" {
+		q.Order = "desc"
+	} else {
+		q.Order = strings.ToLower(strings.TrimSpace(q.Order))
+	}
+	if q.Order != "asc" && q.Order != "desc" {
+		return QueryResult{}, fmt.Errorf("invalid order: %s", q.Order)
+	}
 	if q.To < q.From {
 		return QueryResult{}, fmt.Errorf("'to' must be >= 'from'")
 	}
 
-	out := make([]*Finding, 0)
-	for slot := q.From; slot <= q.To; slot++ {
-		prefixFinding := makeSlotPrefix(findingPrefixKey, slot)
-		err := s.db.GetAll(prefixFinding, func(_ int, obj basedb.Obj) error {
-			if len(out) >= q.Limit {
-				return nil
-			}
-			f := new(Finding)
-			if err := json.Unmarshal(obj.Value, f); err != nil {
-				return nil
-			}
-			if q.Reason != nil && f.Reason != *q.Reason {
-				return nil
-			}
-			if q.Role != nil {
-				if f.Role == nil || *f.Role != *q.Role {
-					return nil
-				}
-			}
-			if q.CommitteeIDHex != nil {
-				if f.CommitteeID == nil || *f.CommitteeID != *q.CommitteeIDHex {
-					return nil
-				}
-			}
-			if q.ValidatorIndex != nil {
-				if f.ValidatorIndex == nil || *f.ValidatorIndex != *q.ValidatorIndex {
-					return nil
-				}
-			}
-			out = append(out, f)
-			return nil
-		})
+	var cur cursorInfo
+	if q.Cursor != nil && strings.TrimSpace(*q.Cursor) != "" {
+		ci, err := parseCursor(strings.TrimSpace(*q.Cursor))
 		if err != nil {
-			return QueryResult{}, fmt.Errorf("query findings (slot=%d): %w", slot, err)
+			return QueryResult{}, err
 		}
-		if len(out) >= q.Limit {
-			break
-		}
-		// Avoid overflow on slot++ when iterating full uint64 space.
-		if slot == q.To {
-			break
+		cur = ci
+	}
+
+	// Use secondary indexes for common lookups when we can return newest-first.
+	if q.Order == "desc" {
+		switch {
+		case q.ValidatorIndex != nil:
+			return s.queryByIndex(makeValidatorIndexPrefix(*q.ValidatorIndex), q, cur)
+		case q.CommitteeIDHex != nil:
+			pfx, err := makeCommitteePrefix(*q.CommitteeIDHex)
+			if err != nil {
+				return QueryResult{}, err
+			}
+			return s.queryByIndex(pfx, q, cur)
+		case q.Reason != nil:
+			rb := reasonToByte(*q.Reason)
+			if rb == 0 {
+				return QueryResult{}, fmt.Errorf("unsupported reason: %s", *q.Reason)
+			}
+			return s.queryByIndex(makeReasonPrefix(rb), q, cur)
 		}
 	}
+
+	return s.queryBySlotScan(q, cur)
+}
+
+func (s *DBStore) queryBySlotScan(q Query, cur cursorInfo) (QueryResult, error) {
+	out := make([]*Finding, 0, minInt(q.Limit, 128))
+
+	started := !cur.ok
+	wantReasonByte := byte(0)
+	if q.Reason != nil {
+		wantReasonByte = reasonToByte(*q.Reason)
+	}
+
+	handleObj := func(slot phase0.Slot, obj basedb.Obj) error {
+		if len(out) >= q.Limit {
+			return errStopIteration
+		}
+		if len(obj.Key) < 2 {
+			return nil
+		}
+		reasonByte := obj.Key[0]
+		seqByte := obj.Key[1]
+
+		if !started {
+			if q.Order == "desc" {
+				if slot > cur.slot {
+					return nil
+				}
+				if slot < cur.slot {
+					started = true
+				} else {
+					if reasonByte < cur.reasonByte || (reasonByte == cur.reasonByte && seqByte <= cur.seqByte) {
+						return nil
+					}
+					started = true
+				}
+			} else {
+				if slot < cur.slot {
+					return nil
+				}
+				if slot > cur.slot {
+					started = true
+				} else {
+					if reasonByte < cur.reasonByte || (reasonByte == cur.reasonByte && seqByte <= cur.seqByte) {
+						return nil
+					}
+					started = true
+				}
+			}
+		}
+
+		if wantReasonByte != 0 && reasonByte != wantReasonByte {
+			return nil
+		}
+
+		f := new(Finding)
+		if err := json.Unmarshal(obj.Value, f); err != nil {
+			return nil
+		}
+		if !matchQueryFilters(q, f) {
+			return nil
+		}
+		out = append(out, f)
+		if len(out) >= q.Limit {
+			return errStopIteration
+		}
+		return nil
+	}
+
+	switch q.Order {
+	case "asc":
+		for slot := q.From; slot <= q.To; slot++ {
+			prefixFinding := makeSlotPrefix(findingPrefixKey, slot)
+			err := s.db.GetAll(prefixFinding, func(_ int, obj basedb.Obj) error {
+				return handleObj(slot, obj)
+			})
+			if err != nil {
+				if errors.Is(err, errStopIteration) {
+					break
+				}
+				return QueryResult{}, fmt.Errorf("query findings (slot=%d): %w", slot, err)
+			}
+			if slot == q.To {
+				break
+			}
+		}
+	case "desc":
+		for slot := q.To; ; slot-- {
+			prefixFinding := makeSlotPrefix(findingPrefixKey, slot)
+			err := s.db.GetAll(prefixFinding, func(_ int, obj basedb.Obj) error {
+				return handleObj(slot, obj)
+			})
+			if err != nil {
+				if errors.Is(err, errStopIteration) {
+					break
+				}
+				return QueryResult{}, fmt.Errorf("query findings (slot=%d): %w", slot, err)
+			}
+			if slot == q.From || slot == 0 {
+				break
+			}
+		}
+	}
+
 	return QueryResult{Findings: out}, nil
+}
+
+func (s *DBStore) queryByIndex(prefix []byte, q Query, cur cursorInfo) (QueryResult, error) {
+	out := make([]*Finding, 0, minInt(q.Limit, 128))
+	started := !cur.ok
+
+	err := s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
+		if len(out) >= q.Limit {
+			return errStopIteration
+		}
+		slot, reasonByte, seqByte, ok := decodeIndexEntryKey(obj.Key)
+		if !ok {
+			return nil
+		}
+		// Newest-first order, so once we pass below q.From we can stop.
+		if slot < q.From {
+			return errStopIteration
+		}
+		if slot > q.To {
+			return nil
+		}
+
+		if !started {
+			if slot > cur.slot {
+				return nil
+			}
+			if slot < cur.slot {
+				started = true
+			} else {
+				if reasonByte < cur.reasonByte || (reasonByte == cur.reasonByte && seqByte <= cur.seqByte) {
+					return nil
+				}
+				started = true
+			}
+		}
+
+		f, err := s.getFinding(slot, reasonByte, seqByte)
+		if err != nil || f == nil {
+			return nil
+		}
+		if !matchQueryFilters(q, f) {
+			return nil
+		}
+		out = append(out, f)
+		if len(out) >= q.Limit {
+			return errStopIteration
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errStopIteration) {
+		return QueryResult{}, err
+	}
+
+	return QueryResult{Findings: out}, nil
+}
+
+func (s *DBStore) getFinding(slot phase0.Slot, reasonByte byte, seqByte byte) (*Finding, error) {
+	prefixFinding := makeSlotPrefix(findingPrefixKey, slot)
+	obj, found, err := s.db.Get(prefixFinding, []byte{reasonByte, seqByte})
+	if err != nil || !found {
+		return nil, err
+	}
+	f := new(Finding)
+	if err := json.Unmarshal(obj.Value, f); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func matchQueryFilters(q Query, f *Finding) bool {
+	if f == nil {
+		return false
+	}
+	if q.Reason != nil && f.Reason != *q.Reason {
+		return false
+	}
+	if q.Role != nil {
+		if f.Role == nil || *f.Role != *q.Role {
+			return false
+		}
+	}
+	if q.CommitteeIDHex != nil {
+		if f.CommitteeID == nil || *f.CommitteeID != *q.CommitteeIDHex {
+			return false
+		}
+	}
+	if q.ValidatorIndex != nil {
+		if f.ValidatorIndex == nil || *f.ValidatorIndex != *q.ValidatorIndex {
+			return false
+		}
+	}
+	return true
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *DBStore) Prune(pruneBefore phase0.Slot) error {
@@ -228,6 +538,15 @@ func (s *DBStore) Prune(pruneBefore phase0.Slot) error {
 		// Delete all findings for the slot.
 		prefixFinding := makeSlotPrefix(findingPrefixKey, slot)
 		_ = s.db.GetAll(prefixFinding, func(_ int, obj basedb.Obj) error {
+			if len(obj.Key) >= 2 {
+				reasonByte := obj.Key[0]
+				seqByte := obj.Key[1]
+				idxKey := makeIndexEntryKey(slot, reasonByte, seqByte)
+				f := new(Finding)
+				if err := json.Unmarshal(obj.Value, f); err == nil {
+					_ = s.deleteIndexes(f, idxKey, reasonByte)
+				}
+			}
 			_ = s.db.Delete(prefixFinding, obj.Key)
 			return nil
 		})
@@ -244,6 +563,23 @@ func (s *DBStore) Prune(pruneBefore phase0.Slot) error {
 
 		if slot == pruneBefore-1 {
 			break
+		}
+	}
+	return nil
+}
+
+func (s *DBStore) deleteIndexes(f *Finding, idxKey []byte, reasonByte byte) error {
+	_ = s.db.Delete(makeReasonPrefix(reasonByte), idxKey)
+	if f == nil {
+		return nil
+	}
+	if f.ValidatorIndex != nil {
+		_ = s.db.Delete(makeValidatorIndexPrefix(*f.ValidatorIndex), idxKey)
+	}
+	if f.CommitteeID != nil && *f.CommitteeID != "" {
+		prefix, err := makeCommitteePrefix(*f.CommitteeID)
+		if err == nil {
+			_ = s.db.Delete(prefix, idxKey)
 		}
 	}
 	return nil
