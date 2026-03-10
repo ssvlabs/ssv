@@ -3,6 +3,9 @@
 SSV Node implements the OpenTelemetry specification for traces.  
 It supports all standard OTel environment variables, as well as one SSV Node–specific environment variable to enable or disable traces.
 
+Related:
+- Exporter audit runbook: `docs/EXPORTER_AUDITOR_RUNBOOK.md`
+
 When traces are enabled, the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` ([docs](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_traces_endpoint)) environment variable **must** be set.  
 Depending on the selected protocol (`http` or `grpc`), you may also need to set `OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` ([docs](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_traces_protocol)).
 

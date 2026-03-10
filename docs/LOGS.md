@@ -7,6 +7,9 @@
 
 This document describes the logging standards and strategies used in ssv node.
 
+Related:
+- Exporter audit runbook: `docs/EXPORTER_AUDITOR_RUNBOOK.md`
+
 ## Logs for Operators
 
 In order to minimize clutter, SSV periodically logs statistics at every slot and epoch.
