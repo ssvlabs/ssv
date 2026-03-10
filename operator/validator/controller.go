@@ -168,6 +168,13 @@ type Controller struct {
 	traceCollector *dutytracer.Collector
 }
 
+func (c *Controller) SetMEVDryRun(svc runner.MEVDryRunService) {
+	if c == nil || c.validatorCommonOpts == nil {
+		return
+	}
+	c.validatorCommonOpts.MEVDryRun = svc
+}
+
 // NewController creates a new validator controller instance.
 func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.Options) *Controller {
 	logger.Debug("setting up validator controller")
@@ -1104,7 +1111,7 @@ func SetupRunners(
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
 			qbftCtrl := buildController(spectypes.RoleProposer)
-			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay)
+			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay, options.MEVDryRun)
 		case spectypes.RoleAggregator:
 			aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator)

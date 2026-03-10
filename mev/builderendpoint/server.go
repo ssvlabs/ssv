@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	builderspec "github.com/attestantio/go-builder-client/spec"
@@ -18,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/mev/builderendpoint/config"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/relayclient"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/relayurl"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/stats"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/unblinder"
 )
@@ -31,13 +33,18 @@ type Server struct {
 	// Exposed for internal wiring in later steps (prefetch triggers).
 	cache    *bidcache.Cache
 	prefetch *bidcache.Prefetcher
-	fetcher  bidcache.Fetcher
+	fetcher  bidcache.Fetcher // used by prefetcher / stats
 	stats    *stats.Collector
+
+	fetcherForHeader bidcache.Fetcher
+	bidSF            *singleflight.Group
 
 	slotStartTime func(phase0.Slot) time.Time
 
 	cacheCleanupInterval time.Duration
 	relaysCount          int
+
+	backgroundOnce sync.Once
 }
 
 type Dependencies struct {
@@ -73,59 +80,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 
 	prefetcher := bidcache.NewPrefetcher(cache, fetcherForPrefetch, cfg.PrefetchMaxInFlight, bidcache.WithPrefetchObserver(collector))
 
-	var bidSF singleflight.Group
-	bidProvider := func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-
-		slotStart := time.Time{}
-		if deps.SlotStartTime != nil {
-			slotStart = deps.SlotStartTime(slot)
-		}
-		slotOffset := time.Duration(0)
-		if !slotStart.IsZero() {
-			slotOffset = time.Since(slotStart)
-		}
-
-		start := time.Now()
-		key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
-
-		cacheRes := getHeaderCacheMiss
-		result := getHeaderResultError
-		defer func() {
-			took := time.Since(start)
-			recordGetHeaderSlotOffset(ctx, cacheRes, result, slotOffset)
-			recordGetHeader(ctx, cacheRes, result, took)
-			if collector != nil {
-				collector.ObserveGetHeader(string(cacheRes), string(result), took, slotOffset)
-			}
-		}()
-
-		if cache != nil {
-			if ent, ok := cache.Get(key); ok {
-				cacheRes = getHeaderCacheHit
-				result = getHeaderResultBid
-				return ent.Bid, nil
-			}
-		}
-
-		bid, err := bids.GetBidSingleflight(ctx, cache, fetcherForHeader, &bidSF, key)
-		if err != nil {
-			result = getHeaderResultError
-			return nil, err
-		}
-		if bid == nil {
-			result = getHeaderResultNoBid
-			return nil, nil
-		}
-		result = getHeaderResultBid
-		return bid, nil
-	}
-
 	unblind := buildUnblinder(cache, factory, cfg)
-
-	handler := httpapi.NewRouter(logger.Named("HTTP"), bidProvider, unblind, buildRegistrar(factory, cfg))
 
 	cleanupInterval := cfg.CacheCleanupInterval
 	if cfg.CacheTTL <= 0 {
@@ -133,23 +88,32 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		cleanupInterval = 0
 	}
 
-	return &Server{
+	srv := &Server{
 		logger:               logger,
 		cache:                cache,
 		prefetch:             prefetcher,
 		fetcher:              fetcherForPrefetch,
 		stats:                collector,
+		fetcherForHeader:     fetcherForHeader,
+		bidSF:                &singleflight.Group{},
 		slotStartTime:        deps.SlotStartTime,
 		cacheCleanupInterval: cleanupInterval,
 		relaysCount:          len(cfg.Relays),
-		httpServer: &http.Server{
-			Addr:              net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
-			Handler:           handler,
-			ReadHeaderTimeout: 5 * time.Second,
-			ReadTimeout:       10 * time.Second,
-			WriteTimeout:      10 * time.Second,
-		},
-	}, nil
+	}
+
+	bidProvider := func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
+		bid, _, err := srv.GetHeader(ctx, "live", slot, parentHash, pubkey)
+		return bid, err
+	}
+	handler := httpapi.NewRouter(logger.Named("HTTP"), bidProvider, unblind, buildRegistrar(factory, cfg))
+	srv.httpServer = &http.Server{
+		Addr:              net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+	}
+	return srv, nil
 }
 
 func buildUnblinder(cache *bidcache.Cache, factory *relayclient.Factory, cfg config.Config) httpapi.UnblinderFunc {
@@ -188,16 +152,125 @@ func buildRegistrar(factory *relayclient.Factory, cfg config.Config) httpapi.Val
 	return fwd.ForwardValidatorRegistrations
 }
 
-// Run serves until ctx is canceled or the underlying server returns an error.
-func (s *Server) Run(ctx context.Context) error {
-	errCh := make(chan error, 1)
+type GetHeaderReport struct {
+	Cache      string        `json:"cache"`
+	Result     string        `json:"result"`
+	Took       time.Duration `json:"took"`
+	SlotOffset time.Duration `json:"slot_offset"`
 
-	if s.cache != nil && s.cacheCleanupInterval > 0 {
-		go s.runCacheJanitor(ctx, s.cacheCleanupInterval)
+	RelayHost string  `json:"relay_host,omitempty"`
+	ValueETH  float64 `json:"value_eth,omitempty"`
+}
+
+// GetHeader runs the builder getHeader flow and returns the selected bid along with a report.
+//
+// mode is used only for metrics labeling (e.g. "live", "dry_run").
+func (s *Server) GetHeader(ctx context.Context, mode string, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, GetHeaderReport, error) {
+	if s == nil || s.fetcherForHeader == nil {
+		return nil, GetHeaderReport{Cache: string(getHeaderCacheMiss), Result: string(getHeaderResultError)}, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	slotStart := time.Time{}
+	if s.slotStartTime != nil {
+		slotStart = s.slotStartTime(slot)
+	}
+	slotOffset := time.Duration(0)
+	if !slotStart.IsZero() {
+		slotOffset = time.Since(slotStart)
+	}
+
+	start := time.Now()
+	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
+
+	cacheRes := getHeaderCacheMiss
+	if s.cache != nil {
+		if ent, ok := s.cache.Get(key); ok {
+			cacheRes = getHeaderCacheHit
+			took := time.Since(start)
+			rep := GetHeaderReport{
+				Cache:      string(cacheRes),
+				Result:     string(getHeaderResultBid),
+				Took:       took,
+				SlotOffset: slotOffset,
+			}
+			if host := relayurl.Host(ent.Provenance); host != "" {
+				rep.RelayHost = host
+			}
+			if s.stats != nil {
+				s.stats.ObserveGetHeader(rep.Cache, rep.Result, rep.Took, rep.SlotOffset)
+			}
+			recordGetHeaderSlotOffset(ctx, mode, cacheRes, getHeaderResultBid, slotOffset)
+			recordGetHeader(ctx, mode, cacheRes, getHeaderResultBid, took)
+			return ent.Bid, rep, nil
+		}
+	}
+
+	bid, err := bids.GetBidSingleflight(ctx, s.cache, s.fetcherForHeader, s.bidSF, key)
+	if err != nil {
+		took := time.Since(start)
+		rep := GetHeaderReport{Cache: string(cacheRes), Result: string(getHeaderResultError), Took: took, SlotOffset: slotOffset}
+		if s.stats != nil {
+			s.stats.ObserveGetHeader(rep.Cache, rep.Result, rep.Took, rep.SlotOffset)
+		}
+		recordGetHeaderSlotOffset(ctx, mode, cacheRes, getHeaderResultError, slotOffset)
+		recordGetHeader(ctx, mode, cacheRes, getHeaderResultError, took)
+		return nil, rep, err
+	}
+	if bid == nil {
+		took := time.Since(start)
+		rep := GetHeaderReport{Cache: string(cacheRes), Result: string(getHeaderResultNoBid), Took: took, SlotOffset: slotOffset}
+		if s.stats != nil {
+			s.stats.ObserveGetHeader(rep.Cache, rep.Result, rep.Took, rep.SlotOffset)
+		}
+		recordGetHeaderSlotOffset(ctx, mode, cacheRes, getHeaderResultNoBid, slotOffset)
+		recordGetHeader(ctx, mode, cacheRes, getHeaderResultNoBid, took)
+		return nil, rep, nil
+	}
+
+	// Fetch provenance (and relay host) from cache if available.
+	provenance := ""
+	if s.cache != nil {
+		if ent, ok := s.cache.Get(key); ok {
+			provenance = ent.Provenance
+		}
+	}
+
+	took := time.Since(start)
+	rep := GetHeaderReport{Cache: string(cacheRes), Result: string(getHeaderResultBid), Took: took, SlotOffset: slotOffset}
+	if host := relayurl.Host(provenance); host != "" {
+		rep.RelayHost = host
 	}
 	if s.stats != nil {
-		go s.runHourlyStatsReporter(ctx, time.Hour)
+		s.stats.ObserveGetHeader(rep.Cache, rep.Result, rep.Took, rep.SlotOffset)
 	}
+	recordGetHeaderSlotOffset(ctx, mode, cacheRes, getHeaderResultBid, slotOffset)
+	recordGetHeader(ctx, mode, cacheRes, getHeaderResultBid, took)
+	return bid, rep, nil
+}
+
+// StartBackground runs periodic tasks (cache cleanup and stats reporting) without starting the HTTP server.
+func (s *Server) StartBackground(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	s.backgroundOnce.Do(func() {
+		if s.cache != nil && s.cacheCleanupInterval > 0 {
+			go s.runCacheJanitor(ctx, s.cacheCleanupInterval)
+		}
+		if s.stats != nil {
+			go s.runHourlyStatsReporter(ctx, time.Hour)
+		}
+	})
+}
+
+// Run serves until ctx is canceled or the underlying server returns an error.
+func (s *Server) Run(ctx context.Context) error {
+	s.StartBackground(ctx)
+
+	errCh := make(chan error, 1)
 
 	go func() {
 		if s.logger != nil {

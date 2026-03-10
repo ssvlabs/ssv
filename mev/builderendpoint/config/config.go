@@ -12,6 +12,12 @@ import (
 type Config struct {
 	Enabled bool `yaml:"Enabled" env:"ENABLED" env-default:"false" env-description:"Enable the SSV-hosted Builder API endpoint (mev-boost-compatible)"`
 
+	// NoDryRun disables dry-run mode. Dry-run is the default when the builder endpoint feature is enabled.
+	//
+	// When dry-run is enabled, the node can run the in-node builder flow in parallel to the legacy
+	// proposer flow for comparison, without serving the Builder API to the beacon node.
+	NoDryRun bool `yaml:"NoDryRun" env:"NO_DRY_RUN" env-default:"false" env-description:"Disable dry-run mode (serve the Builder API to the beacon node)"`
+
 	// Host and Port define the listen address for the builder endpoint.
 	//
 	// Host defaults to 0.0.0.0 to allow the beacon node (often running in another container/host namespace)

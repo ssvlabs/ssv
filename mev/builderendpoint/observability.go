@@ -94,14 +94,20 @@ func getHeaderAttributes(cacheRes getHeaderCacheResult, res getHeaderResult) []a
 	}
 }
 
-func recordGetHeader(ctx context.Context, cacheRes getHeaderCacheResult, res getHeaderResult, duration time.Duration) {
+func recordGetHeader(ctx context.Context, mode string, cacheRes getHeaderCacheResult, res getHeaderResult, duration time.Duration) {
 	attr := getHeaderAttributes(cacheRes, res)
+	if mode != "" {
+		attr = append(attr, attribute.String("ssv.mev.builder_endpoint.mode", mode))
+	}
 	getHeaderRequestsCounter.Add(ctx, 1, metric.WithAttributes(attr...))
 	getHeaderDurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr...))
 }
 
-func recordGetHeaderSlotOffset(ctx context.Context, cacheRes getHeaderCacheResult, res getHeaderResult, offset time.Duration) {
+func recordGetHeaderSlotOffset(ctx context.Context, mode string, cacheRes getHeaderCacheResult, res getHeaderResult, offset time.Duration) {
 	attr := getHeaderAttributes(cacheRes, res)
+	if mode != "" {
+		attr = append(attr, attribute.String("ssv.mev.builder_endpoint.mode", mode))
+	}
 	// Negative offsets can happen for future slots; clamp to 0 for clearer dashboards.
 	if offset < 0 {
 		offset = 0

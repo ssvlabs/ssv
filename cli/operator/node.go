@@ -33,6 +33,7 @@ import (
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
+	hmev "github.com/ssvlabs/ssv/api/handlers/mev"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
 	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -55,6 +56,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	builderendpoint "github.com/ssvlabs/ssv/mev/builderendpoint"
 	builderendpointcfg "github.com/ssvlabs/ssv/mev/builderendpoint/config"
+	mevdryrun "github.com/ssvlabs/ssv/mev/dryrun"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/network"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
@@ -127,6 +129,8 @@ var cfg config
 
 var globalArgs global_config.Args
 
+var builderEndpointNoDryRunFlag bool
+
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -143,6 +147,10 @@ var StartNodeCmd = &cobra.Command{
 			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
 				log.Fatal("could not read share config needed for logger initialization: %w", err)
 			}
+		}
+
+		if cmd.Flags().Changed("no-dry-run") {
+			cfg.BuilderEndpoint.NoDryRun = builderEndpointNoDryRunFlag
 		}
 
 		observabilityOptions := []observability.Option{
@@ -574,6 +582,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
 		var builderSrv *builderendpoint.Server
+		var mevDryRunSvc *mevdryrun.Service
 		if cfg.BuilderEndpoint.Enabled {
 			srv, err := builderendpoint.New(cmd.Context(), logger, cfg.BuilderEndpoint, builderendpoint.Dependencies{
 				SlotStartTime: networkConfig.SlotStartTime,
@@ -582,6 +591,12 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("failed to create builder endpoint server", zap.Error(err))
 			}
 			builderSrv = srv
+
+			if !cfg.BuilderEndpoint.NoDryRun {
+				mevDryRunSvc = mevdryrun.New(logger, executionClient, builderSrv, cfg.BuilderEndpoint.PrefetchParentHashTimeout)
+				validatorCtrl.SetMEVDryRun(mevDryRunSvc)
+				mevDryRunSvc.StartReporter(cmd.Context(), time.Hour)
+			}
 
 			// If enabled, expose the internal prefetcher to the duty scheduler to warm bids before the
 			// beacon node calls the Builder API.
@@ -675,6 +690,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if cfg.SSVAPIPort > 0 {
+			var mevHandler *hmev.Handler
+			if mevDryRunSvc != nil {
+				mevHandler = hmev.New(mevDryRunSvc)
+			}
+
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
@@ -693,6 +713,7 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				mevHandler,
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
@@ -704,11 +725,16 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if builderSrv != nil {
-			go func() {
-				if err := builderSrv.Run(cmd.Context()); err != nil {
-					logger.Fatal("failed to run builder endpoint server", zap.Error(err))
-				}
-			}()
+			builderSrv.StartBackground(cmd.Context())
+			if cfg.BuilderEndpoint.NoDryRun {
+				go func() {
+					if err := builderSrv.Run(cmd.Context()); err != nil {
+						logger.Fatal("failed to run builder endpoint server", zap.Error(err))
+					}
+				}()
+			} else {
+				logger.Info("builder endpoint enabled in dry-run mode (not serving HTTP)")
+			}
 		}
 
 		if err := operatorNode.Start(cfg.SSVOptions.Context); err != nil {
@@ -859,6 +885,7 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
+	StartNodeCmd.Flags().BoolVar(&builderEndpointNoDryRunFlag, "no-dry-run", false, "Disable MEV builder dry-run mode (serve the Builder API to the beacon node)")
 }
 
 func setupBadgerDB(
