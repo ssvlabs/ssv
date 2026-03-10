@@ -49,6 +49,9 @@ var ErrAuditorDisabled = errors.New("auditor disabled")
 type Finding struct {
 	Version   uint32    `json:"version"`
 	CreatedAt time.Time `json:"createdAt"`
+	// ID is a deterministic fingerprint used for log correlation even when
+	// persistence is capped or unavailable.
+	ID string `json:"id,omitempty"`
 	// Key is a stable identifier assigned when persisted, intended for
 	// correlation between logs and the findings store.
 	Key    string     `json:"key,omitempty"`

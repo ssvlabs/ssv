@@ -2,9 +2,12 @@ package auditor
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -282,6 +285,7 @@ func dutyFetchKey(role spectypes.BeaconRole, epoch *phase0.Epoch, period *uint64
 }
 
 func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
+	start := time.Now()
 	epoch := a.cfg.EstimatedEpochAtSlot(slot)
 	period := a.cfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 
@@ -294,12 +298,14 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 	}
 
 	persisted, err := a.traces.GetScheduled(slot)
+	scheduleReadOK := err == nil
 	if err != nil {
 		// Continue with evidence; schedule read failures are part of the story.
 		a.logger.Debug("get persisted schedule failed", fields.Slot(slot), zap.Error(err))
 	}
 
 	links, errLinks := a.traces.GetCommitteeDutyLinks(slot)
+	linksReadOK := errLinks == nil
 	if errLinks != nil {
 		a.logger.Debug("get links failed", fields.Slot(slot), zap.Error(errLinks))
 	}
@@ -416,6 +422,60 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 		rpcReqSync[idx] = struct{}{}
 	}
 
+	type reasonSummary struct {
+		emitted         uint64
+		stored          uint64
+		droppedCap      uint64
+		droppedStoreErr uint64
+
+		rpcUsed   uint64
+		rpcOK     uint64
+		rpcErrors uint64
+
+		roleCounts map[Role]uint64
+	}
+	summaries := make(map[ReasonCode]*reasonSummary)
+
+	addToSummary := func(f *Finding, res emitResult) {
+		if f == nil {
+			return
+		}
+		s, ok := summaries[f.Reason]
+		if !ok {
+			s = &reasonSummary{roleCounts: make(map[Role]uint64)}
+			summaries[f.Reason] = s
+		}
+		s.emitted++
+		if f.Role != nil {
+			s.roleCounts[*f.Role]++
+		}
+		if res.Stored {
+			s.stored++
+		}
+		switch res.DropWhy {
+		case "cap_reached":
+			s.droppedCap++
+		case "store_error":
+			s.droppedStoreErr++
+		}
+		if f.Evidence.Expected.RPCFallback.Used {
+			s.rpcUsed++
+			if f.Evidence.Expected.RPCFallback.OK != nil {
+				if *f.Evidence.Expected.RPCFallback.OK {
+					s.rpcOK++
+				} else {
+					s.rpcErrors++
+				}
+			}
+		}
+	}
+
+	emit := func(f *Finding) emitResult {
+		res := a.emitFinding(f)
+		addToSummary(f, res)
+		return res
+	}
+
 	// Emit findings for mismatches.
 	for _, it := range coalesced {
 		role := it.role
@@ -425,7 +485,7 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 		persistHasRole := persistedHasRole(persisted, index, role)
 		if persistHasRole {
 			// Schedule says it should be there; now verify mapping.
-			if err := a.checkCommitteeMapping(slot, epoch, period, role, committeeID, index, expectedCommitteeByIndex, linksByIndex, persisted, it); err != nil {
+			if err := a.checkCommitteeMapping(slot, epoch, period, role, committeeID, index, expectedCommitteeByIndex, linksByIndex, persisted, it, emit); err != nil {
 				a.logger.Debug("mapping check error", zap.Error(err))
 			}
 			continue
@@ -533,7 +593,30 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 			},
 		}
 
-		a.emitFinding(finding)
+		emit(finding)
+	}
+
+	if len(summaries) > 0 {
+		auditLatency := time.Since(start).Milliseconds()
+		for reason, s := range summaries {
+			a.logger.Info("auditor summary",
+				zap.Uint64("slot", uint64(slot)),
+				zap.Uint64("epoch", uint64(epoch)),
+				zap.Int64("audit_latency_ms", auditLatency),
+				zap.Uint64("delay_slots", a.opts.DelaySlots),
+				zap.String("reason", string(reason)),
+				zap.Uint64("count_emitted", s.emitted),
+				zap.Uint64("count_stored", s.stored),
+				zap.Uint64("count_dropped_cap", s.droppedCap),
+				zap.Uint64("count_dropped_store_error", s.droppedStoreErr),
+				zap.Uint64("rpc_used_count", s.rpcUsed),
+				zap.Uint64("rpc_ok_count", s.rpcOK),
+				zap.Uint64("rpc_error_count", s.rpcErrors),
+				zap.Bool("schedule_read_ok", scheduleReadOK),
+				zap.Bool("links_read_ok", linksReadOK),
+				zap.Any("role_counts", s.roleCounts),
+			)
+		}
 	}
 
 	return nil
@@ -747,7 +830,7 @@ func (a *Auditor) chooseReasonForScheduleMismatch(slot phase0.Slot, epoch phase0
 	return ReasonUnexpectedWireTrace, ev
 }
 
-func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, period uint64, role Role, observedCommittee spectypes.CommitteeID, index phase0.ValidatorIndex, expectedCommittee map[phase0.ValidatorIndex]spectypes.CommitteeID, linksByIndex map[phase0.ValidatorIndex]spectypes.CommitteeID, persisted map[phase0.ValidatorIndex]rolemask.Mask, it obsItem) error {
+func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, period uint64, role Role, observedCommittee spectypes.CommitteeID, index phase0.ValidatorIndex, expectedCommittee map[phase0.ValidatorIndex]spectypes.CommitteeID, linksByIndex map[phase0.ValidatorIndex]spectypes.CommitteeID, persisted map[phase0.ValidatorIndex]rolemask.Mask, it obsItem, emit func(*Finding) emitResult) error {
 	expCID, expOK := expectedCommittee[index]
 	linkCID, linkOK := linksByIndex[index]
 
@@ -828,35 +911,165 @@ func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, pe
 			Pipeline: ev.pipeline,
 		},
 	}
-	a.emitFinding(finding)
+	if emit == nil {
+		a.emitFinding(finding)
+		return nil
+	}
+	emit(finding)
 	return nil
 }
 
-func (a *Auditor) emitFinding(f *Finding) {
+type emitResult struct {
+	Stored   bool
+	DropWhy  string
+	StoreErr error
+	Key      string
+}
+
+func (a *Auditor) emitFinding(f *Finding) emitResult {
 	if f == nil {
-		return
+		return emitResult{}
 	}
 	// Metrics always.
 	findingsTotal.Add(context.Background(), 1, reasonAttr(string(f.Reason)))
 
-	// Logs always (as requested). Keep it compact; evidence is still in stored record.
-	a.logger.Warn("auditor mismatch",
-		zap.String("reason", string(f.Reason)),
-		zap.Uint64("slot", f.Slot),
-		zap.String("committee_id", safeStr(f.CommitteeID)),
-		zap.Any("role", f.Role),
-		zap.Any("validator_index", f.ValidatorIndex),
-	)
+	if f.ID == "" {
+		f.ID = findingFingerprint(f)
+	}
 
+	var out emitResult
 	res, err := a.store.PutFinding(f)
-	if err != nil {
+	switch {
+	case err != nil:
+		out.Stored = false
+		out.DropWhy = "store_error"
+		out.StoreErr = err
 		droppedFindings.Add(context.Background(), 1, dropWhyAttr("store_error"), reasonAttr(string(f.Reason)))
-		a.logger.Debug("failed to persist finding", zap.Error(err))
-		return
-	}
-	if !res.Stored {
+	case !res.Stored:
+		out.Stored = false
+		out.DropWhy = "cap_reached"
 		droppedFindings.Add(context.Background(), 1, dropWhyAttr("cap_reached"), reasonAttr(string(f.Reason)))
+	default:
+		out.Stored = true
+		out.Key = res.Key
 	}
+	if out.Key == "" {
+		out.Key = fmt.Sprintf("%d/%s/*", f.Slot, f.Reason)
+	}
+
+	fields := mismatchLogFields(f, out)
+	if out.StoreErr != nil {
+		fields = append(fields, zap.String("store_error", out.StoreErr.Error()))
+	}
+	a.logger.Warn("auditor mismatch", fields...)
+	return out
+}
+
+func mismatchLogFields(f *Finding, res emitResult) []zap.Field {
+	if f == nil {
+		return nil
+	}
+	var role string
+	if f.Role != nil {
+		role = string(*f.Role)
+	}
+	var validatorIndex string
+	if f.ValidatorIndex != nil {
+		validatorIndex = strconv.FormatUint(*f.ValidatorIndex, 10)
+	}
+
+	sch := f.Evidence.PersistedSchedule
+	rpc := f.Evidence.Expected.RPCFallback
+	df := f.Evidence.Pipeline.DutyFetch
+	sc := f.Evidence.Pipeline.ScheduleCompute
+
+	var rpcOK any
+	if rpc.OK != nil {
+		rpcOK = *rpc.OK
+	}
+
+	fs := []zap.Field{
+		zap.String("finding_id", f.ID),
+		zap.String("finding_key", res.Key),
+		zap.Bool("stored", res.Stored),
+		zap.String("drop_why", res.DropWhy),
+
+		zap.Uint64("slot", f.Slot),
+		zap.Uint64("epoch", f.Epoch),
+		zap.String("reason", string(f.Reason)),
+		zap.String("role", role),
+		zap.String("validator_index", validatorIndex),
+		zap.String("committee_id_observed", safeStr(f.CommitteeID)),
+
+		zap.Int("schedule_size", sch.ScheduleSize),
+		zap.Bool("schedule_has_index", sch.HasIndex),
+		zap.Bool("schedule_has_role", sch.HasRole),
+		zap.Any("schedule_mask_bits", sch.MaskBits),
+
+		zap.Any("duty_store_expected", f.Evidence.Expected.ByDutyStore),
+		zap.Bool("expected_other_role", f.Evidence.Expected.ExpectedOtherRole),
+
+		zap.Bool("rpc_enabled", rpc.Enabled),
+		zap.Bool("rpc_used", rpc.Used),
+		zap.Any("rpc_ok", rpcOK),
+		zap.String("rpc_error", rpc.Error),
+		zap.Any("rpc_expected_slot", rpc.AttesterExpectedSlot),
+
+		zap.Int("msg_count", f.Evidence.Observed.MessagesCount),
+		zap.Int("signers_count", f.Evidence.Observed.SignersCount),
+		zap.Any("signers_sample", f.Evidence.Observed.Signers),
+
+		zap.Bool("registry_validator_known", f.Evidence.Registry.ValidatorKnown),
+		zap.Any("registry_has_beacon_metadata", f.Evidence.Registry.HasBeaconMetadata),
+		zap.Any("registry_min_participation_epoch", f.Evidence.Registry.MinParticipationEpoch),
+		zap.String("committee_id_registry_expected", safeStr(f.Evidence.Registry.ExpectedCommitteeID)),
+
+		zap.Bool("link_present", f.Evidence.Links.LinkPresent),
+		zap.String("committee_id_linked", safeStr(f.Evidence.Links.LinkedCommitteeID)),
+
+		zap.Uint64("schedule_job_drops", f.Evidence.Pipeline.ScheduleJobDroppedCount),
+	}
+
+	if sc != nil {
+		fs = append(fs,
+			zap.Bool("schedule_compute_ok", sc.OK),
+			zap.Time("schedule_compute_at", sc.ComputedAt),
+			zap.String("schedule_compute_error", sc.Error),
+			zap.Int("schedule_compute_size", sc.ComputedScheduleSize),
+		)
+	}
+	if df != nil {
+		fs = append(fs,
+			zap.Bool("duty_fetch_ok", df.OK),
+			zap.Time("duty_fetch_at", df.At),
+			zap.String("duty_fetch_error", df.Error),
+			zap.Int64("duty_fetch_took_ms", df.TookMs),
+			zap.Int("duty_fetch_requested", df.Requested),
+			zap.Int("duty_fetch_returned", df.Returned),
+		)
+	}
+	return fs
+}
+
+func findingFingerprint(f *Finding) string {
+	if f == nil {
+		return ""
+	}
+	role := ""
+	if f.Role != nil {
+		role = string(*f.Role)
+	}
+	validatorIndex := ""
+	if f.ValidatorIndex != nil {
+		validatorIndex = strconv.FormatUint(*f.ValidatorIndex, 10)
+	}
+	committee := ""
+	if f.CommitteeID != nil {
+		committee = *f.CommitteeID
+	}
+	seed := fmt.Sprintf("%d|%s|%s|%s|%s", f.Slot, f.Reason, role, validatorIndex, committee)
+	sum := sha256.Sum256([]byte(seed))
+	return hex.EncodeToString(sum[:8])
 }
 
 func (a *Auditor) getJobDropCount(slot phase0.Slot) uint64 {
