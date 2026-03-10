@@ -56,6 +56,11 @@ type DBStore struct {
 }
 
 const (
+	orderAsc  = "asc"
+	orderDesc = "desc"
+)
+
+const (
 	findingPrefixKey = "af"  // per-slot prefix: af + slotBytes
 	countPrefixKey   = "afc" // per-slot prefix: afc + slotBytes; key: reasonByte -> uint16 count
 	metaPrefixKey    = "afm"
@@ -75,7 +80,7 @@ func NewDBStore(db basedb.Database) *DBStore {
 	return &DBStore{db: db, maxPerSlotReason: 10}
 }
 
-func (s *DBStore) SlotBounds() (min phase0.Slot, max phase0.Slot, ok bool, err error) {
+func (s *DBStore) SlotBounds() (phase0.Slot, phase0.Slot, bool, error) {
 	minSlot, minOK, err := s.getSlotBound(metaMinSlotKey)
 	if err != nil {
 		return 0, 0, false, err
@@ -341,11 +346,11 @@ func (s *DBStore) Query(q Query) (QueryResult, error) {
 		q.Limit = 500
 	}
 	if q.Order == "" {
-		q.Order = "desc"
+		q.Order = orderDesc
 	} else {
 		q.Order = strings.ToLower(strings.TrimSpace(q.Order))
 	}
-	if q.Order != "asc" && q.Order != "desc" {
+	if q.Order != orderAsc && q.Order != orderDesc {
 		return QueryResult{}, fmt.Errorf("invalid order: %s", q.Order)
 	}
 	if q.To < q.From {
@@ -362,7 +367,7 @@ func (s *DBStore) Query(q Query) (QueryResult, error) {
 	}
 
 	// Use secondary indexes for common lookups when we can return newest-first.
-	if q.Order == "desc" {
+	if q.Order == orderDesc {
 		switch {
 		case q.ValidatorIndex != nil:
 			return s.queryByIndex(makeValidatorIndexPrefix(*q.ValidatorIndex), q, cur)
@@ -404,7 +409,7 @@ func (s *DBStore) queryBySlotScan(q Query, cur cursorInfo) (QueryResult, error) 
 		seqByte := obj.Key[1]
 
 		if !started {
-			if q.Order == "desc" {
+			if q.Order == orderDesc {
 				if slot > cur.slot {
 					return nil
 				}
@@ -450,7 +455,7 @@ func (s *DBStore) queryBySlotScan(q Query, cur cursorInfo) (QueryResult, error) 
 	}
 
 	switch q.Order {
-	case "asc":
+	case orderAsc:
 		for slot := q.From; slot <= q.To; slot++ {
 			prefixFinding := makeSlotPrefix(findingPrefixKey, slot)
 			err := s.db.GetAll(prefixFinding, func(_ int, obj basedb.Obj) error {
@@ -466,7 +471,7 @@ func (s *DBStore) queryBySlotScan(q Query, cur cursorInfo) (QueryResult, error) 
 				break
 			}
 		}
-	case "desc":
+	case orderDesc:
 		for slot := q.To; ; slot-- {
 			prefixFinding := makeSlotPrefix(findingPrefixKey, slot)
 			err := s.db.GetAll(prefixFinding, func(_ int, obj basedb.Obj) error {
