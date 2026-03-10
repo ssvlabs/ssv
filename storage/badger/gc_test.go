@@ -187,7 +187,7 @@ func TestGCLock_MutualExclusion(t *testing.T) {
 	close(releaseLock)
 	select {
 	case <-lockAcquired2:
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(100 * time.Millisecond):
 		t.Fatal("second goroutine did not acquire lock after release")
 	}
 }
@@ -275,7 +275,7 @@ func TestPeriodicGC_Cancellation(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(5000 * time.Millisecond):
+	case <-time.After(100 * time.Millisecond):
 		t.Fatal("periodic GC did not cancel promptly")
 	}
 }

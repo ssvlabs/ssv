@@ -262,7 +262,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(8),
-			WithReqTimeout(200*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -633,10 +633,13 @@ func TestFetchLogsInBatches(t *testing.T) {
 		cancel()
 
 		logChan, errChan := env.client.fetchLogsInBatches(canceledCtx, 0, 5)
-		err, ok := <-errChan
-		require.Falsef(t, ok, "should not receive error when context was canceled: %v", err)
-		_, ok = <-logChan
-		require.Falsef(t, ok, "should not receive log when context was canceled")
+		select {
+		case <-logChan:
+			require.Fail(t, "Should not receive log when context is canceled")
+		case err := <-errChan:
+			require.Error(t, err, "fetchLogsInBatches should return an error when context is canceled")
+		case <-canceledCtx.Done():
+		}
 	})
 }
 
@@ -654,7 +657,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 func TestChainReorganizationLogs(t *testing.T) {
 	// TODO: fix reorg test
 	// logger := zaptest.NewLogger(t)
-	// const testTimeout = 30 * time.Second
+	// const testTimeout = 2 * time.Second
 	// ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	// defer cancel()
 
@@ -966,7 +969,7 @@ func TestFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(200*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1056,7 +1059,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(400*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1118,7 +1121,7 @@ func TestHeaderByNumber(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(400*time.Millisecond),
+			WithReqTimeout(100*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 

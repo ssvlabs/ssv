@@ -24,7 +24,7 @@ func Test_specForClient(t *testing.T) {
 			Options{
 				BeaconConfig:   networkconfig.TestNetwork.Beacon,
 				BeaconNodeAddr: mockServer.URL,
-				CommonTimeout:  400 * time.Millisecond,
+				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
 		)

@@ -213,7 +213,7 @@ func TestEthExecLayer(t *testing.T) {
 			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			time.Sleep(time.Millisecond * 500)
 
 			shares = nodeStorage.Shares().List(nil)
 			require.Equal(t, 5, len(shares))
@@ -243,7 +243,7 @@ func TestEthExecLayer(t *testing.T) {
 			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			time.Sleep(time.Millisecond * 300)
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
@@ -283,7 +283,7 @@ func TestEthExecLayer(t *testing.T) {
 			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			time.Sleep(time.Millisecond * 300)
 
 			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
@@ -320,7 +320,7 @@ func TestEthExecLayer(t *testing.T) {
 			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			time.Sleep(time.Millisecond * 300)
 
 			feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
 			require.NoError(t, err)

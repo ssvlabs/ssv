@@ -92,15 +92,3 @@ func (mr *MockdutyHandlerMockRecorder) Setup(name, logger, beaconNode, execution
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), name, logger, beaconNode, executionClient, beaconConfig, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange)
 }
-
-// WaitShutdown mocks base method.
-func (m *MockdutyHandler) WaitShutdown() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "WaitShutdown")
-}
-
-// WaitShutdown indicates an expected call of WaitShutdown.
-func (mr *MockdutyHandlerMockRecorder) WaitShutdown() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitShutdown", reflect.TypeOf((*MockdutyHandler)(nil).WaitShutdown))
-}

@@ -135,7 +135,7 @@ func runHealthyTest(
 	syncDistanceTolerance uint64,
 ) error {
 	const (
-		commonTimeout = 400 * time.Millisecond
+		commonTimeout = 100 * time.Millisecond
 		longTimeout   = 500 * time.Millisecond
 	)
 
@@ -186,9 +186,9 @@ func runHealthyTest(
 
 func TestTimeouts(t *testing.T) {
 	const (
-		commonTimeout = 800 * time.Millisecond
-		longTimeout   = 4000 * time.Millisecond
-		timeoutMargin = 400 * time.Millisecond
+		commonTimeout = 100 * time.Millisecond
+		longTimeout   = 500 * time.Millisecond
+		timeoutMargin = 20 * time.Millisecond
 		// mockServerEpoch is the epoch to use in requests to the mock server.
 		mockServerEpoch = 132502
 	)

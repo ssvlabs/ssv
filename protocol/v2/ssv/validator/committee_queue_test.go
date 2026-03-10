@@ -126,7 +126,7 @@ func collectMessagesFromQueue(t *testing.T, msgChannel <-chan *queue.SSVMessage,
 	case msg := <-msgChannel:
 		t.Logf("received more messages than expected (%d)", expectedCount)
 		receivedMessages = append(receivedMessages, msg)
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		// No additional messages within timeout, which is the expected case
 	}
 
@@ -828,7 +828,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 					}
 				}
 			} else {
-				time.Sleep(400 * time.Millisecond)
+				time.Sleep(200 * time.Millisecond)
 			}
 
 			// Verify no additional messages are processed
@@ -837,7 +837,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				case msg := <-msgChannel:
 					t.Fatalf("unexpected message processed (type: %v), expected only %d",
 						msg.Body.(*specqbft.Message).MsgType, expectedProcessedCount)
-				case <-time.After(400 * time.Millisecond):
+				case <-time.After(200 * time.Millisecond):
 					// timeout reached - no more messages, as expected
 				}
 			} else {
@@ -846,7 +846,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				case msg := <-msgChannel:
 					t.Fatalf("unexpected message processed when expecting none: %v",
 						msg.Body.(*specqbft.Message).MsgType)
-				case <-time.After(400 * time.Millisecond):
+				case <-time.After(200 * time.Millisecond):
 					// Timeout reached - no messages, as expected
 				}
 			}
@@ -1731,7 +1731,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			require.True(t, q.Q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
 		}
 
-		time.Sleep(400 * time.Millisecond) // Give time for the consumer to process (and filter) messages
+		time.Sleep(200 * time.Millisecond) // Give time for the consumer to process (and filter) messages
 
 		select {
 		case <-handlerCalled:

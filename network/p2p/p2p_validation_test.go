@@ -65,7 +65,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			Ignored:  make([]int, nodeCount),
 			Rejected: make([]int, nodeCount),
 		}
-		messageValidators[i].ValidateFunc = func(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			signedSSVMessage := &spectypes.SignedSSVMessage{}
 			if err := signedSSVMessage.Decode(pmsg.GetData()); err != nil {
 				return pubsub.ValidationReject
@@ -101,26 +101,22 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				Body:             body,
 			}
 
-			p := vNet.NodeByPeerID(peerID)
-			if p == nil {
-				panic(fmt.Sprintf("unknown peer: %s", peerID))
-			}
+			peer := vNet.NodeByPeerID(p)
 
 			mtx.Lock()
-
 			// Validation according to role.
 			var validation pubsub.ValidationResult
 			switch ssvMessage.MsgID.GetRoleType() {
 			case acceptedRole:
-				messageValidators[i].Accepted[p.Index]++
+				messageValidators[i].Accepted[peer.Index]++
 				messageValidators[i].TotalAccepted++
 				validation = pubsub.ValidationAccept
 			case ignoredRole:
-				messageValidators[i].Ignored[p.Index]++
+				messageValidators[i].Ignored[peer.Index]++
 				messageValidators[i].TotalIgnored++
 				validation = pubsub.ValidationIgnore
 			case rejectedRole:
-				messageValidators[i].Rejected[p.Index]++
+				messageValidators[i].Rejected[peer.Index]++
 				messageValidators[i].TotalRejected++
 				validation = pubsub.ValidationReject
 			default:
@@ -130,7 +126,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 			// Always accept messages from self to make libp2p propagate them,
 			// while still counting them by their role.
-			if peerID == vNet.Nodes[i].Network.Host().ID() {
+			if p == vNet.Nodes[i].Network.Host().ID() {
 				return pubsub.ValidationAccept
 			}
 
@@ -139,7 +135,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	}
 
 	// Create a VirtualNet with 4 nodes.
-	vNet = createVirtualNet(t, ctx, 4, shares, func(nodeIndex uint64) validation.MessageValidator {
+	vNet = CreateVirtualNet(t, ctx, 4, shares, func(nodeIndex uint64) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
 
@@ -290,6 +286,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			}
 		}
 	}
+
+	defer fmt.Println()
 }
 
 type MockMessageValidator struct {
@@ -328,7 +326,7 @@ type VirtualNet struct {
 	Nodes []*VirtualNode
 }
 
-func createVirtualNet(
+func CreateVirtualNet(
 	t *testing.T,
 	ctx context.Context,
 	nodes int,

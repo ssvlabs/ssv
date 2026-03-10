@@ -12,6 +12,10 @@ const (
 	healthyInbounds  = 4
 )
 
+type TopicIndex interface {
+	PeersByTopic() map[string][]peer.ID
+}
+
 type AllPeersAndTopicsJSON struct {
 	AllPeers     []peer.ID        `json:"all_peers"`
 	PeersByTopic []topicIndexJSON `json:"peers_by_topic"`

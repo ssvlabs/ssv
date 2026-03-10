@@ -6,21 +6,17 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
-	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
+	networkpeers "github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
 type Node struct {
 	listenAddresses []string
-
-	network    p2pNetwork
-	peersIndex peersIndex
-	topicIndex topicIndex
+	peersIndex      networkpeers.Index
+	topicIndex      TopicIndex
+	network         network.Network
 
 	nodeProber          *nodeprobe.Prober
 	clNodeName          string
@@ -30,9 +26,9 @@ type Node struct {
 
 func NewNode(
 	listenAddresses []string,
-	peersIndex peersIndex,
-	network p2pNetwork,
-	topicIndex topicIndex,
+	peersIndex networkpeers.Index,
+	network network.Network,
+	topicIndex TopicIndex,
 	nodeProber *nodeprobe.Prober,
 	clNodeName string,
 	elNodeName string,
@@ -152,41 +148,4 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
 	return resp
-}
-
-type p2pNetwork interface {
-	// LocalPeer returns the local peer associated with this network
-	LocalPeer() peer.ID
-
-	// ListenAddresses returns a list of addresses at which this network listens.
-	ListenAddresses() []ma.Multiaddr
-
-	// Peers returns the peers connected
-	Peers() []peer.ID
-
-	// Connectedness returns a state signaling connection capabilities
-	Connectedness(peer.ID) network.Connectedness
-
-	// Peerstore returns the internal peerstore
-	// This is useful to tell the dialer about a new address for a peer.
-	// Or use one of the public keys found out over the network.
-	Peerstore() peerstore.Peerstore
-
-	// ConnsToPeer returns the connections in this Network for given peer.
-	ConnsToPeer(p peer.ID) []network.Conn
-}
-
-type peersIndex interface {
-	// Self returns the current node info
-	Self() *records.NodeInfo
-
-	// NodeInfo returns the NodeInfo of the given peers, or nil if not found.
-	NodeInfo(id peer.ID) *records.NodeInfo
-
-	// GetPeerSubnets returns subnets of the given peer and whether it was found
-	GetPeerSubnets(id peer.ID) (subnets commons.Subnets, ok bool)
-}
-
-type topicIndex interface {
-	PeersByTopic() map[string][]peer.ID
 }

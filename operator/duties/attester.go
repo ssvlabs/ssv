@@ -7,7 +7,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -35,26 +34,18 @@ type AttesterHandler struct {
 	fetchNextEpoch bool
 
 	exporterMode bool
-
-	// pool manages all go-routines spawned by AttesterHandler.
-	pool *pool.Pool
 }
 
 func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], exporterMode bool) *AttesterHandler {
 	h := &AttesterHandler{
 		duties:       duties,
 		exporterMode: exporterMode,
-		pool:         pool.New(),
 	}
 	return h
 }
 
 func (h *AttesterHandler) Name() string {
 	return spectypes.BNRoleAttester.String()
-}
-
-func (h *AttesterHandler) WaitShutdown() {
-	h.pool.Wait()
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -339,7 +330,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
-	h.pool.Go(func() {
+	go func() {
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
 		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -351,7 +342,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to submit beacon committee subscription", zap.Error(err))
 		}
-	})
+	}()
 
 	span.SetStatus(codes.Ok, "")
 	return nil

@@ -112,9 +112,7 @@ type Scheduler struct {
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
-
-	// pool manages all go-routines spawned by Scheduler.
-	pool *pool.ContextPool
+	pool       *pool.ContextPool
 
 	// waitCond coordinates access to headSlot for different go-routines
 	waitCond *sync.Cond
@@ -182,15 +180,14 @@ type ReorgEvent struct {
 // Note: This function includes blocking operations, especially within the handler's HandleInitialDuties call,
 // which will block until initial duties are fully handled.
 func (s *Scheduler) Start(ctx context.Context) error {
-	s.logger.Info("starting duty scheduler")
-	defer s.logger.Info("duty scheduler has started")
-
-	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
+	s.logger.Info("duty scheduler started")
 
 	s.logger.Info("subscribing to head events")
 	if err := s.listenToHeadEvents(ctx); err != nil {
 		return fmt.Errorf("failed to listen to head events: %w", err)
 	}
+
+	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
 
 	indicesChangeFeed := NewEventFeed[struct{}]()
 	reorgFeed := NewEventFeed[ReorgEvent]()
@@ -224,19 +221,10 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		})
 	}
 
-	s.pool.Go(func(ctx context.Context) error {
-		indicesChangeFeed.FanOut(ctx, s.indicesChg)
-		return nil
-	})
-	s.pool.Go(func(ctx context.Context) error {
-		reorgFeed.FanOut(ctx, s.reorg)
-		return nil
-	})
+	go s.SlotTicker(ctx)
 
-	s.pool.Go(func(ctx context.Context) error {
-		s.SlotTicker(ctx)
-		return nil
-	})
+	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
+	go reorgFeed.FanOut(ctx, s.reorg)
 
 	return nil
 }
@@ -252,11 +240,11 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
-	s.pool.Go(func(ctx context.Context) error {
+	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				return nil
+				return
 			case headEvent := <-ch:
 				if headEvent == nil {
 					s.logger.Warn("head event was nil, skipping")
@@ -270,16 +258,12 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 				headEventHandler(ctx, headEvent)
 			}
 		}
-	})
+	}()
 
 	return nil
 }
 
 func (s *Scheduler) Wait() error {
-	for _, handler := range s.handlers {
-		handler.WaitShutdown()
-	}
-
 	return s.pool.Wait()
 }
 
@@ -460,13 +444,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(poolCtx context.Context) error {
-			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
-			// not worth the code complexity).
-			if poolCtx.Err() != nil {
-				return nil
-			}
-
+		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -476,9 +454,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 			}
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
-
-			return nil
-		})
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -520,13 +496,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(poolCtx context.Context) error {
-			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
-			// not worth the code complexity).
-			if poolCtx.Err() != nil {
-				return nil
-			}
-
+		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -537,9 +507,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
-
-			return nil
-		})
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
