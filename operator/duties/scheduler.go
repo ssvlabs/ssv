@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	audit "github.com/ssvlabs/ssv/operator/dutytracer/auditor"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils"
@@ -94,6 +95,10 @@ type SchedulerOptions struct {
 	// executing duties (e.g., validator registration). When true, scheduler
 	// still fetches/stores duties for all validators but does not execute them.
 	ExporterMode bool
+
+	// AuditReporter optionally receives duty-fetch pipeline events for in-node
+	// trace<->schedule auditing. It must be non-blocking and best-effort.
+	AuditReporter audit.Reporter
 }
 
 type Scheduler struct {
@@ -122,7 +127,8 @@ type Scheduler struct {
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
 
-	exporterMode bool
+	exporterMode  bool
+	auditReporter audit.Reporter
 }
 
 func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
@@ -151,6 +157,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	}
 
 	s.exporterMode = opts.ExporterMode
+	s.auditReporter = opts.AuditReporter
 
 	// These handlers fetch & record duties from the beacon node and are needed in both operator & exporter modes.
 	// When adding a new handler here, ensure it supports both modes.
@@ -211,6 +218,13 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			reorgCh,
 			indicesChangeCh,
 		)
+
+		// Optional audit reporter wiring (best-effort).
+		if s.auditReporter != nil {
+			if setter, ok := handler.(interface{ SetAuditReporter(audit.Reporter) }); ok {
+				setter.SetAuditReporter(s.auditReporter)
+			}
+		}
 
 		// This call is blocking.
 		handler.HandleInitialDuties(ctx)

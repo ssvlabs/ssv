@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	audit "github.com/ssvlabs/ssv/operator/dutytracer/auditor"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -73,6 +74,8 @@ type Collector struct {
 	// scheduleJobs is a bounded queue for async schedule computation to avoid
 	// blocking the hot path and DB with synchronous writes.
 	scheduleJobs chan phase0.Slot
+
+	auditor *audit.Auditor
 }
 
 type DomainDataProvider interface {
@@ -123,6 +126,10 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 	go c.startScheduleFiller(ctx, tickerProvider)
 	// Start a single worker to process schedule writes asynchronously.
 	go c.runScheduleWorker(ctx)
+	// Start auditor loop (feature-flagged; non-fatal).
+	if c.auditor != nil && c.auditor.Enabled() {
+		c.auditor.Start(ctx, tickerProvider)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -131,6 +138,47 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 			currentSlot := ticker.Slot()
 			c.evict(currentSlot)
 		}
+	}
+}
+
+func (c *Collector) SetAuditor(a *audit.Auditor) {
+	c.auditor = a
+}
+
+func (c *Collector) QueryAuditFindings(q audit.Query) (audit.QueryResult, error) {
+	if c.auditor == nil || !c.auditor.Enabled() {
+		return audit.QueryResult{}, audit.ErrAuditorDisabled
+	}
+	return c.auditor.Query(q)
+}
+
+// RecordDutyFetch implements auditor.Reporter (best-effort, non-fatal).
+func (c *Collector) RecordDutyFetch(ev audit.DutyFetchEvent) {
+	if c.auditor != nil {
+		c.auditor.RecordDutyFetch(ev)
+	}
+}
+
+// RecordScheduleCompute implements auditor.Reporter (best-effort, non-fatal).
+func (c *Collector) RecordScheduleCompute(ev audit.ScheduleComputeEvent) {
+	if c.auditor != nil {
+		c.auditor.RecordScheduleCompute(ev)
+	}
+}
+
+// RecordScheduleJobDropped implements auditor.Reporter (best-effort, non-fatal).
+func (c *Collector) RecordScheduleJobDropped(slot phase0.Slot) {
+	if c.auditor != nil {
+		c.auditor.RecordScheduleJobDropped(slot)
+	}
+}
+
+func (c *Collector) notifyAuditorIfNeeded(slot phase0.Slot) {
+	if c.auditor == nil || !c.auditor.Enabled() {
+		return
+	}
+	if slot <= c.auditor.LastAuditedSlot() {
+		c.auditor.NotifyLateSlot(slot)
 	}
 }
 
@@ -588,6 +636,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			trace.Lock()
+			defer c.notifyAuditorIfNeeded(slot)
 			defer trace.Unlock()
 
 			if len(msg.SignedSSVMessage.FullData) > 0 && subMsg.MsgType == specqbft.ProposalMsgType {
@@ -740,6 +789,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			trace.Lock()
+			defer c.notifyAuditorIfNeeded(slot)
 			defer trace.Unlock()
 
 			c.processPartialSigCommittee(startTime, pSigMessages, committeeID, trace)
@@ -1219,12 +1269,14 @@ func (c *Collector) startScheduleFiller(ctx context.Context, tickerProvider slot
 			select {
 			case c.scheduleJobs <- slot:
 			default:
+				c.RecordScheduleJobDropped(slot)
 			}
 			// Enqueue a tiny backfill (previous slot) to reduce races if queue permits.
 			if slot > 0 {
 				select {
 				case c.scheduleJobs <- slot - 1:
 				default:
+					c.RecordScheduleJobDropped(slot - 1)
 				}
 			}
 		}
@@ -1234,6 +1286,20 @@ func (c *Collector) startScheduleFiller(ctx context.Context, tickerProvider slot
 // computeAndPersistScheduleForSlot builds a per-slot role mask map from dutystore
 // for (ATTESTER, PROPOSER, SYNC_COMMITTEE). Idempotent and best-effort.
 func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
+	start := time.Now()
+	var scheduleSize int
+	var computeErr error
+	defer func() {
+		// Best-effort evidence for the auditor; non-fatal.
+		c.RecordScheduleCompute(audit.ScheduleComputeEvent{
+			Slot: slot,
+			At:   time.Now().UTC(),
+			Took: time.Since(start),
+			Size: scheduleSize,
+			Err:  computeErr,
+		})
+	}()
+
 	epoch := c.beacon.EstimatedEpochAtSlot(slot)
 	schedule := make(map[phase0.ValidatorIndex]rolemask.Mask)
 
@@ -1266,11 +1332,14 @@ func (c *Collector) computeAndPersistScheduleForSlot(slot phase0.Slot) error {
 	}
 
 	if len(schedule) == 0 {
+		scheduleSize = 0
 		return nil
 	}
+	scheduleSize = len(schedule)
 
 	if err := c.store.SaveScheduled(slot, schedule); err != nil {
-		return fmt.Errorf("save scheduled: %w", err)
+		computeErr = fmt.Errorf("save scheduled: %w", err)
+		return computeErr
 	}
 
 	// Populate committee links only for validators with scheduled duties

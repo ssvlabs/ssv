@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	audit "github.com/ssvlabs/ssv/operator/dutytracer/auditor"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils"
 )
@@ -33,7 +34,8 @@ type AttesterHandler struct {
 	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchNextEpoch bool
 
-	exporterMode bool
+	exporterMode  bool
+	auditReporter audit.Reporter
 }
 
 func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], exporterMode bool) *AttesterHandler {
@@ -42,6 +44,10 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], export
 		exporterMode: exporterMode,
 	}
 	return h
+}
+
+func (h *AttesterHandler) SetAuditReporter(r audit.Reporter) {
+	h.auditReporter = r
 }
 
 func (h *AttesterHandler) Name() string {
@@ -277,7 +283,21 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	}
 
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
+	reqN := len(eligibleIndices)
+	fetchAt := time.Now()
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, eligibleIndices)
+	if h.auditReporter != nil {
+		ep := epoch
+		h.auditReporter.RecordDutyFetch(audit.DutyFetchEvent{
+			Role:      spectypes.BNRoleAttester,
+			Epoch:     &ep,
+			At:        fetchAt,
+			Took:      time.Since(fetchAt),
+			Requested: reqN,
+			Returned:  len(duties),
+			Err:       err,
+		})
+	}
 	if err != nil {
 		return traces.Errorf(span, "failed to fetch attester duties: %w", err)
 	}

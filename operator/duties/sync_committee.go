@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	audit "github.com/ssvlabs/ssv/operator/dutytracer/auditor"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils"
 )
@@ -38,6 +39,7 @@ type SyncCommitteeHandler struct {
 	// period change at which to prepare the relevant duties.
 	preparationSlots uint64
 	exporterMode     bool
+	auditReporter    audit.Reporter
 }
 
 func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode bool) *SyncCommitteeHandler {
@@ -46,6 +48,10 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode
 		exporterMode: exporterMode,
 	}
 	return h
+}
+
+func (h *SyncCommitteeHandler) SetAuditReporter(r audit.Reporter) {
+	h.auditReporter = r
 }
 
 func (h *SyncCommitteeHandler) Name() string {
@@ -263,7 +269,21 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	}
 
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
+	reqN := len(eligibleIndices)
+	fetchAt := time.Now()
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
+	if h.auditReporter != nil {
+		p := period
+		h.auditReporter.RecordDutyFetch(audit.DutyFetchEvent{
+			Role:      spectypes.BNRoleSyncCommittee,
+			Period:    &p,
+			At:        fetchAt,
+			Took:      time.Since(fetchAt),
+			Requested: reqN,
+			Returned:  len(duties),
+			Err:       err,
+		})
+	}
 	if err != nil {
 		return traces.Errorf(span, "failed to fetch sync committee duties: %w", err)
 	}

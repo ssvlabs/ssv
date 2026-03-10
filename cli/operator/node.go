@@ -67,6 +67,7 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
+	audit "github.com/ssvlabs/ssv/operator/dutytracer/auditor"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -539,6 +540,31 @@ var StartNodeCmd = &cobra.Command{
 					nodeStorage.ValidatorStore(), consensusClient,
 					dstore, networkConfig.Beacon, decidedStreamPublisherFn,
 					dutyStore)
+
+				if cfg.ExporterOptions.AuditorEnabled {
+					auditStore := audit.NewDBStore(db)
+					a := audit.New(
+						logger,
+						networkConfig.Beacon,
+						collector,
+						dutyStore,
+						nodeStorage.ValidatorStore(),
+						consensusClient,
+						auditStore,
+						audit.Options{
+							Enabled:              true,
+							DelaySlots:           cfg.ExporterOptions.AuditorDelaySlots,
+							Retention:            14 * 24 * time.Hour,
+							RPCFallback:          cfg.ExporterOptions.AuditorRPCFallback,
+							RPCMaxIndicesPerSlot: 2048,
+						},
+					)
+					collector.SetAuditor(a)
+					logger.Info("exporter auditor enabled",
+						zap.Uint64("delay_slots", cfg.ExporterOptions.AuditorDelaySlots),
+						zap.Bool("rpc_fallback", cfg.ExporterOptions.AuditorRPCFallback),
+					)
+				}
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector

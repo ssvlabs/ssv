@@ -17,17 +17,26 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
+	audit "github.com/ssvlabs/ssv/operator/dutytracer/auditor"
 )
 
 type Exporter struct {
 	logger *zap.Logger
 	svc    *exporter2.Exporter
+	audit  auditFindingsReader
 }
 
 func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
+	var auditReader auditFindingsReader
+	if traceStore != nil {
+		if ar, ok := traceStore.(auditFindingsReader); ok {
+			auditReader = ar
+		}
+	}
 	return &Exporter{
 		logger: logger,
 		svc:    exporter2.NewExporter(logger, participantStores, traceStore, validators),
+		audit:  auditReader,
 	}
 }
 
@@ -43,6 +52,10 @@ type dutyTraceStore interface {
 	GetCommitteeDecideds(slot phase0.Slot, index phase0.ValidatorIndex, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]dutytracer.ParticipantsRangeIndexEntry, error)
 	GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
+}
+
+type auditFindingsReader interface {
+	QueryAuditFindings(q audit.Query) (audit.QueryResult, error)
 }
 
 // Common helpers shared across handlers

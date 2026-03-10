@@ -122,6 +122,79 @@ definitions:
           $ref: '#/definitions/exporter.CommitteeSchedule'
         type: array
     type: object
+  exporter.AuditorFindingsRequest:
+    properties:
+      from:
+        description: From is the starting slot (inclusive).
+        format: int64
+        minimum: 0
+        type: integer
+      to:
+        description: To is the ending slot (inclusive).
+        format: int64
+        minimum: 0
+        type: integer
+      reason:
+        description: Optional reason code filter.
+        type: string
+      role:
+        description: Optional role filter (attester or sync_committee).
+        type: string
+      committeeID:
+        description: Optional SSV committee ID (hex, 64 chars).
+        format: hex
+        type: string
+      validatorIndex:
+        description: Optional validator index filter.
+        format: int64
+        type: integer
+      limit:
+        description: Maximum number of findings to return.
+        format: int64
+        type: integer
+    type: object
+  exporter.AuditorFindingsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/auditor.Finding'
+        type: array
+      errors:
+        items:
+          type: string
+        type: array
+    type: object
+  auditor.Finding:
+    properties:
+      version:
+        format: int64
+        type: integer
+      createdAt:
+        format: date-time
+        type: string
+      slot:
+        format: int64
+        type: integer
+      epoch:
+        format: int64
+        type: integer
+      period:
+        format: int64
+        type: integer
+      reason:
+        type: string
+      role:
+        type: string
+      validatorIndex:
+        format: int64
+        type: integer
+      committeeID:
+        format: hex
+        type: string
+      evidence:
+        description: Structured evidence payload (best-effort; may evolve).
+        type: object
+    type: object
   exporter.Decided:
     properties:
       round:
@@ -665,6 +738,105 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       summary: Retrieve committee duty traces
+      tags:
+      - Exporter
+  /v1/exporter/auditor/findings:
+    get:
+      consumes:
+      - application/json
+      description: Returns persisted trace<->schedule mismatch findings (if auditor is enabled).
+      parameters:
+      - description: From is the starting slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: from
+        type: integer
+      - description: To is the ending slot (inclusive).
+        format: int64
+        in: query
+        minimum: 0
+        name: to
+        type: integer
+      - description: Optional reason code filter.
+        in: query
+        name: reason
+        type: string
+      - description: Optional role filter (attester or sync_committee).
+        in: query
+        name: role
+        type: string
+      - description: Optional SSV committee ID (hex, 64 chars).
+        in: query
+        name: committeeID
+        type: string
+      - description: Optional validator index filter.
+        format: int64
+        in: query
+        name: validatorIndex
+        type: integer
+      - description: Maximum number of findings to return.
+        format: int64
+        in: query
+        name: limit
+        type: integer
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.AuditorFindingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.AuditorFindingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "501":
+          description: Auditor disabled
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve auditor findings
+      tags:
+      - Exporter
+    post:
+      consumes:
+      - application/json
+      description: Returns persisted trace<->schedule mismatch findings (if auditor is enabled).
+      parameters:
+      - description: Filters as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/exporter.AuditorFindingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exporter.AuditorFindingsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "501":
+          description: Auditor disabled
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Retrieve auditor findings
       tags:
       - Exporter
     post:

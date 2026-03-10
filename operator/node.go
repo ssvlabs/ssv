@@ -128,6 +128,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			SlotTickerProvider:      slotTickerProvider,
 			P2PNetwork:              opts.P2PNetwork,
 			ExporterMode:            exporterOpts.Enabled,
+			AuditReporter:           opts.ValidatorOptions.DutyTraceCollector,
 		}),
 		feeRecipientCtrl: feeRecipientCtrl,
 

@@ -102,6 +102,9 @@ func New(
 
 		router.Get("/v1/exporter/traces/committee", api.Handler(exporter.CommitteeTraces))
 
+		router.Get("/v1/exporter/auditor/findings", api.Handler(exporter.AuditorFindings))
+		router.Post("/v1/exporter/auditor/findings", api.Handler(exporter.AuditorFindings))
+
 		router.Get("/v1/exporter/decideds", api.Handler(exporter.TraceDecideds))
 
 		router.Post("/v1/exporter/decideds", api.Handler(exporter.TraceDecideds))

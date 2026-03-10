@@ -379,6 +379,154 @@
                 }
             }
         },
+        "/v1/exporter/auditor/findings": {
+            "get": {
+                "description": "Returns persisted trace<->schedule mismatch findings (if auditor is enabled).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve auditor findings",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "From is the starting slot (inclusive).",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "To is the ending slot (inclusive).",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional reason code filter.",
+                        "name": "reason",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional role filter (attester or sync_committee).",
+                        "name": "role",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Optional SSV committee ID (hex, 64 chars).",
+                        "name": "committeeID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Optional validator index filter.",
+                        "name": "validatorIndex",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Maximum number of findings to return.",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "Auditor disabled",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Returns persisted trace<->schedule mismatch findings (if auditor is enabled).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve auditor findings",
+                "parameters": [
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "Auditor disabled",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/exporter/traces/validator": {
             "get": {
                 "description": "Returns consensus, decided, and message traces for the requested validator duties.",
@@ -751,6 +899,106 @@
                     "items": {
                         "$ref": "#/definitions/exporter.CommitteeSchedule"
                     }
+                }
+            }
+        },
+        "exporter.AuditorFindingsRequest": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "description": "From is the starting slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                },
+                "to": {
+                    "description": "To is the ending slot (inclusive).",
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                },
+                "reason": {
+                    "description": "Optional reason code filter.",
+                    "type": "string"
+                },
+                "role": {
+                    "description": "Optional role filter (attester or sync_committee).",
+                    "type": "string"
+                },
+                "committeeID": {
+                    "description": "Optional SSV committee ID (hex, 64 chars).",
+                    "type": "string",
+                    "format": "hex"
+                },
+                "validatorIndex": {
+                    "description": "Optional validator index filter.",
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "limit": {
+                    "description": "Maximum number of findings to return.",
+                    "type": "integer",
+                    "format": "int64"
+                }
+            }
+        },
+        "exporter.AuditorFindingsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/auditor.Finding"
+                    }
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "auditor.Finding": {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "slot": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "epoch": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "period": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "validatorIndex": {
+                    "type": "integer",
+                    "format": "int64"
+                },
+                "committeeID": {
+                    "type": "string",
+                    "format": "hex"
+                },
+                "evidence": {
+                    "description": "Structured evidence payload (best-effort; may evolve).",
+                    "type": "object"
                 }
             }
         },
