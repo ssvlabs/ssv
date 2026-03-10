@@ -28,6 +28,9 @@ type fakeTraceReader struct {
 	duties    map[phase0.Slot][]*exporter.CommitteeDutyTrace
 	scheduled map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask
 	links     map[phase0.Slot][]*exporter.CommitteeDutyLink
+
+	scheduledErr map[phase0.Slot]error
+	linksErr     map[phase0.Slot]error
 }
 
 func (f *fakeTraceReader) GetCommitteeDuties(slot phase0.Slot, _ ...spectypes.BeaconRole) ([]*exporter.CommitteeDutyTrace, error) {
@@ -35,6 +38,11 @@ func (f *fakeTraceReader) GetCommitteeDuties(slot phase0.Slot, _ ...spectypes.Be
 }
 
 func (f *fakeTraceReader) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	if f.scheduledErr != nil {
+		if err := f.scheduledErr[slot]; err != nil {
+			return map[phase0.ValidatorIndex]rolemask.Mask{}, err
+		}
+	}
 	if m, ok := f.scheduled[slot]; ok {
 		return m, nil
 	}
@@ -42,6 +50,11 @@ func (f *fakeTraceReader) GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIn
 }
 
 func (f *fakeTraceReader) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+	if f.linksErr != nil {
+		if err := f.linksErr[slot]; err != nil {
+			return nil, err
+		}
+	}
 	return f.links[slot], nil
 }
 
@@ -434,6 +447,160 @@ func TestAuditor_RPCFallbackSkipped_MaxIndices(t *testing.T) {
 	require.True(t, skipped.Evidence.Expected.RPCFallback.Enabled)
 	require.False(t, skipped.Evidence.Expected.RPCFallback.Used)
 	require.Nil(t, skipped.Evidence.Expected.RPCFallback.OK)
+}
+
+func TestAuditor_ScheduleReadFailed_IsAttributed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	reg := regmocks.NewMockValidatorStore(ctrl)
+
+	cfg := networkconfig.TestNetwork.Beacon
+	slot := phase0.Slot(200)
+	epoch := cfg.EstimatedEpochAtSlot(slot)
+
+	var committeeID spectypes.CommitteeID
+	committeeID[0] = 0x20
+	index := phase0.ValidatorIndex(77)
+
+	reg.EXPECT().ParticipatingCommittees(epoch).Return([]*registrystorage.Committee{
+		{ID: committeeID, Indices: []phase0.ValidatorIndex{index}},
+	}).AnyTimes()
+	share := &ssvtypes.SSVShare{Status: eth2apiv1.ValidatorStateActiveOngoing}
+	share.ValidatorIndex = index
+	reg.EXPECT().ValidatorByIndex(index).Return(share, true).AnyTimes()
+
+	ds := dutystore.New()
+
+	tr := &exporter.CommitteeDutyTrace{
+		Slot:        slot,
+		CommitteeID: committeeID,
+		Attester: []*exporter.SignerData{{
+			Signer:       7,
+			ValidatorIdx: []phase0.ValidatorIndex{index},
+			ReceivedTime: uint64(time.Now().UnixMilli()),
+		}},
+	}
+
+	reader := &fakeTraceReader{
+		duties: map[phase0.Slot][]*exporter.CommitteeDutyTrace{slot: {tr}},
+		scheduledErr: map[phase0.Slot]error{
+			slot: errors.New("db timeout"),
+		},
+		links: map[phase0.Slot][]*exporter.CommitteeDutyLink{slot: {}},
+	}
+
+	store := &memStore{}
+	a := New(zap.NewNop(), cfg, reader, ds, reg, &fakeBeacon{}, store, Options{Enabled: true, RPCFallback: true, DelaySlots: 4})
+	require.NoError(t, a.AuditSlot(context.Background(), slot))
+	require.NotEmpty(t, store.findings)
+	require.Equal(t, ReasonScheduleReadFailed, store.findings[0].Reason)
+	require.False(t, store.findings[0].Evidence.PersistedSchedule.ReadOK)
+	require.Contains(t, store.findings[0].Evidence.PersistedSchedule.ReadError, "db timeout")
+}
+
+func TestAuditor_TraceSlotMisattributed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	reg := regmocks.NewMockValidatorStore(ctrl)
+
+	cfg := networkconfig.TestNetwork.Beacon
+	slot := phase0.Slot(224)
+	epoch := cfg.EstimatedEpochAtSlot(slot)
+
+	var committeeID spectypes.CommitteeID
+	committeeID[0] = 0x21
+	index := phase0.ValidatorIndex(88)
+
+	reg.EXPECT().ParticipatingCommittees(epoch).Return([]*registrystorage.Committee{
+		{ID: committeeID, Indices: []phase0.ValidatorIndex{index}},
+	}).AnyTimes()
+	share := &ssvtypes.SSVShare{Status: eth2apiv1.ValidatorStateActiveOngoing}
+	share.ValidatorIndex = index
+	reg.EXPECT().ValidatorByIndex(index).Return(share, true).AnyTimes()
+
+	ds := dutystore.New() // duty store doesn't expect it
+
+	tr := &exporter.CommitteeDutyTrace{
+		Slot:        slot,
+		CommitteeID: committeeID,
+		Attester: []*exporter.SignerData{{
+			Signer:       8,
+			ValidatorIdx: []phase0.ValidatorIndex{index},
+			ReceivedTime: uint64(time.Now().UnixMilli()),
+		}},
+	}
+
+	reader := &fakeTraceReader{
+		duties: map[phase0.Slot][]*exporter.CommitteeDutyTrace{slot: {tr}},
+		scheduled: map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask{slot: {
+			phase0.ValidatorIndex(99): rolemask.BitAttester,
+		}},
+		links: map[phase0.Slot][]*exporter.CommitteeDutyLink{slot: {{ValidatorIndex: index, CommitteeID: committeeID}}},
+	}
+
+	nextSlot := slot + 1
+	beacon := &fakeBeacon{
+		attester: map[phase0.ValidatorIndex]*eth2apiv1.AttesterDuty{
+			index: {Slot: nextSlot, ValidatorIndex: index},
+		},
+	}
+
+	store := &memStore{}
+	a := New(zap.NewNop(), cfg, reader, ds, reg, beacon, store, Options{Enabled: true, RPCFallback: true, DelaySlots: 4})
+	require.NoError(t, a.AuditSlot(context.Background(), slot))
+	require.NotEmpty(t, store.findings)
+	require.Equal(t, ReasonTraceSlotMisattributed, store.findings[0].Reason)
+	require.True(t, store.findings[0].Evidence.Expected.RPCFallback.Used)
+	require.NotNil(t, store.findings[0].Evidence.Expected.RPCFallback.AttesterExpectedSlot)
+	require.Equal(t, uint64(nextSlot), *store.findings[0].Evidence.Expected.RPCFallback.AttesterExpectedSlot)
+}
+
+func TestAuditor_LinksReadFailed_IsAttributed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	reg := regmocks.NewMockValidatorStore(ctrl)
+
+	cfg := networkconfig.TestNetwork.Beacon
+	slot := phase0.Slot(256)
+	epoch := cfg.EstimatedEpochAtSlot(slot)
+
+	var committeeID spectypes.CommitteeID
+	committeeID[0] = 0x22
+	index := phase0.ValidatorIndex(99)
+
+	reg.EXPECT().ParticipatingCommittees(epoch).Return([]*registrystorage.Committee{
+		{ID: committeeID, Indices: []phase0.ValidatorIndex{index}},
+	}).AnyTimes()
+	share := &ssvtypes.SSVShare{Status: eth2apiv1.ValidatorStateActiveOngoing}
+	share.ValidatorIndex = index
+	reg.EXPECT().ValidatorByIndex(index).Return(share, true).AnyTimes()
+
+	ds := dutystore.New()
+
+	tr := &exporter.CommitteeDutyTrace{
+		Slot:        slot,
+		CommitteeID: committeeID,
+		Attester: []*exporter.SignerData{{
+			Signer:       9,
+			ValidatorIdx: []phase0.ValidatorIndex{index},
+			ReceivedTime: uint64(time.Now().UnixMilli()),
+		}},
+	}
+
+	reader := &fakeTraceReader{
+		duties: map[phase0.Slot][]*exporter.CommitteeDutyTrace{slot: {tr}},
+		scheduled: map[phase0.Slot]map[phase0.ValidatorIndex]rolemask.Mask{slot: {
+			index: rolemask.BitAttester,
+		}},
+		linksErr: map[phase0.Slot]error{
+			slot: errors.New("links db read timeout"),
+		},
+	}
+
+	store := &memStore{}
+	a := New(zap.NewNop(), cfg, reader, ds, reg, &fakeBeacon{}, store, Options{Enabled: true, RPCFallback: false, DelaySlots: 4})
+	require.NoError(t, a.AuditSlot(context.Background(), slot))
+	require.NotEmpty(t, store.findings)
+	require.Equal(t, ReasonLinksReadFailed, store.findings[0].Reason)
+	require.False(t, store.findings[0].Evidence.Links.ReadOK)
+	require.Contains(t, store.findings[0].Evidence.Links.ReadError, "links db read timeout")
 }
 
 func TestAuditor_ScheduleJobDropped_IsAttributed(t *testing.T) {

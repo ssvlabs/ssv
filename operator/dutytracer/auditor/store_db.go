@@ -320,6 +320,8 @@ func reasonToByte(r ReasonCode) byte {
 		return 5
 	case ReasonScheduleBeforeDutiesReady:
 		return 6
+	case ReasonScheduleReadFailed:
+		return 7
 	case ReasonDutyFetchFailed:
 		return 10
 	case ReasonDutyStoreIncomplete:
@@ -336,10 +338,14 @@ func reasonToByte(r ReasonCode) byte {
 		return 22
 	case ReasonRegistryCommitteeMismatch:
 		return 23
+	case ReasonLinksReadFailed:
+		return 24
 	case ReasonUnexpectedWireTrace:
 		return 30
 	case ReasonRoleClassificationSuspect:
 		return 31
+	case ReasonTraceSlotMisattributed:
+		return 32
 	default:
 		return 0
 	}

@@ -27,11 +27,14 @@ const (
 	ReasonScheduleComputeFailed     ReasonCode = "SCHEDULE_COMPUTE_FAILED"
 	ReasonScheduleJobDropped        ReasonCode = "SCHEDULE_JOB_DROPPED"
 	ReasonScheduleBeforeDutiesReady ReasonCode = "SCHEDULE_BEFORE_DUTIES_READY"
+	ReasonScheduleReadFailed        ReasonCode = "SCHEDULE_READ_FAILED"
 
-	ReasonDutyFetchFailed     ReasonCode = "DUTY_FETCH_FAILED"
-	ReasonDutyStoreIncomplete ReasonCode = "DUTY_STORE_INCOMPLETE"
-	ReasonRPCFallbackFailed   ReasonCode = "RPC_FALLBACK_FAILED"
-	ReasonRPCFallbackSkipped  ReasonCode = "RPC_FALLBACK_SKIPPED"
+	ReasonDutyFetchFailed        ReasonCode = "DUTY_FETCH_FAILED"
+	ReasonDutyStoreIncomplete    ReasonCode = "DUTY_STORE_INCOMPLETE"
+	ReasonRPCFallbackFailed      ReasonCode = "RPC_FALLBACK_FAILED"
+	ReasonRPCFallbackSkipped     ReasonCode = "RPC_FALLBACK_SKIPPED"
+	ReasonLinksReadFailed        ReasonCode = "LINKS_READ_FAILED"
+	ReasonTraceSlotMisattributed ReasonCode = "TRACE_SLOT_MISATTRIBUTED"
 
 	ReasonRegistryIndexNotFound     ReasonCode = "REGISTRY_INDEX_NOT_FOUND"
 	ReasonCommitteeLinkMissing      ReasonCode = "COMMITTEE_LINK_MISSING"
@@ -85,6 +88,9 @@ type ObservedEvidence struct {
 	Signers      []uint64 `json:"signers,omitempty"` // operator IDs (truncated/sampled at source)
 
 	MessagesCount int `json:"messagesCount,omitempty"`
+
+	ReceivedMinMs *uint64 `json:"receivedMinMs,omitempty"`
+	ReceivedMaxMs *uint64 `json:"receivedMaxMs,omitempty"`
 }
 
 type ScheduleEvidence struct {
@@ -92,6 +98,9 @@ type ScheduleEvidence struct {
 	HasIndex     bool    `json:"hasIndex"`
 	MaskBits     []uint8 `json:"maskBits,omitempty"` // compact list of set bits in role mask
 	HasRole      bool    `json:"hasRole"`
+
+	ReadOK    bool   `json:"readOk"`
+	ReadError string `json:"readError,omitempty"`
 }
 
 type ExpectedEvidence struct {
@@ -122,6 +131,9 @@ type RegistryEvidence struct {
 type LinksEvidence struct {
 	LinkPresent       bool    `json:"linkPresent"`
 	LinkedCommitteeID *string `json:"linkedCommitteeID,omitempty"`
+
+	ReadOK    bool   `json:"readOk"`
+	ReadError string `json:"readError,omitempty"`
 }
 
 type PipelineEvidence struct {

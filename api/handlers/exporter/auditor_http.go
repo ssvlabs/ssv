@@ -122,16 +122,19 @@ func isKnownReason(rc audit.ReasonCode) bool {
 		audit.ReasonScheduleComputeFailed,
 		audit.ReasonScheduleJobDropped,
 		audit.ReasonScheduleBeforeDutiesReady,
+		audit.ReasonScheduleReadFailed,
 		audit.ReasonDutyFetchFailed,
 		audit.ReasonDutyStoreIncomplete,
 		audit.ReasonRPCFallbackFailed,
 		audit.ReasonRPCFallbackSkipped,
+		audit.ReasonLinksReadFailed,
 		audit.ReasonRegistryIndexNotFound,
 		audit.ReasonCommitteeLinkMissing,
 		audit.ReasonCommitteeLinkMismatch,
 		audit.ReasonRegistryCommitteeMismatch,
 		audit.ReasonUnexpectedWireTrace,
-		audit.ReasonRoleClassificationSuspect:
+		audit.ReasonRoleClassificationSuspect,
+		audit.ReasonTraceSlotMisattributed:
 		return true
 	default:
 		return false

@@ -59,6 +59,8 @@ type obsItem struct {
 	index       phase0.ValidatorIndex
 	signers     []uint64
 	msgCount    int
+	receivedMin uint64
+	receivedMax uint64
 }
 
 // Reporter is implemented by the auditor and can be passed to other subsystems
@@ -297,17 +299,20 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 		return nil
 	}
 
-	persisted, err := a.traces.GetScheduled(slot)
-	scheduleReadOK := err == nil
-	if err != nil {
+	persisted, scheduleReadErr := a.traces.GetScheduled(slot)
+	scheduleReadOK := scheduleReadErr == nil
+	if scheduleReadErr != nil {
 		// Continue with evidence; schedule read failures are part of the story.
-		a.logger.Debug("get persisted schedule failed", fields.Slot(slot), zap.Error(err))
+		a.logger.Debug("get persisted schedule failed", fields.Slot(slot), zap.Error(scheduleReadErr))
+	}
+	if persisted == nil {
+		persisted = map[phase0.ValidatorIndex]rolemask.Mask{}
 	}
 
-	links, errLinks := a.traces.GetCommitteeDutyLinks(slot)
-	linksReadOK := errLinks == nil
-	if errLinks != nil {
-		a.logger.Debug("get links failed", fields.Slot(slot), zap.Error(errLinks))
+	links, linksReadErr := a.traces.GetCommitteeDutyLinks(slot)
+	linksReadOK := linksReadErr == nil
+	if linksReadErr != nil {
+		a.logger.Debug("get links failed", fields.Slot(slot), zap.Error(linksReadErr))
 	}
 	linksByIndex := make(map[phase0.ValidatorIndex]spectypes.CommitteeID, len(links))
 	for _, l := range links {
@@ -336,6 +341,8 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 				observed = append(observed, obsItem{
 					role: RoleAttester, committeeID: tr.CommitteeID, index: idx,
 					signers: []uint64{sd.Signer}, msgCount: 1,
+					receivedMin: sd.ReceivedTime,
+					receivedMax: sd.ReceivedTime,
 				})
 			}
 		}
@@ -345,6 +352,8 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 				observed = append(observed, obsItem{
 					role: RoleSyncCommittee, committeeID: tr.CommitteeID, index: idx,
 					signers: []uint64{sd.Signer}, msgCount: 1,
+					receivedMin: sd.ReceivedTime,
+					receivedMax: sd.ReceivedTime,
 				})
 			}
 		}
@@ -372,6 +381,12 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 		}
 		coalesced[n-1].msgCount += it.msgCount
 		coalesced[n-1].signers = append(coalesced[n-1].signers, it.signers...)
+		if coalesced[n-1].receivedMin == 0 || it.receivedMin < coalesced[n-1].receivedMin {
+			coalesced[n-1].receivedMin = it.receivedMin
+		}
+		if it.receivedMax > coalesced[n-1].receivedMax {
+			coalesced[n-1].receivedMax = it.receivedMax
+		}
 	}
 	for i := range coalesced {
 		slices.Sort(coalesced[i].signers)
@@ -485,7 +500,7 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 		persistHasRole := persistedHasRole(persisted, index, role)
 		if persistHasRole {
 			// Schedule says it should be there; now verify mapping.
-			if err := a.checkCommitteeMapping(slot, epoch, period, role, committeeID, index, expectedCommitteeByIndex, linksByIndex, persisted, it, emit); err != nil {
+			if err := a.checkCommitteeMapping(slot, epoch, period, role, committeeID, index, expectedCommitteeByIndex, linksByIndex, persisted, it, linksReadOK, linksReadErr, emit); err != nil {
 				a.logger.Debug("mapping check error", zap.Error(err))
 			}
 			continue
@@ -550,9 +565,24 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 			}
 		}
 
-		reason, ev := a.chooseReasonForScheduleMismatch(slot, epoch, period, role, index, persisted, expectedByDutyStore, rpcUsed, rpcSkipped, rpcExpected, rpcErr, expectedOtherRole)
+		reason, ev := a.chooseReasonForScheduleMismatch(slot, epoch, period, role, index, persisted, expectedByDutyStore, scheduleReadErr, rpcUsed, rpcSkipped, rpcExpected, rpcExpectedSlot, rpcErr, expectedOtherRole)
 		if reason == "" {
 			continue
+		}
+
+		// Always attach mapping context for schedule-mismatch findings.
+		if expCID, ok := expectedCommitteeByIndex[index]; ok {
+			h := committeeIDHex(expCID)
+			ev.registry.ExpectedCommitteeID = &h
+		}
+		ev.links.ReadOK = linksReadOK
+		ev.links.ReadError = errString(linksReadErr)
+		if linksReadOK {
+			if cid, ok := linksByIndex[index]; ok {
+				ev.links.LinkPresent = true
+				h := committeeIDHex(cid)
+				ev.links.LinkedCommitteeID = &h
+			}
 		}
 
 		committeeHex := committeeIDHex(committeeID)
@@ -580,6 +610,20 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 					SignersCount:  len(it.signers),
 					Signers:       it.signers,
 					MessagesCount: it.msgCount,
+					ReceivedMinMs: func() *uint64 {
+						if it.receivedMin > 0 {
+							v := it.receivedMin
+							return &v
+						}
+						return nil
+					}(),
+					ReceivedMaxMs: func() *uint64 {
+						if it.receivedMax > 0 {
+							v := it.receivedMax
+							return &v
+						}
+						return nil
+					}(),
 				},
 				PersistedSchedule: ev.persistedSchedule,
 				Expected: ExpectedEvidence{
@@ -729,7 +773,7 @@ type reasonEvidence struct {
 	pipeline          PipelineEvidence
 }
 
-func (a *Auditor) chooseReasonForScheduleMismatch(slot phase0.Slot, epoch phase0.Epoch, period uint64, role Role, index phase0.ValidatorIndex, persisted map[phase0.ValidatorIndex]rolemask.Mask, expectedByDutyStore bool, rpcUsed bool, rpcSkipped bool, rpcExpected bool, rpcErr error, expectedOtherRole bool) (ReasonCode, reasonEvidence) {
+func (a *Auditor) chooseReasonForScheduleMismatch(slot phase0.Slot, epoch phase0.Epoch, period uint64, role Role, index phase0.ValidatorIndex, persisted map[phase0.ValidatorIndex]rolemask.Mask, expectedByDutyStore bool, scheduleReadErr error, rpcUsed bool, rpcSkipped bool, rpcExpected bool, rpcExpectedSlot *uint64, rpcErr error, expectedOtherRole bool) (ReasonCode, reasonEvidence) {
 	ev := reasonEvidence{}
 
 	mask, hasIndex := persisted[index]
@@ -745,6 +789,11 @@ func (a *Auditor) chooseReasonForScheduleMismatch(slot phase0.Slot, epoch phase0
 		HasIndex:     hasIndex,
 		MaskBits:     maskToBits(mask),
 		HasRole:      hasRole,
+	}
+	ev.persistedSchedule.ReadOK = scheduleReadErr == nil
+	ev.persistedSchedule.ReadError = errString(scheduleReadErr)
+	if scheduleReadErr != nil && len(persisted) == 0 {
+		return ReasonScheduleReadFailed, ev
 	}
 
 	// Populate registry evidence.
@@ -818,6 +867,9 @@ func (a *Auditor) chooseReasonForScheduleMismatch(slot phase0.Slot, epoch phase0
 		if rpcErr != nil {
 			return ReasonRPCFallbackFailed, ev
 		}
+		if role == RoleAttester && rpcExpectedSlot != nil && *rpcExpectedSlot != uint64(slot) {
+			return ReasonTraceSlotMisattributed, ev
+		}
 		if rpcExpected {
 			return ReasonDutyStoreIncomplete, ev
 		}
@@ -830,7 +882,7 @@ func (a *Auditor) chooseReasonForScheduleMismatch(slot phase0.Slot, epoch phase0
 	return ReasonUnexpectedWireTrace, ev
 }
 
-func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, period uint64, role Role, observedCommittee spectypes.CommitteeID, index phase0.ValidatorIndex, expectedCommittee map[phase0.ValidatorIndex]spectypes.CommitteeID, linksByIndex map[phase0.ValidatorIndex]spectypes.CommitteeID, persisted map[phase0.ValidatorIndex]rolemask.Mask, it obsItem, emit func(*Finding) emitResult) error {
+func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, period uint64, role Role, observedCommittee spectypes.CommitteeID, index phase0.ValidatorIndex, expectedCommittee map[phase0.ValidatorIndex]spectypes.CommitteeID, linksByIndex map[phase0.ValidatorIndex]spectypes.CommitteeID, persisted map[phase0.ValidatorIndex]rolemask.Mask, it obsItem, linksReadOK bool, linksReadErr error, emit func(*Finding) emitResult) error {
 	expCID, expOK := expectedCommittee[index]
 	linkCID, linkOK := linksByIndex[index]
 
@@ -844,6 +896,7 @@ func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, pe
 			HasIndex:     true,
 			MaskBits:     maskToBits(persisted[index]),
 			HasRole:      true,
+			ReadOK:       true,
 		},
 	}
 
@@ -859,10 +912,14 @@ func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, pe
 		h := committeeIDHex(expCID)
 		ev.registry.ExpectedCommitteeID = &h
 	}
-	ev.links.LinkPresent = linkOK
-	if linkOK {
-		h := committeeIDHex(linkCID)
-		ev.links.LinkedCommitteeID = &h
+	ev.links.ReadOK = linksReadOK
+	ev.links.ReadError = errString(linksReadErr)
+	if linksReadOK {
+		ev.links.LinkPresent = linkOK
+		if linkOK {
+			h := committeeIDHex(linkCID)
+			ev.links.LinkedCommitteeID = &h
+		}
 	}
 
 	// Determine mismatch reason.
@@ -870,12 +927,14 @@ func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, pe
 	switch {
 	case !expOK:
 		reason = ReasonRegistryIndexNotFound
+	case expCID != observedCommittee:
+		reason = ReasonRegistryCommitteeMismatch
+	case !linksReadOK:
+		reason = ReasonLinksReadFailed
 	case !linkOK:
 		reason = ReasonCommitteeLinkMissing
 	case linkCID != observedCommittee:
 		reason = ReasonCommitteeLinkMismatch
-	case expCID != observedCommittee:
-		reason = ReasonRegistryCommitteeMismatch
 	default:
 		return nil
 	}
@@ -901,6 +960,20 @@ func (a *Auditor) checkCommitteeMapping(slot phase0.Slot, epoch phase0.Epoch, pe
 				SignersCount:  len(it.signers),
 				Signers:       it.signers,
 				MessagesCount: it.msgCount,
+				ReceivedMinMs: func() *uint64 {
+					if it.receivedMin > 0 {
+						v := it.receivedMin
+						return &v
+					}
+					return nil
+				}(),
+				ReceivedMaxMs: func() *uint64 {
+					if it.receivedMax > 0 {
+						v := it.receivedMax
+						return &v
+					}
+					return nil
+				}(),
 			},
 			PersistedSchedule: ev.persistedSchedule,
 			Expected: ExpectedEvidence{
@@ -1005,6 +1078,8 @@ func mismatchLogFields(f *Finding, res emitResult) []zap.Field {
 		zap.Bool("schedule_has_index", sch.HasIndex),
 		zap.Bool("schedule_has_role", sch.HasRole),
 		zap.Any("schedule_mask_bits", sch.MaskBits),
+		zap.Bool("schedule_read_ok", sch.ReadOK),
+		zap.String("schedule_read_error", sch.ReadError),
 
 		zap.Any("duty_store_expected", f.Evidence.Expected.ByDutyStore),
 		zap.Bool("expected_other_role", f.Evidence.Expected.ExpectedOtherRole),
@@ -1018,6 +1093,8 @@ func mismatchLogFields(f *Finding, res emitResult) []zap.Field {
 		zap.Int("msg_count", f.Evidence.Observed.MessagesCount),
 		zap.Int("signers_count", f.Evidence.Observed.SignersCount),
 		zap.Any("signers_sample", f.Evidence.Observed.Signers),
+		zap.Any("received_min_ms", f.Evidence.Observed.ReceivedMinMs),
+		zap.Any("received_max_ms", f.Evidence.Observed.ReceivedMaxMs),
 
 		zap.Bool("registry_validator_known", f.Evidence.Registry.ValidatorKnown),
 		zap.Any("registry_has_beacon_metadata", f.Evidence.Registry.HasBeaconMetadata),
@@ -1026,6 +1103,8 @@ func mismatchLogFields(f *Finding, res emitResult) []zap.Field {
 
 		zap.Bool("link_present", f.Evidence.Links.LinkPresent),
 		zap.String("committee_id_linked", safeStr(f.Evidence.Links.LinkedCommitteeID)),
+		zap.Bool("links_read_ok", f.Evidence.Links.ReadOK),
+		zap.String("links_read_error", f.Evidence.Links.ReadError),
 
 		zap.Uint64("schedule_job_drops", f.Evidence.Pipeline.ScheduleJobDroppedCount),
 	}
