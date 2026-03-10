@@ -11,18 +11,26 @@ import (
 
 	builderspec "github.com/attestantio/go-builder-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/mev/builderendpoint"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
+type executionHeaderProvider interface {
+	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
+}
+
+type builderHeaderProvider interface {
+	GetHeader(ctx context.Context, mode string, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, builderendpoint.GetHeaderReport, error)
+}
+
 type Service struct {
 	logger *zap.Logger
 
-	exec              executionclient.Provider
-	builder           *builderendpoint.Server
+	exec              executionHeaderProvider
+	builder           builderHeaderProvider
 	parentHashTimeout time.Duration
 
 	maxComparisons int
@@ -34,7 +42,7 @@ type Service struct {
 	lastReportAt time.Time
 }
 
-func New(logger *zap.Logger, exec executionclient.Provider, builder *builderendpoint.Server, parentHashTimeout time.Duration) *Service {
+func New(logger *zap.Logger, exec executionHeaderProvider, builder builderHeaderProvider, parentHashTimeout time.Duration) *Service {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -48,6 +56,33 @@ func New(logger *zap.Logger, exec executionclient.Provider, builder *builderendp
 		parentHashTimeout: parentHashTimeout,
 		maxComparisons:    2048,
 		lastReportAt:      time.Now(),
+	}
+}
+
+func fillGetHeaderResult(res *runner.MEVShadowGetHeaderResult, bid *builderspec.VersionedSignedBuilderBid, rep builderendpoint.GetHeaderReport, err error) {
+	if res == nil {
+		return
+	}
+	if err != nil {
+		res.Result = runner.MEVShadowResultError
+		res.Cache = rep.Cache
+		return
+	}
+
+	res.Cache = rep.Cache
+	res.RelayHost = rep.RelayHost
+
+	switch rep.Result {
+	case runner.MEVShadowResultBid, runner.MEVShadowResultNoBid, runner.MEVShadowResultError:
+		res.Result = rep.Result
+	default:
+		res.Result = runner.MEVShadowResultError
+	}
+
+	if rep.Result == runner.MEVShadowResultBid && bid != nil {
+		if eth, ok := bidValueETH(bid); ok {
+			res.ValueETH = eth
+		}
 	}
 }
 
@@ -88,7 +123,7 @@ func (s *Service) StartShadowGetHeader(ctx context.Context, slot phase0.Slot, pu
 
 		res := runner.MEVShadowGetHeaderResult{
 			StartedAt: startedAt,
-			Result:    "error",
+			Result:    runner.MEVShadowResultError,
 		}
 
 		// Fetch parent_hash from EL head at the moment of the baseline GetBeaconBlock call.
@@ -98,7 +133,7 @@ func (s *Service) StartShadowGetHeader(ctx context.Context, slot phase0.Slot, pu
 		res.HeadHashTook = time.Since(headStart)
 		cancel()
 		if err != nil || header == nil {
-			res.Result = "head_error"
+			res.Result = runner.MEVShadowResultHeadErr
 			res.Took = 0
 			ch <- res
 			return
@@ -112,28 +147,7 @@ func (s *Service) StartShadowGetHeader(ctx context.Context, slot phase0.Slot, pu
 		getHeaderStart := time.Now()
 		bid, rep, err := s.builder.GetHeader(ctx, "dry_run", slot, parentHash, pubkey)
 		res.Took = time.Since(getHeaderStart)
-		if err != nil {
-			res.Result = "error"
-			res.Cache = rep.Cache
-			ch <- res
-			return
-		}
-
-		res.Cache = rep.Cache
-		res.RelayHost = rep.RelayHost
-
-		switch rep.Result {
-		case "bid", "no_bid", "error":
-			res.Result = rep.Result
-		default:
-			res.Result = "error"
-		}
-
-		if rep.Result == "bid" && bid != nil {
-			if eth, ok := bidValueETH(bid); ok {
-				res.ValueETH = eth
-			}
-		}
+		fillGetHeaderResult(&res, bid, rep, err)
 
 		ch <- res
 	}()
@@ -162,33 +176,13 @@ func (s *Service) StartShadowGetHeaderWithParentHash(ctx context.Context, slot p
 		res := runner.MEVShadowGetHeaderResult{
 			StartedAt:     startedAt,
 			ParentHashHex: hex.EncodeToString(parentHash[:]),
-			Result:        "error",
+			Result:        runner.MEVShadowResultError,
 		}
 
 		getHeaderStart := time.Now()
 		bid, rep, err := s.builder.GetHeader(ctx, "dry_run_exact_parent", slot, parentHash, pubkey)
 		res.Took = time.Since(getHeaderStart)
-		if err != nil {
-			res.Result = "error"
-			res.Cache = rep.Cache
-			ch <- res
-			return
-		}
-
-		res.Cache = rep.Cache
-		res.RelayHost = rep.RelayHost
-		switch rep.Result {
-		case "bid", "no_bid", "error":
-			res.Result = rep.Result
-		default:
-			res.Result = "error"
-		}
-
-		if rep.Result == "bid" && bid != nil {
-			if eth, ok := bidValueETH(bid); ok {
-				res.ValueETH = eth
-			}
-		}
+		fillGetHeaderResult(&res, bid, rep, err)
 
 		ch <- res
 	}()
@@ -287,22 +281,22 @@ func (s *Service) logSummary(now time.Time) {
 			continue
 		}
 		c.total++
-		if cmp.Baseline.Result == "ok" {
+		if cmp.Baseline.Result == runner.MEVBaselineResultOK {
 			c.baselineOK++
 		} else {
 			c.baselineErr++
 		}
 
 		switch cmp.Shadow.Result {
-		case "bid":
+		case runner.MEVShadowResultBid:
 			c.shadowBid++
-		case "no_bid":
+		case runner.MEVShadowResultNoBid:
 			c.shadowNoBid++
-		case "error":
+		case runner.MEVShadowResultError:
 			c.shadowErr++
-		case "head_error":
+		case runner.MEVShadowResultHeadErr:
 			c.shadowHeadErr++
-		case "timeout":
+		case runner.MEVShadowResultTimeout:
 			c.shadowTimeout++
 		default:
 			c.shadowErr++
@@ -320,13 +314,13 @@ func (s *Service) logSummary(now time.Time) {
 		if cmp.ShadowExactParent != nil {
 			c.exactTotal++
 			switch cmp.ShadowExactParent.Result {
-			case "bid":
+			case runner.MEVShadowResultBid:
 				c.exactBid++
-			case "no_bid":
+			case runner.MEVShadowResultNoBid:
 				c.exactNoBid++
-			case "timeout":
+			case runner.MEVShadowResultTimeout:
 				c.exactTimeout++
-			case "error", "head_error":
+			case runner.MEVShadowResultError, runner.MEVShadowResultHeadErr:
 				c.exactErr++
 			default:
 				c.exactErr++

@@ -786,7 +786,7 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 
 	slotOffsetMs := int64(0)
 	if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil && r.BaseRunner.NetworkConfig.Beacon != nil {
-		start := r.BaseRunner.NetworkConfig.Beacon.SlotStartTime(slot)
+		start := r.BaseRunner.NetworkConfig.SlotStartTime(slot)
 		if !start.IsZero() {
 			slotOffsetMs = time.Since(start).Milliseconds()
 			if slotOffsetMs < 0 {
@@ -796,7 +796,7 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 	}
 
 	go func() {
-		shadow := MEVShadowGetHeaderResult{StartedAt: shadowStart, Result: "timeout"}
+		shadow := MEVShadowGetHeaderResult{StartedAt: shadowStart, Result: MEVShadowResultTimeout}
 		select {
 		case res, ok := <-shadowCh:
 			if ok {
@@ -818,7 +818,7 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 		// Enrich with offsets (start/finish) relative to slot start for precision.
 		slotStart := time.Time{}
 		if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil && r.BaseRunner.NetworkConfig.Beacon != nil {
-			slotStart = r.BaseRunner.NetworkConfig.Beacon.SlotStartTime(slot)
+			slotStart = r.BaseRunner.NetworkConfig.SlotStartTime(slot)
 			if !slotStart.IsZero() {
 				bs := baseline.StartedAt.Sub(slotStart).Milliseconds()
 				if bs < 0 {
@@ -841,13 +841,13 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 		}
 
 		// Optional post-hoc precision check: run shadow get_header with baseline execution parent_hash.
-		if baseline.Result == "ok" && baselineExecParentHex != "" {
+		if baseline.Result == MEVBaselineResultOK && baselineExecParentHex != "" {
 			if exactSvc, ok := r.mevDryRun.(MEVDryRunExactParentService); ok {
-				if shadow.Result != "bid" || !cmp.ParentHashMatch {
+				if shadow.Result != MEVShadowResultBid || !cmp.ParentHashMatch {
 					exactCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 					exactCh := exactSvc.StartShadowGetHeaderWithParentHash(exactCtx, slot, baselineExecParentHash, pubkey)
 
-					exact := MEVShadowGetHeaderResult{StartedAt: time.Now(), Result: "timeout", ParentHashHex: baselineExecParentHex}
+					exact := MEVShadowGetHeaderResult{StartedAt: time.Now(), Result: MEVShadowResultTimeout, ParentHashHex: baselineExecParentHex}
 					select {
 					case res, ok := <-exactCh:
 						if ok {
@@ -867,7 +867,7 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 						cmp.ShadowExactFinishOffsetMs = es + exact.HeadHashTook.Milliseconds() + exact.Took.Milliseconds()
 					}
 
-					cmp.RecoveredBid = shadow.Result != "bid" && exact.Result == "bid"
+					cmp.RecoveredBid = shadow.Result != MEVShadowResultBid && exact.Result == MEVShadowResultBid
 				}
 			}
 		}
@@ -879,7 +879,7 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 		shadowMinusBaseline := shadowTotal - baseline.Took
 		level := logger.Debug
 		parentMismatch := cmp.BaselineExecParentHash != "" && shadow.ParentHashHex != "" && !cmp.ParentHashMatch
-		if baseline.Result != "ok" || shadow.Result != "bid" || cmp.RecoveredBid || parentMismatch || shadow.HeadHashTook > 100*time.Millisecond || shadowTotal > 400*time.Millisecond || shadowMinusBaseline > 150*time.Millisecond {
+		if baseline.Result != MEVBaselineResultOK || shadow.Result != MEVShadowResultBid || cmp.RecoveredBid || parentMismatch || shadow.HeadHashTook > 100*time.Millisecond || shadowTotal > 400*time.Millisecond || shadowMinusBaseline > 150*time.Millisecond {
 			level = logger.Info
 		}
 

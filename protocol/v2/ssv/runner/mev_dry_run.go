@@ -25,6 +25,16 @@ type MEVDryRunExactParentService interface {
 	StartShadowGetHeaderWithParentHash(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) <-chan MEVShadowGetHeaderResult
 }
 
+const (
+	MEVShadowResultBid     = "bid"
+	MEVShadowResultNoBid   = "no_bid"
+	MEVShadowResultError   = "error"
+	MEVShadowResultHeadErr = "head_error"
+	MEVShadowResultTimeout = "timeout"
+	MEVBaselineResultOK    = "ok"
+	MEVBaselineResultError = "error"
+)
+
 type MEVShadowGetHeaderResult struct {
 	StartedAt time.Time     `json:"started_at"`
 	Took      time.Duration `json:"took"`

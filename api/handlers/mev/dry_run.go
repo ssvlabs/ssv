@@ -28,9 +28,12 @@ func (h *Handler) DryRunComparisons(w http.ResponseWriter, r *http.Request) erro
 		}
 	}
 
-	var comparisons []runner.MEVDryRunComparison
+	comparisons := make([]runner.MEVDryRunComparison, 0)
 	if h != nil && h.dryRun != nil {
 		comparisons = h.dryRun.Comparisons(limit)
+		if comparisons == nil {
+			comparisons = make([]runner.MEVDryRunComparison, 0)
+		}
 	}
 
 	resp := struct {
