@@ -19,6 +19,399 @@
     },
     "basePath": "/",
     "paths": {
+        "/v1/exporter/auditor/findings": {
+            "get": {
+                "description": "Returns persisted trace\u003c-\u003eschedule mismatch findings (if auditor is enabled).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve auditor findings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex",
+                        "name": "committeeID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "lastN",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "reason",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "role",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "name": "validatorIndex",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "Auditor disabled",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Returns persisted trace\u003c-\u003eschedule mismatch findings (if auditor is enabled).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve auditor findings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "hex",
+                        "name": "committeeID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "lastN",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "reason",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "name": "role",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "name": "validatorIndex",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorFindingsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "Auditor disabled",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/exporter/auditor/status": {
+            "get": {
+                "description": "Returns basic auditor status (if auditor is enabled).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve auditor status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorStatusResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "Auditor disabled",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/exporter/auditor/summary": {
+            "get": {
+                "description": "Returns a summary of stored findings grouped by reason (and role counts) over a slot range.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve auditor summary",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "lastN",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "MaxFindings limits how many stored findings are scanned to build the summary.\nThis is a safety valve; defaults to 200000 and is capped to 500000.",
+                        "name": "maxFindings",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorSummaryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "Auditor disabled",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Returns a summary of stored findings grouped by reason (and role counts) over a slot range.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Exporter"
+                ],
+                "summary": "Retrieve auditor summary",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "lastN",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "MaxFindings limits how many stored findings are scanned to build the summary.\nThis is a safety valve; defaults to 200000 and is capped to 500000.",
+                        "name": "maxFindings",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Filters as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorSummaryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/exporter.AuditorSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "Auditor disabled",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/exporter/decideds": {
             "get": {
                 "description": "Returns decided duty participant traces for validators or committees, including partial error details.",
@@ -379,154 +772,6 @@
                 }
             }
         },
-        "/v1/exporter/auditor/findings": {
-            "get": {
-                "description": "Returns persisted trace<->schedule mismatch findings (if auditor is enabled).",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Exporter"
-                ],
-                "summary": "Retrieve auditor findings",
-                "parameters": [
-                    {
-                        "minimum": 0,
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "From is the starting slot (inclusive).",
-                        "name": "from",
-                        "in": "query"
-                    },
-                    {
-                        "minimum": 0,
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "To is the ending slot (inclusive).",
-                        "name": "to",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Optional reason code filter.",
-                        "name": "reason",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Optional role filter (attester or sync_committee).",
-                        "name": "role",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Optional SSV committee ID (hex, 64 chars).",
-                        "name": "committeeID",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "Optional validator index filter.",
-                        "name": "validatorIndex",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "format": "int64",
-                        "description": "Maximum number of findings to return.",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "description": "Filters as JSON body",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/exporter.AuditorFindingsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/exporter.AuditorFindingsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "501": {
-                        "description": "Auditor disabled",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Returns persisted trace<->schedule mismatch findings (if auditor is enabled).",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Exporter"
-                ],
-                "summary": "Retrieve auditor findings",
-                "parameters": [
-                    {
-                        "description": "Filters as JSON body",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/exporter.AuditorFindingsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/exporter.AuditorFindingsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "501": {
-                        "description": "Auditor disabled",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/exporter/traces/validator": {
             "get": {
                 "description": "Returns consensus, decided, and message traces for the requested validator duties.",
@@ -754,6 +999,136 @@
                 }
             }
         },
+        "exporter.AuditorFindingsRequest": {
+            "type": "object",
+            "properties": {
+                "committeeID": {
+                    "type": "string",
+                    "format": "hex"
+                },
+                "cursor": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "lastN": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "order": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "validatorIndex": {
+                    "type": "integer",
+                    "format": "int64"
+                }
+            }
+        },
+        "exporter.AuditorFindingsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "type": "object"
+                    }
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "exporter.AuditorStatusResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object"
+                }
+            }
+        },
+        "exporter.AuditorSummaryEntry": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "roleCounts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                },
+                "rpcErrors": {
+                    "type": "integer"
+                },
+                "rpcOk": {
+                    "type": "integer"
+                },
+                "rpcUsed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "exporter.AuditorSummaryRequest": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "lastN": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "maxFindings": {
+                    "description": "MaxFindings limits how many stored findings are scanned to build the summary.\nThis is a safety valve; defaults to 200000 and is capped to 500000.",
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "exporter.AuditorSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/exporter.AuditorSummaryEntry"
+                    }
+                },
+                "from": {
+                    "type": "integer"
+                },
+                "to": {
+                    "type": "integer"
+                }
+            }
+        },
         "exporter.CommitteeMessage": {
             "type": "object",
             "properties": {
@@ -899,106 +1274,6 @@
                     "items": {
                         "$ref": "#/definitions/exporter.CommitteeSchedule"
                     }
-                }
-            }
-        },
-        "exporter.AuditorFindingsRequest": {
-            "type": "object",
-            "properties": {
-                "from": {
-                    "description": "From is the starting slot (inclusive).",
-                    "type": "integer",
-                    "format": "int64",
-                    "minimum": 0
-                },
-                "to": {
-                    "description": "To is the ending slot (inclusive).",
-                    "type": "integer",
-                    "format": "int64",
-                    "minimum": 0
-                },
-                "reason": {
-                    "description": "Optional reason code filter.",
-                    "type": "string"
-                },
-                "role": {
-                    "description": "Optional role filter (attester or sync_committee).",
-                    "type": "string"
-                },
-                "committeeID": {
-                    "description": "Optional SSV committee ID (hex, 64 chars).",
-                    "type": "string",
-                    "format": "hex"
-                },
-                "validatorIndex": {
-                    "description": "Optional validator index filter.",
-                    "type": "integer",
-                    "format": "int64"
-                },
-                "limit": {
-                    "description": "Maximum number of findings to return.",
-                    "type": "integer",
-                    "format": "int64"
-                }
-            }
-        },
-        "exporter.AuditorFindingsResponse": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/auditor.Finding"
-                    }
-                },
-                "errors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "auditor.Finding": {
-            "type": "object",
-            "properties": {
-                "version": {
-                    "type": "integer",
-                    "format": "int64"
-                },
-                "createdAt": {
-                    "type": "string",
-                    "format": "date-time"
-                },
-                "slot": {
-                    "type": "integer",
-                    "format": "int64"
-                },
-                "epoch": {
-                    "type": "integer",
-                    "format": "int64"
-                },
-                "period": {
-                    "type": "integer",
-                    "format": "int64"
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "validatorIndex": {
-                    "type": "integer",
-                    "format": "int64"
-                },
-                "committeeID": {
-                    "type": "string",
-                    "format": "hex"
-                },
-                "evidence": {
-                    "description": "Structured evidence payload (best-effort; may evolve).",
-                    "type": "object"
                 }
             }
         },

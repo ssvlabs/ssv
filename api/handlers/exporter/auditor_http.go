@@ -31,7 +31,7 @@ type AuditorFindingsRequest struct {
 }
 
 type AuditorFindingsResponse struct {
-	Data   []*audit.Finding `json:"data"`
+	Data   []*audit.Finding `json:"data" swaggertype:"array,object"`
 	Errors []string         `json:"errors,omitempty"`
 }
 
@@ -209,7 +209,7 @@ func resolveSlotRange(from, to, lastN *uint64, lastAuditedSlot uint64) (uint64, 
 }
 
 type AuditorStatusResponse struct {
-	Data audit.Status `json:"data"`
+	Data audit.Status `json:"data" swaggertype:"object"`
 }
 
 // AuditorStatus godoc
