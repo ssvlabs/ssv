@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
-	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -113,8 +112,8 @@ type Scheduler struct {
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
 
-	// pool manages all go-routines spawned by Scheduler.
-	pool *pool.ContextPool
+	// backgroundTasks tracks all go-routines spawned by Scheduler for graceful shutdown.
+	backgroundTasks sync.WaitGroup
 
 	// waitCond coordinates access to headSlot for different go-routines
 	waitCond *sync.Cond
@@ -183,9 +182,6 @@ type ReorgEvent struct {
 // which will block until initial duties are fully handled.
 func (s *Scheduler) Start(ctx context.Context) error {
 	s.logger.Info("starting duty scheduler")
-	defer s.logger.Info("duty scheduler has started")
-
-	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
 
 	s.logger.Info("subscribing to head events")
 	if err := s.listenToHeadEvents(ctx); err != nil {
@@ -218,25 +214,32 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		// This call is blocking.
 		handler.HandleInitialDuties(ctx)
 
-		s.pool.Go(func(ctx context.Context) error {
+		s.backgroundTasks.Add(1)
+		go func() {
+			defer s.backgroundTasks.Done()
 			handler.HandleDuties(ctx)
-			return nil
-		})
+		}()
 	}
 
-	s.pool.Go(func(ctx context.Context) error {
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
 		indicesChangeFeed.FanOut(ctx, s.indicesChg)
-		return nil
-	})
-	s.pool.Go(func(ctx context.Context) error {
-		reorgFeed.FanOut(ctx, s.reorg)
-		return nil
-	})
+	}()
 
-	s.pool.Go(func(ctx context.Context) error {
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
+		reorgFeed.FanOut(ctx, s.reorg)
+	}()
+
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
 		s.SlotTicker(ctx)
-		return nil
-	})
+	}()
+
+	s.logger.Info("duty scheduler has started")
 
 	return nil
 }
@@ -252,11 +255,13 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
-	s.pool.Go(func(ctx context.Context) error {
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
 		for {
 			select {
 			case <-ctx.Done():
-				return nil
+				return
 			case headEvent := <-ch:
 				if headEvent == nil {
 					s.logger.Warn("head event was nil, skipping")
@@ -270,7 +275,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 				headEventHandler(ctx, headEvent)
 			}
 		}
-	})
+	}()
 
 	return nil
 }
@@ -280,7 +285,9 @@ func (s *Scheduler) Wait() error {
 		handler.WaitShutdown()
 	}
 
-	return s.pool.Wait()
+	s.backgroundTasks.Wait()
+
+	return nil
 }
 
 type EventFeed[T any] struct {
@@ -460,12 +467,9 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(poolCtx context.Context) error {
-			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
-			// not worth the code complexity).
-			if poolCtx.Err() != nil {
-				return nil
-			}
+		s.backgroundTasks.Add(1)
+		go func() {
+			defer s.backgroundTasks.Done()
 
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
@@ -476,9 +480,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 			}
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
-
-			return nil
-		})
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -520,12 +522,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(poolCtx context.Context) error {
-			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
-			// not worth the code complexity).
-			if poolCtx.Err() != nil {
-				return nil
-			}
+		s.backgroundTasks.Add(1)
+		go func() {
+			defer s.backgroundTasks.Done()
 
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
@@ -537,9 +536,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
-
-			return nil
-		})
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")

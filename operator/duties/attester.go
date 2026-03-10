@@ -3,11 +3,11 @@ package duties
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -34,17 +34,16 @@ type AttesterHandler struct {
 	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchNextEpoch bool
 
-	exporterMode bool
+	// backgroundTasks tracks all go-routines spawned by Scheduler for graceful shutdown.
+	backgroundTasks sync.WaitGroup
 
-	// pool manages all go-routines spawned by AttesterHandler.
-	pool *pool.Pool
+	exporterMode bool
 }
 
 func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], exporterMode bool) *AttesterHandler {
 	h := &AttesterHandler{
 		duties:       duties,
 		exporterMode: exporterMode,
-		pool:         pool.New(),
 	}
 	return h
 }
@@ -54,7 +53,7 @@ func (h *AttesterHandler) Name() string {
 }
 
 func (h *AttesterHandler) WaitShutdown() {
-	h.pool.Wait()
+	h.backgroundTasks.Wait()
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -339,7 +338,10 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
-	h.pool.Go(func() {
+	h.backgroundTasks.Add(1)
+	go func() {
+		defer h.backgroundTasks.Done()
+
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
 		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -351,7 +353,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to submit beacon committee subscription", zap.Error(err))
 		}
-	})
+	}()
 
 	span.SetStatus(codes.Ok, "")
 	return nil
