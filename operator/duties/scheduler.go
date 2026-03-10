@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
-	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -113,9 +112,6 @@ type Scheduler struct {
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
 
-	// pool manages all go-routines spawned by Scheduler.
-	pool *pool.ContextPool
-
 	// waitCond coordinates access to headSlot for different go-routines
 	waitCond *sync.Cond
 	headSlot phase0.Slot
@@ -185,8 +181,6 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	s.logger.Info("starting duty scheduler")
 	defer s.logger.Info("duty scheduler has started")
 
-	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
-
 	s.logger.Info("subscribing to head events")
 	if err := s.listenToHeadEvents(ctx); err != nil {
 		return fmt.Errorf("failed to listen to head events: %w", err)
@@ -218,25 +212,22 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		// This call is blocking.
 		handler.HandleInitialDuties(ctx)
 
-		s.pool.Go(func(ctx context.Context) error {
+		go func() {
 			handler.HandleDuties(ctx)
-			return nil
-		})
+		}()
 	}
 
-	s.pool.Go(func(ctx context.Context) error {
+	go func() {
 		indicesChangeFeed.FanOut(ctx, s.indicesChg)
-		return nil
-	})
-	s.pool.Go(func(ctx context.Context) error {
-		reorgFeed.FanOut(ctx, s.reorg)
-		return nil
-	})
+	}()
 
-	s.pool.Go(func(ctx context.Context) error {
+	go func() {
+		reorgFeed.FanOut(ctx, s.reorg)
+	}()
+
+	go func() {
 		s.SlotTicker(ctx)
-		return nil
-	})
+	}()
 
 	return nil
 }
@@ -252,11 +243,11 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
-	s.pool.Go(func(ctx context.Context) error {
+	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				return nil
+				return
 			case headEvent := <-ch:
 				if headEvent == nil {
 					s.logger.Warn("head event was nil, skipping")
@@ -270,7 +261,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 				headEventHandler(ctx, headEvent)
 			}
 		}
-	})
+	}()
 
 	return nil
 }
@@ -280,7 +271,10 @@ func (s *Scheduler) Wait() error {
 		handler.WaitShutdown()
 	}
 
-	return s.pool.Wait()
+	// TODO: a work-around for now
+	time.Sleep(5 * time.Second)
+
+	return nil
 }
 
 type EventFeed[T any] struct {
@@ -460,13 +454,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(poolCtx context.Context) error {
-			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
-			// not worth the code complexity).
-			if poolCtx.Err() != nil {
-				return nil
-			}
-
+		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -476,9 +464,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 			}
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
-
-			return nil
-		})
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -520,13 +506,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.pool.Go(func(poolCtx context.Context) error {
-			// Perform a simple check to see if we are shutting down (merging 2 parent contexts here is
-			// not worth the code complexity).
-			if poolCtx.Err() != nil {
-				return nil
-			}
-
+		go func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
@@ -537,9 +517,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
-
-			return nil
-		})
+		}()
 	}
 
 	span.SetStatus(codes.Ok, "")
