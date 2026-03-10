@@ -85,6 +85,14 @@ func bidValueETH(bid *builderspec.VersionedSignedBuilderBid) (float64, bool) {
 type FetcherWithMetrics struct {
 	Source string
 	Next   bidcache.Fetcher
+
+	Observer WinningBidObserver
+}
+
+// WinningBidObserver receives the winning bid value selected by the fetcher.
+// Implementations must be low-overhead and thread-safe.
+type WinningBidObserver interface {
+	ObserveWinningBid(source string, relayHost string, valueETH float64)
 }
 
 func (f *FetcherWithMetrics) FetchBestBid(ctx context.Context, key bidcache.Key) (*builderspec.VersionedSignedBuilderBid, string, error) {
@@ -119,6 +127,10 @@ func (f *FetcherWithMetrics) FetchBestBid(ctx context.Context, key bidcache.Key)
 		if eth, ok := bidValueETH(bid); ok {
 			valAttr := append(attr, attribute.String("ssv.mev.builder_endpoint.relay", relayHost))
 			bidFetchWinningValueETHHistogram.Record(ctx, eth, metric.WithAttributes(valAttr...))
+
+			if f.Observer != nil {
+				f.Observer.ObserveWinningBid(f.Source, relayHost, eth)
+			}
 		}
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/mev/builderendpoint/config"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/httpapi"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/relayclient"
+	"github.com/ssvlabs/ssv/mev/builderendpoint/stats"
 	"github.com/ssvlabs/ssv/mev/builderendpoint/unblinder"
 )
 
@@ -31,6 +32,7 @@ type Server struct {
 	cache    *bidcache.Cache
 	prefetch *bidcache.Prefetcher
 	fetcher  bidcache.Fetcher
+	stats    *stats.Collector
 
 	slotStartTime func(phase0.Slot) time.Time
 
@@ -54,6 +56,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 
 	cache := bidcache.New(cfg.CacheTTL)
 	factory := relayclient.NewFactory(ctx, cfg.RelayRequestTimeout)
+	collector := stats.NewCollector(stats.Options{})
 
 	baseFetcher := &bids.RelayFetcher{
 		Factory:       factory,
@@ -65,10 +68,10 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		},
 	}
 
-	fetcherForHeader := &bids.FetcherWithMetrics{Source: "get_header", Next: baseFetcher}
-	fetcherForPrefetch := &bids.FetcherWithMetrics{Source: "prefetch", Next: baseFetcher}
+	fetcherForHeader := &bids.FetcherWithMetrics{Source: "get_header", Next: baseFetcher, Observer: collector}
+	fetcherForPrefetch := &bids.FetcherWithMetrics{Source: "prefetch", Next: baseFetcher, Observer: collector}
 
-	prefetcher := bidcache.NewPrefetcher(cache, fetcherForPrefetch, cfg.PrefetchMaxInFlight)
+	prefetcher := bidcache.NewPrefetcher(cache, fetcherForPrefetch, cfg.PrefetchMaxInFlight, bidcache.WithPrefetchObserver(collector))
 
 	var bidSF singleflight.Group
 	bidProvider := func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
@@ -89,28 +92,34 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
 
 		cacheRes := getHeaderCacheMiss
+		result := getHeaderResultError
+		defer func() {
+			took := time.Since(start)
+			recordGetHeaderSlotOffset(ctx, cacheRes, result, slotOffset)
+			recordGetHeader(ctx, cacheRes, result, took)
+			if collector != nil {
+				collector.ObserveGetHeader(string(cacheRes), string(result), took, slotOffset)
+			}
+		}()
+
 		if cache != nil {
 			if ent, ok := cache.Get(key); ok {
 				cacheRes = getHeaderCacheHit
-				recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultBid, slotOffset)
-				recordGetHeader(ctx, cacheRes, getHeaderResultBid, time.Since(start))
+				result = getHeaderResultBid
 				return ent.Bid, nil
 			}
 		}
 
 		bid, err := bids.GetBidSingleflight(ctx, cache, fetcherForHeader, &bidSF, key)
 		if err != nil {
-			recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultError, slotOffset)
-			recordGetHeader(ctx, cacheRes, getHeaderResultError, time.Since(start))
+			result = getHeaderResultError
 			return nil, err
 		}
 		if bid == nil {
-			recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultNoBid, slotOffset)
-			recordGetHeader(ctx, cacheRes, getHeaderResultNoBid, time.Since(start))
+			result = getHeaderResultNoBid
 			return nil, nil
 		}
-		recordGetHeaderSlotOffset(ctx, cacheRes, getHeaderResultBid, slotOffset)
-		recordGetHeader(ctx, cacheRes, getHeaderResultBid, time.Since(start))
+		result = getHeaderResultBid
 		return bid, nil
 	}
 
@@ -129,6 +138,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 		cache:                cache,
 		prefetch:             prefetcher,
 		fetcher:              fetcherForPrefetch,
+		stats:                collector,
 		slotStartTime:        deps.SlotStartTime,
 		cacheCleanupInterval: cleanupInterval,
 		relaysCount:          len(cfg.Relays),
@@ -185,6 +195,9 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.cache != nil && s.cacheCleanupInterval > 0 {
 		go s.runCacheJanitor(ctx, s.cacheCleanupInterval)
 	}
+	if s.stats != nil {
+		go s.runHourlyStatsReporter(ctx, time.Hour)
+	}
 
 	go func() {
 		if s.logger != nil {
@@ -235,6 +248,27 @@ func (s *Server) runCacheJanitor(ctx context.Context, interval time.Duration) {
 	}
 }
 
+func (s *Server) runHourlyStatsReporter(ctx context.Context, interval time.Duration) {
+	if s == nil || s.stats == nil || s.logger == nil || interval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	logger := s.logger.Named("Stats")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case t := <-ticker.C:
+			report := s.stats.SnapshotAndReset(t)
+			logger.Info("mev builder hourly report", zap.Any("report", report))
+		}
+	}
+}
+
 // PrefetchBid warms the bid cache for the given (slot, parentHash, pubkey) key.
 //
 // This is intended to be called from the node's duty pipeline so that when the local
@@ -246,7 +280,11 @@ func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash p
 	}
 
 	if s.slotStartTime != nil {
-		recordPrefetchLeadTime(ctx, time.Until(s.slotStartTime(slot)))
+		lead := time.Until(s.slotStartTime(slot))
+		recordPrefetchLeadTime(ctx, lead)
+		if s.stats != nil {
+			s.stats.ObservePrefetchLeadTime(lead)
+		}
 	}
 
 	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
@@ -264,7 +302,11 @@ func (s *Server) PrefetchBidSync(ctx context.Context, slot phase0.Slot, parentHa
 	}
 
 	if s.slotStartTime != nil {
-		recordPrefetchLeadTime(ctx, time.Until(s.slotStartTime(slot)))
+		lead := time.Until(s.slotStartTime(slot))
+		recordPrefetchLeadTime(ctx, lead)
+		if s.stats != nil {
+			s.stats.ObservePrefetchLeadTime(lead)
+		}
 	}
 
 	key := bidcache.Key{Slot: slot, ParentHash: parentHash, Pubkey: pubkey}
