@@ -47,6 +47,19 @@ const (
 
 var ErrAuditorDisabled = errors.New("auditor disabled")
 
+type Status struct {
+	Enabled bool `json:"enabled"`
+
+	DelaySlots      uint64 `json:"delaySlots"`
+	LastAuditedSlot uint64 `json:"lastAuditedSlot"`
+	RetentionSlots  uint64 `json:"retentionSlots"`
+
+	RPCFallbackEnabled bool `json:"rpcFallbackEnabled"`
+
+	MinStoredSlot *uint64 `json:"minStoredSlot,omitempty"`
+	MaxStoredSlot *uint64 `json:"maxStoredSlot,omitempty"`
+}
+
 // Finding is a single auditor-detected mismatch with evidence attached.
 // It is persisted (2 weeks retention) and exposed via HTTP for later analysis.
 type Finding struct {

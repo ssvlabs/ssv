@@ -62,6 +62,21 @@ func NewDBStore(db basedb.Database) *DBStore {
 	return &DBStore{db: db, maxPerSlotReason: 10}
 }
 
+func (s *DBStore) SlotBounds() (min phase0.Slot, max phase0.Slot, ok bool, err error) {
+	minSlot, minOK, err := s.getSlotBound(metaMinSlotKey)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	maxSlot, maxOK, err := s.getSlotBound(metaMaxSlotKey)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if !minOK && !maxOK {
+		return 0, 0, false, nil
+	}
+	return minSlot, maxSlot, true, nil
+}
+
 func findingKey(slot phase0.Slot, reason ReasonCode, seq uint16) string {
 	return fmt.Sprintf("%d/%s/%d", uint64(slot), reason, seq)
 }

@@ -23,13 +23,13 @@ import (
 type Exporter struct {
 	logger *zap.Logger
 	svc    *exporter2.Exporter
-	audit  auditFindingsReader
+	audit  auditAccessor
 }
 
 func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
-	var auditReader auditFindingsReader
+	var auditReader auditAccessor
 	if traceStore != nil {
-		if ar, ok := traceStore.(auditFindingsReader); ok {
+		if ar, ok := traceStore.(auditAccessor); ok {
 			auditReader = ar
 		}
 	}
@@ -54,8 +54,9 @@ type dutyTraceStore interface {
 	GetScheduled(slot phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error)
 }
 
-type auditFindingsReader interface {
+type auditAccessor interface {
 	QueryAuditFindings(q audit.Query) (audit.QueryResult, error)
+	AuditStatus() (audit.Status, error)
 }
 
 // Common helpers shared across handlers

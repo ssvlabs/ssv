@@ -151,6 +151,34 @@ func (a *Auditor) LastAuditedSlot() phase0.Slot {
 	return a.lastAuditedSlot
 }
 
+type boundedStore interface {
+	SlotBounds() (min phase0.Slot, max phase0.Slot, ok bool, err error)
+}
+
+func (a *Auditor) Status() Status {
+	st := Status{}
+	if a == nil {
+		return st
+	}
+	st.Enabled = a.Enabled()
+	st.DelaySlots = a.opts.DelaySlots
+	st.LastAuditedSlot = uint64(a.LastAuditedSlot())
+	if a.cfg != nil && a.cfg.SlotDuration > 0 {
+		st.RetentionSlots = uint64(a.opts.Retention / a.cfg.SlotDuration)
+	}
+	st.RPCFallbackEnabled = a.opts.RPCFallback
+	if bs, ok := a.store.(boundedStore); ok && bs != nil {
+		min, max, ok2, err := bs.SlotBounds()
+		if err == nil && ok2 {
+			minU := uint64(min)
+			maxU := uint64(max)
+			st.MinStoredSlot = &minU
+			st.MaxStoredSlot = &maxU
+		}
+	}
+	return st
+}
+
 func (a *Auditor) Query(q Query) (QueryResult, error) {
 	if a == nil || a.store == nil {
 		return QueryResult{}, fmt.Errorf("auditor store not initialized")

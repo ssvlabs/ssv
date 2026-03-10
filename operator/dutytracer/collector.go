@@ -152,6 +152,13 @@ func (c *Collector) QueryAuditFindings(q audit.Query) (audit.QueryResult, error)
 	return c.auditor.Query(q)
 }
 
+func (c *Collector) AuditStatus() (audit.Status, error) {
+	if c.auditor == nil || !c.auditor.Enabled() {
+		return audit.Status{}, audit.ErrAuditorDisabled
+	}
+	return c.auditor.Status(), nil
+}
+
 // RecordDutyFetch implements auditor.Reporter (best-effort, non-fatal).
 func (c *Collector) RecordDutyFetch(ev audit.DutyFetchEvent) {
 	if c.auditor != nil {
