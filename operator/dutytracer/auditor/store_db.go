@@ -59,6 +59,7 @@ const (
 	findingPrefixKey = "af"  // per-slot prefix: af + slotBytes
 	countPrefixKey   = "afc" // per-slot prefix: afc + slotBytes; key: reasonByte -> uint16 count
 	metaPrefixKey    = "afm"
+	summaryPrefixKey = "afs"  // per-slot prefix: afs + slotBytes; key: reasonByte -> json summary
 	indexVPrefixKey  = "afvi" // per-validator index: afvi + validatorIndex(8)
 	indexCPrefixKey  = "afci" // per-committee index: afci + committeeID(32)
 	indexRPrefixKey  = "afre" // per-reason index: afre + reasonByte(1)
@@ -261,6 +262,78 @@ func (s *DBStore) PutFinding(f *Finding) (PutResult, error) {
 	// Best-effort slot bounds for prune initialization.
 	_ = s.updateSlotBounds(slot)
 	return res, nil
+}
+
+func (s *DBStore) PutSlotSummary(sum *SlotSummary) error {
+	if sum == nil {
+		return fmt.Errorf("nil summary")
+	}
+	if sum.CreatedAt.IsZero() {
+		sum.CreatedAt = time.Now().UTC()
+	}
+	if sum.Version == 0 {
+		sum.Version = 1
+	}
+	slot := phase0.Slot(sum.Slot)
+	reasonByte := reasonToByte(sum.Reason)
+	if reasonByte == 0 {
+		return fmt.Errorf("unsupported reason code: %s", sum.Reason)
+	}
+	prefix := makeSlotPrefix(summaryPrefixKey, slot)
+	val, err := json.Marshal(sum)
+	if err != nil {
+		return fmt.Errorf("marshal summary: %w", err)
+	}
+	return s.db.Set(prefix, []byte{reasonByte}, val)
+}
+
+func (s *DBStore) QuerySlotSummaries(q SummaryQuery) (SummaryResult, error) {
+	if q.Limit <= 0 {
+		q.Limit = 500
+	}
+	if q.To < q.From {
+		return SummaryResult{}, fmt.Errorf("'to' must be >= 'from'")
+	}
+	out := make([]*SlotSummary, 0, minInt(q.Limit, 64))
+
+	wantReasonByte := byte(0)
+	if q.Reason != nil {
+		wantReasonByte = reasonToByte(*q.Reason)
+	}
+
+	for slot := q.To; ; slot-- {
+		prefix := makeSlotPrefix(summaryPrefixKey, slot)
+		err := s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
+			if len(out) >= q.Limit {
+				return errStopIteration
+			}
+			if wantReasonByte != 0 {
+				if len(obj.Key) != 1 || obj.Key[0] != wantReasonByte {
+					return nil
+				}
+			}
+			su := new(SlotSummary)
+			if err := json.Unmarshal(obj.Value, su); err != nil {
+				return nil
+			}
+			out = append(out, su)
+			if len(out) >= q.Limit {
+				return errStopIteration
+			}
+			return nil
+		})
+		if err != nil {
+			if errors.Is(err, errStopIteration) {
+				break
+			}
+			return SummaryResult{}, fmt.Errorf("query summaries (slot=%d): %w", slot, err)
+		}
+		if slot == q.From || slot == 0 {
+			break
+		}
+	}
+
+	return SummaryResult{Summaries: out}, nil
 }
 
 func (s *DBStore) Query(q Query) (QueryResult, error) {
@@ -554,6 +627,12 @@ func (s *DBStore) Prune(pruneBefore phase0.Slot) error {
 		prefixCount := makeSlotPrefix(countPrefixKey, slot)
 		_ = s.db.GetAll(prefixCount, func(_ int, obj basedb.Obj) error {
 			_ = s.db.Delete(prefixCount, obj.Key)
+			return nil
+		})
+		// Delete all summaries for the slot.
+		prefixSummary := makeSlotPrefix(summaryPrefixKey, slot)
+		_ = s.db.GetAll(prefixSummary, func(_ int, obj basedb.Obj) error {
+			_ = s.db.Delete(prefixSummary, obj.Key)
 			return nil
 		})
 

@@ -186,6 +186,18 @@ func (a *Auditor) Query(q Query) (QueryResult, error) {
 	return a.store.Query(q)
 }
 
+func (a *Auditor) QuerySummaries(q SummaryQuery) (SummaryResult, error) {
+	if a == nil || a.store == nil {
+		return SummaryResult{}, fmt.Errorf("auditor store not initialized")
+	}
+	if qs, ok := a.store.(interface {
+		QuerySlotSummaries(q SummaryQuery) (SummaryResult, error)
+	}); ok {
+		return qs.QuerySlotSummaries(q)
+	}
+	return SummaryResult{}, fmt.Errorf("summary store not supported")
+}
+
 // NotifyLateSlot schedules a re-audit for a slot that already passed the fixed-delay audit window.
 func (a *Auditor) NotifyLateSlot(slot phase0.Slot) {
 	if !a.Enabled() {
@@ -670,6 +682,7 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 
 	if len(summaries) > 0 {
 		auditLatency := time.Since(start).Milliseconds()
+		sw, _ := a.store.(interface{ PutSlotSummary(sum *SlotSummary) error })
 		for reason, s := range summaries {
 			a.logger.Info("auditor summary",
 				zap.Uint64("slot", uint64(slot)),
@@ -688,6 +701,41 @@ func (a *Auditor) AuditSlot(ctx context.Context, slot phase0.Slot) error {
 				zap.Bool("links_read_ok", linksReadOK),
 				zap.Any("role_counts", s.roleCounts),
 			)
+
+			if sw != nil {
+				roleCounts := make(map[string]uint64, len(s.roleCounts))
+				for r, c := range s.roleCounts {
+					roleCounts[string(r)] = c
+				}
+				sum := &SlotSummary{
+					CreatedAt: time.Now().UTC(),
+					Slot:      uint64(slot),
+					Epoch:     uint64(epoch),
+					Reason:    reason,
+
+					Emitted:         s.emitted,
+					Stored:          s.stored,
+					DroppedCap:      s.droppedCap,
+					DroppedStoreErr: s.droppedStoreErr,
+
+					RPCUsed:   s.rpcUsed,
+					RPCOK:     s.rpcOK,
+					RPCErrors: s.rpcErrors,
+
+					ScheduleReadOK: scheduleReadOK,
+					LinksReadOK:    linksReadOK,
+
+					RoleCounts:     roleCounts,
+					AuditLatencyMs: auditLatency,
+					DelaySlots:     a.opts.DelaySlots,
+				}
+				if len(sum.RoleCounts) == 0 {
+					sum.RoleCounts = nil
+				}
+				if err := sw.PutSlotSummary(sum); err != nil {
+					a.logger.Debug("failed to persist summary", zap.Error(err))
+				}
+			}
 		}
 	}
 

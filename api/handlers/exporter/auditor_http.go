@@ -307,6 +307,46 @@ func (e *Exporter) AuditorSummary(w http.ResponseWriter, r *http.Request) error 
 		maxFindings = 500000
 	}
 
+	if sr, ok := e.audit.(interface {
+		QueryAuditSummaries(q audit.SummaryQuery) (audit.SummaryResult, error)
+	}); ok {
+		sumRes, err := sr.QueryAuditSummaries(audit.SummaryQuery{
+			From:  phase0.Slot(from),
+			To:    phase0.Slot(to),
+			Limit: maxFindings,
+		})
+		if err == nil && len(sumRes.Summaries) > 0 {
+			m := make(map[string]*AuditorSummaryEntry)
+			for _, s := range sumRes.Summaries {
+				if s == nil {
+					continue
+				}
+				key := string(s.Reason)
+				ent, ok := m[key]
+				if !ok {
+					ent = &AuditorSummaryEntry{Reason: key, RoleCounts: make(map[string]uint64)}
+					m[key] = ent
+				}
+				ent.Total += s.Stored
+				ent.RPCUsed += s.RPCUsed
+				ent.RPCOK += s.RPCOK
+				ent.RPCErrors += s.RPCErrors
+				for r, c := range s.RoleCounts {
+					ent.RoleCounts[r] += c
+				}
+			}
+			out := make([]AuditorSummaryEntry, 0, len(m))
+			for _, ent := range m {
+				if len(ent.RoleCounts) == 0 {
+					ent.RoleCounts = nil
+				}
+				out = append(out, *ent)
+			}
+			sort.Slice(out, func(i, j int) bool { return out[i].Total > out[j].Total })
+			return api.Render(w, r, &AuditorSummaryResponse{From: from, To: to, Data: out})
+		}
+	}
+
 	res, err := e.audit.QueryAuditFindings(audit.Query{
 		From:  phase0.Slot(from),
 		To:    phase0.Slot(to),

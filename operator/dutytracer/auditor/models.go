@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -58,6 +59,44 @@ type Status struct {
 
 	MinStoredSlot *uint64 `json:"minStoredSlot,omitempty"`
 	MaxStoredSlot *uint64 `json:"maxStoredSlot,omitempty"`
+}
+
+type SlotSummary struct {
+	Version   uint32    `json:"version"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	Slot   uint64     `json:"slot"`
+	Epoch  uint64     `json:"epoch"`
+	Reason ReasonCode `json:"reason"`
+
+	Emitted         uint64 `json:"emitted"`
+	Stored          uint64 `json:"stored"`
+	DroppedCap      uint64 `json:"droppedCap"`
+	DroppedStoreErr uint64 `json:"droppedStoreErr"`
+
+	RPCUsed   uint64 `json:"rpcUsed"`
+	RPCOK     uint64 `json:"rpcOk"`
+	RPCErrors uint64 `json:"rpcErrors"`
+
+	ScheduleReadOK bool `json:"scheduleReadOk"`
+	LinksReadOK    bool `json:"linksReadOk"`
+
+	RoleCounts map[string]uint64 `json:"roleCounts,omitempty"`
+
+	AuditLatencyMs int64  `json:"auditLatencyMs,omitempty"`
+	DelaySlots     uint64 `json:"delaySlots,omitempty"`
+}
+
+type SummaryQuery struct {
+	From  phase0.Slot
+	To    phase0.Slot
+	Limit int
+
+	Reason *ReasonCode
+}
+
+type SummaryResult struct {
+	Summaries []*SlotSummary
 }
 
 // Finding is a single auditor-detected mismatch with evidence attached.
