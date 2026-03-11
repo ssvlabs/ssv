@@ -163,15 +163,38 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 
 	switch {
 	case canonicalPebbleExists:
+		if err := ensureDoneMarkerNotOnEmptyPebble(basePath, basePath, canonicalPebbleNonEmpty); err != nil {
+			return PebbleDBPlan{}, err
+		}
 		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	case badgerExists:
 		// Keep using a separate Pebble path when basePath has Badger files.
+		if err := ensureDoneMarkerNotOnEmptyPebble(legacyPebblePath, basePath, legacyPebbleNonEmpty); err != nil {
+			return PebbleDBPlan{}, err
+		}
 		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	case legacyPebbleExists:
+		if err := ensureDoneMarkerNotOnEmptyPebble(legacyPebblePath, basePath, legacyPebbleNonEmpty); err != nil {
+			return PebbleDBPlan{}, err
+		}
 		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	default:
 		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	}
+}
+
+func ensureDoneMarkerNotOnEmptyPebble(pebblePath string, badgerPath string, pebbleNonEmpty bool) error {
+	if pebbleNonEmpty {
+		return nil
+	}
+	done, err := badgerImportDoneMarkerExists(pebblePath, badgerPath)
+	if err != nil {
+		return err
+	}
+	if done {
+		return fmt.Errorf("badger import completion marker exists at %q but pebble db at %q is empty; manual recovery required", doneMarkerPath(pebblePath), pebblePath)
+	}
+	return nil
 }
 
 // MigrateBadgerToPebbleIfNeeded imports legacy Badger keys into Pebble.
