@@ -389,6 +389,31 @@ func TestMigrateBadgerToPebbleIfNeeded_SkipsAfterCompletionMarker(t *testing.T) 
 	require.Equal(t, 0, keys)
 }
 
+func TestMigrateBadgerToPebbleIfNeeded_RemovesStaleInProgressWhenDoneExists(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	badgerPath := filepath.Join(root, "db")
+	pebblePath := filepath.Join(root, "db-pebble")
+	createBadgerDB(t, badgerPath, map[string][]byte{"foo": []byte("bar")})
+	createPebbleDB(t, pebblePath, map[string][]byte{"foo": []byte("bar")})
+	require.NoError(t, writeBadgerImportDoneMarker(pebblePath, badgerPath, 1))
+	require.NoError(t, writeBadgerImportInProgressMarker(pebblePath, badgerPath))
+
+	pdb, err := pebble.New(zap.NewNop(), pebblePath, &cockroachdb.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, pdb.Close())
+	})
+
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb, false, false, false)
+	require.NoError(t, err)
+	require.False(t, migrated)
+	require.Equal(t, 0, keys)
+	require.FileExists(t, doneMarkerPath(pebblePath))
+	require.NoFileExists(t, inProgressMarkerPath(pebblePath))
+}
+
 func TestMigrateBadgerToPebbleIfNeeded_EndToEndInterruptedThenResumed(t *testing.T) {
 	t.Parallel()
 

@@ -224,6 +224,19 @@ func migrateBadgerToPebbleIfNeeded(
 	}
 
 	if doneMarkerExists {
+		if inProgressMarkerExists {
+			logger.Warn("both done and in-progress badger import markers exist; removing stale in-progress marker",
+				zap.String("badger_path", badgerPath),
+				zap.String("pebble_path", pebblePath),
+			)
+			if err := removeBadgerImportInProgressMarker(pebblePath); err != nil {
+				logger.Warn("failed to remove stale badger in-progress marker",
+					zap.String("badger_path", badgerPath),
+					zap.String("pebble_path", pebblePath),
+					zap.Error(err),
+				)
+			}
+		}
 		pebbleEmpty, err := isPebbleEmpty(db)
 		if err != nil {
 			return false, 0, err
@@ -529,6 +542,9 @@ func badgerImportMarkerState(pebblePath string, badgerPath string) (done bool, i
 	done, err = badgerImportDoneMarkerExists(pebblePath, badgerPath)
 	if err != nil {
 		return false, false, err
+	}
+	if done {
+		return true, false, nil
 	}
 	inProgress, err = badgerImportInProgressMarkerExists(pebblePath, badgerPath)
 	if err != nil {
