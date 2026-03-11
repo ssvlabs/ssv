@@ -467,12 +467,15 @@ func hasBadgerFiles(path string) (bool, error) {
 }
 
 func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath string, db *pebble.DB, hook importBatchCommitHook) (int, error) {
+	// NOTE: resume always re-copies keys from the beginning of Badger when an in-progress
+	// marker exists. Duplicate puts are safe in Pebble (latest write wins), but resume
+	// currently has similar write amplification and temporary disk pressure as a full import.
 	bdb, recovered, err := openBadgerForImport(badgerPath)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = bdb.Close() }()
-	if recovered && logger != nil {
+	if recovered {
 		logger.Warn(
 			"badger value log required truncation during pebble import; proceeding with recovered badger state",
 			zap.String("badger_path", badgerPath),
