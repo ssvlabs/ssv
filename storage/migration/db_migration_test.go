@@ -321,6 +321,28 @@ func TestMigrateBadgerToPebbleIfNeeded_UsesKnownBadgerState(t *testing.T) {
 	require.Equal(t, 0, keys)
 }
 
+func TestMigrateBadgerToPebbleIfNeeded_InvalidStateHint(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	badgerPath := filepath.Join(root, "db")
+	pebblePath := filepath.Join(root, "db-pebble")
+
+	pdb, err := pebble.New(zap.NewNop(), pebblePath, &cockroachdb.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, pdb.Close())
+	})
+
+	_, _, err = MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb, false, true, false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid badger state hint")
+
+	_, _, err = MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb, true, false, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid badger state hint")
+}
+
 func TestMigrateBadgerToPebbleIfNeeded_SkipsAfterCompletionMarker(t *testing.T) {
 	t.Parallel()
 
@@ -488,9 +510,10 @@ func TestHasBadgerFiles(t *testing.T) {
 		expectHas bool
 	}{
 		{name: "none", files: nil, expectHas: false},
-		{name: "keyregistry", files: []string{"KEYREGISTRY"}, expectHas: true},
-		{name: "vlog", files: []string{"000001.vlog"}, expectHas: true},
-		{name: "vlog zstd", files: []string{"000001.vlog.zstd"}, expectHas: true},
+		{name: "keyregistry only", files: []string{"KEYREGISTRY"}, expectHas: false},
+		{name: "vlog only", files: []string{"000001.vlog"}, expectHas: false},
+		{name: "keyregistry and vlog", files: []string{"KEYREGISTRY", "000001.vlog"}, expectHas: true},
+		{name: "keyregistry and vlog zstd", files: []string{"KEYREGISTRY", "000001.vlog.zstd"}, expectHas: true},
 		{name: "pebble only", files: []string{"MANIFEST-000001", "CURRENT"}, expectHas: false},
 	}
 

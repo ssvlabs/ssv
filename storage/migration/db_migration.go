@@ -174,7 +174,23 @@ func MigrateBadgerToPebbleIfNeeded(
 	badgerExists bool,
 	badgerNonEmpty bool,
 ) (bool, int, error) {
+	if err := validateBadgerStateHint(badgerStateKnown, badgerExists, badgerNonEmpty); err != nil {
+		return false, 0, err
+	}
 	return migrateBadgerToPebbleIfNeeded(ctx, logger, badgerPath, pebblePath, db, badgerStateKnown, badgerExists, badgerNonEmpty, nil)
+}
+
+func validateBadgerStateHint(badgerStateKnown bool, badgerExists bool, badgerNonEmpty bool) error {
+	if !badgerStateKnown {
+		if badgerExists || badgerNonEmpty {
+			return fmt.Errorf("invalid badger state hint: badgerStateKnown=false requires badgerExists=false and badgerNonEmpty=false")
+		}
+		return nil
+	}
+	if badgerNonEmpty && !badgerExists {
+		return fmt.Errorf("invalid badger state hint: badgerNonEmpty=true requires badgerExists=true")
+	}
+	return nil
 }
 
 func migrateBadgerToPebbleIfNeeded(
@@ -352,11 +368,19 @@ func hasBadgerFiles(path string) (bool, error) {
 	}
 
 	// Heuristic for "Badger files are present" used only to decide whether to attempt
-	// opening Badger. Badger v4 writes KEYREGISTRY and value-log files (".vlog", and
-	// optionally ".vlog.zstd" when compressed). openBadgerForImport remains the source
-	// of truth for validating the directory.
+	// opening Badger. For Badger v4, require KEYREGISTRY and at least one value-log
+	// file (".vlog" or ".vlog.zstd"). openBadgerForImport remains the source of
+	// truth for validating the directory.
+	hasKeyRegistry := false
+	hasValueLog := false
 	for _, entry := range entries {
-		if entry.Name() == "KEYREGISTRY" || strings.HasSuffix(entry.Name(), ".vlog") || strings.HasSuffix(entry.Name(), ".vlog.zstd") {
+		switch {
+		case entry.Name() == "KEYREGISTRY":
+			hasKeyRegistry = true
+		case strings.HasSuffix(entry.Name(), ".vlog"), strings.HasSuffix(entry.Name(), ".vlog.zstd"):
+			hasValueLog = true
+		}
+		if hasKeyRegistry && hasValueLog {
 			return true, nil
 		}
 	}
