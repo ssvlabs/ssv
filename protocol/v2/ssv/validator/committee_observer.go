@@ -243,6 +243,16 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 	for _, msg := range partialMsgs.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		if !exists {
+			ncv.logger.Debug("verify partial sig: validator share not found by index",
+				fields.MessageID(ncv.msgID),
+				fields.Slot(partialMsgs.Slot),
+				fields.OperatorID(msg.Signer),
+				zap.Uint64("validator_index", uint64(msg.ValidatorIndex)),
+				fields.Root(msg.SigningRoot),
+				zap.Int("partial_msgs_count", len(partialMsgs.Messages)),
+				zap.Int("slot_container_validators", len(slotValidators)),
+				zap.Int("post_consensus_container_slots", len(ncv.postConsensusContainer)),
+			)
 			return fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
 		}
 		container, ok := slotValidators[msg.ValidatorIndex]
