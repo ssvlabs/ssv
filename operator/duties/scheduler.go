@@ -280,12 +280,14 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 	return nil
 }
 
+// Wait blocks until the Scheduler is finished with all it's tasks, also ensuring all the
+// handlers terminate before this func returns.
 func (s *Scheduler) Wait() error {
+	s.backgroundTasks.Wait()
+
 	for _, handler := range s.handlers {
 		handler.WaitShutdown()
 	}
-
-	s.backgroundTasks.Wait()
 
 	return nil
 }
