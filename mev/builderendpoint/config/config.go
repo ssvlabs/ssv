@@ -12,11 +12,13 @@ import (
 type Config struct {
 	Enabled bool `yaml:"Enabled" env:"ENABLED" env-default:"false" env-description:"Enable the SSV-hosted Builder API endpoint (mev-boost-compatible)"`
 
-	// NoDryRun disables dry-run mode. Dry-run is the default when the builder endpoint feature is enabled.
+	// DryRun enables dry-run mode (shadow in-node MEV), without serving the Builder API to the beacon node.
 	//
-	// When dry-run is enabled, the node can run the in-node builder flow in parallel to the legacy
-	// proposer flow for comparison, without serving the Builder API to the beacon node.
-	NoDryRun bool `yaml:"NoDryRun" env:"NO_DRY_RUN" env-default:"false" env-description:"Disable dry-run mode (serve the Builder API to the beacon node)"`
+	// When enabled, the node can run the in-node builder flow in parallel to the legacy proposer flow for
+	// comparison, while still receiving blocks from an external relay (v1 behavior).
+	//
+	// If both Enabled and DryRun are set, DryRun wins (i.e. HTTP server is not started).
+	DryRun bool `yaml:"DryRun" env:"DRY_RUN" env-default:"false" env-description:"Enable MEV dry-run mode (do not serve the Builder API; collect comparison metrics)"`
 
 	// Host and Port define the listen address for the builder endpoint.
 	//
@@ -69,14 +71,17 @@ type Config struct {
 }
 
 func (c Config) Validate() error {
-	if !c.Enabled {
+	if !c.Enabled && !c.DryRun {
 		return nil
 	}
-	if c.Host == "" {
-		return fmt.Errorf("builder endpoint enabled but Host is empty")
-	}
-	if c.Port <= 0 || c.Port > 65535 {
-		return fmt.Errorf("builder endpoint enabled but Port is invalid: %d", c.Port)
+	// Only validate listen parameters when serving the Builder API.
+	if c.Enabled && !c.DryRun {
+		if c.Host == "" {
+			return fmt.Errorf("builder endpoint enabled but Host is empty")
+		}
+		if c.Port <= 0 || c.Port > 65535 {
+			return fmt.Errorf("builder endpoint enabled but Port is invalid: %d", c.Port)
+		}
 	}
 	return nil
 }

@@ -129,7 +129,7 @@ var cfg config
 
 var globalArgs global_config.Args
 
-var builderEndpointNoDryRunFlag bool
+var builderEndpointDryRunFlag bool
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -149,8 +149,8 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 
-		if cmd.Flags().Changed("no-dry-run") {
-			cfg.BuilderEndpoint.NoDryRun = builderEndpointNoDryRunFlag
+		if cmd.Flags().Changed("dry-run") {
+			cfg.BuilderEndpoint.DryRun = builderEndpointDryRunFlag
 		}
 
 		observabilityOptions := []observability.Option{
@@ -583,7 +583,8 @@ var StartNodeCmd = &cobra.Command{
 
 		var builderSrv *builderendpoint.Server
 		var mevDryRunSvc *mevdryrun.Service
-		if cfg.BuilderEndpoint.Enabled {
+		builderFeatureEnabled := cfg.BuilderEndpoint.Enabled || cfg.BuilderEndpoint.DryRun
+		if builderFeatureEnabled {
 			srv, err := builderendpoint.New(cmd.Context(), logger, cfg.BuilderEndpoint, builderendpoint.Dependencies{
 				SlotStartTime: networkConfig.SlotStartTime,
 			})
@@ -592,7 +593,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 			builderSrv = srv
 
-			if !cfg.BuilderEndpoint.NoDryRun {
+			if cfg.BuilderEndpoint.DryRun {
 				mevDryRunSvc = mevdryrun.New(logger, executionClient, builderSrv, cfg.BuilderEndpoint.PrefetchParentHashTimeout)
 				validatorCtrl.SetMEVDryRun(mevDryRunSvc)
 				mevDryRunSvc.StartReporter(cmd.Context(), time.Hour)
@@ -726,7 +727,8 @@ var StartNodeCmd = &cobra.Command{
 
 		if builderSrv != nil {
 			builderSrv.StartBackground(cmd.Context())
-			if cfg.BuilderEndpoint.NoDryRun {
+			// Dry-run wins over Enabled.
+			if cfg.BuilderEndpoint.Enabled && !cfg.BuilderEndpoint.DryRun {
 				go func() {
 					if err := builderSrv.Run(cmd.Context()); err != nil {
 						logger.Fatal("failed to run builder endpoint server", zap.Error(err))
@@ -885,7 +887,7 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
-	StartNodeCmd.Flags().BoolVar(&builderEndpointNoDryRunFlag, "no-dry-run", false, "Disable MEV builder dry-run mode (serve the Builder API to the beacon node)")
+	StartNodeCmd.Flags().BoolVar(&builderEndpointDryRunFlag, "dry-run", false, "Enable MEV builder dry-run mode (do not serve the Builder API; collect comparison metrics)")
 }
 
 func setupBadgerDB(
