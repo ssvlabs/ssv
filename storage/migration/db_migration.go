@@ -62,19 +62,25 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 	// This avoids opening legacy Badger on every startup when it is no longer needed.
 	switch {
 	case canonicalPebbleNonEmpty && !legacyPebbleNonEmpty:
-		ok, err := canUsePebbleAlongsideBadger(basePath, basePath)
+		done, inProgress, err := badgerImportMarkerState(basePath, basePath)
 		if err != nil {
 			return PebbleDBPlan{}, err
 		}
-		if ok {
+		if done {
+			return PebbleDBPlan{PebblePath: basePath}, nil
+		}
+		if inProgress {
 			return PebbleDBPlan{PebblePath: basePath, BadgerImportPath: basePath}, nil
 		}
 	case legacyPebbleNonEmpty && !canonicalPebbleNonEmpty:
-		ok, err := canUsePebbleAlongsideBadger(legacyPebblePath, basePath)
+		done, inProgress, err := badgerImportMarkerState(legacyPebblePath, basePath)
 		if err != nil {
 			return PebbleDBPlan{}, err
 		}
-		if ok {
+		if done {
+			return PebbleDBPlan{PebblePath: legacyPebblePath}, nil
+		}
+		if inProgress {
 			return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerImportPath: basePath}, nil
 		}
 	}
@@ -96,11 +102,11 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 	}
 	if len(nonEmptyCandidates) > 1 {
 		if canonicalPebbleNonEmpty && badgerNonEmpty && !legacyPebbleNonEmpty {
-			ok, err := canUsePebbleAlongsideBadger(basePath, basePath)
+			done, inProgress, err := badgerImportMarkerState(basePath, basePath)
 			if err != nil {
 				return PebbleDBPlan{}, err
 			}
-			if ok {
+			if done || inProgress {
 				return PebbleDBPlan{
 					PebblePath:       basePath,
 					BadgerImportPath: basePath,
@@ -111,11 +117,11 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 			}
 		}
 		if legacyPebbleNonEmpty && badgerNonEmpty && !canonicalPebbleNonEmpty {
-			ok, err := canUsePebbleAlongsideBadger(legacyPebblePath, basePath)
+			done, inProgress, err := badgerImportMarkerState(legacyPebblePath, basePath)
 			if err != nil {
 				return PebbleDBPlan{}, err
 			}
-			if ok {
+			if done || inProgress {
 				return PebbleDBPlan{
 					PebblePath:       legacyPebblePath,
 					BadgerImportPath: basePath,
@@ -519,19 +525,16 @@ func isBadgerTruncateRequiredError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "log truncate required to run db")
 }
 
-func canUsePebbleAlongsideBadger(pebblePath string, badgerPath string) (bool, error) {
-	done, err := badgerImportDoneMarkerExists(pebblePath, badgerPath)
+func badgerImportMarkerState(pebblePath string, badgerPath string) (done bool, inProgress bool, err error) {
+	done, err = badgerImportDoneMarkerExists(pebblePath, badgerPath)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	if done {
-		return true, nil
-	}
-	inProgress, err := badgerImportInProgressMarkerExists(pebblePath, badgerPath)
+	inProgress, err = badgerImportInProgressMarkerExists(pebblePath, badgerPath)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return inProgress, nil
+	return done, inProgress, nil
 }
 
 func writeBadgerImportInProgressMarker(pebblePath string, badgerPath string) error {

@@ -92,7 +92,7 @@ func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportDoneMarkerExis
 	plan, err := ResolvePebbleDBPlan(basePath)
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
-	require.Equal(t, basePath, plan.BadgerImportPath)
+	require.Empty(t, plan.BadgerImportPath)
 	require.False(t, plan.BadgerStateKnown)
 }
 
@@ -111,7 +111,7 @@ func TestResolvePebbleDBPlan_FastPathSkipsBadgerOpenAfterDoneMarker(t *testing.T
 	plan, err := ResolvePebbleDBPlan(basePath)
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
-	require.Equal(t, basePath, plan.BadgerImportPath)
+	require.Empty(t, plan.BadgerImportPath)
 }
 
 func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportInProgressMarkerExists(t *testing.T) {
