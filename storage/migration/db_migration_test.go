@@ -22,7 +22,7 @@ func TestResolvePebbleDBPlan_NoExistingDatabases(t *testing.T) {
 
 	basePath := filepath.Join(t.TempDir(), "db")
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, basePath, plan.PebblePath)
 	require.Empty(t, plan.BadgerImportPath)
@@ -34,7 +34,7 @@ func TestResolvePebbleDBPlan_UsesCanonicalPebble(t *testing.T) {
 	basePath := filepath.Join(t.TempDir(), "db")
 	createPebbleDB(t, basePath, map[string][]byte{"a": []byte("1")})
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, basePath, plan.PebblePath)
 	require.Empty(t, plan.BadgerImportPath)
@@ -48,7 +48,7 @@ func TestResolvePebbleDBPlan_UsesLegacyPebble(t *testing.T) {
 	legacyPath := basePath + "-pebble"
 	createPebbleDB(t, legacyPath, map[string][]byte{"a": []byte("1")})
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
 	require.Empty(t, plan.BadgerImportPath)
@@ -61,7 +61,7 @@ func TestResolvePebbleDBPlan_ImportsFromBadgerWhenOnlyBadgerHasData(t *testing.T
 	basePath := filepath.Join(t.TempDir(), "db")
 	createBadgerDB(t, basePath, map[string][]byte{"a": []byte("1")})
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, basePath+"-pebble", plan.PebblePath)
 	require.Equal(t, basePath, plan.BadgerImportPath)
@@ -77,7 +77,7 @@ func TestResolvePebbleDBPlan_FailsOnMultipleNonEmptySources(t *testing.T) {
 	createBadgerDB(t, basePath, map[string][]byte{"a": []byte("1")})
 	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
 
-	_, err := ResolvePebbleDBPlan(basePath)
+	_, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "multiple non-empty databases detected")
 }
@@ -91,7 +91,7 @@ func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportDoneMarkerExis
 	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
 	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
 	require.Empty(t, plan.BadgerImportPath)
@@ -108,7 +108,7 @@ func TestResolvePebbleDBPlan_DoneAndInProgressMarkersTriggersCleanupRun(t *testi
 	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
 	require.NoError(t, writeBadgerImportInProgressMarker(legacyPath, basePath))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
 	require.Equal(t, basePath, plan.BadgerImportPath)
@@ -127,7 +127,7 @@ func TestResolvePebbleDBPlan_FastPathSkipsBadgerOpenAfterDoneMarker(t *testing.T
 	require.NoError(t, os.WriteFile(filepath.Join(basePath, "KEYREGISTRY"), []byte("not-a-badger-db"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(basePath, "000001.vlog"), []byte("garbage"), 0o600))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
 	require.Empty(t, plan.BadgerImportPath)
@@ -141,7 +141,7 @@ func TestResolvePebbleDBPlan_FailsWhenDoneMarkerExistsButLegacyPebbleEmpty(t *te
 	createPebbleDB(t, legacyPath, map[string][]byte{})
 	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
 
-	_, err := ResolvePebbleDBPlan(basePath)
+	_, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "completion marker exists")
 }
@@ -153,7 +153,7 @@ func TestResolvePebbleDBPlan_FailsWhenDoneMarkerExistsButCanonicalPebbleEmpty(t 
 	createPebbleDB(t, basePath, map[string][]byte{})
 	require.NoError(t, writeBadgerImportDoneMarker(basePath, basePath, 1))
 
-	_, err := ResolvePebbleDBPlan(basePath)
+	_, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "completion marker exists")
 }
@@ -167,7 +167,7 @@ func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportInProgressMark
 	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
 	require.NoError(t, writeBadgerImportInProgressMarker(legacyPath, basePath))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	plan, err := ResolvePebbleDBPlan(zap.NewNop(), basePath)
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
 	require.Equal(t, basePath, plan.BadgerImportPath)

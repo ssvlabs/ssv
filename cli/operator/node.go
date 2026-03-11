@@ -829,9 +829,7 @@ func setupPebbleDB(
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
-	plan, err := storagemigration.ResolvePebbleDBPlan(
-		cfg.DBOptions.Path,
-	)
+	plan, err := storagemigration.ResolvePebbleDBPlan(logger, cfg.DBOptions.Path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve database layout: %w", err)
 	}

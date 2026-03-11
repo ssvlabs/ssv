@@ -45,7 +45,7 @@ type PebbleDBPlan struct {
 }
 
 // ResolvePebbleDBPlan selects the Pebble path and optional Badger import path.
-func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
+func ResolvePebbleDBPlan(logger *zap.Logger, basePath string) (PebbleDBPlan, error) {
 	legacyPebblePath := basePath + "-pebble"
 
 	canonicalPebbleExists, canonicalPebbleNonEmpty, err := pebble.DirState(basePath)
@@ -114,7 +114,7 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 		}
 	}
 
-	badgerExists, badgerNonEmpty, err := badgerDirState(basePath)
+	badgerExists, badgerNonEmpty, err := badgerDirState(logger, basePath)
 	if err != nil {
 		return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
 	}
@@ -310,7 +310,7 @@ func migrateBadgerToPebbleIfNeeded(
 		hasBadgerData = knownBadgerExists
 		badgerNonEmpty = knownBadgerNonEmpty
 	} else {
-		hasBadgerData, badgerNonEmpty, err = badgerDirState(badgerPath)
+		hasBadgerData, badgerNonEmpty, err = badgerDirState(logger, badgerPath)
 		if err != nil {
 			return false, 0, err
 		}
@@ -406,15 +406,20 @@ func isPebbleEmpty(db *pebble.DB) (bool, error) {
 	return !hasEntry, nil
 }
 
-func badgerDirState(path string) (exists bool, nonEmpty bool, err error) {
+func badgerDirState(logger *zap.Logger, path string) (exists bool, nonEmpty bool, err error) {
 	exists, err = hasBadgerFiles(path)
 	if err != nil || !exists {
 		return exists, false, err
 	}
 
-	bdb, _, err := openBadgerForImport(path)
+	bdb, recovered, err := openBadgerForImport(path)
 	if err != nil {
 		return true, false, err
+	}
+	if recovered {
+		logger.Warn("badger value log required truncation while inspecting badger db state",
+			zap.String("badger_path", path),
+		)
 	}
 	defer func() { _ = bdb.Close() }()
 
@@ -487,7 +492,11 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 	pending := 0
 	committedBatches := 0
 	batch := db.NewBatch()
-	defer func() { _ = batch.Close() }()
+	defer func() {
+		if batch != nil {
+			_ = batch.Close()
+		}
+	}()
 
 	flushBatch := func() error {
 		if pending == 0 {
@@ -500,8 +509,10 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 			return err
 		}
 		if err := batch.Close(); err != nil {
+			batch = nil
 			return err
 		}
+		batch = nil
 		committedBatches++
 		if committedBatches%importProgressLogEveryBatches == 0 {
 			logger.Info("badger import in progress",
