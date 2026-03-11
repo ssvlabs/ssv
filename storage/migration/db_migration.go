@@ -59,7 +59,8 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 	}
 
 	// Fast path: post-migration steady state (non-empty pebble + import marker).
-	// This avoids opening legacy Badger on every startup when it is no longer needed.
+	// This avoids opening legacy Badger on startup when marker state already determines
+	// the selected source of truth.
 	switch {
 	case canonicalPebbleNonEmpty && !legacyPebbleNonEmpty:
 		done, inProgress, err := badgerImportMarkerState(basePath, basePath)
@@ -76,6 +77,16 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 		if inProgress {
 			return PebbleDBPlan{PebblePath: basePath, BadgerImportPath: basePath}, nil
 		}
+		hasBadgerData, err := hasBadgerFiles(basePath)
+		if err != nil {
+			return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
+		}
+		if !hasBadgerData {
+			return PebbleDBPlan{
+				PebblePath:       basePath,
+				BadgerStateKnown: true,
+			}, nil
+		}
 	case legacyPebbleNonEmpty && !canonicalPebbleNonEmpty:
 		done, inProgress, err := badgerImportMarkerState(legacyPebblePath, basePath)
 		if err != nil {
@@ -90,6 +101,16 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 		}
 		if inProgress {
 			return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerImportPath: basePath}, nil
+		}
+		hasBadgerData, err := hasBadgerFiles(basePath)
+		if err != nil {
+			return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
+		}
+		if !hasBadgerData {
+			return PebbleDBPlan{
+				PebblePath:       legacyPebblePath,
+				BadgerStateKnown: true,
+			}, nil
 		}
 	}
 

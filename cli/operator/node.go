@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -19,7 +20,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -850,7 +850,7 @@ func setupPebbleDB(
 			zap.String("path", dbPath),
 			zap.Error(closeErr),
 		)
-		return setupErr
+		return errors.Join(setupErr, fmt.Errorf("close db after setup error: %w", closeErr))
 	}
 	if dbPath != cfg.DBOptions.Path {
 		logger.Warn("using legacy pebble database path",
@@ -1047,7 +1047,7 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 		}
 		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to decode custom domain type")
+			return nil, fmt.Errorf("failed to decode custom domain type: %w", err)
 		}
 		if len(domainBytes) != 4 {
 			return nil, errors.New("custom domain type must be 4 bytes")

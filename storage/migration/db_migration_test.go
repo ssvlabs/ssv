@@ -38,6 +38,7 @@ func TestResolvePebbleDBPlan_UsesCanonicalPebble(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, basePath, plan.PebblePath)
 	require.Empty(t, plan.BadgerImportPath)
+	require.True(t, plan.BadgerStateKnown)
 }
 
 func TestResolvePebbleDBPlan_UsesLegacyPebble(t *testing.T) {
@@ -51,6 +52,7 @@ func TestResolvePebbleDBPlan_UsesLegacyPebble(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, legacyPath, plan.PebblePath)
 	require.Empty(t, plan.BadgerImportPath)
+	require.True(t, plan.BadgerStateKnown)
 }
 
 func TestResolvePebbleDBPlan_ImportsFromBadgerWhenOnlyBadgerHasData(t *testing.T) {
