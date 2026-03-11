@@ -361,7 +361,11 @@ func migrateBadgerToPebbleIfNeeded(
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
 	}
 	if err := removeBadgerImportInProgressMarker(pebblePath); err != nil {
-		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
+		logger.Warn("failed to remove in-progress badger import marker after successful migration; marker will be retried on next startup",
+			zap.String("badger_path", badgerPath),
+			zap.String("pebble_path", pebblePath),
+			zap.Error(err),
+		)
 	}
 
 	return true, copied, nil
