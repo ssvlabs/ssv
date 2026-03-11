@@ -351,8 +351,12 @@ func hasBadgerFiles(path string) (bool, error) {
 		return false, err
 	}
 
+	// Heuristic for "Badger files are present" used only to decide whether to attempt
+	// opening Badger. Badger v4 writes KEYREGISTRY and value-log files (".vlog", and
+	// optionally ".vlog.zstd" when compressed). openBadgerForImport remains the source
+	// of truth for validating the directory.
 	for _, entry := range entries {
-		if entry.Name() == "KEYREGISTRY" || strings.HasSuffix(entry.Name(), ".vlog") {
+		if entry.Name() == "KEYREGISTRY" || strings.HasSuffix(entry.Name(), ".vlog") || strings.HasSuffix(entry.Name(), ".vlog.zstd") {
 			return true, nil
 		}
 	}

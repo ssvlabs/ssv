@@ -3,6 +3,7 @@ package testenv
 import (
 	"fmt"
 
+	cockroachdb "github.com/cockroachdb/pebble"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -29,7 +30,7 @@ func (env *TestEnvironment) initializeKeyManagers() error {
 
 // createLocalKeyManager creates and configures the LocalKeyManager
 func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
-	localDB, err := storagepebble.New(logger, env.localKeyManagerPath, nil)
+	localDB, err := storagepebble.New(logger, env.localKeyManagerPath, &cockroachdb.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to create local database: %w", err)
 	}
@@ -53,7 +54,7 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
 	// Only create database on first initialization
 	if env.remoteDB == nil {
-		remoteDB, err := storagepebble.New(logger, env.remoteKeyManagerPath, nil)
+		remoteDB, err := storagepebble.New(logger, env.remoteKeyManagerPath, &cockroachdb.Options{})
 		if err != nil {
 			return fmt.Errorf("failed to create remote database: %w", err)
 		}

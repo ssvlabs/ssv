@@ -479,6 +479,38 @@ func TestWrapNoSpaceImportError_Passthrough(t *testing.T) {
 	require.ErrorIs(t, err, baseErr)
 }
 
+func TestHasBadgerFiles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		files     []string
+		expectHas bool
+	}{
+		{name: "none", files: nil, expectHas: false},
+		{name: "keyregistry", files: []string{"KEYREGISTRY"}, expectHas: true},
+		{name: "vlog", files: []string{"000001.vlog"}, expectHas: true},
+		{name: "vlog zstd", files: []string{"000001.vlog.zstd"}, expectHas: true},
+		{name: "pebble only", files: []string{"MANIFEST-000001", "CURRENT"}, expectHas: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			for _, f := range tc.files {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600))
+			}
+
+			has, err := hasBadgerFiles(dir)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectHas, has)
+		})
+	}
+}
+
 func createPebbleDB(t *testing.T, path string, data map[string][]byte) {
 	t.Helper()
 
