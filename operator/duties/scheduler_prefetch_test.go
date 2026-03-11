@@ -46,6 +46,9 @@ func TestSchedulerPrefetchesBuilderBidsForCurrentSlotProposerDuties(t *testing.T
 	exec := NewMockExecutionClient(ctrl)
 	dutyExec := NewMockDutyExecutor(ctrl)
 
+	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+	t.Cleanup(cancelBaseCtx)
+
 	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.SlotDuration = 12 * time.Second
 	// Set genesis such that EstimatedCurrentSlot() == 1.
@@ -71,13 +74,13 @@ func TestSchedulerPrefetchesBuilderBidsForCurrentSlotProposerDuties(t *testing.T
 	})
 
 	s := NewScheduler(logger, &SchedulerOptions{
-		Ctx:                       context.Background(),
+		Ctx:                       baseCtx,
 		ExecutionClient:           exec,
 		BeaconConfig:              &beaconCfg,
 		BuilderBidPrefetcher:      prefetcher,
 		PrefetchParentHashTimeout: 200 * time.Millisecond,
 		DutyExecutor:              dutyExec,
-		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker() },
+		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker(baseCtx) },
 	})
 
 	pubkey := phase0.BLSPubKey{2}
@@ -128,6 +131,9 @@ func TestSchedulerDoesNotPrefetchForNextSlotDuties(t *testing.T) {
 	exec := NewMockExecutionClient(ctrl)
 	dutyExec := NewMockDutyExecutor(ctrl)
 
+	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+	t.Cleanup(cancelBaseCtx)
+
 	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.SlotDuration = 12 * time.Second
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration)
@@ -144,13 +150,13 @@ func TestSchedulerDoesNotPrefetchForNextSlotDuties(t *testing.T) {
 	})
 
 	s := NewScheduler(logger, &SchedulerOptions{
-		Ctx:                       context.Background(),
+		Ctx:                       baseCtx,
 		ExecutionClient:           exec,
 		BeaconConfig:              &beaconCfg,
 		BuilderBidPrefetcher:      prefetcher,
 		PrefetchParentHashTimeout: 200 * time.Millisecond,
 		DutyExecutor:              dutyExec,
-		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker() },
+		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker(baseCtx) },
 	})
 
 	currentSlot := beaconCfg.EstimatedCurrentSlot()
@@ -186,6 +192,9 @@ func TestSchedulerPrefetchExecutionClientErrorDoesNotBlockDutyExecution(t *testi
 	exec := NewMockExecutionClient(ctrl)
 	dutyExec := NewMockDutyExecutor(ctrl)
 
+	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+	t.Cleanup(cancelBaseCtx)
+
 	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.SlotDuration = 12 * time.Second
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration)
@@ -201,13 +210,13 @@ func TestSchedulerPrefetchExecutionClientErrorDoesNotBlockDutyExecution(t *testi
 	})
 
 	s := NewScheduler(logger, &SchedulerOptions{
-		Ctx:                       context.Background(),
+		Ctx:                       baseCtx,
 		ExecutionClient:           exec,
 		BeaconConfig:              &beaconCfg,
 		BuilderBidPrefetcher:      prefetcher,
 		PrefetchParentHashTimeout: 50 * time.Millisecond,
 		DutyExecutor:              dutyExec,
-		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker() },
+		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker(baseCtx) },
 	})
 
 	currentSlot := beaconCfg.EstimatedCurrentSlot()
@@ -243,6 +252,9 @@ func TestSchedulerPrefetchesOncePerBatch(t *testing.T) {
 	exec := NewMockExecutionClient(ctrl)
 	dutyExec := NewMockDutyExecutor(ctrl)
 
+	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+	t.Cleanup(cancelBaseCtx)
+
 	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.SlotDuration = 12 * time.Second
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration)
@@ -262,13 +274,13 @@ func TestSchedulerPrefetchesOncePerBatch(t *testing.T) {
 	})
 
 	s := NewScheduler(logger, &SchedulerOptions{
-		Ctx:                       context.Background(),
+		Ctx:                       baseCtx,
 		ExecutionClient:           exec,
 		BeaconConfig:              &beaconCfg,
 		BuilderBidPrefetcher:      prefetcher,
 		PrefetchParentHashTimeout: 200 * time.Millisecond,
 		DutyExecutor:              dutyExec,
-		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker() },
+		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker(baseCtx) },
 	})
 
 	currentSlot := beaconCfg.EstimatedCurrentSlot()

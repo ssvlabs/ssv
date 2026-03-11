@@ -33,6 +33,9 @@ func TestSchedulerScheduleBuilderBidPrefetch_DoesNotFireEarly(t *testing.T) {
 
 	exec := NewMockExecutionClient(ctrl)
 
+	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+	t.Cleanup(cancelBaseCtx)
+
 	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.SlotDuration = 200 * time.Millisecond
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration) // currentSlot == 1
@@ -47,13 +50,13 @@ func TestSchedulerScheduleBuilderBidPrefetch_DoesNotFireEarly(t *testing.T) {
 	prefetcher := &chanPrefetcher{ch: ch}
 
 	s := NewScheduler(logger, &SchedulerOptions{
-		Ctx:                       context.Background(),
+		Ctx:                       baseCtx,
 		ExecutionClient:           exec,
 		BeaconConfig:              &beaconCfg,
 		BuilderBidPrefetcher:      prefetcher,
 		PrefetchParentHashTimeout: 200 * time.Millisecond,
 		PrefetchLeadTime:          150 * time.Millisecond, // should fire ~50ms after scheduling
-		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker() },
+		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker(baseCtx) },
 	})
 
 	duty := &spectypes.ValidatorDuty{
@@ -86,6 +89,9 @@ func TestSchedulerScheduleBuilderBidPrefetch_MergesPubkeysAndFetchesHeadOnce(t *
 
 	exec := NewMockExecutionClient(ctrl)
 
+	baseCtx, cancelBaseCtx := context.WithCancel(context.Background())
+	t.Cleanup(cancelBaseCtx)
+
 	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.SlotDuration = 200 * time.Millisecond
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration) // currentSlot == 1
@@ -100,13 +106,13 @@ func TestSchedulerScheduleBuilderBidPrefetch_MergesPubkeysAndFetchesHeadOnce(t *
 	prefetcher := &chanPrefetcher{ch: ch}
 
 	s := NewScheduler(logger, &SchedulerOptions{
-		Ctx:                       context.Background(),
+		Ctx:                       baseCtx,
 		ExecutionClient:           exec,
 		BeaconConfig:              &beaconCfg,
 		BuilderBidPrefetcher:      prefetcher,
 		PrefetchParentHashTimeout: 200 * time.Millisecond,
 		PrefetchLeadTime:          150 * time.Millisecond,
-		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker() },
+		SlotTickerProvider:        func() slotticker.SlotTicker { return NewMockSlotTicker(baseCtx) },
 	})
 
 	d1 := &spectypes.ValidatorDuty{Type: spectypes.BNRoleProposer, Slot: targetSlot, PubKey: phase0.BLSPubKey{1}, ValidatorIndex: 1}
