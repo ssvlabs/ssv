@@ -77,6 +77,9 @@ func ResolvePebbleDBPlan(logger *zap.Logger, basePath string) (PebbleDBPlan, err
 		if inProgress {
 			return PebbleDBPlan{PebblePath: basePath, BadgerImportPath: basePath}, nil
 		}
+		// Fast path: if no Badger files are present, return without opening Badger.
+		// If Badger files are present, fall through to badgerDirState below, which
+		// re-checks the directory and performs the authoritative open-based probe.
 		hasBadgerData, err := hasBadgerFiles(basePath)
 		if err != nil {
 			return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
@@ -102,6 +105,9 @@ func ResolvePebbleDBPlan(logger *zap.Logger, basePath string) (PebbleDBPlan, err
 		if inProgress {
 			return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerImportPath: basePath}, nil
 		}
+		// Fast path: if no Badger files are present, return without opening Badger.
+		// If Badger files are present, fall through to badgerDirState below, which
+		// re-checks the directory and performs the authoritative open-based probe.
 		hasBadgerData, err := hasBadgerFiles(basePath)
 		if err != nil {
 			return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
@@ -305,23 +311,23 @@ func migrateBadgerToPebbleIfNeeded(
 	}
 
 	hasBadgerData := false
-	badgerNonEmpty := false
+	badgerIsNonEmpty := false
 	if badgerStateKnown {
 		hasBadgerData = knownBadgerExists
-		badgerNonEmpty = knownBadgerNonEmpty
+		badgerIsNonEmpty = knownBadgerNonEmpty
 	} else {
-		hasBadgerData, badgerNonEmpty, err = badgerDirState(logger, badgerPath)
+		hasBadgerData, badgerIsNonEmpty, err = badgerDirState(logger, badgerPath)
 		if err != nil {
 			return false, 0, err
 		}
 	}
 
-	if inProgressMarkerExists && (!hasBadgerData || !badgerNonEmpty) {
+	if inProgressMarkerExists && (!hasBadgerData || !badgerIsNonEmpty) {
 		logger.Warn("in-progress badger import marker exists but badger source is missing or empty; removing stale marker",
 			zap.String("badger_path", badgerPath),
 			zap.String("pebble_path", pebblePath),
 			zap.Bool("badger_exists", hasBadgerData),
-			zap.Bool("badger_non_empty", badgerNonEmpty),
+			zap.Bool("badger_non_empty", badgerIsNonEmpty),
 		)
 		if err := removeBadgerImportInProgressMarker(pebblePath); err != nil {
 			logger.Warn("failed to remove stale badger in-progress marker",
@@ -335,8 +341,8 @@ func migrateBadgerToPebbleIfNeeded(
 	}
 
 	if !pebbleEmpty {
-		if !hasBadgerData || !badgerNonEmpty {
-			if !badgerNonEmpty && hasBadgerData {
+		if !hasBadgerData || !badgerIsNonEmpty {
+			if !badgerIsNonEmpty && hasBadgerData {
 				logger.Info("legacy badger database is empty, skipping import", zap.String("path", badgerPath))
 			}
 			return false, 0, nil
@@ -357,7 +363,7 @@ func migrateBadgerToPebbleIfNeeded(
 	if !hasBadgerData {
 		return false, 0, nil
 	}
-	if !badgerNonEmpty {
+	if !badgerIsNonEmpty {
 		logger.Info("legacy badger database is empty, skipping import", zap.String("path", badgerPath))
 		return false, 0, nil
 	}
@@ -594,8 +600,15 @@ func openBadgerForImport(path string) (*badgerdb.DB, bool, error) {
 	if recoverErr != nil {
 		return nil, false, fmt.Errorf("open badger read-only failed: %w; recovery open with truncate failed: %w", err, recoverErr)
 	}
+	if closeErr := recoveredDB.Close(); closeErr != nil {
+		return nil, false, fmt.Errorf("close badger after recovery open: %w", closeErr)
+	}
+	bdb, reopenErr := badgerdb.Open(opt)
+	if reopenErr != nil {
+		return nil, false, fmt.Errorf("reopen badger read-only after recovery: %w", reopenErr)
+	}
 
-	return recoveredDB, true, nil
+	return bdb, true, nil
 }
 
 func isBadgerTruncateRequiredError(err error) bool {
