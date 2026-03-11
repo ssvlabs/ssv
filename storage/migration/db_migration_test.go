@@ -214,6 +214,28 @@ func TestMigrateBadgerToPebbleIfNeeded_RemovesOrphanedInProgressMarkerWhenBadger
 	require.NoFileExists(t, inProgressMarkerPath(pebblePath))
 }
 
+func TestMigrateBadgerToPebbleIfNeeded_RemovesOrphanedInProgressMarkerWhenBadgerMissingAndPebbleEmpty(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	badgerPath := filepath.Join(root, "db")
+	pebblePath := filepath.Join(root, "db-pebble")
+
+	pdb, err := pebble.New(zap.NewNop(), pebblePath, &cockroachdb.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, pdb.Close())
+	})
+
+	require.NoError(t, writeBadgerImportInProgressMarker(pebblePath, badgerPath))
+
+	migrated, keys, err := MigrateBadgerToPebbleIfNeeded(t.Context(), zap.NewNop(), badgerPath, pebblePath, pdb, false, false, false)
+	require.NoError(t, err)
+	require.False(t, migrated)
+	require.Equal(t, 0, keys)
+	require.NoFileExists(t, inProgressMarkerPath(pebblePath))
+}
+
 func TestMigrateBadgerToPebbleIfNeeded_SkipsWhenNoBadgerDB(t *testing.T) {
 	t.Parallel()
 
