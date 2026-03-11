@@ -231,6 +231,24 @@ func migrateBadgerToPebbleIfNeeded(
 
 	if !pebbleEmpty {
 		if !hasBadgerData || !badgerNonEmpty {
+			if inProgressMarkerExists {
+				logger.Warn("in-progress badger import marker exists but badger source is missing or empty; pebble may be partially migrated, removing stale marker",
+					zap.String("badger_path", badgerPath),
+					zap.String("pebble_path", pebblePath),
+					zap.Bool("badger_exists", hasBadgerData),
+					zap.Bool("badger_non_empty", badgerNonEmpty),
+				)
+				if err := removeBadgerImportInProgressMarker(pebblePath); err != nil {
+					logger.Warn("failed to remove stale badger in-progress marker",
+						zap.String("badger_path", badgerPath),
+						zap.String("pebble_path", pebblePath),
+						zap.Error(err),
+					)
+				}
+			}
+			if !badgerNonEmpty && hasBadgerData {
+				logger.Info("legacy badger database is empty, skipping import", zap.String("path", badgerPath))
+			}
 			return false, 0, nil
 		}
 		if !inProgressMarkerExists {

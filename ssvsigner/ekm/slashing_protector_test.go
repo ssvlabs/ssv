@@ -7,6 +7,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
@@ -915,7 +916,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 
 	// --- Phase 1: Initial Setup, Sign, and Close ---
 	logger := log.TestLogger(t)
-	db, err := pebble.New(logger, dbPath, nil)
+	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
 	require.NoError(t, err)
 
 	netCfg := networkconfig.TestNetwork
@@ -950,7 +951,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	// --- Phase 2: Reopen DB and Attempt Slashable Signing ---
 	// Make sure it's a fresh instance with the same DB path
 	t.Log("Starting Phase 2 with the same database path")
-	db2, err := pebble.New(logger, dbPath, nil)
+	db2, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db2.Close()) })
 
