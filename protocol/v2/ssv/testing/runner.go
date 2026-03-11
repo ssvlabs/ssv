@@ -2,7 +2,6 @@ package testing
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -164,9 +163,6 @@ var ConstructBaseRunner = func(
 		)
 		if err != nil {
 			return nil, err
-		}
-		rnr.(*runner.AggregatorCommitteeRunner).IsAggregator = func(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
-			return true
 		}
 		r = rnr
 	case ssvtypes.RoleAggregator:
@@ -449,9 +445,6 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 		if err != nil {
 			return nil, err
-		}
-		rnr.(*runner.AggregatorCommitteeRunner).IsAggregator = func(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, slotSig []byte) bool {
-			return true
 		}
 		r = rnr
 	case ssvtypes.RoleAggregator:
