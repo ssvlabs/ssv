@@ -120,6 +120,20 @@ var (
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("total number of failed duty submissions")))
 
+	proposerGetBeaconBlockDurationHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "proposer.get_beacon_block.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("duration of proposer GetBeaconBlock calls (end-to-end, regardless of MEV mode)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	proposerGetBeaconBlockFinishOffsetHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "proposer.get_beacon_block.finish_offset"),
+			metric.WithUnit("s"),
+			metric.WithDescription("time since slot start when proposer GetBeaconBlock returned (seconds, regardless of MEV mode)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
 	mevDryRunBaselineDurationHistogram = metrics.New(
 		meter.Float64Histogram(
 			observability.InstrumentName(observabilityNamespace, "mev_dry_run.baseline_get_block.duration"),
@@ -243,6 +257,45 @@ func recordTotalDutyDuration(ctx context.Context, duration time.Duration, role s
 			observability.RunnerRoleAttribute(role),
 			observability.DutyRoundAttribute(round),
 		))
+}
+
+const (
+	proposerGetBeaconBlockResultOK    = "ok"
+	proposerGetBeaconBlockResultError = "error"
+
+	proposerGetBeaconBlockBlindedTrue    = "true"
+	proposerGetBeaconBlockBlindedFalse   = "false"
+	proposerGetBeaconBlockBlindedUnknown = "unknown"
+)
+
+func proposerGetBeaconBlockAttributes(result string, blinded string) []attribute.KeyValue {
+	if result == "" {
+		result = proposerGetBeaconBlockResultError
+	}
+	if blinded == "" {
+		blinded = proposerGetBeaconBlockBlindedUnknown
+	}
+	return []attribute.KeyValue{
+		attribute.String("ssv.runner.proposer.get_beacon_block.result", result),
+		attribute.String("ssv.runner.proposer.get_beacon_block.blinded", blinded),
+	}
+}
+
+func recordProposerGetBeaconBlock(ctx context.Context, result string, blinded string, duration time.Duration, finishOffset time.Duration) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	attr := proposerGetBeaconBlockAttributes(result, blinded)
+	if duration > 0 {
+		proposerGetBeaconBlockDurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr...))
+	}
+	if finishOffset > 0 {
+		// Negative offsets can happen for future slots; clamp to 0 for clearer dashboards.
+		if finishOffset < 0 {
+			finishOffset = 0
+		}
+		proposerGetBeaconBlockFinishOffsetHistogram.Record(ctx, finishOffset.Seconds(), metric.WithAttributes(attr...))
+	}
 }
 
 func recordMEVDryRunComparison(ctx context.Context, cmp MEVDryRunComparison) {

@@ -61,6 +61,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 	}
 	logger = logger.Named("MevBuilder")
 
+	cfg.Relays = config.NormalizeRelays(cfg.Relays)
+
 	cache := bidcache.New(cfg.CacheTTL)
 	factory := relayclient.NewFactory(ctx, cfg.RelayRequestTimeout)
 	collector := stats.NewCollector(stats.Options{})

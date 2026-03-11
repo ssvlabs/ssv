@@ -176,9 +176,34 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	start := time.Now()
 	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+	took := time.Since(start)
+
+	blindedLabel := proposerGetBeaconBlockBlindedUnknown
+	if err == nil && vBlk != nil {
+		if vBlk.Blinded {
+			blindedLabel = proposerGetBeaconBlockBlindedTrue
+		} else {
+			blindedLabel = proposerGetBeaconBlockBlindedFalse
+		}
+	}
+	resultLabel := proposerGetBeaconBlockResultError
+	if err == nil {
+		resultLabel = proposerGetBeaconBlockResultOK
+	}
+	finishOffset := time.Duration(0)
+	if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil {
+		slotStart := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
+		if !slotStart.IsZero() {
+			finishOffset = time.Since(slotStart)
+			if finishOffset < 0 {
+				finishOffset = 0
+			}
+		}
+	}
+	recordProposerGetBeaconBlock(ctx, resultLabel, blindedLabel, took, finishOffset)
 	if err != nil {
 		if shadowCh != nil {
-			baseline := MEVBaselineGetBlockResult{StartedAt: start, Took: time.Since(start), Result: "error"}
+			baseline := MEVBaselineGetBlockResult{StartedAt: start, Took: took, Result: "error"}
 			r.spawnMEVDryRunComparisonLogger(ctx, logger, duty.Slot, duty.ValidatorIndex, duty.PubKey, phase0.Hash32{}, "", baseline, shadowCh, shadowStart)
 		}
 		return fmt.Errorf("get beacon block: %w", err)
@@ -193,7 +218,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 			}
 		}
 
-		baseline := MEVBaselineGetBlockResult{StartedAt: start, Took: time.Since(start), Result: "ok", Blinded: vBlk != nil && vBlk.Blinded}
+		baseline := MEVBaselineGetBlockResult{StartedAt: start, Took: took, Result: "ok", Blinded: vBlk != nil && vBlk.Blinded}
 		r.spawnMEVDryRunComparisonLogger(ctx, logger, duty.Slot, duty.ValidatorIndex, duty.PubKey, baselineParentHash, baselineParentHex, baseline, shadowCh, shadowStart)
 	}
 

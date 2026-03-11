@@ -28,7 +28,7 @@ type Config struct {
 	Port int    `yaml:"Port" env:"PORT" env-default:"18550" env-description:"Listen port for the builder endpoint (e.g. 18550)"`
 
 	// Relay addresses (HTTP) to query for bids/unblind. These should be mev-boost-compatible relay URLs.
-	Relays []string `yaml:"Relays" env:"RELAYS" env-description:"Comma-separated list of relay URLs"`
+	Relays []string `yaml:"Relays" env:"RELAYS" env-description:"Comma- or semicolon-separated list of relay URLs"`
 
 	// RelayRequestTimeout is the per-request timeout for relay HTTP calls.
 	RelayRequestTimeout time.Duration `yaml:"RelayRequestTimeout" env:"RELAY_REQUEST_TIMEOUT" env-default:"500ms" env-description:"Timeout for relay HTTP requests"`
