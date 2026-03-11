@@ -631,7 +631,25 @@ func markerExistsForSource(path string, badgerPath string) (bool, error) {
 	if !exists {
 		return false, nil
 	}
-	return marker.SourcePath == "" || marker.SourcePath == badgerPath, nil
+	return marker.SourcePath == "" || samePath(marker.SourcePath, badgerPath), nil
+}
+
+func samePath(left string, right string) bool {
+	if left == right {
+		return true
+	}
+
+	if filepath.Clean(left) == filepath.Clean(right) {
+		return true
+	}
+
+	absLeft, errLeft := filepath.Abs(left)
+	absRight, errRight := filepath.Abs(right)
+	if errLeft == nil && errRight == nil && filepath.Clean(absLeft) == filepath.Clean(absRight) {
+		return true
+	}
+
+	return false
 }
 
 func writeMarker(path string, marker badgerImportMarker) error {

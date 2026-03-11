@@ -623,6 +623,36 @@ func TestHasBadgerFiles(t *testing.T) {
 	}
 }
 
+func TestMarkerExistsForSource_EquivalentPaths(t *testing.T) {
+	t.Parallel()
+
+	markerPath := filepath.Join(t.TempDir(), "marker.json")
+	sourcePath := "./data/../data/badger-db"
+	require.NoError(t, writeMarker(markerPath, badgerImportMarker{SourcePath: sourcePath}))
+
+	exists, err := markerExistsForSource(markerPath, filepath.Clean(sourcePath))
+	require.NoError(t, err)
+	require.True(t, exists)
+
+	absPath, err := filepath.Abs(filepath.Clean(sourcePath))
+	require.NoError(t, err)
+
+	exists, err = markerExistsForSource(markerPath, absPath)
+	require.NoError(t, err)
+	require.True(t, exists)
+}
+
+func TestMarkerExistsForSource_DifferentPaths(t *testing.T) {
+	t.Parallel()
+
+	markerPath := filepath.Join(t.TempDir(), "marker.json")
+	require.NoError(t, writeMarker(markerPath, badgerImportMarker{SourcePath: "path-a"}))
+
+	exists, err := markerExistsForSource(markerPath, "path-b")
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
 func createPebbleDB(t *testing.T, path string, data map[string][]byte) {
 	t.Helper()
 
