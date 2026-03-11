@@ -952,7 +952,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	t.Log("Starting Phase 2 with the same database path")
 	db2, err := pebble.New(logger, dbPath, nil)
 	require.NoError(t, err)
-	defer db2.Close()
+	t.Cleanup(func() { require.NoError(t, db2.Close()) })
 
 	signerStore2 := NewSignerStorage(db2, netCfg.Beacon, logger)
 	protection2 := slashingprotection.NewNormalProtection(signerStore2)

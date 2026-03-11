@@ -40,6 +40,7 @@ type PebbleDBPlan struct {
 	PebblePath       string
 	BadgerImportPath string
 	BadgerStateKnown bool
+	BadgerExists     bool
 	BadgerNonEmpty   bool
 }
 
@@ -104,6 +105,7 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 					PebblePath:       basePath,
 					BadgerImportPath: basePath,
 					BadgerStateKnown: true,
+					BadgerExists:     true,
 					BadgerNonEmpty:   true,
 				}, nil
 			}
@@ -118,6 +120,7 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 					PebblePath:       legacyPebblePath,
 					BadgerImportPath: basePath,
 					BadgerStateKnown: true,
+					BadgerExists:     true,
 					BadgerNonEmpty:   true,
 				}, nil
 			}
@@ -131,34 +134,35 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 
 	switch {
 	case canonicalPebbleNonEmpty:
-		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
+		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	case legacyPebbleNonEmpty:
-		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
+		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	case badgerNonEmpty:
 		return PebbleDBPlan{
 			PebblePath:       legacyPebblePath,
 			BadgerImportPath: basePath,
 			BadgerStateKnown: true,
+			BadgerExists:     true,
 			BadgerNonEmpty:   true,
 		}, nil
 	}
 
 	switch {
 	case canonicalPebbleExists:
-		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
+		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	case badgerExists:
 		// Keep using a separate Pebble path when basePath has Badger files.
-		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
+		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	case legacyPebbleExists:
-		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
+		return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	default:
-		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerNonEmpty: badgerNonEmpty}, nil
+		return PebbleDBPlan{PebblePath: basePath, BadgerStateKnown: true, BadgerExists: badgerExists, BadgerNonEmpty: badgerNonEmpty}, nil
 	}
 }
 
 // MigrateBadgerToPebbleIfNeeded imports legacy Badger keys into Pebble.
 // It is resumable via marker files stored inside pebblePath.
-// badgerStateKnown/badgerNonEmpty can be provided by ResolvePebbleDBPlan to skip
+// badgerStateKnown/badgerExists/badgerNonEmpty can be provided by ResolvePebbleDBPlan to skip
 // an extra badgerDirState probe.
 func MigrateBadgerToPebbleIfNeeded(
 	ctx context.Context,
@@ -167,9 +171,10 @@ func MigrateBadgerToPebbleIfNeeded(
 	pebblePath string,
 	db *pebble.DB,
 	badgerStateKnown bool,
+	badgerExists bool,
 	badgerNonEmpty bool,
 ) (bool, int, error) {
-	return migrateBadgerToPebbleIfNeeded(ctx, logger, badgerPath, pebblePath, db, badgerStateKnown, badgerNonEmpty, nil)
+	return migrateBadgerToPebbleIfNeeded(ctx, logger, badgerPath, pebblePath, db, badgerStateKnown, badgerExists, badgerNonEmpty, nil)
 }
 
 func migrateBadgerToPebbleIfNeeded(
@@ -179,6 +184,7 @@ func migrateBadgerToPebbleIfNeeded(
 	pebblePath string,
 	db *pebble.DB,
 	badgerStateKnown bool,
+	knownBadgerExists bool,
 	knownBadgerNonEmpty bool,
 	hook importBatchCommitHook,
 ) (bool, int, error) {
@@ -214,7 +220,7 @@ func migrateBadgerToPebbleIfNeeded(
 	hasBadgerData := false
 	badgerNonEmpty := false
 	if badgerStateKnown {
-		hasBadgerData = knownBadgerNonEmpty
+		hasBadgerData = knownBadgerExists
 		badgerNonEmpty = knownBadgerNonEmpty
 	} else {
 		hasBadgerData, badgerNonEmpty, err = badgerDirState(badgerPath)

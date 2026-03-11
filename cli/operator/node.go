@@ -867,6 +867,7 @@ func setupPebbleDB(
 			dbPath,
 			db,
 			plan.BadgerStateKnown,
+			plan.BadgerExists,
 			plan.BadgerNonEmpty,
 		)
 		if err != nil {
