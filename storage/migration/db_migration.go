@@ -67,6 +67,10 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 			return PebbleDBPlan{}, err
 		}
 		if done {
+			if inProgress {
+				// Keep import path set only to let migration code remove stale in-progress marker.
+				return PebbleDBPlan{PebblePath: basePath, BadgerImportPath: basePath}, nil
+			}
 			return PebbleDBPlan{PebblePath: basePath}, nil
 		}
 		if inProgress {
@@ -78,6 +82,10 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 			return PebbleDBPlan{}, err
 		}
 		if done {
+			if inProgress {
+				// Keep import path set only to let migration code remove stale in-progress marker.
+				return PebbleDBPlan{PebblePath: legacyPebblePath, BadgerImportPath: basePath}, nil
+			}
 			return PebbleDBPlan{PebblePath: legacyPebblePath}, nil
 		}
 		if inProgress {
@@ -542,9 +550,6 @@ func badgerImportMarkerState(pebblePath string, badgerPath string) (done bool, i
 	done, err = badgerImportDoneMarkerExists(pebblePath, badgerPath)
 	if err != nil {
 		return false, false, err
-	}
-	if done {
-		return true, false, nil
 	}
 	inProgress, err = badgerImportInProgressMarkerExists(pebblePath, badgerPath)
 	if err != nil {

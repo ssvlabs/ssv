@@ -96,6 +96,23 @@ func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportDoneMarkerExis
 	require.False(t, plan.BadgerStateKnown)
 }
 
+func TestResolvePebbleDBPlan_DoneAndInProgressMarkersTriggersCleanupRun(t *testing.T) {
+	t.Parallel()
+
+	basePath := filepath.Join(t.TempDir(), "db")
+	legacyPath := basePath + "-pebble"
+	createBadgerDB(t, basePath, map[string][]byte{"a": []byte("1")})
+	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
+	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
+	require.NoError(t, writeBadgerImportInProgressMarker(legacyPath, basePath))
+
+	plan, err := ResolvePebbleDBPlan(basePath)
+	require.NoError(t, err)
+	require.Equal(t, legacyPath, plan.PebblePath)
+	require.Equal(t, basePath, plan.BadgerImportPath)
+	require.False(t, plan.BadgerStateKnown)
+}
+
 func TestResolvePebbleDBPlan_FastPathSkipsBadgerOpenAfterDoneMarker(t *testing.T) {
 	t.Parallel()
 
