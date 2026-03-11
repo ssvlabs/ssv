@@ -25,6 +25,29 @@ eth1:
   # WebSocket URL of the Eth1 node to connect to.
   ETH1Addr: ws://example.url:8546/ws
 
+builder:
+  # Builder Endpoint (Optional)
+  # When enabled, SSV runs a local mev-boost-compatible Builder API endpoint.
+  # Configure your beacon node to use this address as its builder endpoint.
+  # NOTE: This is distinct from ProposerDelay, which affects when SSV asks the beacon node for a proposal.
+  Enabled: false
+  # Host: 0.0.0.0
+  # Port: 18550
+  # Relays:
+  #   - https://relay.example
+  # RelayRequestTimeout: 500ms
+  # BidDeadline: 850ms
+  # BidGap: 50ms
+  # CacheTTL: 4s
+  # CacheCleanupInterval: 1s
+  # PrefetchEnabled: true
+  # PrefetchParentHashTimeout: 150ms
+  # PrefetchLeadTime: 200ms
+  # PrefetchMaxInFlight: 32
+  # UnblindRetries: 0
+  # UnblindRetryInterval: 250ms
+  # UnblindProvenanceHeadStart: 25ms
+
 p2p:
   # Optionally specify the external IP address of the node, if it cannot be determined automatically.
   # HostAddress: 192.168.1.1

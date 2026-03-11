@@ -33,6 +33,7 @@ import (
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
+	hmev "github.com/ssvlabs/ssv/api/handlers/mev"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
 	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -53,6 +54,9 @@ import (
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
+	builderendpoint "github.com/ssvlabs/ssv/mev/builderendpoint"
+	builderendpointcfg "github.com/ssvlabs/ssv/mev/builderendpoint/config"
+	mevdryrun "github.com/ssvlabs/ssv/mev/dryrun"
 	"github.com/ssvlabs/ssv/migrations"
 	"github.com/ssvlabs/ssv/network"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
@@ -97,32 +101,35 @@ type SSVSignerConfig struct {
 
 type config struct {
 	global_config.Global         `yaml:"global"`
-	DBOptions                    basedb.Options          `yaml:"db"`
-	SSVOptions                   operator.Options        `yaml:"ssv"`
-	ExporterOptions              exporter.Options        `yaml:"exporter"`
-	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
-	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
-	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
-	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
-	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
-	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
-	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
-	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
-	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
-	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
-	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
-	WithPing                     bool                    `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
-	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
-	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
-	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
+	DBOptions                    basedb.Options            `yaml:"db"`
+	SSVOptions                   operator.Options          `yaml:"ssv"`
+	ExporterOptions              exporter.Options          `yaml:"exporter"`
+	ExecutionClient              executionclient.Options   `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient              goclient.Options          `yaml:"eth2"` // TODO: consensus_client in yaml
+	BuilderEndpoint              builderendpointcfg.Config `yaml:"builder" env-prefix:"BUILDER_ENDPOINT_"`
+	P2pNetworkConfig             p2pv1.Config              `yaml:"p2p"`
+	KeyStore                     KeyStore                  `yaml:"KeyStore"`
+	SSVSigner                    SSVSignerConfig           `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
+	Graffiti                     string                    `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
+	ProposerDelay                time.Duration             `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
+	AllowDangerousProposerDelay  bool                      `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
+	OperatorPrivateKey           string                    `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
+	MetricsAPIPort               int                       `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
+	EnableTraces                 bool                      `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
+	EnableProfile                bool                      `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
+	NetworkPrivateKey            string                    `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
+	WsAPIPort                    int                       `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
+	WithPing                     bool                      `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
+	SSVAPIPort                   int                       `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
+	LocalEventsPath              string                    `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
+	EnableDoppelgangerProtection bool                      `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
 }
 
 var cfg config
 
 var globalArgs global_config.Args
+
+var builderEndpointDryRunFlag bool
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -140,6 +147,10 @@ var StartNodeCmd = &cobra.Command{
 			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
 				log.Fatal("could not read share config needed for logger initialization: %w", err)
 			}
+		}
+
+		if cmd.Flags().Changed("dry-run") {
+			cfg.BuilderEndpoint.DryRun = builderEndpointDryRunFlag
 		}
 
 		observabilityOptions := []observability.Option{
@@ -570,6 +581,33 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
+		var builderSrv *builderendpoint.Server
+		var mevDryRunSvc *mevdryrun.Service
+		builderFeatureEnabled := cfg.BuilderEndpoint.Enabled || cfg.BuilderEndpoint.DryRun
+		if builderFeatureEnabled {
+			srv, err := builderendpoint.New(cmd.Context(), logger, cfg.BuilderEndpoint, builderendpoint.Dependencies{
+				SlotStartTime: networkConfig.SlotStartTime,
+			})
+			if err != nil {
+				logger.Fatal("failed to create builder endpoint server", zap.Error(err))
+			}
+			builderSrv = srv
+
+			if cfg.BuilderEndpoint.DryRun {
+				mevDryRunSvc = mevdryrun.New(logger, executionClient, builderSrv, cfg.BuilderEndpoint.PrefetchParentHashTimeout)
+				validatorCtrl.SetMEVDryRun(mevDryRunSvc)
+				mevDryRunSvc.StartReporter(cmd.Context(), time.Hour)
+			}
+
+			// If enabled, expose the internal prefetcher to the duty scheduler to warm bids before the
+			// beacon node calls the Builder API.
+			if cfg.BuilderEndpoint.PrefetchEnabled {
+				cfg.SSVOptions.BuilderBidPrefetcher = srv
+				cfg.SSVOptions.BuilderBidPrefetchParentHashTimeout = cfg.BuilderEndpoint.PrefetchParentHashTimeout
+				cfg.SSVOptions.BuilderBidPrefetchLeadTime = cfg.BuilderEndpoint.PrefetchLeadTime
+			}
+		}
+
 		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
@@ -653,6 +691,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if cfg.SSVAPIPort > 0 {
+			var mevHandler *hmev.Handler
+			if mevDryRunSvc != nil {
+				mevHandler = hmev.New(mevDryRunSvc)
+			}
+
 			apiServer := apiserver.New(
 				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
@@ -671,6 +714,7 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				mevHandler,
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
@@ -680,6 +724,21 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
+
+		if builderSrv != nil {
+			builderSrv.StartBackground(cmd.Context())
+			// Dry-run wins over Enabled.
+			if cfg.BuilderEndpoint.Enabled && !cfg.BuilderEndpoint.DryRun {
+				go func() {
+					if err := builderSrv.Run(cmd.Context()); err != nil {
+						logger.Fatal("failed to run builder endpoint server", zap.Error(err))
+					}
+				}()
+			} else {
+				logger.Info("builder endpoint enabled in dry-run mode (not serving HTTP)")
+			}
+		}
+
 		if err := operatorNode.Start(cfg.SSVOptions.Context); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
@@ -828,6 +887,7 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
+	StartNodeCmd.Flags().BoolVar(&builderEndpointDryRunFlag, "dry-run", false, "Enable MEV builder dry-run mode (do not serve the Builder API; collect comparison metrics)")
 }
 
 func setupBadgerDB(

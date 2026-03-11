@@ -42,6 +42,7 @@ type ProposerRunner struct {
 	doppelgangerHandler DoppelgangerProvider
 	measurements        *dutyMeasurements
 	graffiti            []byte
+	mevDryRun           MEVDryRunService
 
 	// ValCheck is used to validate the qbft-value(s) proposed by other Operators.
 	ValCheck ssv.ValueChecker
@@ -75,6 +76,7 @@ func NewProposerRunner(
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
 	proposerDelay time.Duration,
+	mevDryRun MEVDryRunService,
 ) (Runner, error) {
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
@@ -97,6 +99,7 @@ func NewProposerRunner(
 		ValCheck:            valCheck,
 		measurements:        newMeasurementsStore(),
 		graffiti:            graffiti,
+		mevDryRun:           mevDryRun,
 
 		proposerDelay: proposerDelay,
 	}, nil
@@ -164,11 +167,36 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
+	var shadowCh <-chan MEVShadowGetHeaderResult
+	var shadowStart time.Time
+	if r.mevDryRun != nil {
+		shadowStart = time.Now()
+		shadowCh = r.mevDryRun.StartShadowGetHeader(context.WithoutCancel(ctx), duty.Slot, duty.PubKey)
+	}
+
 	start := time.Now()
 	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
+		if shadowCh != nil {
+			baseline := MEVBaselineGetBlockResult{StartedAt: start, Took: time.Since(start), Result: "error"}
+			r.spawnMEVDryRunComparisonLogger(ctx, logger, duty.Slot, duty.ValidatorIndex, duty.PubKey, phase0.Hash32{}, "", baseline, shadowCh, shadowStart)
+		}
 		return fmt.Errorf("get beacon block: %w", err)
 	}
+	if shadowCh != nil {
+		var baselineParentHash phase0.Hash32
+		baselineParentHex := ""
+		if vBlk != nil {
+			if execInfo, eerr := extractExecutionInfo(vBlk); eerr == nil {
+				baselineParentHash = execInfo.ParentHash
+				baselineParentHex = hex.EncodeToString(execInfo.ParentHash[:])
+			}
+		}
+
+		baseline := MEVBaselineGetBlockResult{StartedAt: start, Took: time.Since(start), Result: "ok", Blinded: vBlk != nil && vBlk.Blinded}
+		r.spawnMEVDryRunComparisonLogger(ctx, logger, duty.Slot, duty.ValidatorIndex, duty.PubKey, baselineParentHash, baselineParentHex, baseline, shadowCh, shadowStart)
+	}
+
 	// Log essentials about the retrieved block.
 	logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
 	logFields = append(
@@ -735,4 +763,167 @@ func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, []attribute
 	}
 
 	return logFields, traceAttrs
+}
+
+func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	validatorIndex phase0.ValidatorIndex,
+	pubkey phase0.BLSPubKey,
+	baselineExecParentHash phase0.Hash32,
+	baselineExecParentHex string,
+	baseline MEVBaselineGetBlockResult,
+	shadowCh <-chan MEVShadowGetHeaderResult,
+	shadowStart time.Time,
+) {
+	if r == nil || r.mevDryRun == nil || shadowCh == nil {
+		return
+	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
+	slotOffsetMs := int64(0)
+	if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil && r.BaseRunner.NetworkConfig.Beacon != nil {
+		start := r.BaseRunner.NetworkConfig.SlotStartTime(slot)
+		if !start.IsZero() {
+			slotOffsetMs = time.Since(start).Milliseconds()
+			if slotOffsetMs < 0 {
+				slotOffsetMs = 0
+			}
+		}
+	}
+
+	go func() {
+		shadow := MEVShadowGetHeaderResult{StartedAt: shadowStart, Result: MEVShadowResultTimeout}
+		select {
+		case res, ok := <-shadowCh:
+			if ok {
+				shadow = res
+			}
+		case <-time.After(2 * time.Second):
+		}
+
+		cmp := MEVDryRunComparison{
+			Slot:                   slot,
+			ValidatorIndex:         validatorIndex,
+			ValidatorPubkey:        hex.EncodeToString(pubkey[:]),
+			SlotOffsetMs:           slotOffsetMs,
+			BaselineExecParentHash: baselineExecParentHex,
+			Baseline:               baseline,
+			Shadow:                 shadow,
+		}
+
+		// Enrich with offsets (start/finish) relative to slot start for precision.
+		slotStart := time.Time{}
+		if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil && r.BaseRunner.NetworkConfig.Beacon != nil {
+			slotStart = r.BaseRunner.NetworkConfig.SlotStartTime(slot)
+			if !slotStart.IsZero() {
+				bs := baseline.StartedAt.Sub(slotStart).Milliseconds()
+				if bs < 0 {
+					bs = 0
+				}
+				cmp.BaselineStartOffsetMs = bs
+				cmp.BaselineFinishOffsetMs = bs + baseline.Took.Milliseconds()
+
+				ss := shadow.StartedAt.Sub(slotStart).Milliseconds()
+				if ss < 0 {
+					ss = 0
+				}
+				cmp.ShadowStartOffsetMs = ss
+				cmp.ShadowFinishOffsetMs = ss + shadow.HeadHashTook.Milliseconds() + shadow.Took.Milliseconds()
+			}
+		}
+
+		if baselineExecParentHex != "" && shadow.ParentHashHex != "" {
+			cmp.ParentHashMatch = shadow.ParentHashHex == baselineExecParentHex
+		}
+
+		// Optional post-hoc precision check: run shadow get_header with baseline execution parent_hash.
+		if baseline.Result == MEVBaselineResultOK && baselineExecParentHex != "" {
+			if exactSvc, ok := r.mevDryRun.(MEVDryRunExactParentService); ok {
+				if shadow.Result != MEVShadowResultBid || !cmp.ParentHashMatch {
+					exactCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+					exactCh := exactSvc.StartShadowGetHeaderWithParentHash(exactCtx, slot, baselineExecParentHash, pubkey)
+
+					exact := MEVShadowGetHeaderResult{StartedAt: time.Now(), Result: MEVShadowResultTimeout, ParentHashHex: baselineExecParentHex}
+					select {
+					case res, ok := <-exactCh:
+						if ok {
+							exact = res
+						}
+					case <-time.After(2 * time.Second):
+					}
+					cancel()
+
+					cmp.ShadowExactParent = &exact
+					if !slotStart.IsZero() {
+						es := exact.StartedAt.Sub(slotStart).Milliseconds()
+						if es < 0 {
+							es = 0
+						}
+						cmp.ShadowExactStartOffsetMs = es
+						cmp.ShadowExactFinishOffsetMs = es + exact.HeadHashTook.Milliseconds() + exact.Took.Milliseconds()
+					}
+
+					cmp.RecoveredBid = shadow.Result != MEVShadowResultBid && exact.Result == MEVShadowResultBid
+				}
+			}
+		}
+
+		r.mevDryRun.RecordComparison(context.Background(), cmp)
+		recordMEVDryRunComparison(ctx, cmp)
+
+		shadowTotal := shadow.HeadHashTook + shadow.Took
+		shadowMinusBaseline := shadowTotal - baseline.Took
+		level := logger.Debug
+		parentMismatch := cmp.BaselineExecParentHash != "" && shadow.ParentHashHex != "" && !cmp.ParentHashMatch
+		if baseline.Result != MEVBaselineResultOK || shadow.Result != MEVShadowResultBid || cmp.RecoveredBid || parentMismatch || shadow.HeadHashTook > 100*time.Millisecond || shadowTotal > 400*time.Millisecond || shadowMinusBaseline > 150*time.Millisecond {
+			level = logger.Info
+		}
+
+		shadowExactResult := ""
+		shadowExactTook := time.Duration(0)
+		shadowExactRelay := ""
+		shadowExactValue := float64(0)
+		if cmp.ShadowExactParent != nil {
+			shadowExactResult = cmp.ShadowExactParent.Result
+			shadowExactTook = cmp.ShadowExactParent.Took
+			shadowExactRelay = cmp.ShadowExactParent.RelayHost
+			shadowExactValue = cmp.ShadowExactParent.ValueETH
+		}
+		level(
+			"mev dry-run comparison",
+			zap.Uint64("slot", uint64(slot)),
+			zap.Uint64("validator_index", uint64(validatorIndex)),
+			zap.String("validator_pubkey", hex.EncodeToString(pubkey[:])),
+			zap.Int64("slot_offset_ms", slotOffsetMs),
+			zap.Int64("baseline_start_offset_ms", cmp.BaselineStartOffsetMs),
+			zap.Int64("baseline_finish_offset_ms", cmp.BaselineFinishOffsetMs),
+			zap.Int64("shadow_start_offset_ms", cmp.ShadowStartOffsetMs),
+			zap.Int64("shadow_finish_offset_ms", cmp.ShadowFinishOffsetMs),
+			zap.Int64("shadow_exact_start_offset_ms", cmp.ShadowExactStartOffsetMs),
+			zap.Int64("shadow_exact_finish_offset_ms", cmp.ShadowExactFinishOffsetMs),
+			zap.String("baseline_result", baseline.Result),
+			zap.Bool("baseline_blinded", baseline.Blinded),
+			zap.Duration("baseline_took", baseline.Took),
+			zap.String("shadow_result", shadow.Result),
+			zap.String("shadow_cache", shadow.Cache),
+			zap.Duration("shadow_took", shadow.Took),
+			zap.Duration("shadow_head_hash_took", shadow.HeadHashTook),
+			zap.Duration("shadow_total_took", shadowTotal),
+			zap.Duration("shadow_minus_baseline", shadowMinusBaseline),
+			zap.String("baseline_exec_parent_hash", baselineExecParentHex),
+			zap.String("shadow_parent_hash", shadow.ParentHashHex),
+			zap.Bool("parent_hash_match", cmp.ParentHashMatch),
+			zap.Bool("recovered_bid", cmp.RecoveredBid),
+			zap.String("shadow_exact_result", shadowExactResult),
+			zap.Duration("shadow_exact_took", shadowExactTook),
+			zap.String("shadow_exact_relay", shadowExactRelay),
+			zap.Float64("shadow_exact_value_eth", shadowExactValue),
+			zap.String("shadow_relay", shadow.RelayHost),
+			zap.Float64("shadow_value_eth", shadow.ValueETH),
+		)
+	}()
 }

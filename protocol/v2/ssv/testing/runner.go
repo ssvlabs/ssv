@@ -173,6 +173,7 @@ var ConstructBaseRunner = func(
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
 			0,
+			nil,
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
@@ -436,6 +437,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
 			0,
+			nil,
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(

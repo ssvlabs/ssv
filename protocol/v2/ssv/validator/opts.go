@@ -44,6 +44,7 @@ type CommonOptions struct {
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
 	ProposerDelay       time.Duration
+	MEVDryRun           runner.MEVDryRunService
 }
 
 func NewCommonOptions(

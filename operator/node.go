@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
@@ -38,22 +39,27 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NetworkName         string             `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
-	CustomNetwork       *networkconfig.SSV `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
-	CustomDomainType    string             `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
-	NetworkConfig       *networkconfig.Network
-	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
-	ExecutionClient     executionclient.Provider
-	P2PNetwork          network.P2PNetwork
-	Context             context.Context
-	DB                  basedb.Database
-	ValidatorController *validator.Controller
-	ValidatorStore      storage2.ValidatorStore
-	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
-	DutyStore           *dutystore.Store
-	ExporterRead        *exporter2.Exporter
-	WS                  api.WebSocketServer
-	WsAPIPort           int
+	NetworkName          string             `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
+	CustomNetwork        *networkconfig.SSV `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
+	CustomDomainType     string             `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
+	NetworkConfig        *networkconfig.Network
+	BeaconNode           beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
+	ExecutionClient      executionclient.Provider
+	P2PNetwork           network.P2PNetwork
+	Context              context.Context
+	DB                   basedb.Database
+	ValidatorController  *validator.Controller
+	ValidatorStore       storage2.ValidatorStore
+	ValidatorOptions     validator.ControllerOptions `yaml:"ValidatorOptions"`
+	BuilderBidPrefetcher duties.BuilderBidPrefetcher `yaml:"-"`
+	// BuilderBidPrefetchParentHashTimeout bounds execution-head queries used to compute parent_hash for prefetch.
+	BuilderBidPrefetchParentHashTimeout time.Duration `yaml:"-"`
+	// BuilderBidPrefetchLeadTime is how long before slot start we begin prefetching relay bids.
+	BuilderBidPrefetchLeadTime time.Duration `yaml:"-"`
+	DutyStore                  *dutystore.Store
+	ExporterRead               *exporter2.Exporter
+	WS                         api.WebSocketServer
+	WsAPIPort                  int
 }
 
 type Node struct {
@@ -114,20 +120,23 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      qbftStorage,
 		dutyScheduler: duties.NewScheduler(logger, &duties.SchedulerOptions{
-			Ctx:                     opts.Context,
-			BeaconNode:              schedulerBeacon,
-			ExecutionClient:         opts.ExecutionClient,
-			BeaconConfig:            opts.NetworkConfig.Beacon,
-			ValidatorProvider:       validatorProvider,
-			ValidatorController:     opts.ValidatorController,
-			DutyExecutor:            dutyExecutor,
-			IndicesChg:              opts.ValidatorController.IndicesChangeChan(),
-			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
-			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
-			DutyStore:               opts.DutyStore,
-			SlotTickerProvider:      slotTickerProvider,
-			P2PNetwork:              opts.P2PNetwork,
-			ExporterMode:            exporterOpts.Enabled,
+			Ctx:                       opts.Context,
+			BeaconNode:                schedulerBeacon,
+			ExecutionClient:           opts.ExecutionClient,
+			BeaconConfig:              opts.NetworkConfig.Beacon,
+			BuilderBidPrefetcher:      opts.BuilderBidPrefetcher,
+			PrefetchParentHashTimeout: opts.BuilderBidPrefetchParentHashTimeout,
+			PrefetchLeadTime:          opts.BuilderBidPrefetchLeadTime,
+			ValidatorProvider:         validatorProvider,
+			ValidatorController:       opts.ValidatorController,
+			DutyExecutor:              dutyExecutor,
+			IndicesChg:                opts.ValidatorController.IndicesChangeChan(),
+			ValidatorRegistrationCh:   opts.ValidatorController.ValidatorRegistrationChan(),
+			ValidatorExitCh:           opts.ValidatorController.ValidatorExitChan(),
+			DutyStore:                 opts.DutyStore,
+			SlotTickerProvider:        slotTickerProvider,
+			P2PNetwork:                opts.P2PNetwork,
+			ExporterMode:              exporterOpts.Enabled,
 		}),
 		feeRecipientCtrl: feeRecipientCtrl,
 

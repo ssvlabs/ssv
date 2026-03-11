@@ -119,6 +119,93 @@ var (
 			observability.InstrumentName(observabilityNamespace, "submissions.failed"),
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("total number of failed duty submissions")))
+
+	mevDryRunBaselineDurationHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.baseline_get_block.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("duration of baseline GetBeaconBlock calls (legacy proposer flow) when MEV dry-run is enabled"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunBaselineFinishOffsetHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.baseline_finish_offset"),
+			metric.WithUnit("s"),
+			metric.WithDescription("time since slot start when baseline GetBeaconBlock finished (seconds)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunShadowHeadHashDurationHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_get_header.head_hash.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("duration of execution-head (parent_hash) lookup for shadow get_header when MEV dry-run is enabled"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunShadowDurationHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_get_header.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("duration of shadow get_header calls (in-node builder flow) when MEV dry-run is enabled"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunShadowTotalDurationHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_get_header.total_duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("duration of shadow get_header total path (head hash lookup + get_header) when MEV dry-run is enabled"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunShadowResultCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_get_header.result"),
+			metric.WithUnit("{result}"),
+			metric.WithDescription("count of shadow get_header results when MEV dry-run is enabled")))
+
+	mevDryRunParentHashMatchCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.parent_hash_match"),
+			metric.WithUnit("{match}"),
+			metric.WithDescription("count of comparisons where shadow parent_hash matched the baseline execution parent_hash")))
+
+	mevDryRunRecoveredBidCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.recovered_bid"),
+			metric.WithUnit("{recovered}"),
+			metric.WithDescription("count of comparisons where shadow head-parent did not yield a bid but baseline-parent did")))
+
+	mevDryRunShadowExactDurationHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_exact_parent.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("duration of shadow get_header calls using the baseline execution parent_hash"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunShadowExactResultCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_exact_parent.result"),
+			metric.WithUnit("{result}"),
+			metric.WithDescription("count of shadow exact-parent get_header results")))
+
+	mevDryRunShadowExactFinishOffsetHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_exact_parent.finish_offset"),
+			metric.WithUnit("s"),
+			metric.WithDescription("time since slot start when exact-parent shadow get_header finished (seconds)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunShadowMinusBaselineHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_minus_baseline"),
+			metric.WithUnit("s"),
+			metric.WithDescription("shadow get_header duration minus baseline get_block duration when MEV dry-run is enabled"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	mevDryRunShadowFinishOffsetHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "mev_dry_run.shadow_finish_offset"),
+			metric.WithUnit("s"),
+			metric.WithDescription("time since slot start when shadow get_header finished (seconds)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count int64, epoch phase0.Epoch, role spectypes.BeaconRole) {
@@ -156,4 +243,58 @@ func recordTotalDutyDuration(ctx context.Context, duration time.Duration, role s
 			observability.RunnerRoleAttribute(role),
 			observability.DutyRoundAttribute(round),
 		))
+}
+
+func recordMEVDryRunComparison(ctx context.Context, cmp MEVDryRunComparison) {
+	shadowResultAttr := attribute.String("ssv.mev.dry_run.shadow_result", cmp.Shadow.Result)
+	baselineResultAttr := attribute.String("ssv.mev.dry_run.baseline_result", cmp.Baseline.Result)
+
+	if cmp.Baseline.Took > 0 {
+		mevDryRunBaselineDurationHistogram.Record(ctx, cmp.Baseline.Took.Seconds(), metric.WithAttributes(baselineResultAttr))
+	}
+	if cmp.BaselineFinishOffsetMs > 0 {
+		mevDryRunBaselineFinishOffsetHistogram.Record(ctx, float64(cmp.BaselineFinishOffsetMs)/1000.0, metric.WithAttributes(baselineResultAttr))
+	}
+	if cmp.Shadow.HeadHashTook > 0 {
+		mevDryRunShadowHeadHashDurationHistogram.Record(ctx, cmp.Shadow.HeadHashTook.Seconds(), metric.WithAttributes(shadowResultAttr))
+	}
+	if cmp.Shadow.Took > 0 {
+		mevDryRunShadowDurationHistogram.Record(ctx, cmp.Shadow.Took.Seconds(), metric.WithAttributes(shadowResultAttr))
+	}
+	mevDryRunShadowResultCounter.Add(ctx, 1,
+		metric.WithAttributes(shadowResultAttr))
+
+	shadowTotal := cmp.Shadow.HeadHashTook + cmp.Shadow.Took
+	if shadowTotal > 0 {
+		mevDryRunShadowTotalDurationHistogram.Record(ctx, shadowTotal.Seconds(), metric.WithAttributes(shadowResultAttr))
+	}
+	if cmp.Baseline.Took > 0 && shadowTotal > 0 {
+		mevDryRunShadowMinusBaselineHistogram.Record(ctx, (shadowTotal - cmp.Baseline.Took).Seconds(), metric.WithAttributes(shadowResultAttr))
+	}
+	if cmp.ShadowFinishOffsetMs > 0 {
+		mevDryRunShadowFinishOffsetHistogram.Record(ctx, float64(cmp.ShadowFinishOffsetMs)/1000.0, metric.WithAttributes(shadowResultAttr))
+	}
+
+	if cmp.BaselineExecParentHash != "" && cmp.Shadow.ParentHashHex != "" {
+		mevDryRunParentHashMatchCounter.Add(ctx, 1,
+			metric.WithAttributes(
+				attribute.Bool("ssv.mev.dry_run.parent_hash_match", cmp.ParentHashMatch),
+				shadowResultAttr,
+			))
+	}
+
+	if cmp.ShadowExactParent != nil {
+		exactResultAttr := attribute.String("ssv.mev.dry_run.shadow_exact_parent_result", cmp.ShadowExactParent.Result)
+		if cmp.ShadowExactParent.Took > 0 {
+			mevDryRunShadowExactDurationHistogram.Record(ctx, cmp.ShadowExactParent.Took.Seconds(), metric.WithAttributes(exactResultAttr))
+		}
+		mevDryRunShadowExactResultCounter.Add(ctx, 1, metric.WithAttributes(exactResultAttr))
+		if cmp.ShadowExactFinishOffsetMs > 0 {
+			mevDryRunShadowExactFinishOffsetHistogram.Record(ctx, float64(cmp.ShadowExactFinishOffsetMs)/1000.0, metric.WithAttributes(exactResultAttr))
+		}
+	}
+
+	if cmp.RecoveredBid {
+		mevDryRunRecoveredBidCounter.Add(ctx, 1, metric.WithAttributes(shadowResultAttr))
+	}
 }

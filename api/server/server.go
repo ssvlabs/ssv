@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	exporterHandlers "github.com/ssvlabs/ssv/api/handlers/exporter"
+	mevHandlers "github.com/ssvlabs/ssv/api/handlers/mev"
 	nodeHandlers "github.com/ssvlabs/ssv/api/handlers/node"
 	validatorsHandlers "github.com/ssvlabs/ssv/api/handlers/validators"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -31,6 +32,7 @@ func New(
 	node *nodeHandlers.Node,
 	validators *validatorsHandlers.Validators,
 	exporter *exporterHandlers.Exporter,
+	mev *mevHandlers.Handler,
 	fullExporter bool,
 ) *Server {
 	router := chi.NewRouter()
@@ -84,6 +86,16 @@ func New(
 	// @Success 200 {object} handlers.HealthResponse
 	// @Router /v1/node/health [get]
 	router.Get("/v1/node/health", api.Handler(node.Health))
+
+	if mev != nil {
+		// @Summary Get MEV dry-run comparisons
+		// @Description Returns recent per-slot MEV dry-run comparison records (baseline block fetch vs shadow in-node get_header)
+		// @Tags MEV
+		// @Produce json
+		// @Success 200 {object} map[string]any
+		// @Router /v1/mev/dry-run/comparisons [get]
+		router.Get("/v1/mev/dry-run/comparisons", api.Handler(mev.DryRunComparisons))
+	}
 
 	// @Summary Get validators
 	// @Description Returns the list of validators managed by the SSV node
