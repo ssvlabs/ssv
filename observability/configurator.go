@@ -41,9 +41,7 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 
 	shutdown = func(ctx context.Context) error {
 		var joinedErr error
-		// TODO - debug
-		//localLogger.Info("shutting down observability stack")
-		localLogger.Info("shutting down observability stack", zap.Error(ctx.Err()))
+		localLogger.Info("shutting down observability stack")
 		for _, f := range shutdownFuncs {
 			if err := f(ctx); err != nil {
 				joinedErr = errors.Join(joinedErr, err)
