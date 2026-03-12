@@ -22,6 +22,10 @@ type DeadlineStrategy struct {
 	MinValue *uint256.Int
 }
 
+// BidObserver is an optional callback invoked on every successfully fetched (non-empty) bid.
+// Implementations must be thread-safe and low-overhead as it is called from per-relay polling goroutines.
+type BidObserver func(provider builderclient.BuilderBidProvider, bid *builderspec.VersionedSignedBuilderBid)
+
 type result struct {
 	provider string
 	bid      *builderspec.VersionedSignedBuilderBid
@@ -34,6 +38,18 @@ func (s DeadlineStrategy) BestBid(
 	slot phase0.Slot,
 	parentHash phase0.Hash32,
 	pubkey phase0.BLSPubKey,
+) (*builderspec.VersionedSignedBuilderBid, string, error) {
+	return s.BestBidWithObserver(ctx, slotStart, providers, slot, parentHash, pubkey, nil)
+}
+
+func (s DeadlineStrategy) BestBidWithObserver(
+	ctx context.Context,
+	slotStart time.Time,
+	providers []builderclient.BuilderBidProvider,
+	slot phase0.Slot,
+	parentHash phase0.Hash32,
+	pubkey phase0.BLSPubKey,
+	observer BidObserver,
 ) (*builderspec.VersionedSignedBuilderBid, string, error) {
 	if len(providers) == 0 {
 		return nil, "", nil
@@ -58,7 +74,7 @@ func (s DeadlineStrategy) BestBid(
 		provider := p
 		go func() {
 			defer wg.Done()
-			s.pollProvider(ctx, deadlineTime, provider, slot, parentHash, pubkey, resCh)
+			s.pollProvider(ctx, deadlineTime, provider, slot, parentHash, pubkey, resCh, observer)
 		}()
 	}
 
@@ -111,10 +127,14 @@ func (s DeadlineStrategy) pollProvider(
 	parentHash phase0.Hash32,
 	pubkey phase0.BLSPubKey,
 	resCh chan<- result,
+	observer BidObserver,
 ) {
 	for {
 		bid, err := fetchBid(ctx, provider, slot, parentHash, pubkey)
-		if err == nil {
+		if err == nil && bid != nil && !bid.IsEmpty() {
+			if observer != nil {
+				observer(provider, bid)
+			}
 			resCh <- result{provider: provider.Address(), bid: bid}
 		}
 

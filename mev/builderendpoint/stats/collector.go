@@ -27,8 +27,10 @@ type Collector struct {
 	prefetchSkips       map[string]uint64 // skip_reason
 	prefetchResults     map[string]uint64 // result
 	prefetchLeadTime    *Histogram
+	prefetchFirstCached *Histogram
 	prefetchLate        uint64
 	prefetchOverSlot    uint64
+	prefetchParentHash  map[string]uint64 // compare_result
 	bidValueETH         *Histogram
 	bidValueETHSum      float64
 	bidValueETHCount    uint64
@@ -67,7 +69,9 @@ func NewCollector(opts Options) *Collector {
 		prefetchSkips:   make(map[string]uint64),
 		prefetchResults: make(map[string]uint64),
 
-		prefetchLeadTime: NewHistogram(leadBounds),
+		prefetchLeadTime:    NewHistogram(leadBounds),
+		prefetchFirstCached: NewHistogram(leadBounds),
+		prefetchParentHash:  make(map[string]uint64),
 
 		bidValueETH:         NewHistogram(bidBounds),
 		relayWinnerCounts:   make(map[string]uint64),
@@ -159,6 +163,22 @@ func (c *Collector) ObservePrefetchLeadTime(lead time.Duration) {
 	c.prefetchLeadTime.Record(lead.Seconds())
 }
 
+func (c *Collector) ObservePrefetchFirstCachedLeadTime(lead time.Duration) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if lead < 0 {
+		lead = 0
+	}
+	if lead > 12*time.Second {
+		lead = 12 * time.Second
+	}
+	c.prefetchFirstCached.Record(lead.Seconds())
+}
+
 func (c *Collector) ObservePrefetchRequest() {
 	if c == nil {
 		return
@@ -184,6 +204,15 @@ func (c *Collector) ObservePrefetchResult(result string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.prefetchResults[result]++
+}
+
+func (c *Collector) ObservePrefetchParentHashCompare(result string) {
+	if c == nil || result == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.prefetchParentHash[result]++
 }
 
 func (c *Collector) ObserveWinningBid(source, relayHost string, valueETH float64) {
@@ -237,12 +266,15 @@ type Report struct {
 	} `json:"slot_offset"`
 
 	Prefetch struct {
-		Requests      uint64            `json:"requests,omitempty"`
-		LateTotal     uint64            `json:"late_total,omitempty"`
-		OverSlotTotal uint64            `json:"over_slot_total,omitempty"`
-		LeadTimeP95Ms float64           `json:"lead_time_p95_ms,omitempty"`
-		Results       map[string]uint64 `json:"results,omitempty"`
-		Skips         map[string]uint64 `json:"skips,omitempty"`
+		Requests                  uint64            `json:"requests,omitempty"`
+		LateTotal                 uint64            `json:"late_total,omitempty"`
+		OverSlotTotal             uint64            `json:"over_slot_total,omitempty"`
+		LeadTimeP95Ms             float64           `json:"lead_time_p95_ms,omitempty"`
+		FirstCachedLeadTimeP95Ms  float64           `json:"first_cached_lead_time_p95_ms,omitempty"`
+		ParentHashCompare         map[string]uint64 `json:"parent_hash_compare,omitempty"`
+		ParentHashMismatchRatePct float64           `json:"parent_hash_mismatch_rate_pct,omitempty"`
+		Results                   map[string]uint64 `json:"results,omitempty"`
+		Skips                     map[string]uint64 `json:"skips,omitempty"`
 	} `json:"prefetch"`
 
 	Value struct {
@@ -339,6 +371,14 @@ func (c *Collector) SnapshotAndReset(now time.Time) Report {
 	report.Prefetch.Results = copyUint64Map(c.prefetchResults)
 	report.Prefetch.Skips = copyUint64Map(c.prefetchSkips)
 	report.Prefetch.LeadTimeP95Ms = p95Ms(c.prefetchLeadTime)
+	report.Prefetch.FirstCachedLeadTimeP95Ms = p95Ms(c.prefetchFirstCached)
+	report.Prefetch.ParentHashCompare = copyUint64Map(c.prefetchParentHash)
+	matches := c.prefetchParentHash["match"]
+	mismatches := c.prefetchParentHash["mismatch"]
+	known := matches + mismatches
+	if known > 0 {
+		report.Prefetch.ParentHashMismatchRatePct = float64(mismatches) / float64(known) * 100
+	}
 
 	// Value
 	report.Value.WinningCount = c.bidValueETHCount
@@ -371,8 +411,10 @@ func (c *Collector) SnapshotAndReset(now time.Time) Report {
 	clear(c.prefetchSkips)
 	clear(c.prefetchResults)
 	c.prefetchLeadTime.Reset()
+	c.prefetchFirstCached.Reset()
 	c.prefetchLate = 0
 	c.prefetchOverSlot = 0
+	clear(c.prefetchParentHash)
 	c.bidValueETH.Reset()
 	c.bidValueETHSum = 0
 	c.bidValueETHCount = 0

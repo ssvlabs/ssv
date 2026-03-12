@@ -36,6 +36,8 @@ const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
 	blockPropagationDelay = 300 * time.Millisecond
+
+	defaultBuilderBidPrefetchLeadTime = 1500 * time.Millisecond
 )
 
 // DutiesExecutor is an interface for executing duties.
@@ -595,7 +597,7 @@ func (s *Scheduler) ScheduleBuilderBidPrefetch(duties []*spectypes.ValidatorDuty
 
 	leadTime := s.prefetchLeadTime
 	if leadTime <= 0 {
-		leadTime = 200 * time.Millisecond
+		leadTime = defaultBuilderBidPrefetchLeadTime
 	}
 
 	for slot, pubkeys := range pubkeysBySlot {

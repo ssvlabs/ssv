@@ -95,6 +95,108 @@ func (c *Cache) Put(key Key, bid *builderspec.VersionedSignedBuilderBid, relayPr
 	c.mu.Unlock()
 }
 
+// PutIfBetter stores bid in the cache if:
+// - this is the first entry for the key, or
+// - bid's value is greater than the existing entry's value, or
+// - the existing value cannot be evaluated.
+//
+// It returns (first, updated).
+// - first is true if there was no existing (non-expired) entry for the key.
+// - updated is true if the cache was written (including first insert).
+func (c *Cache) PutIfBetter(key Key, bid *builderspec.VersionedSignedBuilderBid, relayProvenance string) (first bool, updated bool) {
+	if c == nil {
+		return false, false
+	}
+
+	var expiresAt time.Time
+	if c.ttl > 0 {
+		expiresAt = c.now().Add(c.ttl)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check existing entry, treating expired entries as absent.
+	ent, ok := c.m[key]
+	if ok && !ent.ExpiresAt.IsZero() && c.now().After(ent.ExpiresAt) {
+		delete(c.m, key)
+		ok = false
+	}
+	if !ok {
+		c.m[key] = Entry{
+			Bid:        bid,
+			Provenance: relayProvenance,
+			ExpiresAt:  expiresAt,
+		}
+		if relayProvenance != "" {
+			if provKey, ok := prov.FromBid(key.Slot, bid); ok {
+				c.byExecBlockHash[provKey] = provenanceEntry{
+					Provenance: relayProvenance,
+					ExpiresAt:  expiresAt,
+				}
+			}
+		}
+		return true, true
+	}
+
+	if ent.Bid == nil || ent.Bid.IsEmpty() {
+		// Existing entry is unusable; overwrite.
+		c.m[key] = Entry{
+			Bid:        bid,
+			Provenance: relayProvenance,
+			ExpiresAt:  expiresAt,
+		}
+		if relayProvenance != "" {
+			if provKey, ok := prov.FromBid(key.Slot, bid); ok {
+				c.byExecBlockHash[provKey] = provenanceEntry{
+					Provenance: relayProvenance,
+					ExpiresAt:  expiresAt,
+				}
+			}
+		}
+		return false, true
+	}
+
+	if bid == nil || bid.IsEmpty() {
+		// Never overwrite with an empty bid.
+		return false, false
+	}
+
+	newValue, errNew := bid.Value()
+	if errNew != nil || newValue == nil {
+		// Cannot compare; keep existing.
+		return false, false
+	}
+
+	oldValue, errOld := ent.Bid.Value()
+	shouldOverwrite := errOld != nil || oldValue == nil || newValue.Cmp(oldValue) > 0
+	if !shouldOverwrite {
+		return false, false
+	}
+
+	// Remove old provenance mapping to avoid stale routing entries.
+	if ent.Provenance != "" {
+		if oldProvKey, ok := prov.FromBid(key.Slot, ent.Bid); ok {
+			delete(c.byExecBlockHash, oldProvKey)
+		}
+	}
+
+	c.m[key] = Entry{
+		Bid:        bid,
+		Provenance: relayProvenance,
+		ExpiresAt:  expiresAt,
+	}
+	if relayProvenance != "" {
+		if provKey, ok := prov.FromBid(key.Slot, bid); ok {
+			c.byExecBlockHash[provKey] = provenanceEntry{
+				Provenance: relayProvenance,
+				ExpiresAt:  expiresAt,
+			}
+		}
+	}
+	return false, true
+}
+
 func (c *Cache) GetProvenanceByBlockHash(slot phase0.Slot, blockHash phase0.Hash32) (string, bool) {
 	if c == nil {
 		return "", false

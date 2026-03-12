@@ -42,7 +42,7 @@ builder:
   # CacheCleanupInterval: 1s
   # PrefetchEnabled: true
   # PrefetchParentHashTimeout: 150ms
-  # PrefetchLeadTime: 200ms
+  # PrefetchLeadTime: 1500ms
   # PrefetchMaxInFlight: 32
   # UnblindRetries: 0
   # UnblindRetryInterval: 250ms

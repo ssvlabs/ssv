@@ -2,6 +2,7 @@ package bids_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -151,5 +152,53 @@ func TestDeadlineStrategyPollsUntilDeadline(t *testing.T) {
 	}
 	if value.Cmp(uint256.NewInt(7)) != 0 {
 		t.Fatalf("unexpected best bid value: got %s want %s", value.String(), uint256.NewInt(7).String())
+	}
+}
+
+func TestDeadlineStrategyCallsObserverOnEachBid(t *testing.T) {
+	t.Parallel()
+
+	p := &fakeProvider{
+		addr: "relay-a",
+		bids: []*builderspec.VersionedSignedBuilderBid{
+			capellaBidWithValue(1),
+			capellaBidWithValue(7),
+		},
+	}
+
+	s := bids.DeadlineStrategy{
+		Deadline: 80 * time.Millisecond,
+		BidGap:   10 * time.Millisecond,
+	}
+
+	var (
+		mu   sync.Mutex
+		seen []uint64
+	)
+	observer := func(_ builderclient.BuilderBidProvider, bid *builderspec.VersionedSignedBuilderBid) {
+		if bid == nil {
+			return
+		}
+		v, err := bid.Value()
+		if err != nil || v == nil {
+			return
+		}
+		mu.Lock()
+		seen = append(seen, v.Uint64())
+		mu.Unlock()
+	}
+
+	_, _, err := s.BestBidWithObserver(context.Background(), time.Now(), []builderclient.BuilderBidProvider{p}, 1, phase0.Hash32{1}, phase0.BLSPubKey{2}, observer)
+	if err != nil {
+		t.Fatalf("best bid: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) == 0 {
+		t.Fatalf("expected observer to see bids")
+	}
+	if seen[0] != 1 {
+		t.Fatalf("expected first observed bid to be low: got %d", seen[0])
 	}
 }

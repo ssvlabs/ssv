@@ -119,7 +119,7 @@ func (p *Prefetcher) Prefetch(ctx context.Context, key Key) {
 			return
 		}
 
-		p.cache.Put(key, bid, provenance)
+		p.cache.PutIfBetter(key, bid, provenance)
 		recordPrefetchResult(ctx, prefetchResultCached)
 		if p.observer != nil {
 			p.observer.OnPrefetchResult(ctx, string(prefetchResultCached))

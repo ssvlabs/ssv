@@ -44,6 +44,8 @@ type Server struct {
 	cacheCleanupInterval time.Duration
 	relaysCount          int
 
+	prefetchParentHashTracker *prefetchParentHashTracker
+
 	backgroundOnce sync.Once
 }
 
@@ -67,18 +69,47 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 	factory := relayclient.NewFactory(ctx, cfg.RelayRequestTimeout)
 	collector := stats.NewCollector(stats.Options{})
 
-	baseFetcher := &bids.RelayFetcher{
+	trackerTTL := cfg.CacheTTL
+	if trackerTTL < 12*time.Second {
+		trackerTTL = 12 * time.Second
+	}
+	parentHashTracker := newPrefetchParentHashTracker(trackerTTL)
+
+	strategy := bids.DeadlineStrategy{
+		Deadline: cfg.BidDeadline,
+		BidGap:   cfg.BidGap,
+	}
+
+	baseFetcherForHeader := &bids.RelayFetcher{
 		Factory:       factory,
 		Relays:        cfg.Relays,
 		SlotStartTime: deps.SlotStartTime,
-		Strategy: bids.DeadlineStrategy{
-			Deadline: cfg.BidDeadline,
-			BidGap:   cfg.BidGap,
+		Strategy:      strategy,
+	}
+
+	baseFetcherForPrefetch := &bids.RelayFetcher{
+		Factory:       factory,
+		Relays:        cfg.Relays,
+		SlotStartTime: deps.SlotStartTime,
+		Strategy:      strategy,
+		OnBid: func(ctx context.Context, key bidcache.Key, provenance string, bid *builderspec.VersionedSignedBuilderBid) {
+			first, updated := cache.PutIfBetter(key, bid, provenance)
+			if !updated {
+				return
+			}
+
+			if first && deps.SlotStartTime != nil {
+				lead := time.Until(deps.SlotStartTime(key.Slot))
+				recordPrefetchFirstCachedLeadTime(ctx, lead)
+				if collector != nil {
+					collector.ObservePrefetchFirstCachedLeadTime(lead)
+				}
+			}
 		},
 	}
 
-	fetcherForHeader := &bids.FetcherWithMetrics{Source: "get_header", Next: baseFetcher, Observer: collector}
-	fetcherForPrefetch := &bids.FetcherWithMetrics{Source: "prefetch", Next: baseFetcher, Observer: collector}
+	fetcherForHeader := &bids.FetcherWithMetrics{Source: "get_header", Next: baseFetcherForHeader, Observer: collector}
+	fetcherForPrefetch := &bids.FetcherWithMetrics{Source: "prefetch", Next: baseFetcherForPrefetch, Observer: collector}
 
 	prefetcher := bidcache.NewPrefetcher(cache, fetcherForPrefetch, cfg.PrefetchMaxInFlight, bidcache.WithPrefetchObserver(collector))
 
@@ -91,16 +122,17 @@ func New(ctx context.Context, logger *zap.Logger, cfg config.Config, deps Depend
 	}
 
 	srv := &Server{
-		logger:               logger,
-		cache:                cache,
-		prefetch:             prefetcher,
-		fetcher:              fetcherForPrefetch,
-		stats:                collector,
-		fetcherForHeader:     fetcherForHeader,
-		bidSF:                &singleflight.Group{},
-		slotStartTime:        deps.SlotStartTime,
-		cacheCleanupInterval: cleanupInterval,
-		relaysCount:          len(cfg.Relays),
+		logger:                    logger,
+		cache:                     cache,
+		prefetch:                  prefetcher,
+		fetcher:                   fetcherForPrefetch,
+		stats:                     collector,
+		fetcherForHeader:          fetcherForHeader,
+		bidSF:                     &singleflight.Group{},
+		slotStartTime:             deps.SlotStartTime,
+		cacheCleanupInterval:      cleanupInterval,
+		relaysCount:               len(cfg.Relays),
+		prefetchParentHashTracker: parentHashTracker,
 	}
 
 	bidProvider := func(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) (*builderspec.VersionedSignedBuilderBid, error) {
@@ -182,6 +214,14 @@ func (s *Server) GetHeader(ctx context.Context, mode string, slot phase0.Slot, p
 	slotOffset := time.Duration(0)
 	if !slotStart.IsZero() {
 		slotOffset = time.Since(slotStart)
+	}
+
+	if s.prefetchParentHashTracker != nil {
+		res := s.prefetchParentHashTracker.Compare(slot, pubkey, parentHash)
+		recordPrefetchParentHashCompare(ctx, mode, res)
+		if s.stats != nil {
+			s.stats.ObservePrefetchParentHashCompare(string(res))
+		}
 	}
 
 	start := time.Now()
@@ -354,6 +394,10 @@ func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash p
 		return
 	}
 
+	if s.prefetchParentHashTracker != nil {
+		s.prefetchParentHashTracker.Record(slot, pubkey, parentHash)
+	}
+
 	if s.slotStartTime != nil {
 		lead := time.Until(s.slotStartTime(slot))
 		recordPrefetchLeadTime(ctx, lead)
@@ -374,6 +418,10 @@ func (s *Server) PrefetchBid(ctx context.Context, slot phase0.Slot, parentHash p
 func (s *Server) PrefetchBidSync(ctx context.Context, slot phase0.Slot, parentHash phase0.Hash32, pubkey phase0.BLSPubKey) error {
 	if s == nil || s.cache == nil || s.fetcher == nil {
 		return nil
+	}
+
+	if s.prefetchParentHashTracker != nil {
+		s.prefetchParentHashTracker.Record(slot, pubkey, parentHash)
 	}
 
 	if s.slotStartTime != nil {

@@ -56,8 +56,8 @@ type Config struct {
 	PrefetchParentHashTimeout time.Duration `yaml:"PrefetchParentHashTimeout" env:"PREFETCH_PARENT_HASH_TIMEOUT" env-default:"150ms" env-description:"Timeout for fetching execution head hash used as parent_hash for prefetch"`
 
 	// PrefetchLeadTime is how long before slot start we begin prefetching relay bids.
-	// Keep this small to avoid long-running relay polling.
-	PrefetchLeadTime time.Duration `yaml:"PrefetchLeadTime" env:"PREFETCH_LEAD_TIME" env-default:"200ms" env-description:"How long before slot start to begin bid prefetching"`
+	// Set this based on observed relay latency so bids are likely cached before the beacon client's getHeader call.
+	PrefetchLeadTime time.Duration `yaml:"PrefetchLeadTime" env:"PREFETCH_LEAD_TIME" env-default:"1500ms" env-description:"How long before slot start to begin bid prefetching"`
 
 	// PrefetchMaxInFlight bounds in-flight prefetch goroutines.
 	PrefetchMaxInFlight int `yaml:"PrefetchMaxInFlight" env:"PREFETCH_MAX_IN_FLIGHT" env-default:"32" env-description:"Maximum in-flight prefetches"`

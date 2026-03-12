@@ -85,6 +85,25 @@ var (
 			observability.InstrumentName(observabilityNamespace, "prefetch.late"),
 			metric.WithUnit("{prefetch}"),
 			metric.WithDescription("number of prefetch requests issued after slot start")))
+
+	prefetchFirstCachedLeadTimeHistogram = metrics.New(
+		meter.Float64Histogram(
+			observability.InstrumentName(observabilityNamespace, "prefetch.first_cached.lead_time"),
+			metric.WithUnit("s"),
+			metric.WithDescription("time before slot start when the first bid was cached for a prefetch key (seconds)"),
+			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+
+	prefetchFirstCachedLateCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "prefetch.first_cached.late"),
+			metric.WithUnit("{prefetch}"),
+			metric.WithDescription("number of first-cached events that occurred after slot start")))
+
+	prefetchParentHashCompareCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "prefetch.parent_hash_compare"),
+			metric.WithUnit("{compare}"),
+			metric.WithDescription("parent_hash comparison results between prefetch trigger and later get_header")))
 )
 
 func getHeaderAttributes(cacheRes getHeaderCacheResult, res getHeaderResult) []attribute.KeyValue {
@@ -127,4 +146,25 @@ func recordPrefetchLeadTime(ctx context.Context, lead time.Duration) {
 		lead = 0
 	}
 	prefetchLeadTimeHistogram.Record(ctx, lead.Seconds())
+}
+
+func recordPrefetchFirstCachedLeadTime(ctx context.Context, lead time.Duration) {
+	if lead < 0 {
+		prefetchFirstCachedLateCounter.Add(ctx, 1)
+		lead = 0
+	}
+	if lead > 12*time.Second {
+		lead = 12 * time.Second
+	}
+	prefetchFirstCachedLeadTimeHistogram.Record(ctx, lead.Seconds())
+}
+
+func recordPrefetchParentHashCompare(ctx context.Context, mode string, res prefetchParentHashCompareResult) {
+	attr := []attribute.KeyValue{
+		attribute.String("ssv.mev.builder_endpoint.prefetch.parent_hash_compare.result", string(res)),
+	}
+	if mode != "" {
+		attr = append(attr, attribute.String("ssv.mev.builder_endpoint.mode", mode))
+	}
+	prefetchParentHashCompareCounter.Add(ctx, 1, metric.WithAttributes(attr...))
 }

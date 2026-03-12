@@ -92,6 +92,69 @@ func TestCacheCleanupExpiredRemovesEntriesEvenWithoutReads(t *testing.T) {
 	}
 }
 
+func TestCachePutIfBetterKeepsBestValueAndUpdatesProvenance(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(1, 0)
+	c := New(10 * time.Second)
+	c.now = func() time.Time { return now }
+
+	key := Key{Slot: 1, ParentHash: phase0.Hash32{1}, Pubkey: phase0.BLSPubKey{2}}
+
+	lowHash := phase0.Hash32{7}
+	low := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderdeneb.SignedBuilderBid{
+			Message: &builderdeneb.BuilderBid{
+				Header: &consensusdeneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0), BlockHash: lowHash},
+				Value:  uint256.NewInt(1),
+			},
+		},
+	}
+
+	highHash := phase0.Hash32{8}
+	high := &builderspec.VersionedSignedBuilderBid{
+		Version: consensusspec.DataVersionDeneb,
+		Deneb: &builderdeneb.SignedBuilderBid{
+			Message: &builderdeneb.BuilderBid{
+				Header: &consensusdeneb.ExecutionPayloadHeader{BaseFeePerGas: uint256.NewInt(0), BlockHash: highHash},
+				Value:  uint256.NewInt(2),
+			},
+		},
+	}
+
+	first, updated := c.PutIfBetter(key, low, "relay-a")
+	if !first || !updated {
+		t.Fatalf("expected first insert")
+	}
+
+	_, updated = c.PutIfBetter(key, low, "relay-b")
+	if updated {
+		t.Fatalf("expected no update for equal value")
+	}
+
+	first, updated = c.PutIfBetter(key, high, "relay-b")
+	if first || !updated {
+		t.Fatalf("expected update for higher value")
+	}
+
+	ent, ok := c.Get(key)
+	if !ok || ent.Bid == nil || ent.Provenance != "relay-b" {
+		t.Fatalf("expected updated cache entry")
+	}
+	val, err := ent.Bid.Value()
+	if err != nil || val.Cmp(uint256.NewInt(2)) != 0 {
+		t.Fatalf("unexpected cached value: %v (err=%v)", val, err)
+	}
+
+	if prov, ok := c.GetProvenanceByBlockHash(key.Slot, lowHash); ok || prov != "" {
+		t.Fatalf("expected old provenance mapping to be removed")
+	}
+	if prov, ok := c.GetProvenanceByBlockHash(key.Slot, highHash); !ok || prov != "relay-b" {
+		t.Fatalf("expected provenance for best bid")
+	}
+}
+
 type fakeFetcher struct {
 	calls int32
 	bid   *builderspec.VersionedSignedBuilderBid

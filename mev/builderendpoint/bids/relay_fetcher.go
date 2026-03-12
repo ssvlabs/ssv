@@ -21,11 +21,18 @@ type RelayFetcher struct {
 	Relays        []string
 	SlotStartTime func(phase0.Slot) time.Time
 	Strategy      DeadlineStrategy
+
+	// OnBid is an optional callback invoked on every successfully fetched (non-empty) bid during polling.
+	// This is primarily intended for cache warming during background prefetching.
+	OnBid func(ctx context.Context, key bidcache.Key, provenance string, bid *builderspec.VersionedSignedBuilderBid)
 }
 
 func (f *RelayFetcher) FetchBestBid(ctx context.Context, key bidcache.Key) (*builderspec.VersionedSignedBuilderBid, string, error) {
 	if f == nil || f.Factory == nil || len(f.Relays) == 0 {
 		return nil, "", nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	providers := make([]builderclient.BuilderBidProvider, 0, len(f.Relays))
@@ -45,7 +52,17 @@ func (f *RelayFetcher) FetchBestBid(ctx context.Context, key bidcache.Key) (*bui
 		slotStart = f.SlotStartTime(key.Slot)
 	}
 
-	return f.Strategy.BestBid(ctx, slotStart, providers, key.Slot, key.ParentHash, key.Pubkey)
+	if f.OnBid == nil {
+		return f.Strategy.BestBid(ctx, slotStart, providers, key.Slot, key.ParentHash, key.Pubkey)
+	}
+
+	observer := func(p builderclient.BuilderBidProvider, bid *builderspec.VersionedSignedBuilderBid) {
+		if bid == nil || bid.IsEmpty() {
+			return
+		}
+		f.OnBid(ctx, key, p.Address(), bid)
+	}
+	return f.Strategy.BestBidWithObserver(ctx, slotStart, providers, key.Slot, key.ParentHash, key.Pubkey, observer)
 }
 
 var _ bidcache.Fetcher = (*RelayFetcher)(nil)
