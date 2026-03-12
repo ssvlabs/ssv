@@ -546,7 +546,7 @@ func (eh *EventHandler) processClusterEvent(
 		share.Liquidated = toLiquidate
 		toUpdate = append(toUpdate, share)
 
-		if isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorData().ID); isOperatorShare {
+		if isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()); isOperatorShare {
 			operatorShares = append(operatorShares, share)
 			operatorValidatorPubKeys = append(operatorValidatorPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
 		}
