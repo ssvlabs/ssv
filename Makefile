@@ -80,26 +80,10 @@ spec-test-alan:
 	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/qbft/spectest
 	@go test -tags "blst_enabled alan_spec" -timeout 10m ${COV_CMD} -race -p 16 -parallel 256 ./protocol/v2/ssv/spectest
 
-.PHONY: all-spec-test-raceless
-all-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
-
-.PHONY: all-spec-test-alan-raceless
-all-spec-test-alan-raceless:
-	@echo "Running spec tests against ssv-spec Alan (raceless)"
-	@$(MAKE) spec-test-alan-deps
-	@go test -tags "blst_enabled alan_spec" -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
-
 .PHONY: spec-test-alan-deps
 spec-test-alan-deps:
 	@echo "Downloading Alan modfile dependencies"
 	@go mod download -modfile=go.spec.alan.mod
-
-.PHONY: spec-test-raceless
-spec-test-raceless:
-	@echo "Running spec tests without race flag"
-	@go test -tags blst_enabled -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
 
 .PHONY: benchmark
 benchmark:
