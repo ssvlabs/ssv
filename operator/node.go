@@ -166,7 +166,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 	return node
 }
 
-// Start starts to stream duties and run IBFT instances
+// Start prepares and starts the main components.
 func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting operator node")
 

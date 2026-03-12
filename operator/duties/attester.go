@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -33,6 +34,9 @@ type AttesterHandler struct {
 	// processFetching func uses this value to decide on whether the fetch is needed.
 	fetchNextEpoch bool
 
+	// backgroundTasks tracks all go-routines spawned by Scheduler for graceful shutdown.
+	backgroundTasks sync.WaitGroup
+
 	exporterMode bool
 }
 
@@ -46,6 +50,10 @@ func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty], export
 
 func (h *AttesterHandler) Name() string {
 	return spectypes.BNRoleAttester.String()
+}
+
+func (h *AttesterHandler) WaitShutdown() {
+	h.backgroundTasks.Wait()
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -330,7 +338,10 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
+	h.backgroundTasks.Add(1)
 	go func() {
+		defer h.backgroundTasks.Done()
+
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
 		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)

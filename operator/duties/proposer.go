@@ -38,6 +38,8 @@ func (h *ProposerHandler) Name() string {
 	return spectypes.BNRoleProposer.String()
 }
 
+func (h *ProposerHandler) WaitShutdown() {}
+
 // HandleDuties manages the duty lifecycle, handling different cases:
 //
 // On First Run:
