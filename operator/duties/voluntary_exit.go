@@ -49,6 +49,8 @@ func (h *VoluntaryExitHandler) Name() string {
 	return spectypes.BNRoleVoluntaryExit.String()
 }
 
+func (h *VoluntaryExitHandler) WaitShutdown() {}
+
 func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")

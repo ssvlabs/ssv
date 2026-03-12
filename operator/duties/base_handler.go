@@ -30,6 +30,7 @@ type dutyHandler interface {
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
+	WaitShutdown()
 }
 
 type baseHandler struct {

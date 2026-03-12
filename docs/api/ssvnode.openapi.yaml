@@ -9,6 +9,24 @@ definitions:
         description: user-level status message
         type: string
     type: object
+  api.PaginationRequest:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+    type: object
+  api.PaginationResponse:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
   exporter.CommitteeMessage:
     properties:
       signer:
@@ -471,6 +489,92 @@ definitions:
           $ref: '#/definitions/exporter.ValidatorSchedule'
         type: array
     type: object
+  validators.Validator:
+    properties:
+      activation_epoch:
+        example: "0"
+        type: string
+      committee:
+        items:
+          format: int64
+          minimum: 0
+          type: integer
+        type: array
+      exit_epoch:
+        example: "0"
+        type: string
+      graffiti:
+        type: string
+      index:
+        example: "123"
+        type: string
+      liquidated:
+        type: boolean
+      owner:
+        items:
+          type: integer
+        type: array
+      partial_quorum:
+        type: integer
+      public_key:
+        items:
+          type: integer
+        type: array
+      quorum:
+        type: integer
+      status:
+        type: string
+    type: object
+  validators.ValidatorsRequest:
+    properties:
+      clusters:
+        items:
+          items:
+            format: int64
+            type: integer
+          type: array
+        type: array
+      indices:
+        items:
+          format: int64
+          minimum: 0
+          type: integer
+        type: array
+      operators:
+        items:
+          format: int64
+          minimum: 0
+          type: integer
+        type: array
+      owners:
+        items:
+          format: hex
+          type: string
+        type: array
+      pagination:
+        $ref: '#/definitions/api.PaginationRequest'
+      pubkeys:
+        items:
+          format: hex
+          type: string
+        type: array
+      subclusters:
+        items:
+          items:
+            format: int64
+            type: integer
+          type: array
+        type: array
+    type: object
+  validators.ValidatorsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/validators.Validator'
+        type: array
+      pagination:
+        $ref: '#/definitions/api.PaginationResponse'
+    type: object
 info:
   contact:
     email: info@ssv.network
@@ -913,6 +1017,40 @@ paths:
       summary: Retrieve validator duty traces
       tags:
       - Exporter
+  /v1/validators:
+    get:
+      consumes:
+      - application/json
+      description: Returns the list of validators managed by the SSV node. Pagination
+        is provided via the JSON request body under "pagination".
+      parameters:
+      - description: Filters and pagination as JSON body
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/validators.ValidatorsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/validators.ValidatorsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get validators
+      tags:
+      - Validators
 schemes:
 - http
 swagger: "2.0"

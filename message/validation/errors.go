@@ -174,6 +174,6 @@ func (mv *messageValidator) handleValidationError(
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
+	recordAcceptedMessage(ctx, messageRole(decodedMessage))
 	return pubsub.ValidationAccept
 }

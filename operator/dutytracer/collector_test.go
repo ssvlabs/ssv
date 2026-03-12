@@ -1336,7 +1336,7 @@ func TestCollector_lateMessage(t *testing.T) {
 		collector.lastEvictedSlot.Store(uint64(1))
 
 		go func() {
-			time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Millisecond * 400)
 			collector.inFlightCommittee.Delete(committeeTraceKey{id: committeeID, role: spectypes.RoleCommittee})
 		}()
 

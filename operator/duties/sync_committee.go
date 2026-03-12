@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -37,7 +38,11 @@ type SyncCommitteeHandler struct {
 	// preparationSlots is the number of slots ahead of the sync committee
 	// period change at which to prepare the relevant duties.
 	preparationSlots uint64
-	exporterMode     bool
+
+	// backgroundTasks tracks all go-routines spawned by Scheduler for graceful shutdown.
+	backgroundTasks sync.WaitGroup
+
+	exporterMode bool
 }
 
 func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode bool) *SyncCommitteeHandler {
@@ -50,6 +55,10 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties, exporterMode
 
 func (h *SyncCommitteeHandler) Name() string {
 	return spectypes.BNRoleSyncCommittee.String()
+}
+
+func (h *SyncCommitteeHandler) WaitShutdown() {
+	h.backgroundTasks.Wait()
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -318,7 +327,10 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
+	h.backgroundTasks.Add(1)
 	go func() {
+		defer h.backgroundTasks.Done()
+
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
 		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
