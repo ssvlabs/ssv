@@ -176,8 +176,8 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	// IMPORTANT: We must initialize validators regardless of whether we are running exporter or
-	// a regular SSV node.
+	// Call the shared validator initialization path in both modes.
+	// Exporter returns no committee validators here but still relies on the common startup flow.
 	validatorsInitialized, err := n.validatorsCtrl.InitValidators()
 	if err != nil {
 		return fmt.Errorf("init validators: %w", err)

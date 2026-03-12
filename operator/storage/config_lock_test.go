@@ -100,4 +100,20 @@ func TestConfigLock(t *testing.T) {
 
 		require.NoError(t, c1.ValidateCompatibility(c2, true))
 	})
+
+	t.Run("exporter ignores ssv-signer usage difference in either direction", func(t *testing.T) {
+		c1 := &ConfigLock{
+			NetworkName:      "test",
+			UsingLocalEvents: true,
+			UsingSSVSigner:   false,
+		}
+
+		c2 := &ConfigLock{
+			NetworkName:      "test",
+			UsingLocalEvents: true,
+			UsingSSVSigner:   true,
+		}
+
+		require.NoError(t, c1.ValidateCompatibility(c2, true))
+	})
 }

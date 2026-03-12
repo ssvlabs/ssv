@@ -112,6 +112,24 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	require.Empty(t, validatorsInitialized)
 }
 
+func TestSetupRunnersExporter(t *testing.T) {
+	runners, err := SetupRunners(
+		t.Context(),
+		log.TestLogger(t),
+		&types.SSVShare{},
+		nil,
+		nil,
+		nil,
+		&validator.CommonOptions{
+			ExporterOptions: exporter.Options{
+				Enabled: true,
+			},
+		},
+	)
+	require.Nil(t, runners)
+	require.ErrorContains(t, err, "cannot set up duty runners in exporter mode")
+}
+
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := log.TestLogger(t)
 	mockValidatorsMap := validators.New(t.Context())
