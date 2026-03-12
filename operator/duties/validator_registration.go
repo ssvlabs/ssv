@@ -45,6 +45,8 @@ func (h *ValidatorRegistrationHandler) Name() string {
 	return spectypes.BNRoleValidatorRegistration.String()
 }
 
+func (h *ValidatorRegistrationHandler) WaitShutdown() {}
+
 // HandleDuties generates registration duties every N epochs for every participating validator, then
 // validator-registrations are aggregated into batches and sent periodically to Beacon node by
 // ValidatorRegistrationRunner (sending validator-registrations periodically ensures various

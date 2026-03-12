@@ -142,11 +142,11 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		waitForSlotN(scheduler.beaconConfig, 1)
 		startTime := time.Now()
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for attester duties to be fetched and executed at the same slot
 		duties, _ := attDuties.Get(phase0.Epoch(0))
@@ -162,7 +162,8 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -187,11 +188,11 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		waitForSlotN(scheduler.beaconConfig, 1)
 		startTime := time.Now()
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for attester duties to be fetched and executed at the same slot
 		duties, _ := syncDuties.Get(0)
@@ -207,7 +208,8 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -239,11 +241,11 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		waitForSlotN(scheduler.beaconConfig, 1)
 		startTime := time.Now()
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for attester duties to be fetched and executed at the same slot
 		aDuties, _ := attDuties.Get(0)
@@ -260,7 +262,8 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -287,9 +290,9 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 2: wait for no action to be taken
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
@@ -311,7 +314,8 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -331,9 +335,9 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for no action to be taken
 		ticker.Send(phase0.Slot(0))
@@ -382,7 +386,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -402,9 +407,9 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for no action to be taken
 		ticker.Send(phase0.Slot(0))
@@ -458,7 +463,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -486,9 +492,9 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for no action to be taken
 		ticker.Send(phase0.Slot(0))
@@ -532,7 +538,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -553,7 +560,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
 		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 
@@ -568,7 +575,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		// STEP 1: (on startup) wait for attester duties to be fetched for the next epoch only (since we start at
 		// the last slot of the epoch), plus for sync committee duties to be fetched for the current period.
 		waitForDuties.Set(true)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
@@ -624,7 +631,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -645,7 +653,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch*2-1)
 		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 
@@ -660,7 +668,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		// STEP 1: (on startup) wait for attester duties to be fetched for the next epoch only (since we start at
 		// the last slot of the epoch), plus for sync committee duties to be fetched for the current period.
 		waitForDuties.Set(true)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
@@ -730,7 +738,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -760,10 +769,10 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch)
 		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch)
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		waitForDuties.Set(true)
 		// STEP 2: trigger head event
@@ -822,7 +831,8 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -848,9 +858,9 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		ticker.Send(phase0.Slot(0))
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -881,7 +891,8 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -913,11 +924,11 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 		waitForSlotN(scheduler.beaconConfig, 1)
 		startTime := time.Now()
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 2: wait for committee duty to be executed
 		aDuties, _ := attDuties.Get(0)
@@ -950,7 +961,8 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 
@@ -988,9 +1000,9 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-		scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch-1)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, testSlotsPerEpoch-1)
 		fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, &SafeValue[bool]{})
-		startScheduler(ctx, t, scheduler, schedulerPool)
+		require.NoError(t, scheduler.Start(ctx))
 
 		// STEP 1: wait for no action to be taken
 		ticker.Send(phase0.Slot(0))
@@ -1019,7 +1031,8 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
-		require.NoError(t, schedulerPool.Wait())
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
 	})
 }
 

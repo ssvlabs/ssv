@@ -146,7 +146,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 	return node
 }
 
-// Start starts to stream duties and run IBFT instances
+// Start prepares and starts the main components.
 func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting operator node")
 
@@ -157,8 +157,6 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}()
 
-	// Start the duty scheduler, and a background goroutine to crash the node
-	// in case there were any errors.
 	if err := n.dutyScheduler.Start(ctx); err != nil {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}

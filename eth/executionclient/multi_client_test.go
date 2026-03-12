@@ -66,7 +66,7 @@ func TestNewMulti(t *testing.T) {
 		contractAddr := ethcommon.HexToAddress("0x1234")
 
 		customLogger := zap.NewExample()
-		const customTimeout = 100 * time.Millisecond
+		const customTimeout = 400 * time.Millisecond
 		const customSyncDistanceTolerance = 12
 
 		mc, err := NewMulti(

@@ -45,6 +45,8 @@ func (h *CommitteeHandler) Name() string {
 	return "CLUSTER"
 }
 
+func (h *CommitteeHandler) WaitShutdown() {}
+
 func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
