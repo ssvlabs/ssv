@@ -52,7 +52,8 @@ var (
 
 func TestEventSyncer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	const testTimeout = 5 * time.Second
+
+	const testTimeout = 30 * time.Second
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 

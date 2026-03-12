@@ -31,9 +31,9 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			// Ensure genesis is not in the future relative to mocked block timestamps (1,2,5... seconds).
 			//
 			// Use 1-second slots so that block number == slot in the test’s 1:1 mapping assertion.
-			scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+			scheduler, ticker := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
 
-			startScheduler(ctx, t, scheduler, schedulerPool)
+			require.NoError(t, scheduler.Start(ctx))
 
 			blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
 			assert1to1BlockSlotMapping(t, scheduler)
@@ -101,7 +101,8 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			require.EqualValues(t, 1, blockByNumberCalls.Load())
 
 			close(regCh)
-			require.NoError(t, schedulerPool.Wait())
+			require.NoError(t, scheduler.Wait())
+			ticker.WaitShutdown()
 		})
 	})
 
@@ -121,9 +122,9 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			// Ensure genesis is not in the future relative to mocked block timestamps (1,2,5... seconds).
 			//
 			// Use 1-second slots so that block number == slot in the test’s 1:1 mapping assertion.
-			scheduler, _, schedulerPool := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+			scheduler, ticker := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
 
-			startScheduler(ctx, t, scheduler, schedulerPool)
+			require.NoError(t, scheduler.Start(ctx))
 
 			blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
 			assert1to1BlockSlotMapping(t, scheduler)
@@ -153,7 +154,8 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			})
 			require.EqualValues(t, 2, blockByNumberCalls.Load())
 			close(regCh)
-			require.NoError(t, schedulerPool.Wait())
+			require.NoError(t, scheduler.Wait())
+			ticker.WaitShutdown()
 		})
 	})
 }
