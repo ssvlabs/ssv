@@ -78,21 +78,13 @@ type Node struct {
 	exporterRead *exporter2.Exporter
 }
 
+func shouldRunDutyScheduler(exporterOpts exporter.Options) bool {
+	return !exporterOpts.Enabled || exporterOpts.Mode == exporter.ModeArchive
+}
+
 // New is the constructor of Node
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
-
-	// Prepare scheduler wiring; in exporter mode we swap to AllShares provider,
-	// a prefetching beacon adapter, and a no-op executor.
-	var schedulerBeacon duties.BeaconNode = opts.BeaconNode
-	validatorProvider := any(selfValidatorStore).(duties.ValidatorProvider)
-	dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
-
-	if exporterOpts.Enabled {
-		validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
-		dutyExecutor = duties.NewNoopExecutor()
-		schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
-	}
 
 	var (
 		feeRecipientCtrl       fee_recipient.RecipientController
@@ -111,18 +103,21 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		proposalPreparationsFn = feeRecipientController.GetProposalPreparations
 	}
 
-	node := &Node{
-		logger:           logger.Named(log.NameOperator),
-		validatorsCtrl:   opts.ValidatorController,
-		validatorOptions: opts.ValidatorOptions,
-		exporterOptions:  exporterOpts,
-		network:          opts.NetworkConfig,
-		consensusClient:  opts.BeaconNode,
-		executionClient:  opts.ExecutionClient,
-		net:              opts.P2PNetwork,
-		storage:          opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:      qbftStorage,
-		dutyScheduler: duties.NewScheduler(logger, &duties.SchedulerOptions{
+	var dutyScheduler *duties.Scheduler
+	if shouldRunDutyScheduler(exporterOpts) {
+		// Prepare scheduler wiring; in exporter archive mode we swap to AllShares provider,
+		// a prefetching beacon adapter, and a no-op executor.
+		schedulerBeacon := duties.BeaconNode(opts.BeaconNode)
+		validatorProvider := duties.ValidatorProvider(selfValidatorStore)
+		dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
+
+		if exporterOpts.Enabled {
+			validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
+			dutyExecutor = duties.NewNoopExecutor()
+			schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
+		}
+
+		dutyScheduler = duties.NewScheduler(logger, &duties.SchedulerOptions{
 			Ctx:                     opts.Context,
 			BeaconNode:              schedulerBeacon,
 			ExecutionClient:         opts.ExecutionClient,
@@ -137,7 +132,21 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			SlotTickerProvider:      slotTickerProvider,
 			P2PNetwork:              opts.P2PNetwork,
 			ExporterMode:            exporterOpts.Enabled,
-		}),
+		})
+	}
+
+	node := &Node{
+		logger:           logger.Named(log.NameOperator),
+		validatorsCtrl:   opts.ValidatorController,
+		validatorOptions: opts.ValidatorOptions,
+		exporterOptions:  exporterOpts,
+		network:          opts.NetworkConfig,
+		consensusClient:  opts.BeaconNode,
+		executionClient:  opts.ExecutionClient,
+		net:              opts.P2PNetwork,
+		storage:          opts.ValidatorOptions.RegistryStorage,
+		qbftStorage:      qbftStorage,
+		dutyScheduler:    dutyScheduler,
 		feeRecipientCtrl: feeRecipientCtrl,
 
 		ws:           opts.WS,
@@ -170,8 +179,12 @@ func (n *Node) Start(ctx context.Context) error {
 
 	// Start the duty scheduler, and a background goroutine to crash the node
 	// in case there were any errors.
-	if err := n.dutyScheduler.Start(ctx); err != nil {
-		return fmt.Errorf("failed to run duty scheduler: %w", err)
+	if n.dutyScheduler != nil {
+		if err := n.dutyScheduler.Start(ctx); err != nil {
+			return fmt.Errorf("failed to run duty scheduler: %w", err)
+		}
+	} else if n.exporterOptions.Enabled && n.exporterOptions.Mode == exporter.ModeStandard {
+		n.logger.Info("exporter standard mode: skipping duty scheduler")
 	}
 
 	n.validatorsCtrl.StartNetworkHandlers()
@@ -241,8 +254,12 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
 
-	if err := n.dutyScheduler.Wait(); err != nil {
-		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
+	if n.dutyScheduler != nil {
+		if err := n.dutyScheduler.Wait(); err != nil {
+			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
+		}
+	} else {
+		<-ctx.Done()
 	}
 
 	if err := n.net.Close(); err != nil {
