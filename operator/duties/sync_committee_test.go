@@ -596,7 +596,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 		}
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-		require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.netCfg.Beacon.SlotDuration/3)*0.90))
+		require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.netCfg.SlotDuration/3)*0.90))
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()

@@ -901,7 +901,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 		}
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesExecutionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-		require.Less(t, time.Since(startTime), scheduler.netCfg.Beacon.SlotDuration/3)
+		require.Less(t, time.Since(startTime), scheduler.netCfg.SlotDuration/3)
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
@@ -971,7 +971,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 		}
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesExecutionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-		require.Less(t, time.Since(startTime), scheduler.netCfg.Beacon.SlotDuration/3)
+		require.Less(t, time.Since(startTime), scheduler.netCfg.SlotDuration/3)
 
 		// Stop scheduler & wait for graceful exit.
 		cancel()
