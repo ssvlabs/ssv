@@ -177,8 +177,7 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}()
 
-	// Start the duty scheduler, and a background goroutine to crash the node
-	// in case there were any errors.
+	// Start the duty scheduler in modes that use it.
 	if n.dutyScheduler != nil {
 		if err := n.dutyScheduler.Start(ctx); err != nil {
 			return fmt.Errorf("failed to run duty scheduler: %w", err)
