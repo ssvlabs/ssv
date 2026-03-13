@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
 
-	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/commons"
 )
 
 // UpdateSubnets updates subnets entry according to the given changes.

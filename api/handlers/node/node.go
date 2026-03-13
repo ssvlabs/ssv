@@ -9,10 +9,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/v2/api"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/records"
+	"github.com/ssvlabs/ssv/v2/nodeprobe"
 )
 
 type Node struct {

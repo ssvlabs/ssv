@@ -14,11 +14,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/pebble"
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
+	kv "github.com/ssvlabs/ssv/v2/storage/pebble"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 func TestEviction(t *testing.T) {

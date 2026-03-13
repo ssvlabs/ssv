@@ -6,7 +6,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/v2/network/topics/params"
 )
 
 // Implements GossipScoreIndex

@@ -12,9 +12,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 var ErrNotFound = errors.New("duty not found")

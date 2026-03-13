@@ -11,7 +11,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log"
 )
 
 func TestStreamCtrl(t *testing.T) {

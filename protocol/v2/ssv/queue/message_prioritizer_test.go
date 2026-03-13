@@ -16,9 +16,9 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/casts"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/message"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/utils/casts"
 )
 
 var messagePriorityTests = []struct {

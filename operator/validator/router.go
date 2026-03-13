@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/v2/network"
 )
 
 const bufSize = 65536

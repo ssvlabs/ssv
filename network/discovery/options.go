@@ -9,9 +9,9 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
-	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	compatible_logger "github.com/ssvlabs/ssv/v2/network/discovery/logger"
+	"github.com/ssvlabs/ssv/v2/observability/log"
 )
 
 var DefaultSSVProtocolID = [6]byte{'s', 's', 'v', 'd', 'v', '5'}

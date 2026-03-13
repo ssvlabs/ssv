@@ -10,10 +10,10 @@ import (
 	"github.com/oleiade/lane/v2"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/utils/async"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/discovery"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/utils/async"
 )
 
 func (n *p2pNetwork) startDiscovery() error {

@@ -14,10 +14,10 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/operator/slotticker"
+	mockslotticker "github.com/ssvlabs/ssv/v2/operator/slotticker/mocks"
 )
 
 const (

@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/beacon/goclient/mocks"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 func Test_computeVoluntaryExitDomain(t *testing.T) {

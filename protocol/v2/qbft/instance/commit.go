@@ -11,8 +11,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.

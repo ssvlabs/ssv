@@ -15,10 +15,10 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/casts"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/message"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/utils/casts"
 )
 
 func (mv *messageValidator) validateConsensusMessage(

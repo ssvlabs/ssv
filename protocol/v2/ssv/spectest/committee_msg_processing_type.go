@@ -20,12 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 type CommitteeSpecTest struct {

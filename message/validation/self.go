@@ -5,7 +5,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
 )
 
 func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.ValidationResult {

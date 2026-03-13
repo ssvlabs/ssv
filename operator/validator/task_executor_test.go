@@ -16,16 +16,16 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/utils/threshold"
+	ibftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	operatordatastore "github.com/ssvlabs/ssv/v2/operator/datastore"
+	"github.com/ssvlabs/ssv/v2/operator/validators"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/utils/threshold"
 )
 
 func TestController_LiquidateCluster(t *testing.T) {

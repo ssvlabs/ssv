@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/network/peers/connections/mock"
-	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/v2/network/peers/connections/mock"
+	"github.com/ssvlabs/ssv/v2/observability/log"
 )
 
 // TestHandshakeTestData is a test for testing data and mocks

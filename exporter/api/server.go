@@ -10,9 +10,9 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/utils/tasks"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/utils/tasks"
 )
 
 const (

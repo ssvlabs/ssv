@@ -9,7 +9,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	qbftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
 )
 
 // Message represents an exporter message

@@ -10,7 +10,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/v2/eth/contract"
 )
 
 // Event represents an eth1 event log in the system

@@ -13,17 +13,17 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/api"
-	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/exporter2"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
-	"github.com/ssvlabs/ssv/operator/validator"
-	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/api"
+	dutytracestore "github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/exporter2"
+	ibftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	dutytracer "github.com/ssvlabs/ssv/v2/operator/dutytracer"
+	"github.com/ssvlabs/ssv/v2/operator/validator"
+	registrystoragemocks "github.com/ssvlabs/ssv/v2/registry/storage/mocks"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 type validatorDutyKey struct {

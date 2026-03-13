@@ -11,15 +11,15 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/topics"
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/network/topics"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/network/p2p"
+	observabilityName      = "github.com/ssvlabs/ssv/v2/network/p2p"
 	observabilityNamespace = "ssv.p2p"
 )
 

@@ -3,7 +3,7 @@ package testing
 import (
 	"context"
 
-	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/v2/network"
 )
 
 // NetworkFactory is a generic factory for network instances

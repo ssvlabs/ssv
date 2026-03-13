@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	opstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	opstorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func TestMigration6ExitEpochField(t *testing.T) {

@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 type StartNewRunnerDutySpecTest struct {

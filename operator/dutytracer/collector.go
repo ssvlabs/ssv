@@ -19,17 +19,17 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	"github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/v2/operator/slotticker"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 type DecidedInfo struct {

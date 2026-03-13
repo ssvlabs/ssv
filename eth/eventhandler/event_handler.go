@@ -19,17 +19,17 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/eth/contract"
-	"github.com/ssvlabs/ssv/eth/eventparser"
-	"github.com/ssvlabs/ssv/eth/executionclient"
-	"github.com/ssvlabs/ssv/eth/localevents"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/metrics"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	nodestorage "github.com/ssvlabs/ssv/operator/storage"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/eth/contract"
+	"github.com/ssvlabs/ssv/v2/eth/eventparser"
+	"github.com/ssvlabs/ssv/v2/eth/executionclient"
+	"github.com/ssvlabs/ssv/v2/eth/localevents"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
+	operatordatastore "github.com/ssvlabs/ssv/v2/operator/datastore"
+	nodestorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 // Ethereum SSV network contract event names.

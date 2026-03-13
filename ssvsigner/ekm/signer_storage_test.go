@@ -17,11 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/utils/threshold"
 )
 
 func _byteArray(input string) []byte {

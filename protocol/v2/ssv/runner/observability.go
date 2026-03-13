@@ -12,12 +12,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	observabilityName      = "github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
 	observabilityNamespace = "ssv.runner"
 )
 

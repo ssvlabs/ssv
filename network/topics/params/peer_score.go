@@ -7,7 +7,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 const (

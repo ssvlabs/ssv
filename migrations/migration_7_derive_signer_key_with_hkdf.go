@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 var migration_7_derive_signer_key_with_hkdf = Migration{

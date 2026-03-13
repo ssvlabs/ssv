@@ -8,8 +8,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/v2/api"
+	"github.com/ssvlabs/ssv/v2/exporter"
 )
 
 // Decided represents a decided message within a duty trace.

@@ -6,7 +6,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
 )
 
 type signing interface {

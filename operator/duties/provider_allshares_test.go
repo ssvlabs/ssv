@@ -10,9 +10,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	types "github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/registry/storage/mocks"
+	types "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/registry/storage/mocks"
 )
 
 func TestAllSharesProviderDelegates(t *testing.T) {

@@ -1,5 +1,5 @@
 // Tools require their own go.mod because dependency versions conflict with ssv's dependencies
-module github.com/ssvlabs/ssv
+module github.com/ssvlabs/ssv/v2
 
 go 1.25
 

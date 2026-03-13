@@ -19,10 +19,10 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	registry "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/eth1"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 // signer_storage.go provides a concrete implementation of Storage (backed by

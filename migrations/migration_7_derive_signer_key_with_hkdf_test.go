@@ -15,11 +15,11 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/operator/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/operator/storage"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {

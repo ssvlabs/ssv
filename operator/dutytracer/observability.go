@@ -6,11 +6,11 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/operator/dutytracer"
+	observabilityName      = "github.com/ssvlabs/ssv/v2/operator/dutytracer"
 	observabilityNamespace = "ssv.dutytracer"
 )
 

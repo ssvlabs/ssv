@@ -8,8 +8,8 @@ import (
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 // slashing_protector.go provides SlashingProtector, a wrapper around

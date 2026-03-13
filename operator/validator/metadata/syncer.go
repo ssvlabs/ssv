@@ -13,13 +13,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	networkcommons "github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	networkcommons "github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 //go:generate go tool -modfile=../../../tool.mod mockgen -package=metadata -destination=./mocks.go -source=./syncer.go

@@ -13,8 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	networkconfig "github.com/ssvlabs/ssv/networkconfig"
-	slotticker "github.com/ssvlabs/ssv/operator/slotticker"
+	networkconfig "github.com/ssvlabs/ssv/v2/networkconfig"
+	slotticker "github.com/ssvlabs/ssv/v2/operator/slotticker"
 	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
 )

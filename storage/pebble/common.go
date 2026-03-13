@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func getter(key []byte, dbFetch func(key []byte) ([]byte, io.Closer, error)) (basedb.Obj, bool, error) {

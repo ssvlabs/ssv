@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/v2/eth/simulator/simcontract"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
 )
 
 var (

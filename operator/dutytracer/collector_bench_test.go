@@ -16,13 +16,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func BenchmarkTracer(b *testing.B) {

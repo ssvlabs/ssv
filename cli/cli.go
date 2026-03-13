@@ -6,8 +6,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/cli/bootnode"
-	"github.com/ssvlabs/ssv/cli/operator"
+	"github.com/ssvlabs/ssv/v2/cli/bootnode"
+	"github.com/ssvlabs/ssv/v2/cli/operator"
 )
 
 // RootCmd represents the root command of SSV CLI

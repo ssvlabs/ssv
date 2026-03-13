@@ -16,16 +16,16 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 
-	"github.com/ssvlabs/ssv/message/signatureverifier"
-	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/message/signatureverifier"
+	"github.com/ssvlabs/ssv/v2/message/validation"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/operator/duties/dutystore"
+	operatorstorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func TestMsgValidator(t *testing.T) {

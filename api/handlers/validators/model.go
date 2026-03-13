@@ -7,8 +7,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/api"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // Clusters represents clusters of operator IDs.

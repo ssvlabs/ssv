@@ -14,15 +14,15 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/store"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	registrymocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/store"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
+	registrymocks "github.com/ssvlabs/ssv/v2/registry/storage/mocks"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 // setCommitteeLink is a test helper that directly sets validator-to-committee links in the collector's in-memory map

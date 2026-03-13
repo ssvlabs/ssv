@@ -14,12 +14,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).

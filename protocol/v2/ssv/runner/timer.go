@@ -7,8 +7,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
 )
 
 type TimeoutF func(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF

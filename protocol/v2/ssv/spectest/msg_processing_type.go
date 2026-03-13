@@ -19,13 +19,13 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
+	ssvprotocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/ssv/testing"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 type MsgProcessingSpecTest struct {

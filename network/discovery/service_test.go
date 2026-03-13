@@ -13,9 +13,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/records"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 )
 
 func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig *networkconfig.Network) {

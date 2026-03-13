@@ -5,8 +5,8 @@ import (
 
 	crand "crypto/rand"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/v2/network/commons"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 

@@ -10,9 +10,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	ssvmessage "github.com/ssvlabs/ssv/v2/protocol/v2/message"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
 )
 
 // ConsensusFields provides details about the consensus for a message. It's used for logging and metrics.

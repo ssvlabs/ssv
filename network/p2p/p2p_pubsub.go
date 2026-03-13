@@ -14,11 +14,11 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	p2pprotocol "github.com/ssvlabs/ssv/v2/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
 )
 
 // committeeSubscriptionStatus reflects the state of committee subscription (whether we are subscribed to the

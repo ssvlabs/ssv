@@ -8,9 +8,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	qbftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 var db basedb.Database

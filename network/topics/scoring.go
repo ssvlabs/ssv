@@ -10,11 +10,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/topics/params"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/network/topics/params"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
 )
 
 // DefaultScoringConfig returns the default scoring config
@@ -131,7 +131,7 @@ func scoreInspector(logger *zap.Logger,
 			p7 := peerScores.BehaviourPenalty
 			w7 := peerScoreParams.BehaviourPenaltyWeight
 
-			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
+			// Short logs per topic https://github.com/ssvlabs/ssv/v2/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
 			if inspections%logFrequency != 0 {

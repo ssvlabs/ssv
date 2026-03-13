@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/v2/network/records"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.

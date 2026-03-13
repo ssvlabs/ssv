@@ -14,15 +14,15 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
 )
 
 type beaconNodeStatus string
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/beacon/goclient"
+	observabilityName      = "github.com/ssvlabs/ssv/v2/beacon/goclient"
 	observabilityNamespace = "ssv.cl"
 
 	statusUnknown beaconNodeStatus = "unknown"

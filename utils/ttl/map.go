@@ -3,7 +3,7 @@ package ttl
 import (
 	"time"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 // Map implements a thread-safe map with a sync.Map under the hood.

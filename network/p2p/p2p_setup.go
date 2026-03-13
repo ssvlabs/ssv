@@ -22,14 +22,14 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
-	p2pcommons "github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/peers/connections"
-	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/network/streams"
-	"github.com/ssvlabs/ssv/network/topics"
-	"github.com/ssvlabs/ssv/utils/commons"
+	p2pcommons "github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/discovery"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/network/peers/connections"
+	"github.com/ssvlabs/ssv/v2/network/records"
+	"github.com/ssvlabs/ssv/v2/network/streams"
+	"github.com/ssvlabs/ssv/v2/network/topics"
+	"github.com/ssvlabs/ssv/v2/utils/commons"
 )
 
 const (

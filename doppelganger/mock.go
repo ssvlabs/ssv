@@ -15,7 +15,7 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/ssvlabs/ssv/protocol/v2/types"
+	types "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 	gomock "go.uber.org/mock/gomock"
 )
 

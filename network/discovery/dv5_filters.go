@@ -8,7 +8,7 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/v2/network/records"
 )
 
 // limitNodeFilter returns true if the limit is exceeded

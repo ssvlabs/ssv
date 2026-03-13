@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/v2/nodeprobe"
 )
 
 // List of prober prober-nodes.

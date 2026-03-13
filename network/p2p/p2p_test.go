@@ -20,9 +20,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/networkconfig"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {

@@ -11,12 +11,12 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/metrics"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/metrics"
+	"github.com/ssvlabs/ssv/v2/operator/slotticker"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 //go:generate go tool -modfile=../tool.mod mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go

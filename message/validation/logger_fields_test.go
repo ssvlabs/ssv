@@ -10,7 +10,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
 )
 
 func TestBuildLoggerFields(t *testing.T) {

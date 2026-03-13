@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/v2/network/records"
 )
 
 func TestNetworkIDFilter(t *testing.T) {

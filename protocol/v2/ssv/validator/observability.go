@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	observabilityName      = "github.com/ssvlabs/ssv/v2/protocol/v2/ssv/validator"
 	observabilityNamespace = "ssv.validator"
 )
 

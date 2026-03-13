@@ -12,8 +12,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go

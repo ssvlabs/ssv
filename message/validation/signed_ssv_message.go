@@ -10,7 +10,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	ssvmessage "github.com/ssvlabs/ssv/v2/protocol/v2/message"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {

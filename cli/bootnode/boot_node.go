@@ -7,11 +7,11 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	globalcfg "github.com/ssvlabs/ssv/cli/config"
-	"github.com/ssvlabs/ssv/networkconfig"
-	ssvlog "github.com/ssvlabs/ssv/observability/log"
-	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
-	"github.com/ssvlabs/ssv/utils/commons"
+	globalcfg "github.com/ssvlabs/ssv/v2/cli/config"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	ssvlog "github.com/ssvlabs/ssv/v2/observability/log"
+	bootnode "github.com/ssvlabs/ssv/v2/utils/boot_node"
+	"github.com/ssvlabs/ssv/v2/utils/commons"
 )
 
 type config struct {

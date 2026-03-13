@@ -7,9 +7,9 @@ import (
 	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 
-	runnertesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	runnertesting "github.com/ssvlabs/ssv/v2/protocol/v2/ssv/testing"
 )
 
 type RunnerConstructionSpecTest struct {

@@ -3,7 +3,7 @@ package migrations
 import (
 	"fmt"
 
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 //go:generate go tool -modfile=../tool.mod sszgen -path ./migration_6_model.go --objs migration_6_OldStorageShare

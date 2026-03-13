@@ -8,10 +8,10 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	blindutil "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon/blind"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
 )
 
 func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType string) runner.Runner {

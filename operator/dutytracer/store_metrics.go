@@ -10,9 +10,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/exporter/store"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	"github.com/ssvlabs/ssv/v2/exporter/store"
 )
 
 type DutyTraceStoreMetrics struct {

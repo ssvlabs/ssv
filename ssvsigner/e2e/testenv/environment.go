@@ -12,13 +12,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 // TestEnvironment manages the complete E2E test infrastructure

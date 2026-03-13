@@ -14,7 +14,7 @@ import (
 	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )

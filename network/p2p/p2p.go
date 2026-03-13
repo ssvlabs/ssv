@@ -22,23 +22,23 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/peers/connections"
-	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/network/streams"
-	"github.com/ssvlabs/ssv/network/topics"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/utils/async"
-	"github.com/ssvlabs/ssv/utils/hashmap"
-	"github.com/ssvlabs/ssv/utils/tasks"
-	"github.com/ssvlabs/ssv/utils/ttl"
+	"github.com/ssvlabs/ssv/v2/message/validation"
+	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/network/discovery"
+	"github.com/ssvlabs/ssv/v2/network/peers"
+	"github.com/ssvlabs/ssv/v2/network/peers/connections"
+	"github.com/ssvlabs/ssv/v2/network/records"
+	"github.com/ssvlabs/ssv/v2/network/streams"
+	"github.com/ssvlabs/ssv/v2/network/topics"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	operatordatastore "github.com/ssvlabs/ssv/v2/operator/datastore"
+	operatorstorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	"github.com/ssvlabs/ssv/v2/utils/async"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/utils/tasks"
+	"github.com/ssvlabs/ssv/v2/utils/ttl"
 )
 
 // network states
@@ -465,7 +465,7 @@ func (n *p2pNetwork) isReady() bool {
 // NOTE: it won't subscribe to the subnets (use subscribeToFixedSubnets for that)
 func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
-	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
+	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/v2/pull/990
 	ticker := time.NewTicker(time.Second)
 	registeredSubnets := commons.Subnets{}
 	defer ticker.Stop()

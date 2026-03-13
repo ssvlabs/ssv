@@ -1,6 +1,6 @@
 package tasks
 
-import "github.com/ssvlabs/ssv/protocol/v2/queue"
+import "github.com/ssvlabs/ssv/v2/protocol/v2/queue"
 
 // Fn represents a function to execute
 type Fn = queue.Fn

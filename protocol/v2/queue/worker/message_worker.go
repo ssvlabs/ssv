@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
 )
 
 // MsgHandler func that receive message.SSVMessage to handle

@@ -6,8 +6,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/utils/casts"
+	"github.com/ssvlabs/ssv/v2/observability/log"
+	"github.com/ssvlabs/ssv/v2/utils/casts"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go

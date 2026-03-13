@@ -21,10 +21,10 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/operator/slotticker"
+	mockslotticker "github.com/ssvlabs/ssv/v2/operator/slotticker/mocks"
+	kv "github.com/ssvlabs/ssv/v2/storage/badger"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func TestRemoveSlot(t *testing.T) {

@@ -13,10 +13,10 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	registry "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/eth1"
+	registrystorage "github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 var (

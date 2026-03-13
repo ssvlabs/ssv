@@ -12,9 +12,9 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 func TestQBFTMapping(t *testing.T) {

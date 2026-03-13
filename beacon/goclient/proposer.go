@@ -24,8 +24,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/observability/traces"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
+	"github.com/ssvlabs/ssv/v2/observability/traces"
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -249,7 +249,7 @@ collect:
 				// that this is a MEV block; it is a reasonable assumption to make in
 				// the usual operating environment.
 				// Returning as soon as we fetch at least 1 MEV block is good enough,
-				// see https://github.com/ssvlabs/ssv/pull/2631#issuecomment-3678879204
+				// see https://github.com/ssvlabs/ssv/v2/pull/2631#issuecomment-3678879204
 				// Note: We may want to add an operator option to disable this behavior
 				// in the future.
 				break collect

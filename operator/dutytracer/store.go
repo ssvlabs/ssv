@@ -9,9 +9,9 @@ import (
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/exporter/rolemask"
-	"github.com/ssvlabs/ssv/utils/hashmap"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/exporter/rolemask"
+	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
 
 // ParticipantsRangeIndexEntry mirrors qbftstorage.ParticipantsRangeEntry but uses a validator index

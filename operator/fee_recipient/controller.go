@@ -9,11 +9,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/v2/operator/datastore"
+	"github.com/ssvlabs/ssv/v2/operator/slotticker"
+	beaconprotocol "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go

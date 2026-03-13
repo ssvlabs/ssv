@@ -10,8 +10,8 @@ import (
 	util "github.com/wealdtech/go-eth2-util"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/cli/flags"
-	ssvlog "github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/v2/cli/flags"
+	ssvlog "github.com/ssvlabs/ssv/v2/observability/log"
 )
 
 // exportKeysCmd is the command to export private/public keys based on given mnemonic

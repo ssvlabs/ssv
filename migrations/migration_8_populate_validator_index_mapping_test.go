@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	opstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	opstorage "github.com/ssvlabs/ssv/v2/operator/storage"
+	"github.com/ssvlabs/ssv/v2/registry/storage"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
 
 func TestMigration8PopulateValidatorIndexMapping(t *testing.T) {

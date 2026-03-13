@@ -8,7 +8,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise

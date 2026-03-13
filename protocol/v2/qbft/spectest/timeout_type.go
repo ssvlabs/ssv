@@ -11,9 +11,9 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 type SpecTest struct {

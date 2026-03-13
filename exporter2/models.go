@@ -5,8 +5,8 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/exporter"
+	"github.com/ssvlabs/ssv/v2/ibft/storage"
 )
 
 // DecidedsQuery defines the transport-agnostic parameters for decided traces

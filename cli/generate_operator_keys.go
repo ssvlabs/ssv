@@ -8,7 +8,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
-	ssvlog "github.com/ssvlabs/ssv/observability/log"
+	ssvlog "github.com/ssvlabs/ssv/v2/observability/log"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"

@@ -23,14 +23,14 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/v2/ibft/storage"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/v2/protocol/v2/ssv/testing"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 func TestSSVMapping(t *testing.T) {

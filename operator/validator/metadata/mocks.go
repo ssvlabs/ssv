@@ -12,10 +12,10 @@ package metadata
 import (
 	reflect "reflect"
 
-	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	types "github.com/ssvlabs/ssv/protocol/v2/types"
-	storage "github.com/ssvlabs/ssv/registry/storage"
-	basedb "github.com/ssvlabs/ssv/storage/basedb"
+	beacon "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
+	types "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	storage "github.com/ssvlabs/ssv/v2/registry/storage"
+	basedb "github.com/ssvlabs/ssv/v2/storage/basedb"
 	gomock "go.uber.org/mock/gomock"
 )
 

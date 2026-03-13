@@ -7,9 +7,9 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/traces"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/observability"
+	"github.com/ssvlabs/ssv/v2/observability/traces"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 // OnTimeout is trigger upon timeout for the given height

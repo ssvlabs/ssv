@@ -19,7 +19,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log"
+	"github.com/ssvlabs/ssv/v2/observability/log"
 )
 
 func TestNewMulti(t *testing.T) {

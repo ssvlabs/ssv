@@ -9,11 +9,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/api"
-	exporterHandlers "github.com/ssvlabs/ssv/api/handlers/exporter"
-	nodeHandlers "github.com/ssvlabs/ssv/api/handlers/node"
-	validatorsHandlers "github.com/ssvlabs/ssv/api/handlers/validators"
-	"github.com/ssvlabs/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/v2/api"
+	exporterHandlers "github.com/ssvlabs/ssv/v2/api/handlers/exporter"
+	nodeHandlers "github.com/ssvlabs/ssv/v2/api/handlers/node"
+	validatorsHandlers "github.com/ssvlabs/ssv/v2/api/handlers/validators"
+	"github.com/ssvlabs/ssv/v2/utils/commons"
 )
 
 // Server represents the HTTP API server for SSV.

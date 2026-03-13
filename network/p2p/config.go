@@ -18,13 +18,13 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
-	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/storage"
-	uc "github.com/ssvlabs/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/v2/message/validation"
+	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/network/commons"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/v2/operator/datastore"
+	"github.com/ssvlabs/ssv/v2/operator/storage"
+	uc "github.com/ssvlabs/ssv/v2/utils/commons"
 )
 
 const (

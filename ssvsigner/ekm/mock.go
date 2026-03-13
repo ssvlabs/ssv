@@ -7,7 +7,7 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/v2/storage/basedb"
 
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"

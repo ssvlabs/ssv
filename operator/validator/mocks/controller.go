@@ -13,11 +13,11 @@ import (
 	reflect "reflect"
 
 	types "github.com/ssvlabs/ssv-spec/types"
-	network "github.com/ssvlabs/ssv/network"
-	commons "github.com/ssvlabs/ssv/network/commons"
-	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
-	storage "github.com/ssvlabs/ssv/registry/storage"
-	basedb "github.com/ssvlabs/ssv/storage/basedb"
+	network "github.com/ssvlabs/ssv/v2/network"
+	commons "github.com/ssvlabs/ssv/v2/network/commons"
+	types0 "github.com/ssvlabs/ssv/v2/protocol/v2/types"
+	storage "github.com/ssvlabs/ssv/v2/registry/storage"
+	basedb "github.com/ssvlabs/ssv/v2/storage/basedb"
 	gomock "go.uber.org/mock/gomock"
 )
 

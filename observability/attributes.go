@@ -14,9 +14,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/observability/utils"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
-	protocolTypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/v2/observability/utils"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/message"
+	protocolTypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
 const (

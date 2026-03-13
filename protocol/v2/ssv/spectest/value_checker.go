@@ -15,9 +15,9 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/runner"
 )
 
 // ValCheckSpecTest wraps valcheck.SpecTest but uses our implementation's value checkers
