@@ -328,18 +328,18 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
 
-		if !cfg.ExporterOptions.Enabled && usingSSVSigner {
-			// Ensure the pubkey is saved on first run and never changes afterwards
-			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
-				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
-			}
-		} else if !cfg.ExporterOptions.Enabled {
-			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
-				logger.Fatal("could not save operator private key", zap.Error(err))
-			}
-		}
-
 		if !cfg.ExporterOptions.Enabled {
+			if usingSSVSigner {
+				// Ensure the pubkey is saved on first run and never changes afterwards
+				if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
+					logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
+				}
+			} else {
+				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
+					logger.Fatal("could not save operator private key", zap.Error(err))
+				}
+			}
+
 			logger.Info("successfully loaded operator keys", zap.String(fields.FieldPubKey, operatorPubKeyBase64))
 		}
 

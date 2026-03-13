@@ -182,7 +182,7 @@ func (n *Node) Start(ctx context.Context) error {
 		if err := n.dutyScheduler.Start(ctx); err != nil {
 			return fmt.Errorf("failed to run duty scheduler: %w", err)
 		}
-	} else if n.exporterOptions.Enabled && n.exporterOptions.Mode == exporter.ModeStandard {
+	} else {
 		n.logger.Info("exporter standard mode: skipping duty scheduler")
 	}
 
