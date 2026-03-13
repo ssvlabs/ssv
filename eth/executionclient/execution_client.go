@@ -3,6 +3,7 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync/atomic"
@@ -185,6 +186,9 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				ToBlock:   new(big.Int).SetUint64(toBlock),
 			}
 			results, err := ec.subdivideLogFetch(ctx, query)
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 			if err != nil {
 				errCh <- err
 				return
@@ -201,7 +205,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			select {
 			case <-ctx.Done():
-				errCh <- ctx.Err()
 				return
 
 			case <-ec.closed:

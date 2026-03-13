@@ -169,7 +169,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				for _, p := range peers {
 					// wait for messages
 					for ctxReadMessages.Err() == nil && p.getCount(commons.GetTopicFullName(committeeTopic(cid))) < minMsgCount {
-						time.Sleep(time.Millisecond * 100)
+						time.Sleep(time.Millisecond * 400)
 					}
 					require.NoError(t, ctxReadMessages.Err())
 					c := p.getCount(commons.GetTopicFullName(committeeTopic(cid)))

@@ -291,6 +291,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 		}
 	}
 	wg.Wait()
+
 	// let the nodes subscribe
 	for {
 		noPeers := false
@@ -301,7 +302,6 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 			}
 		}
 		if noPeers {
-			noPeers = false
 			time.Sleep(time.Second * 1)
 			continue
 		}

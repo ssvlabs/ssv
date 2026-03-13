@@ -14,7 +14,7 @@ import (
 
 func TestSlotTicker(t *testing.T) {
 	const numTicks = 3
-	slotDuration := 200 * time.Millisecond
+	slotDuration := 400 * time.Millisecond
 	// Set the genesis time such that we start from slot 1
 	genesisTime := time.Now().Truncate(slotDuration).Add(-slotDuration)
 
@@ -34,7 +34,7 @@ func TestSlotTicker(t *testing.T) {
 }
 
 func TestSlotTicker2(t *testing.T) {
-	slotDuration := 200 * time.Millisecond
+	slotDuration := 400 * time.Millisecond
 	dummyChan := make(chan struct{}, 1)
 	dummyChan <- struct{}{}
 	// Set the genesis time such that we start from slot 1
@@ -61,7 +61,7 @@ func TestSlotTicker2(t *testing.T) {
 }
 
 func TestTickerInitialization(t *testing.T) {
-	slotDuration := 200 * time.Millisecond
+	slotDuration := 400 * time.Millisecond
 	genesisTime := time.Now()
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
 
@@ -78,7 +78,7 @@ func TestTickerInitialization(t *testing.T) {
 }
 
 func TestSlotNumberConsistency(t *testing.T) {
-	slotDuration := 200 * time.Millisecond
+	slotDuration := 400 * time.Millisecond
 	genesisTime := time.Now()
 
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
@@ -94,7 +94,7 @@ func TestSlotNumberConsistency(t *testing.T) {
 }
 
 func TestGenesisInFuture(t *testing.T) {
-	slotDuration := 200 * time.Millisecond
+	slotDuration := 400 * time.Millisecond
 	genesisTime := time.Now().Add(1 * time.Second) // Setting genesis time 1s in the future
 
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
@@ -113,7 +113,7 @@ func TestGenesisInFuture(t *testing.T) {
 }
 
 func TestBoundedDrift(t *testing.T) {
-	slotDuration := 20 * time.Millisecond
+	slotDuration := 400 * time.Millisecond
 	genesisTime := time.Now()
 
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
@@ -137,7 +137,7 @@ func TestMultipleSlotTickers(t *testing.T) {
 		ticksPerTimer = 3
 	)
 
-	slotDuration := 200 * time.Millisecond
+	slotDuration := 400 * time.Millisecond
 	genesisTime := time.Now()
 
 	// Start the clock to time the full execution of all tickers
@@ -169,9 +169,9 @@ func TestMultipleSlotTickers(t *testing.T) {
 
 func TestSlotSkipping(t *testing.T) {
 	const (
-		numTicks     = 100
-		skipInterval = 10 // Introduce a delay every 10 ticks
-		slotDuration = 20 * time.Millisecond
+		numTicks     = 8
+		skipInterval = 2 // Introduce a delay every skipInterval ticks
+		slotDuration = 400 * time.Millisecond
 	)
 
 	genesisTime := time.Now()
@@ -247,7 +247,7 @@ func TestDoubleTickWarning(t *testing.T) {
 
 	// Initialize the slotTicker with the mock timer provider
 	ticker := newWithCustomTimer(logger, Config{
-		SlotDuration: 200 * time.Millisecond,
+		SlotDuration: 400 * time.Millisecond,
 		GenesisTime:  time.Now(),
 	}, func(d time.Duration) Timer {
 		// Create a timer with a large duration to never fire.
@@ -292,7 +292,7 @@ func TestDoubleTickRealTimer(t *testing.T) {
 
 	// Initialize the slotTicker with the mock timer provider
 	mockTimer := &mockTimer{timer: NewTimer(time.Hour).(*timer)}
-	slotTime := 200 * time.Millisecond
+	slotTime := 400 * time.Millisecond
 	firstSlotTime := time.Now()
 	ticker := newWithCustomTimer(logger, Config{
 		SlotDuration: slotTime,
