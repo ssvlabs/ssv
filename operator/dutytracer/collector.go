@@ -569,8 +569,12 @@ type partialSigVerifyCtx struct {
 func (c *Collector) newPartialSigVerifyCtx(msg *queue.SSVMessage, pSigMessages *spectypes.PartialSignatureMessages) partialSigVerifyCtx {
 	runnerRole := msg.MsgID.GetRoleType()
 	slot := pSigMessages.Slot
-	signer := ssvtypes.PartialSigMsgSigner(pSigMessages)
-	root := pSigMessages.Messages[0].SigningRoot
+	var signer spectypes.OperatorID
+	var root phase0.Root
+	if len(pSigMessages.Messages) > 0 {
+		signer = ssvtypes.PartialSigMsgSigner(pSigMessages)
+		root = pSigMessages.Messages[0].SigningRoot
+	}
 
 	logger := c.logger.With(
 		fields.MessageID(msg.MsgID),
