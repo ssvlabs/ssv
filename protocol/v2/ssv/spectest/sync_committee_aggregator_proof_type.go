@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -26,7 +25,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks, testingutils.TestingValidatorIndex)
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	v := ssvtesting.BaseValidator(logger, testingutils.KeySetForShare(share))
 	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)

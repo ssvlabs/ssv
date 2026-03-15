@@ -11,21 +11,43 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  spec-test:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup make
-        run: sudo apt-get update && sudo apt-get install make
-
       - name: Setup Go
+        id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.x"
+          go-version-file: go.mod
+          # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
+          # behavior is consistent across workflows.
+          cache: false
+
+      - name: Restore Go cache (spec)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-spec-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-spec-
+            ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-
+
+      - name: Cache generated spec artifacts
+        uses: actions/cache@v4
+        with:
+          path: .cache/spec-tests
+          key: ${{ runner.os }}-spec-artifacts-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-spec-artifacts-
 
       - name: Run spec tests
         run: make spec-test
+        env:
+          SSV_SPEC_CACHE_DIR: ${{ github.workspace }}/.cache/spec-tests
         timeout-minutes: 80

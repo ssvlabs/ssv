@@ -4,11 +4,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
+	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
@@ -92,4 +94,62 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 	}
 
 	return r
+}
+
+func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
+	if pr == nil || pr.BaseRunner == nil {
+		return
+	}
+	if state := pr.BaseRunner.State; state != nil {
+		state.DecidedValue = normalizeProposerConsensusValue(state.DecidedValue)
+		if state.RunningInstance != nil {
+			state.RunningInstance.StartValue = normalizeProposerConsensusValue(state.RunningInstance.StartValue)
+			if state.RunningInstance.State != nil {
+				state.RunningInstance.State.LastPreparedValue = normalizeProposerConsensusValue(state.RunningInstance.State.LastPreparedValue)
+				state.RunningInstance.State.DecidedValue = normalizeProposerConsensusValue(state.RunningInstance.State.DecidedValue)
+			}
+		}
+	}
+	if pr.BaseRunner.QBFTController == nil {
+		return
+	}
+	for _, inst := range pr.BaseRunner.QBFTController.StoredInstances {
+		if inst == nil {
+			continue
+		}
+		inst.StartValue = normalizeProposerConsensusValue(inst.StartValue)
+		if inst.State != nil {
+			inst.State.LastPreparedValue = normalizeProposerConsensusValue(inst.State.LastPreparedValue)
+			inst.State.DecidedValue = normalizeProposerConsensusValue(inst.State.DecidedValue)
+		}
+	}
+}
+
+func normalizeProposerConsensusValue(value []byte) []byte {
+	if len(value) == 0 {
+		return value
+	}
+	cd := &spectypes.ValidatorConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return value
+	}
+	vBlk, _, err := cd.GetBlockData()
+	if err != nil {
+		return value
+	}
+	blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
+	if err != nil {
+		return value
+	}
+	blindedDataSSZ, err := blindedMarshaler.MarshalSSZ()
+	if err != nil {
+		return value
+	}
+	cd.Version = blindedVBlk.Version
+	cd.DataSSZ = blindedDataSSZ
+	encoded, err := cd.Encode()
+	if err != nil {
+		return value
+	}
+	return encoded
 }

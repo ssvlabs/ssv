@@ -1,6 +1,6 @@
 module github.com/ssvlabs/ssv/scripts/differ
 
-go 1.24
+go 1.25
 
 require (
 	github.com/alecthomas/kong v0.7.1

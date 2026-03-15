@@ -2,6 +2,7 @@ package validation
 
 import (
 	"bytes"
+	"context"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
@@ -1809,6 +1810,30 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, "", peerID, receivedAt)
 		require.ErrorContains(t, err, ErrNilSSVMessage.Error())
+	})
+
+	t.Run("validate handles nil ssv message without panic", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage = nil
+
+		encoded, err := signedSSVMessage.Encode()
+		require.NoError(t, err)
+
+		topic := "ssv.v2.0"
+		pmsg := &pubsub.Message{
+			Message: &pspb.Message{
+				Data:  encoded,
+				Topic: &topic,
+			},
+		}
+
+		require.NotPanics(t, func() {
+			result := validator.Validate(context.Background(), peerID, pmsg)
+			require.Equal(t, pubsub.ValidationReject, result)
+		})
 	})
 
 	// Receive zero round

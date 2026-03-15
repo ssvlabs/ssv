@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -36,15 +37,21 @@ func TestTimeoutForRound(t *testing.T) {
 
 	for _, role := range roles {
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: <= quickTimeoutThreshold", role), func(t *testing.T) {
-			testTimeoutForRound(t, role, specqbft.Round(1))
+			synctest.Test(t, func(t *testing.T) {
+				testTimeoutForRound(t, role, specqbft.Round(1))
+			})
 		})
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: > quickTimeoutThreshold", role), func(t *testing.T) {
-			testTimeoutForRound(t, role, specqbft.Round(2))
+			synctest.Test(t, func(t *testing.T) {
+				testTimeoutForRound(t, role, specqbft.Round(2))
+			})
 		})
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: before elapsed", role), func(t *testing.T) {
-			testTimeoutForRoundElapsed(t, role, specqbft.Round(2))
+			synctest.Test(t, func(t *testing.T) {
+				testTimeoutForRoundElapsed(t, role, specqbft.Round(2))
+			})
 		})
 
 		// TODO: Decide if to make the proposer timeout deterministic
@@ -54,7 +61,9 @@ func TestTimeoutForRound(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: multiple synchronized timers", role), func(t *testing.T) {
-			testTimeoutForRoundMulti(t, role, specqbft.Round(1))
+			synctest.Test(t, func(t *testing.T) {
+				testTimeoutForRoundMulti(t, role, specqbft.Round(1))
+			})
 		})
 	}
 }

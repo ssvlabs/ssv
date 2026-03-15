@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -54,7 +53,7 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
 }
@@ -148,8 +147,13 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
+				consensusMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
+				if err != nil {
+					panic(err)
+				}
+				slot := phase0.Slot(consensusMsg.Height)
 				for _, validatorShare := range test.Runner.GetShares() {
-					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
+					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, slot)
 				}
 			}
 		}
@@ -185,6 +189,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	network := &spectestingutils.TestingNetwork{}
 	var beaconNetwork *protocoltesting.BeaconNodeWrapped
 	var committee []*spectypes.Operator
+	actualRunner := test.Runner
 
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
@@ -193,6 +198,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 			runnerInstance = runner
 			break
 		}
+		actualRunner = runnerInstance
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
 		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
 		committee = c.CommitteeMember.Committee
@@ -215,12 +221,18 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	assertRootsRelaxed(t, test.BeaconBroadcastedRoots, beaconNetwork.GetBroadcastedRoots())
 
 	// post root
-	postRoot, err := test.Runner.GetRoot()
+	if !test.DontStartDuty {
+		if proposerRunner, ok := actualRunner.(*runner.ProposerRunner); ok {
+			normalizeExpectedProposerStartValues(proposerRunner)
+		}
+	}
+	postRoot, err := actualRunner.GetRoot()
 	require.NoError(t, err)
 
-	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
-		diff := dumpState(t, test.Name, test.Runner, test.PostDutyRunnerState)
-		logger.Error("post runner state not equal", zap.String("state", diff))
+	actualPostRoot := hex.EncodeToString(postRoot[:])
+	if test.PostDutyRunnerStateRoot != actualPostRoot {
+		diff := dumpState(t, test.Name, actualRunner, test.PostDutyRunnerState)
+		require.EqualValues(t, test.PostDutyRunnerStateRoot, actualPostRoot, "post runner state not equal\n%s\n", diff)
 	}
 }
 
@@ -232,6 +244,11 @@ func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 
 func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name string, testType string) {
 	r := runnerForTest(t, test.Runner, name, testType)
+	if !test.DontStartDuty {
+		if proposerRunner, ok := r.(*runner.ProposerRunner); ok {
+			normalizeExpectedProposerStartValues(proposerRunner)
+		}
+	}
 
 	test.PostDutyRunnerState = r
 

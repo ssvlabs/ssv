@@ -22,9 +22,24 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.x"
+          go-version-file: ssvsigner/go.mod
+          cache: true
+          cache-dependency-path: ssvsigner/go.sum
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ssv-signer image (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ssvsigner/Dockerfile
+          tags: ssv-signer:latest
+          load: true
+          cache-from: type=gha,scope=ssvsigner-e2e
+          cache-to: type=gha,mode=max,scope=ssvsigner-e2e
 
       - name: Run SSV-Signer E2E tests
         run: |
           cd ssvsigner
-          make test-e2e
+          make test-e2e-no-build

@@ -1108,9 +1108,9 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			var done <-chan struct{}
 
 			if tc.expectIndicesChange {
-				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
+				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 400*time.Millisecond)
 			} else {
-				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
+				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 400*time.Millisecond)
 			}
 
 			require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
@@ -1175,15 +1175,16 @@ func prepareController(t *testing.T) (*Controller, *mocks.MockSharesStorage) {
 	mockValidatorsMap := validators.New(ctx)
 
 	validatorCtrl := &Controller{
-		ctx:               ctx,
-		beacon:            mockBeaconNode,
-		logger:            logger,
-		operatorDataStore: operatorDataStore,
-		operatorsStorage:  operatorsStorage,
-		sharesStorage:     mockSharesStorage,
-		validatorsMap:     mockValidatorsMap,
-		networkConfig:     networkconfig.TestNetwork,
-		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
+		ctx:                  ctx,
+		beacon:               mockBeaconNode,
+		logger:               logger,
+		operatorDataStore:    operatorDataStore,
+		operatorsStorage:     operatorsStorage,
+		sharesStorage:        mockSharesStorage,
+		validatorsMap:        mockValidatorsMap,
+		networkConfig:        networkconfig.TestNetwork,
+		indicesChangeCh:      make(chan struct{}, 1), // Buffered channel for each test
+		feeRecipientChangeCh: make(chan struct{}, 1), // Prevent timeout path in tests that trigger metadata updates
 		validatorCommonOpts: &validator.CommonOptions{
 			NetworkConfig: networkconfig.TestNetwork,
 		},
