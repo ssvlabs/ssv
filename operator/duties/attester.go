@@ -57,28 +57,22 @@ func (h *AttesterHandler) WaitShutdown() {
 // HandleDuties manages the duty lifecycle, handling different cases:
 //
 // On First Run:
-//  1. Fetch duties for the current epoch.
+//  1. If necessary, fetch duties for the current epoch.
 //  2. If necessary, fetch duties for the next epoch.
-//  3. Execute duties.
+//  3. Duties will be executed on the very next slot-tick.
 //
 // On Re-org:
-//
-//	If the previous dependent root changed:
-//	    1. Fetch duties for the current epoch.
-//	    2. Execute duties.
-//	If the current dependent root changed:
-//	    1. Execute duties.
-//	    2. If necessary, fetch duties for the next epoch.
-//
-// On Indices Change:
-//  1. Execute duties.
-//  2. EraseEpochData duties for the current epoch.
-//  3. Fetch duties for the current epoch.
-//  4. If necessary, fetch duties for the next epoch.
+//  1. Declare intents to fetch duties for the epochs affected by the reorg (depending on whether the
+//     previous or current dependent root changed).
+//  2. If necessary, fetch duties for the current/next epochs so they can be processed on the next slot-tick.
+//  3. Duties will be executed on the very next slot-tick.
 //
 // On Ticker event:
-//  1. Execute duties.
-//  2. If necessary, fetch duties for the next epoch.
+//  1. If necessary, fetch duties for the current epoch.
+//  2. Execute duties.
+//  3. If necessary, fetch duties for the next epoch.
+//  4. If necessary, process validator-indices changes by declaring the intents to fetch duties for the epochs
+//     affected by it, also potentially pre-fetching duties so they are ready for processing on the next slot-tick.
 func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -149,7 +143,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 					// epoch (the current epoch will have been passed upon the next slot-tick). Otherwise, pre-fetch &
 					// prepare the duties for the current epoch.
 					if h.atLastSlotOfCurrentEpoch() {
-						delete(h.dutyFetchIntents, currentEpoch) // prune irrelevant intent
+						delete(h.dutyFetchIntents, currentEpoch) // optimization: prune irrelevant intent
 						h.prepareNextEpoch(tickCtx, logger, currentEpoch, currentSlot)
 					} else {
 						h.prepareCurrentEpoch(tickCtx, logger, currentEpoch, currentSlot)
@@ -160,8 +154,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 					return
 				}
 
-				// 3. Schedule the duty-fetch for the next epoch, but only if it hasn't been scheduled already (or
-				// already fulfilled prior).
+				// 3. Schedule the duty-fetch for the next epoch, but only if it hasn't been scheduled already (also,
+				// already fulfilled intents need not be re-scheduled).
 				if _, ok := h.dutyFetchIntents[nextEpoch]; !ok {
 					h.dutyFetchIntents[nextEpoch] = false
 				}
@@ -197,8 +191,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// 1) Declare intents.
 				if !reorgEvent.Current {
 					// Reorg on the previous epoch means the duties for the current epoch might have changed, so
-					// we want to re-fetch them. We re-fetch immediately so that we have the correct duties to
-					// execute on the next tick.
+					// we want to re-fetch them.
 					h.dutyFetchIntents[reorgEpoch] = false
 				}
 				// Reorg on the previous or current epoch means the duties for the next epoch might have changed, so
@@ -207,10 +200,12 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 				// 2) Process certain intents immediately.
 				// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next epoch
-				// (the current epoch will have been passed upon the next slot-tick). Otherwise, pre-fetch & prepare
-				// the duties for the epochs affected by reorg.
+				// since the current epoch will have been passed upon the next slot-tick. Otherwise, we might need to
+				// pre-fetch & prepare the duties for the current epoch immediately since those might have been
+				// affected by this reorg (the next tick(s) will take care of the pre-fetch & prepare for the next
+				// epoch, if it was also affected by this reorg).
 				if h.atLastSlotOfCurrentEpoch() {
-					delete(h.dutyFetchIntents, currentEpoch) // prune irrelevant intent
+					delete(h.dutyFetchIntents, currentEpoch) // optimization: prune irrelevant intent
 					h.prepareNextEpoch(reorgCtx, logger, currentEpoch, currentSlot)
 				} else {
 					h.prepareCurrentEpoch(reorgCtx, logger, currentEpoch, currentSlot)
@@ -246,7 +241,7 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 	// right away in that case since we'll need to be able to execute those duties on the next tick - the tick
 	// corresponding to the 1st slot of the next epoch.
 	if h.atLastSlotOfCurrentEpoch() {
-		delete(h.dutyFetchIntents, currentEpoch) // prune irrelevant intent
+		delete(h.dutyFetchIntents, currentEpoch) // optimization: prune irrelevant intent
 		h.prepareNextEpoch(initCtx, logger, currentEpoch, currentSlot)
 	} else {
 		h.prepareCurrentEpoch(initCtx, logger, currentEpoch, currentSlot)
