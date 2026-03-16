@@ -171,13 +171,15 @@ var StartNodeCmd = &cobra.Command{
 		logger := zap.L()
 		defer ssvlog.CapturePanic(logger)
 
-		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
-
 		defer func() {
-			if err = observabilityShutdown(cmd.Context()); err != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err = observabilityShutdown(shutdownCtx); err != nil {
 				logger.Error("could not shutdown observability stack", zap.Error(err))
 			}
 		}()
+
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		ssvNetworkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
