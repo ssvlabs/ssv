@@ -98,15 +98,10 @@ var (
 			observability.InstrumentName(observabilityNamespace, "client.init"),
 			metric.WithDescription("number of times a client was initialized")))
 
-	bloomRecoveryCounter = metrics.New(
+	bloomCheckCounter = metrics.New(
 		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "bloom.recoveries"),
-			metric.WithDescription("number of times bloom cross-check recovered missing events from the execution client")))
-
-	bloomFalsePositiveCounter = metrics.New(
-		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "bloom.false_positives"),
-			metric.WithDescription("number of bloom filter false positives where bloom matched but no contract events existed")))
+			observability.InstrumentName(observabilityNamespace, "bloom.checks"),
+			metric.WithDescription("number of bloom cross-check outcomes by type")))
 )
 
 func recordRequest(
@@ -248,10 +243,14 @@ func executionClientInitStatusAttribute(value bool) attribute.KeyValue {
 	return attribute.Bool(eventNameAttrName, value)
 }
 
+func bloomOutcomeAttribute(outcome string) attribute.KeyValue {
+	return attribute.String(fmt.Sprintf("%s.bloom.outcome", observabilityNamespace), outcome)
+}
+
 func recordBloomRecovery(ctx context.Context) {
-	bloomRecoveryCounter.Add(ctx, 1)
+	bloomCheckCounter.Add(ctx, 1, metric.WithAttributes(bloomOutcomeAttribute("recovery")))
 }
 
 func recordBloomFalsePositive(ctx context.Context) {
-	bloomFalsePositiveCounter.Add(ctx, 1)
+	bloomCheckCounter.Add(ctx, 1, metric.WithAttributes(bloomOutcomeAttribute("false_positive")))
 }

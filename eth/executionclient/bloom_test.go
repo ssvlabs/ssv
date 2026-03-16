@@ -102,8 +102,11 @@ func TestBloomCrossCheck_RecoversMissingLogs(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
-	logsCh, errCh, err := client.FetchHistoricalLogs(t.Context(), 0)
+	// Use fetchLogsInBatches directly with verifyBloom=true (FetchHistoricalLogs skips bloom checks).
+	currentBlock, err := client.client.BlockNumber(t.Context())
 	require.NoError(t, err)
+
+	logsCh, errCh := client.fetchLogsInBatches(t.Context(), 0, currentBlock, true)
 
 	allLogs := make([]ethtypes.Log, 0, totalBlocks)
 	for block := range logsCh {
@@ -268,8 +271,11 @@ func TestBloomCrossCheck_RetryExhausted(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
-	logsCh, errCh, err := client.FetchHistoricalLogs(t.Context(), 0)
+	// Use fetchLogsInBatches directly with verifyBloom=true (FetchHistoricalLogs skips bloom checks).
+	currentBlock, err := client.client.BlockNumber(t.Context())
 	require.NoError(t, err)
+
+	logsCh, errCh := client.fetchLogsInBatches(t.Context(), 0, currentBlock, true)
 
 	// Drain logsCh — should close quickly because of error.
 	for range logsCh {

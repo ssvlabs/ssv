@@ -145,14 +145,14 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, nil, ErrNothingToSync
 	}
 
-	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+	logsCh, errsCh = ec.fetchLogsInBatches(ctx, fromBlock, toBlock, false)
 	return
 }
 
 // Calls FilterLogs multiple times (in batches) gradually sending the results on logCh to avoid fetching
 // an enormous number of events. If an error is encountered, the fetching terminates and the error is sent
 // on errCh. Both logCh and errCh are closed upon this function termination.
-func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (logCh chan BlockLogs, errCh chan error) {
+func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64, verifyBloom bool) (logCh chan BlockLogs, errCh chan error) {
 	// All errors are buffered so we don't block the execution of this func (waiting on the caller to
 	// handle the error before we can continue further) + it provides more flexibility for the caller
 	// allowing him to process logCh before continuing to checking the errCh channel.
@@ -195,10 +195,14 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			// Verify each block's logs against its bloom filter.
-			results, err = ec.verifyLogsWithBloom(ctx, results, fromBlock, toBlock)
-			if err != nil {
-				errCh <- err
-				return
+			// Only enabled for streaming (near chain tip) where the Geth bug is most impactful.
+			// Skipped during historical sync to avoid ~200 extra header RPCs per batch.
+			if verifyBloom {
+				results, err = ec.verifyLogsWithBloom(ctx, results, fromBlock, toBlock)
+				if err != nil {
+					errCh <- err
+					return
+				}
 			}
 
 			ec.logger.Info("fetched registry events",
@@ -504,7 +508,7 @@ func (ec *ExecutionClient) streamLogsToChan(
 				continue
 			}
 
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock, true)
 			for block := range logStream {
 				logCh <- block
 				progressed = true
