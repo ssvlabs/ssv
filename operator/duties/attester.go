@@ -164,6 +164,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case reorgEvent := <-h.reorg:
 			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			nextEpoch := currentEpoch + 1
 
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
 			logger := h.logger.With(
@@ -186,17 +187,15 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
 				defer cancel()
 
-				reorgEpoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
-
 				// 1) Declare intents.
 				if !reorgEvent.Current {
 					// Reorg on the previous epoch means the duties for the current epoch might have changed, so
 					// we want to re-fetch them.
-					h.dutyFetchIntents[reorgEpoch] = false
+					h.dutyFetchIntents[currentEpoch] = false
 				}
 				// Reorg on the previous or current epoch means the duties for the next epoch might have changed, so
 				// we want to re-fetch them.
-				h.dutyFetchIntents[reorgEpoch+1] = false
+				h.dutyFetchIntents[nextEpoch] = false
 
 				// 2) Process certain intents immediately.
 				// When at epoch boundary, we only care about pre-fetching & preparing the duties for the next epoch
@@ -223,6 +222,7 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 
 	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	nextEpoch := currentEpoch + 1
 
 	buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
 	logger := h.logger.With(
@@ -233,7 +233,7 @@ func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
 
 	// 1) Declare intents.
 	h.dutyFetchIntents[currentEpoch] = false
-	h.dutyFetchIntents[currentEpoch+1] = false
+	h.dutyFetchIntents[nextEpoch] = false
 
 	// 2) Process certain intents immediately.
 	// At the last slot of current epoch we don't fetch duties for the current epoch because we likely won't
