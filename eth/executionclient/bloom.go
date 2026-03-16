@@ -2,7 +2,9 @@ package executionclient
 
 import (
 	"context"
+	"fmt"
 	"math/big"
+	"sort"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -23,6 +25,7 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 		blocksWithLogs[logs[i].BlockNumber] = true
 	}
 
+	recovered := false
 	for blockNum := fromBlock; blockNum <= toBlock; blockNum++ {
 		if blocksWithLogs[blockNum] {
 			continue // block already has logs, nothing to verify
@@ -30,7 +33,7 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 
 		header, err := ec.HeaderByNumber(ctx, new(big.Int).SetUint64(blockNum))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("bloom check: fetch header for block %d: %w", blockNum, err)
 		}
 
 		if !header.Bloom.Test(ec.contractAddress.Bytes()) {
@@ -38,27 +41,38 @@ func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethty
 		}
 
 		// Bloom matched but FilterLogs returned nothing — suspected EL bug.
-		ec.logger.Warn("bloom filter mismatch: block bloom matches contract but no logs returned, retrying",
+		ec.logger.Warn("bloom filter mismatch during block-logs fetching: block bloom matches contract but EL returned no logs for this block, gonna retry to fetch block-logs for this specific block",
 			fields.BlockNumber(blockNum),
 			zap.String("contract", ec.contractAddress.Hex()),
 		)
 
-		recovered, err := ec.retryBlockLogs(ctx, blockNum)
+		blockLogs, err := ec.retryBlockLogs(ctx, blockNum)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("bloom check: retry block %d logs: %w", blockNum, err)
 		}
 
-		if len(recovered) > 0 {
+		if len(blockLogs) > 0 {
 			ec.logger.Warn("bloom cross-check recovered missing events",
 				fields.BlockNumber(blockNum),
-				zap.Int("recovered_events", len(recovered)),
+				zap.Int("recovered_events", len(blockLogs)),
 			)
 			recordBloomRecovery(ctx)
-			logs = append(logs, recovered...)
+			logs = append(logs, blockLogs...)
+			recovered = true
 		} else {
 			// Bloom false positive — address was in bloom but no actual logs for our contract.
 			recordBloomFalsePositive(ctx)
 		}
+	}
+
+	// Re-sort if we appended recovered logs so downstream receives them in block/tx order.
+	if recovered {
+		sort.Slice(logs, func(i, j int) bool {
+			if logs[i].BlockNumber != logs[j].BlockNumber {
+				return logs[i].BlockNumber < logs[j].BlockNumber
+			}
+			return logs[i].TxIndex < logs[j].TxIndex
+		})
 	}
 
 	return logs, nil
@@ -93,7 +107,7 @@ func (ec *ExecutionClient) retryBlockLogs(ctx context.Context, blockNumber uint6
 				zap.Error(err),
 			)
 			if attempt == DefaultBloomRetryAttempts {
-				return nil, err
+				return nil, fmt.Errorf("bloom retry: filter logs for block %d: %w", blockNumber, err)
 			}
 			continue
 		}
