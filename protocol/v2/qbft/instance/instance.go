@@ -1,25 +1,28 @@
 package instance
 
 import (
-	"context"
-	"encoding/hex"
-	"encoding/json"
+    "context"
+    "encoding/hex"
+    "encoding/json"
+    "os"
+    "strconv"
+    "time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
+    "github.com/attestantio/go-eth2-client/spec/phase0"
+    "github.com/pkg/errors"
+    specqbft "github.com/ssvlabs/ssv-spec/qbft"
+    spectypes "github.com/ssvlabs/ssv-spec/types"
+    "go.opentelemetry.io/otel/attribute"
+    "go.opentelemetry.io/otel/codes"
+    "go.opentelemetry.io/otel/trace"
+    "go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+    "github.com/ssvlabs/ssv/observability"
+    "github.com/ssvlabs/ssv/observability/log"
+    "github.com/ssvlabs/ssv/observability/log/fields"
+    "github.com/ssvlabs/ssv/protocol/v2/qbft"
+    "github.com/ssvlabs/ssv/protocol/v2/ssv"
+    ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
@@ -110,13 +113,26 @@ func (i *Instance) Start(
 	i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 	i.metrics.StartStage(stageProposal)
 
-	// propose if this node is the proposer
-	if proposerID == i.State.CommitteeMember.OperatorID {
-		proposal, err := i.CreateProposal(i.StartValue, nil, nil)
-		if err != nil {
-			logger.Warn("❗ failed to create proposal", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
+    // propose if this node is the proposer
+    if proposerID == i.State.CommitteeMember.OperatorID {
+        // Optional: induce a legitimate round change by delaying the round-1 leader's proposal.
+        // Enabled by setting env var SSV_INDUCE_R1_DELAY_MS to a positive integer (milliseconds)
+        // on selected nodes (e.g., nodes 7 and 8). Only applies at round 1 start.
+        if d := os.Getenv("SSV_INDUCE_R1_DELAY_MS"); d != "" {
+            if ms, err := strconv.Atoi(d); err == nil && ms > 0 {
+                i.logger.Debug("⏱ inducing artificial delay before round-1 proposal",
+                    zap.Int("delay_ms", ms),
+                    zap.Uint64("operator", i.State.CommitteeMember.OperatorID),
+                )
+                time.Sleep(time.Duration(ms) * time.Millisecond)
+            }
+        }
+
+        proposal, err := i.CreateProposal(i.StartValue, nil, nil)
+        if err != nil {
+            logger.Warn("❗ failed to create proposal", zap.Error(err))
+            span.SetStatus(codes.Error, err.Error())
+            return
 			// TODO align spec to add else to avoid broadcast errored proposal
 		}
 
