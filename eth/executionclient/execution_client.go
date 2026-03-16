@@ -194,6 +194,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				return
 			}
 
+			// Verify each block's logs against its bloom filter.
+			results, err = ec.verifyLogsWithBloom(ctx, results, fromBlock, toBlock)
+			if err != nil {
+				errCh <- err
+				return
+			}
+
 			ec.logger.Info("fetched registry events",
 				fields.FromBlock(fromBlock),
 				fields.ToBlock(toBlock),
