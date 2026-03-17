@@ -14,6 +14,7 @@ import (
 
 type dutyHandler interface {
 	Setup(
+		ctx context.Context,
 		name string,
 		logger *zap.Logger,
 		beaconNode BeaconNode,
@@ -33,7 +34,11 @@ type dutyHandler interface {
 }
 
 type baseHandler struct {
-	logger              *zap.Logger
+	logger *zap.Logger
+
+	// ctx controls the lifetime of all go-routines spawned by baseHandler.
+	ctx context.Context
+
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	beaconConfig        *networkconfig.Beacon
@@ -49,6 +54,7 @@ type baseHandler struct {
 }
 
 func (h *baseHandler) Setup(
+	ctx context.Context,
 	name string,
 	logger *zap.Logger,
 	beaconNode BeaconNode,
@@ -62,6 +68,7 @@ func (h *baseHandler) Setup(
 	indicesChange chan struct{},
 ) {
 	h.logger = logger.With(zap.String("handler", name))
+	h.ctx = ctx
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient
 	h.beaconConfig = beaconConfig

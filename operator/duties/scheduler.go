@@ -204,6 +204,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		reorgFeed.Subscribe(reorgCh)
 
 		handler.Setup(
+			ctx,
 			handler.Name(),
 			s.logger,
 			s.beaconNode,

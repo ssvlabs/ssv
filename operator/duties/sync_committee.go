@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils"
 )
 
 type SyncCommitteeHandler struct {
@@ -340,11 +339,8 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
-		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+		subscriptionCtx, cancel := context.WithCancel(h.ctx)
 		defer cancel()
-		if !withDeadline {
-			h.logger.Warn("parent-context has no deadline set")
-		}
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to subscribe sync committee to subnet", zap.Error(err))

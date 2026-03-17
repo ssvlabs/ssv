@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils"
 )
 
 type AttesterHandler struct {
@@ -183,7 +182,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// reorgCtx ensures we never take too long to process the reorg (we don't want to prevent the
 				// slot-ticker from executing duties even if some of them might not be up to date). Since the
 				// reorg can happen closer to the end of the current slot we wouldn't want to set the deadline
-				// to currentSlot+1 as that's gonna be too short (hence setting it to currentSlot+2).
+				// to currentSlot+1 as that might be too short (hence setting it to currentSlot+2).
 				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
 				defer cancel()
 
@@ -417,11 +416,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
-		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+		subscriptionCtx, cancel := context.WithCancel(h.ctx)
 		defer cancel()
-		if !withDeadline {
-			h.logger.Warn("parent-context has no deadline set")
-		}
 
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to submit beacon committee subscription", zap.Error(err))
