@@ -160,7 +160,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		span.AddEvent("process validator message = consensus message")
 
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok {
+		if !ok || qbftMsg == nil {
 			return fmt.Errorf("could not decode consensus message from network message")
 		}
 		if err := qbftMsg.Validate(); err != nil {

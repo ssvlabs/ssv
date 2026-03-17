@@ -568,7 +568,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		subMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok {
+		if !ok || subMsg == nil {
 			return nil
 		}
 

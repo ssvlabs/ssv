@@ -111,7 +111,7 @@ func (c *Committee) ConsumeQueue(
 			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.Message)
-				if !ok {
+				if !ok || sm == nil {
 					return m.MsgType != spectypes.SSVPartialSignatureMsgType
 				}
 
@@ -278,13 +278,16 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	logger = logger.With(fields.MessageType(msgType))
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		qbftMsg := msg.Body.(*specqbft.Message)
+		qbftMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok || qbftMsg == nil {
+			return nil, fmt.Errorf("invalid qbft msg body, type: %T", msg.Body)
+		}
 		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
 	}
 	if msg.MsgType == message.SSVEventMsgType {
 		eventMsg, ok := msg.Body.(*types.EventMsg)
-		if !ok {
-			return nil, fmt.Errorf("could not decode event message")
+		if !ok || eventMsg == nil {
+			return nil, fmt.Errorf("invalid event msg body, type: %T", msg.Body)
 		}
 		if eventMsg.Type == types.Timeout {
 			timeoutData, err := eventMsg.GetTimeoutData()

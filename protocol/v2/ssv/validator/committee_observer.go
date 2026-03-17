@@ -381,8 +381,8 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 	}
 
 	qbftMsg, ok := msg.Body.(*specqbft.Message)
-	if !ok {
-		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
+	if !ok || qbftMsg == nil {
+		return fmt.Errorf("invalid qbft msg body, type: %T", msg.Body)
 	}
 
 	bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}

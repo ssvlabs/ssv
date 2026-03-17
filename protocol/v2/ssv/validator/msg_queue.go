@@ -42,12 +42,20 @@ func mKey(msg *queue.SSVMessage, logger *zap.Logger) messageKey {
 		return idUndefined
 	}
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		sm := msg.Body.(*specqbft.Message)
+		sm, ok := msg.Body.(*specqbft.Message)
+		if !ok || sm == nil {
+			logger.Error("mKey: invalid qbft msg body", zap.String("type", fmt.Sprintf("%T", msg.Body)))
+			return idUndefined
+		}
 		signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
 		return messageKey(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers))
 	}
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		psm, ok := msg.Body.(*spectypes.PartialSignatureMessages)
+		if !ok || psm == nil {
+			logger.Error("mKey: invalid partial-sig msg body", zap.String("type", fmt.Sprintf("%T", msg.Body)))
+			return idUndefined
+		}
 		signer := fmt.Sprintf("%d", ssvtypes.PartialSigMsgSigner(psm)) // same signer for all messages
 		return messageKey(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer))
 	}
@@ -58,19 +66,29 @@ func logWithMessageMetadata(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logg
 	logger = logger.With(fields.MessageType(msg.MsgType))
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		qbftMsg := msg.Body.(*specqbft.Message)
+		qbftMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok || qbftMsg == nil {
+			logger.Error("logWithMessageMetadata: invalid qbft msg body", zap.String("type", fmt.Sprintf("%T", msg.Body)))
+			return logger
+		}
 		logger = logger.With(
 			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		)
+		return logger
 	}
 
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		psm, ok := msg.Body.(*spectypes.PartialSignatureMessages)
+		if !ok || psm == nil {
+			logger.Error("logWithMessageMetadata: invalid partial-sig msg body", zap.String("type", fmt.Sprintf("%T", msg.Body)))
+			return logger
+		}
 		logger = logger.With(
 			zap.Uint64("partial_sig_msg_type", uint64(psm.Type)),
 			zap.Uint64("signer", ssvtypes.PartialSigMsgSigner(psm)),
 		)
+		return logger
 	}
 
 	return logger
