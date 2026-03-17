@@ -165,7 +165,11 @@ func (v *Validator) StartQueueConsumer(
 				continue
 			}
 
-			msgKey := v.mKey(msg)
+			msgKey, err := v.mKey(msg)
+			if err != nil {
+				v.logger.Error("couldn't build msgKey, dropping message", zap.Error(err))
+				continue
+			}
 
 			var msgState *messageProcessingState
 			msgStateItem := msgStates.Get(msgKey)
@@ -315,12 +319,12 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	if msg.MsgType == message.SSVEventMsgType {
 		eventMsg, ok := msg.Body.(*types.EventMsg)
 		if !ok || eventMsg == nil {
-			return nil, fmt.Errorf("invalid event msg body, type: %T", msg.Body)
+			return nil, fmt.Errorf("event message: invalid msg body, type: %T", msg.Body)
 		}
 		if eventMsg.Type == types.Timeout {
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
-				return nil, fmt.Errorf("get timeout data: %w", err)
+				return nil, fmt.Errorf("event message: get timeout data: %w", err)
 			}
 			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
 		}
@@ -330,6 +334,6 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 }
 
 // mKey is a wrapper that provides a logger to report errors (if any).
-func (v *Validator) mKey(msg *queue.SSVMessage) messageKey {
-	return mKey(msg, v.logger)
+func (v *Validator) mKey(msg *queue.SSVMessage) (messageKey, error) {
+	return mKey(msg)
 }
