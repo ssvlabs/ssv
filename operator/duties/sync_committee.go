@@ -92,50 +92,65 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			h.processExecution(ctx, period, slot)
-			h.processFetching(ctx, epoch, period, true)
+			func() {
+				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
+				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
+				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				defer cancel()
+
+				h.processExecution(tickCtx, currentPeriod, currentSlot)
+				h.processFetching(tickCtx, currentEpoch, currentPeriod, true)
+			}()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
 			periodSlots := h.slotsPerPeriod()
-			if uint64(slot)%periodSlots == periodSlots-h.preparationSlots-1 {
+			if uint64(currentSlot)%periodSlots == periodSlots-h.preparationSlots-1 {
 				h.fetchNextPeriod = true
 			}
 
 			// last slot of period
-			if slot == h.beaconConfig.LastSlotOfSyncPeriod(period) {
-				h.duties.Reset(period - 1)
+			if currentSlot == h.beaconConfig.LastSlotOfSyncPeriod(currentPeriod) {
+				h.duties.Reset(currentPeriod - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
-			epoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
-			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
+			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
-			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot) {
-				h.duties.Reset(period + 1)
+			if reorgEvent.Current && h.shouldFetchNextPeriod(currentSlot) {
+				h.duties.Reset(currentPeriod + 1)
 				h.fetchNextPeriod = true
 			}
 
 		case <-h.indicesChange:
-			slot := h.beaconConfig.EstimatedCurrentSlot()
-			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔁 indices change received", zap.String("period_epoch_slot_pos", buildStr))
 
 			h.fetchCurrentPeriod = true
 
 			// reset next period duties if in appropriate slot range
-			if h.shouldFetchNextPeriod(slot) {
+			if h.shouldFetchNextPeriod(currentSlot) {
 				h.fetchNextPeriod = true
 			}
 		}
@@ -159,9 +174,9 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 		h.fetchNextPeriod = true
 	}
 
-	epoch := h.beaconConfig.EstimatedCurrentEpoch()
-	period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, epoch, period, false)
+	currentEpoch := h.beaconConfig.EstimatedCurrentEpoch()
+	currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+	h.processFetching(ctx, currentEpoch, currentPeriod, false)
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {

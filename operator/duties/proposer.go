@@ -69,34 +69,47 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			if h.fetchFirst {
-				h.fetchFirst = false
-				h.indicesChanged = false
-				h.processFetching(ctx, currentEpoch)
-				h.processExecution(ctx, currentEpoch, slot)
-			} else {
-				h.processExecution(ctx, currentEpoch, slot)
-				if h.indicesChanged {
+			func() {
+				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
+				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
+				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
+				defer cancel()
+
+				if h.fetchFirst {
+					h.fetchFirst = false
 					h.indicesChanged = false
-					h.processFetching(ctx, currentEpoch)
+					h.processFetching(tickCtx, currentEpoch)
+					h.processExecution(tickCtx, currentEpoch, currentSlot)
+				} else {
+					h.processExecution(tickCtx, currentEpoch, currentSlot)
+					if h.indicesChanged {
+						h.indicesChanged = false
+						h.processFetching(tickCtx, currentEpoch)
+					}
 				}
-			}
+			}()
 
 			// last slot of epoch
-			if uint64(slot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
+			if uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
 				h.duties.EraseEpochData(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
+			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
@@ -106,9 +119,11 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case <-h.indicesChange:
-			slot := h.beaconConfig.EstimatedCurrentSlot()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
 			h.indicesChanged = true
