@@ -53,7 +53,7 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 		if eventMsg.Type == ssvtypes.Timeout {
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
-				return mKeyUndefined, fmt.Errorf("get timeout data: %w", err)
+				return mKeyUndefined, fmt.Errorf("event message: get timeout data: %w", err)
 			}
 			round = uint64(timeoutData.Round)
 		}
@@ -70,7 +70,7 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok || psm == nil {
-			return mKeyUndefined, fmt.Errorf("invalid partial-sig msg body, type: %T", msg.Body)
+			return mKeyUndefined, fmt.Errorf("partial-sig message: invalid msg body, type: %T", msg.Body)
 		}
 		signer := fmt.Sprintf("%d", ssvtypes.PartialSigMsgSigner(psm)) // same signer for all messages
 		return messageKey(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer)), nil
