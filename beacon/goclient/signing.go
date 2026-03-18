@@ -82,8 +82,9 @@ func (gc *GoClient) DomainData(
 			return cached.Value(), nil
 		}
 
+		fetchCtx := context.WithoutCancel(ctx)
 		start := time.Now()
-		data, err := gc.multiClient.Domain(ctx, domain, epoch)
+		data, err := gc.multiClient.Domain(fetchCtx, domain, epoch)
 		recordRequest(ctx, gc.log, "Domain", gc.multiClient, http.MethodGet, true, time.Since(start), err)
 		if err != nil {
 			return phase0.Domain{}, errMultiClient(fmt.Errorf("fetch domain: %w", err), "Domain")

@@ -20,13 +20,13 @@ import (
 type countingMultiClient struct {
 	MultiClient
 	domainCalls atomic.Int32
-	onDomain    func()
+	onDomain    func(context.Context)
 }
 
 func (c *countingMultiClient) Domain(ctx context.Context, domainType phase0.DomainType, epoch phase0.Epoch) (phase0.Domain, error) {
 	c.domainCalls.Add(1)
 	if c.onDomain != nil {
-		c.onDomain()
+		c.onDomain(ctx)
 	}
 	return c.MultiClient.Domain(ctx, domainType, epoch)
 }
@@ -134,8 +134,11 @@ func TestDomainDataCoalescesConcurrentRequests(t *testing.T) {
 
 	countingClient := &countingMultiClient{
 		MultiClient: client.multiClient,
-		onDomain: func() {
-			time.Sleep(25 * time.Millisecond)
+		onDomain: func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(25 * time.Millisecond):
+			}
 		},
 	}
 	client.multiClient = countingClient
@@ -164,5 +167,81 @@ func TestDomainDataCoalescesConcurrentRequests(t *testing.T) {
 		require.NoError(t, errs[i])
 		require.Equal(t, results[0], results[i])
 	}
+	require.EqualValues(t, 1, countingClient.domainCalls.Load())
+}
+
+func TestDomainDataCoalescedFetchSurvivesWinnerCancellation(t *testing.T) {
+	ctx := t.Context()
+
+	mockServer := mocks.NewServer(nil)
+	defer mockServer.Close()
+
+	client, err := New(
+		ctx,
+		zap.NewNop(),
+		Options{
+			BeaconConfig:   networkconfig.TestNetwork.Beacon,
+			BeaconNodeAddr: mockServer.URL,
+			CommonTimeout:  time.Second,
+			LongTimeout:    time.Second,
+		},
+	)
+	require.NoError(t, err)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	countingClient := &countingMultiClient{
+		MultiClient: client.multiClient,
+		onDomain: func(ctx context.Context) {
+			select {
+			case started <- struct{}{}:
+			default:
+			}
+
+			select {
+			case <-ctx.Done():
+			case <-release:
+			}
+		},
+	}
+	client.multiClient = countingClient
+
+	firstCtx, cancelFirst := context.WithCancel(ctx)
+	firstResultCh := make(chan struct {
+		domain phase0.Domain
+		err    error
+	}, 1)
+	go func() {
+		domain, err := client.DomainData(firstCtx, 555, spectypes.DomainAttester)
+		firstResultCh <- struct {
+			domain phase0.Domain
+			err    error
+		}{domain: domain, err: err}
+	}()
+
+	<-started
+	cancelFirst()
+
+	secondResultCh := make(chan struct {
+		domain phase0.Domain
+		err    error
+	}, 1)
+	go func() {
+		domain, err := client.DomainData(ctx, 555, spectypes.DomainAttester)
+		secondResultCh <- struct {
+			domain phase0.Domain
+			err    error
+		}{domain: domain, err: err}
+	}()
+
+	close(release)
+
+	firstResult := <-firstResultCh
+	secondResult := <-secondResultCh
+
+	require.NoError(t, firstResult.err)
+	require.NoError(t, secondResult.err)
+	require.Equal(t, firstResult.domain, secondResult.domain)
 	require.EqualValues(t, 1, countingClient.domainCalls.Load())
 }
