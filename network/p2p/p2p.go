@@ -389,10 +389,11 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 		return nil
 	}
 
+	peerScores := n.buildPeerTrimScores(myPeers)
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
 		// sort in asc order (peers with the lowest scores come first)
-		aScore := n.peerScore(a)
-		bScore := n.peerScore(b)
+		aScore := peerScores[a]
+		bScore := peerScores[b]
 		if aScore < bScore {
 			return -1
 		}
@@ -590,34 +591,55 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	return n.cfg.TopicMaxPeers
 }
 
-// peerScore calculates peer score based on how valuable this peer would have been if we didn't
-// have him, but then connected with.
-func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
-	// Compute number of peers we're connected to for each subnet excluding peer with peerID.
-	subnetPeersExcluding := newSubnetPeers()
+func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 {
+	trimSnapshot := n.newPeerTrimSnapshot()
+	scores := make(map[peer.ID]float64, len(peerIDs))
+	for _, peerID := range peerIDs {
+		peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
+		scores[peerID] = trimSnapshot.score(peerID, peerSubnets)
+	}
+	return scores
+}
+
+type peerTrimSnapshot struct {
+	ownSubnets       commons.Subnets
+	totalSubnetPeers SubnetPeers
+	peerSubnetPeers  map[peer.ID]SubnetPeers
+}
+
+func (n *p2pNetwork) newPeerTrimSnapshot() peerTrimSnapshot {
+	snapshot := peerTrimSnapshot{
+		ownSubnets:       n.SubscribedSubnets(),
+		totalSubnetPeers: newSubnetPeers(),
+		peerSubnetPeers:  make(map[peer.ID]SubnetPeers),
+	}
+
 	for topic, peers := range n.PeersByTopic() {
 		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
 		if err != nil {
-			n.logger.Error("failed to parse topic",
-				zap.String("topic", topic), zap.Error(err))
+			n.logger.Error("failed to parse topic", zap.String("topic", topic), zap.Error(err))
 			continue
 		}
 		if subnet < 0 || subnet >= commons.SubnetsCount {
-			n.logger.Error("invalid topic",
-				zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+			n.logger.Error("invalid topic", zap.String("topic", topic), zap.Int("subnet", int(subnet)))
 			continue
 		}
-		for _, pID := range peers {
-			if pID == peerID {
-				continue
-			}
-			subnetPeersExcluding[subnet]++
+
+		for _, peerID := range peers {
+			snapshot.totalSubnetPeers[subnet]++
+
+			peerSubnetPeers := snapshot.peerSubnetPeers[peerID]
+			peerSubnetPeers[subnet]++
+			snapshot.peerSubnetPeers[peerID] = peerSubnetPeers
 		}
 	}
 
-	ownSubnets := n.SubscribedSubnets()
-	peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-	return subnetPeersExcluding.Score(ownSubnets, peerSubnets)
+	return snapshot
+}
+
+func (s peerTrimSnapshot) score(peerID peer.ID, peerSubnets commons.Subnets) float64 {
+	subnetPeersExcluding := s.totalSubnetPeers.Subtract(s.peerSubnetPeers[peerID])
+	return subnetPeersExcluding.Score(s.ownSubnets, peerSubnets)
 }
 
 // SubnetPeers contains the number of peers we are connected to for each subnet.
@@ -641,6 +663,14 @@ func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 		sum[i] = a[i] + b[i]
 	}
 	return sum
+}
+
+func (a SubnetPeers) Subtract(b SubnetPeers) SubnetPeers {
+	var diff SubnetPeers
+	for i := range a {
+		diff[i] = a[i] - b[i]
+	}
+	return diff
 }
 
 // Score estimates how many valuable subnets the given peer would contribute.
