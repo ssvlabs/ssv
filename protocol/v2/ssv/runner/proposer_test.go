@@ -215,6 +215,7 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 	dg.canSign = false
 
 	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
+	runner.measurements.StartConsensus()
 	require.NoError(t, runner.BaseRunner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
 	consensusMsgs := spectestingutils.SSVDecidingMsgsForHeight(
 		consensusData,
@@ -456,6 +457,7 @@ func countPartialSignatureBroadcastsByType(
 func cloneTestNetworkConfig() *networkconfig.Network {
 	cfg := *networkconfig.TestNetwork
 	beaconCfg := *networkconfig.TestNetwork.Beacon
+	// Tests only mutate beacon timing fields; the rest of TestNetwork can remain shared.
 	cfg.Beacon = &beaconCfg
 	return &cfg
 }
