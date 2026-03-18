@@ -186,6 +186,8 @@ func TestRemainingProposerDelay(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			cfg := cloneTestNetworkConfig()
 			cfg.GenesisTime = tt.slotTime.Add(-time.Duration(slot) * cfg.SlotDuration)
 			runner := &ProposerRunner{
@@ -228,6 +230,7 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 	require.NotNil(t, runner.state().DecidedValue)
 	require.Equal(t, 0, countPartialSignatureBroadcastsByType(t, network, spectypes.PostConsensusPartialSig))
 	require.Equal(t, 1, countPartialSignatureBroadcastsByType(t, network, spectypes.RandaoPartialSig))
+	require.False(t, runner.state().Finished)
 }
 
 func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecisionMatches(t *testing.T) {
