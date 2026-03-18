@@ -30,7 +30,6 @@ type proposerTestBeacon struct {
 	getProposal *api.VersionedProposal
 
 	getCalls        int
-	getCallTime     time.Time
 	lastGetSlot     phase0.Slot
 	lastGetGraffiti []byte
 	lastGetRandao   []byte
@@ -48,7 +47,6 @@ func newProposerTestBeacon(proposal *api.VersionedProposal) *proposerTestBeacon 
 
 func (b *proposerTestBeacon) GetBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
 	b.getCalls++
-	b.getCallTime = time.Now()
 	b.lastGetSlot = slot
 	b.lastGetGraffiti = append([]byte(nil), graffiti...)
 	b.lastGetRandao = append([]byte(nil), randao...)
@@ -274,6 +272,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
+	require.True(t, runner.state().Finished)
 }
 
 func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *testing.T) {
@@ -295,6 +294,7 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
 	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
+	require.True(t, runner.state().Finished)
 }
 
 func newProposerRunnerForTest(
