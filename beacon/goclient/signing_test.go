@@ -199,10 +199,7 @@ func TestDomainDataCoalescedFetchSurvivesWinnerCancellation(t *testing.T) {
 			default:
 			}
 
-			select {
-			case <-ctx.Done():
-			case <-release:
-			}
+			<-release
 		},
 	}
 	client.multiClient = countingClient
