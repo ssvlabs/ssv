@@ -145,15 +145,16 @@ func scoreRound(state *State, m *SSVMessage) int {
 // scoreMessageType returns a score based on the top level message type,
 // where event type messages are prioritized over other types.
 func scoreMessageType(m *SSVMessage) int {
-	switch mm := m.Body.(type) {
-	case *ssvtypes.EventMsg:
-		switch mm.Type {
-		case ssvtypes.ExecuteDuty:
-			return 3
-		case ssvtypes.Timeout:
-			return 2
-		}
+	mm, ok := m.Body.(*ssvtypes.EventMsg)
+	if !ok || mm == nil {
 		return 0
+	}
+
+	switch mm.Type {
+	case ssvtypes.ExecuteDuty:
+		return 3
+	case ssvtypes.Timeout:
+		return 2
 	default:
 		return 0
 	}
