@@ -37,18 +37,13 @@ type proposerTestBeacon struct {
 	submittedBlocks []*api.VersionedProposal
 	submittedSig    []phase0.BLSSignature
 	submitErr       error
-	testingBeacon   *spectestingutils.TestingBeaconNode
 }
 
 func newProposerTestBeacon(proposal *api.VersionedProposal) *proposerTestBeacon {
 	return &proposerTestBeacon{
-		getProposal:   proposal,
-		testingBeacon: spectestingutils.NewTestingBeaconNode(),
+		BeaconNode:  protocoltesting.NewTestingBeaconNodeWrapped(),
+		getProposal: proposal,
 	}
-}
-
-func (b *proposerTestBeacon) DomainData(_ context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	return b.testingBeacon.DomainData(epoch, domain)
 }
 
 func (b *proposerTestBeacon) GetBeaconBlock(_ context.Context, slot phase0.Slot, graffiti, randao []byte) (*api.VersionedProposal, ssz.Marshaler, error) {
@@ -267,7 +262,8 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 	version := spec.DataVersionDeneb
 	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	beacon := newProposerTestBeacon(nil)
-	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+	dg := &stubDoppelganger{canSign: true}
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
 	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
 	runner.cachedFullBlock = spectestingutils.TestingBeaconBlockV(version)
@@ -277,6 +273,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
+	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
 }
 
 func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *testing.T) {
@@ -285,7 +282,8 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 	version := spec.DataVersionDeneb
 	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	beacon := newProposerTestBeacon(nil)
-	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 0, nil)
+	dg := &stubDoppelganger{canSign: true}
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, dg, 0, nil)
 
 	setupRunnerForPostConsensus(t, runner, keySet, consensusData, 1)
 	runner.operatorSigner = fixedOperatorSigner{id: 2}
@@ -296,6 +294,7 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
+	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
 }
 
 func newProposerRunnerForTest(
