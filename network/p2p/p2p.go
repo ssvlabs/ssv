@@ -595,8 +595,9 @@ func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 
 	trimSnapshot := n.newPeerTrimSnapshot()
 	scores := make(map[peer.ID]float64, len(peerIDs))
 	for _, peerID := range peerIDs {
+		peerContribution := trimSnapshot.peerSubnetPeers[peerID]
 		peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-		scores[peerID] = trimSnapshot.score(peerID, peerSubnets)
+		scores[peerID] = trimSnapshot.score(peerContribution, peerSubnets)
 	}
 	return scores
 }
@@ -628,6 +629,9 @@ func (n *p2pNetwork) newPeerTrimSnapshot() peerTrimSnapshot {
 		for _, peerID := range peers {
 			snapshot.totalSubnetPeers[subnet]++
 
+			// peerSubnetPeers is populated from the same topic membership snapshot as
+			// totalSubnetPeers, so each peer contribution count is a subset of the
+			// corresponding total and can be subtracted safely when scoring.
 			peerSubnetPeers := snapshot.peerSubnetPeers[peerID]
 			peerSubnetPeers[subnet]++
 			snapshot.peerSubnetPeers[peerID] = peerSubnetPeers
@@ -637,8 +641,8 @@ func (n *p2pNetwork) newPeerTrimSnapshot() peerTrimSnapshot {
 	return snapshot
 }
 
-func (s peerTrimSnapshot) score(peerID peer.ID, peerSubnets commons.Subnets) float64 {
-	subnetPeersExcluding := s.totalSubnetPeers.Subtract(s.peerSubnetPeers[peerID])
+func (s peerTrimSnapshot) score(peerContribution SubnetPeers, peerSubnets commons.Subnets) float64 {
+	subnetPeersExcluding := s.totalSubnetPeers.Subtract(peerContribution)
 	return subnetPeersExcluding.Score(s.ownSubnets, peerSubnets)
 }
 
@@ -665,9 +669,17 @@ func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 	return sum
 }
 
+// Subtract returns the element-wise difference between two subnet peer snapshots.
+// In trim scoring, b is expected to be a per-peer contribution derived from the
+// same topic membership snapshot as a, so each b[i] should be less than or equal
+// to a[i]. If a future caller violates that relationship, the result is clamped
+// to 0 for that subnet instead of allowing uint16 underflow.
 func (a SubnetPeers) Subtract(b SubnetPeers) SubnetPeers {
 	var diff SubnetPeers
 	for i := range a {
+		if b[i] > a[i] {
+			continue
+		}
 		diff[i] = a[i] - b[i]
 	}
 	return diff
