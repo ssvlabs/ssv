@@ -6,11 +6,11 @@ import (
 )
 
 // Interval runs the provided function periodically every period
-func Interval(pctx context.Context, interval time.Duration, f func()) {
+func Interval(ctx context.Context, interval time.Duration, f func()) {
 	ticker := time.NewTicker(interval)
 	go func() {
-		ctx, cancel := context.WithCancel(pctx)
-		defer cancel()
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
