@@ -77,7 +77,7 @@ type fixedOperatorSigner struct {
 }
 
 func (s fixedOperatorSigner) SignSSVMessage(*spectypes.SSVMessage) ([]byte, error) {
-	return []byte{byte(s.id)}, nil
+	return []byte("test-signature"), nil
 }
 
 func (s fixedOperatorSigner) GetOperatorID() spectypes.OperatorID { return s.id }
@@ -380,6 +380,8 @@ func setupRunnerForPostConsensus(
 	duty := spectestingutils.TestingProposerDutyV(consensusData.Version)
 	runner.BaseRunner.baseSetupForNewDuty(duty, keySet.Threshold)
 	runner.measurements.StartDutyFlow()
+	runner.measurements.StartConsensus()
+	runner.measurements.EndConsensus()
 	runner.measurements.StartPostConsensus()
 
 	encodedDecidedValue, err := consensusData.Encode()
