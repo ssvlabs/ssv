@@ -88,6 +88,33 @@ func NewTopicsController(
 
 	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic())
 
+	// TEST: optionally log mesh peers for a specific topic periodically
+	if topic := os.Getenv("SSV_TEST_LOG_MESH_TOPIC"); topic != "" {
+		interval := time.Duration(15) * time.Second
+		if v := os.Getenv("SSV_TEST_LOG_MESH_INTERVAL"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil && d > 0 {
+				interval = d
+			}
+		}
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					peers := ctrl.ps.ListPeers(topic)
+					strs := make([]string, 0, len(peers))
+					for _, p := range peers {
+						strs = append(strs, p.String())
+					}
+					ctrl.logger.Info("TEST: mesh peers", zap.String("topic", topic), zap.Int("count", len(peers)), zap.Strings("peers", strs))
+				}
+			}
+		}()
+	}
+
 	return ctrl
 }
 
@@ -228,7 +255,8 @@ func init() {
 func maybeInjectTestMutations(logger *zap.Logger, topic string, data []byte) []byte {
     shuffle := os.Getenv("SSV_TEST_SHUFFLE_SIGNERS") != ""
     dup := os.Getenv("SSV_TEST_DUP_SIGNERS") != ""
-    if !shuffle && !dup {
+    badop := os.Getenv("SSV_TEST_BAD_OPERATOR") != ""
+    if !shuffle && !dup && !badop {
         return data
     }
 
@@ -263,6 +291,17 @@ func maybeInjectTestMutations(logger *zap.Logger, topic string, data []byte) []b
         }
         // if encode failed, continue to other mutations/logging
         logger.Debug("TEST: duplicate signer injection encode failed", zap.Int("operator_count", opCount), zap.Int("signature_count", len(msg.Signatures)))
+    }
+
+    // Scenario 3 (optional): bad operator ID to trigger ErrUnknownOperator
+    if badop && opCount >= 1 {
+        // Set the first operator ID to an out-of-range value for the committee
+        const badID spectypes.OperatorID = ^spectypes.OperatorID(0) // max uint64
+        msg.OperatorIDs[0] = badID
+        if b, err := msg.Encode(); err == nil {
+            logger.Warn("TEST: injected bad operator", zap.String("topic", topic), zap.Int("operator_count_before", opCount))
+            return b
+        }
     }
 
     // Scenario 1: shuffle two signers if sorted and len>=2

@@ -1,10 +1,11 @@
 package validation
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"strings"
+    "context"
+    "errors"
+    "fmt"
+    "strings"
+    "os"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -165,9 +166,14 @@ func (mv *messageValidator) handleValidationError(
 		return pubsub.ValidationIgnore
 	}
 
-	if !valErr.Silent() {
-		logger.Debug("rejecting invalid message", zap.Error(valErr))
-	}
+    if !valErr.Silent() {
+        logger.Debug("rejecting invalid message", zap.Error(valErr))
+    }
+
+    // TEST: elevate rejection visibility when enabled
+    if os.Getenv("SSV_TEST_LOG_REJECTIONS") != "" {
+        logger.Info("TEST: rejected message", zap.String("error", valErr.Text()))
+    }
 
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
