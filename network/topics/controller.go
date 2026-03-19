@@ -253,15 +253,16 @@ func maybeInjectTestMutations(logger *zap.Logger, topic string, data []byte) []b
     }
 
     opCount := len(msg.OperatorIDs)
-    // Scenario 2 (optional): duplicate signer for single-signer messages
-    if dup && opCount == 1 && len(msg.Signatures) == 1 {
+    // Scenario 2 (optional): duplicate signer for messages with at least one signer+signature
+    if dup && opCount >= 1 && len(msg.Signatures) >= 1 {
         msg.OperatorIDs = append(msg.OperatorIDs, msg.OperatorIDs[0])
         msg.Signatures = append(msg.Signatures, msg.Signatures[0])
         if b, err := msg.Encode(); err == nil {
-            logger.Warn("TEST: injected duplicate signer", zap.String("topic", topic))
+            logger.Warn("TEST: injected duplicate signer", zap.String("topic", topic), zap.Int("operator_count_before", opCount))
             return b
         }
-        // fall through to return original if encode failed
+        // if encode failed, continue to other mutations/logging
+        logger.Debug("TEST: duplicate signer injection encode failed", zap.Int("operator_count", opCount), zap.Int("signature_count", len(msg.Signatures)))
     }
 
     // Scenario 1: shuffle two signers if sorted and len>=2
