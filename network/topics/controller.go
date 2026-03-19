@@ -1,22 +1,23 @@
 package topics
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"math/rand"
-	"os"
-	"strconv"
-	"time"
+    "context"
+    "errors"
+    "fmt"
+    "io"
+    "math/rand"
+    "os"
+    "strconv"
+    "sync"
+    "time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+    spectypes "github.com/ssvlabs/ssv-spec/types"
+    "github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 var (
@@ -191,8 +192,8 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 		return err
 	}
 
-	// TEST-ONLY: optionally inject unsorted signers to trigger validation on peers
-	data = maybeInjectUnsortedSigners(ctrl.logger, topicName, data)
+    // TEST-ONLY: optionally mutate outbound messages for validation scenarios
+    data = maybeInjectTestMutations(ctrl.logger, topicName, data)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(ctrl.ctx, timeout)
@@ -210,42 +211,71 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 	return nil
 }
 
-// maybeInjectUnsortedSigners shuffles operator IDs in outgoing SignedSSVMessage when
-// SSV_TEST_SHUFFLE_SIGNERS is set. This is a test-only hook to validate peers reject
-// messages with ErrSignersNotSorted. Controlled via:
-//  - SSV_TEST_SHUFFLE_SIGNERS: enable when non-empty
-//  - SSV_TEST_SHUFFLE_RATE: optional 0.0..1.0 probability (default 1.0)
-func maybeInjectUnsortedSigners(logger *zap.Logger, topic string, data []byte) []byte {
-	if os.Getenv("SSV_TEST_SHUFFLE_SIGNERS") == "" {
-		return data
-	}
+var (
+    injectorOnce sync.Once
+)
 
-	rate := 1.0
-	if v := os.Getenv("SSV_TEST_SHUFFLE_RATE"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
-			rate = f
-		}
-	}
-	if rand.Float64() > rate {
-		return data
-	}
+func init() {
+    // Seed randomness once for rate-based injection
+    rand.Seed(time.Now().UnixNano())
+}
 
-	msg := new(spectypes.SignedSSVMessage)
-	if err := msg.Decode(data); err != nil {
-		return data
-	}
-	if len(msg.OperatorIDs) < 2 {
-		return data
-	}
-	// Only perturb if currently sorted
-	if isSortedOperatorIDs(msg.OperatorIDs) {
-		msg.OperatorIDs[0], msg.OperatorIDs[1] = msg.OperatorIDs[1], msg.OperatorIDs[0]
-		if b, err := msg.Encode(); err == nil {
-			logger.Warn("TEST: injected unsorted signers", zap.String("topic", topic))
-			return b
-		}
-	}
-	return data
+// maybeInjectTestMutations applies test-only mutations to outbound messages when
+// env vars are set. It supports two scenarios:
+//  - SSV_TEST_SHUFFLE_SIGNERS: swap first two OperatorIDs if len>=2 and sorted → peers should reject with ErrSignersNotSorted
+//  - SSV_TEST_DUP_SIGNERS: duplicate the first signer/signature if len==1 → peers should reject with ErrDuplicatedSigner
+// Both respect SSV_TEST_SHUFFLE_RATE (0..1, default 1.0) for sampling.
+func maybeInjectTestMutations(logger *zap.Logger, topic string, data []byte) []byte {
+    shuffle := os.Getenv("SSV_TEST_SHUFFLE_SIGNERS") != ""
+    dup := os.Getenv("SSV_TEST_DUP_SIGNERS") != ""
+    if !shuffle && !dup {
+        return data
+    }
+
+    rate := 1.0
+    if v := os.Getenv("SSV_TEST_SHUFFLE_RATE"); v != "" {
+        if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+            rate = f
+        }
+    }
+
+    injectorOnce.Do(func() {
+        logger.Info("TEST: injector enabled", zap.Float64("rate", rate), zap.Bool("shuffle_signers", shuffle), zap.Bool("dup_signers", dup))
+    })
+
+    if rand.Float64() > rate {
+        return data
+    }
+
+    msg := new(spectypes.SignedSSVMessage)
+    if err := msg.Decode(data); err != nil {
+        return data
+    }
+
+    opCount := len(msg.OperatorIDs)
+    // Scenario 2 (optional): duplicate signer for single-signer messages
+    if dup && opCount == 1 && len(msg.Signatures) == 1 {
+        msg.OperatorIDs = append(msg.OperatorIDs, msg.OperatorIDs[0])
+        msg.Signatures = append(msg.Signatures, msg.Signatures[0])
+        if b, err := msg.Encode(); err == nil {
+            logger.Warn("TEST: injected duplicate signer", zap.String("topic", topic))
+            return b
+        }
+        // fall through to return original if encode failed
+    }
+
+    // Scenario 1: shuffle two signers if sorted and len>=2
+    if shuffle && opCount >= 2 && isSortedOperatorIDs(msg.OperatorIDs) {
+        msg.OperatorIDs[0], msg.OperatorIDs[1] = msg.OperatorIDs[1], msg.OperatorIDs[0]
+        if b, err := msg.Encode(); err == nil {
+            logger.Warn("TEST: injected unsorted signers", zap.String("topic", topic))
+            return b
+        }
+    }
+
+    // Optional trace (debug-level) to show ineligible messages when injector is active
+    logger.Debug("TEST: injector ineligible", zap.Int("operator_count", opCount), zap.String("topic", topic))
+    return data
 }
 
 func isSortedOperatorIDs(ids []spectypes.OperatorID) bool {
