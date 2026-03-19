@@ -169,7 +169,6 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	}
 
 	randaoMsg := partialSignatureMessages.Type == spectypes.RandaoPartialSig
-	// Rule: Message must correspond to a known beacon duty when the role requires it.
 	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.validatorIndices, randaoMsg); err != nil {
 		return err
 	}

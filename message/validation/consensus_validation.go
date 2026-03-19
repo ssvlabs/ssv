@@ -294,7 +294,6 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	msgSlot := phase0.Slot(consensusMessage.Height)
 
 	randaoMsg := false
-	// Rule: Message must correspond to a known beacon duty when the role requires it.
 	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), msgSlot, committeeInfo.validatorIndices, randaoMsg); err != nil {
 		return err
 	}
