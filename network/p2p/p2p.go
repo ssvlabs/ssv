@@ -472,10 +472,8 @@ func (n *p2pNetwork) UpdateSubnets() {
 
 	// Run immediately and then every second.
 	for {
-		select {
-		case <-n.ctx.Done():
+		if n.ctx.Err() != nil {
 			return
-		default:
 		}
 
 		start := time.Now()

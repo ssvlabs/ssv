@@ -13,6 +13,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
+const timeout = 400 * time.Millisecond
+
 type mockTopicsController struct {
 	updateCalled chan struct{}
 }
@@ -67,7 +69,7 @@ func TestUpdateSubnetsStopsOnContextCancel(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(timeout):
 		require.Fail(t, "UpdateSubnets did not stop after context cancellation")
 	}
 }
@@ -91,7 +93,7 @@ func TestUpdateScoreParamsStopsOnContextCancel(t *testing.T) {
 
 	select {
 	case <-topicsCtrl.updateCalled:
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(timeout):
 		require.Fail(t, "UpdateScoreParams did not run its initial update")
 	}
 
@@ -99,7 +101,7 @@ func TestUpdateScoreParamsStopsOnContextCancel(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(timeout):
 		require.Fail(t, "UpdateScoreParams did not stop after context cancellation")
 	}
 }

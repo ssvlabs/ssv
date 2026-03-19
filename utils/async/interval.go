@@ -7,8 +7,8 @@ import (
 
 // Interval runs the provided function periodically every period
 func Interval(ctx context.Context, interval time.Duration, f func()) {
-	ticker := time.NewTicker(interval)
 	go func() {
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		for {
