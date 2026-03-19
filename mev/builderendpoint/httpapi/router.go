@@ -58,6 +58,11 @@ func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			start := time.Now()
 			defer func() {
+				duration := time.Since(start)
+				if ww.Status() < http.StatusBadRequest && duration <= time.Millisecond {
+					return
+				}
+
 				logger.Debug(
 					"served builder endpoint request",
 					zap.String("method", r.Method),
@@ -65,7 +70,7 @@ func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 					zap.Int("status", ww.Status()),
 					zap.Int64("request_length", r.ContentLength),
 					zap.Int("response_length", ww.BytesWritten()),
-					zap.Duration("took", time.Since(start)),
+					zap.Duration("took", duration),
 				)
 			}()
 			next.ServeHTTP(ww, r)

@@ -180,6 +180,13 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 
 	s.exporterMode = opts.ExporterMode
 
+	if s.ctx != nil {
+		go func() {
+			<-s.ctx.Done()
+			s.clearPrefetchPlans()
+		}()
+	}
+
 	// These handlers fetch & record duties from the beacon node and are needed in both operator & exporter modes.
 	// When adding a new handler here, ensure it supports both modes.
 	s.handlers = append(s.handlers,
@@ -571,6 +578,7 @@ func (s *Scheduler) ScheduleBuilderBidPrefetch(duties []*spectypes.ValidatorDuty
 	}
 
 	currentSlot := s.beaconConfig.EstimatedCurrentSlot()
+	s.clearPrefetchPlansBefore(currentSlot)
 
 	// Group proposer duties by slot.
 	pubkeysBySlot := make(map[phase0.Slot]map[phase0.BLSPubKey]struct{})
@@ -627,6 +635,33 @@ func (s *Scheduler) ScheduleBuilderBidPrefetch(duties []*spectypes.ValidatorDuty
 			plan.pubkeys[pk] = struct{}{}
 		}
 		s.prefetchMu.Unlock()
+	}
+}
+
+func (s *Scheduler) clearPrefetchPlansBefore(currentSlot phase0.Slot) {
+	s.prefetchMu.Lock()
+	defer s.prefetchMu.Unlock()
+
+	for slot, plan := range s.prefetchPlans {
+		if slot >= currentSlot {
+			continue
+		}
+		if plan != nil && plan.timer != nil {
+			plan.timer.Stop()
+		}
+		delete(s.prefetchPlans, slot)
+	}
+}
+
+func (s *Scheduler) clearPrefetchPlans() {
+	s.prefetchMu.Lock()
+	defer s.prefetchMu.Unlock()
+
+	for slot, plan := range s.prefetchPlans {
+		if plan != nil && plan.timer != nil {
+			plan.timer.Stop()
+		}
+		delete(s.prefetchPlans, slot)
 	}
 }
 
