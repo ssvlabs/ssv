@@ -91,12 +91,12 @@ func (h *baseHandler) HandleInitialDuties(context.Context) {
 
 // shouldFetchNextEpoch returns true if it is a "good time" to fetch duties for the next epoch (typically, Beacon node
 // would be under less load during the mid-end time into the epoch vs during the beginning of the epoch).
-func (h *AttesterHandler) shouldFetchNextEpoch(currentSlot phase0.Slot) bool {
+func (h *baseHandler) shouldFetchNextEpoch(currentSlot phase0.Slot) bool {
 	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 	return uint64(currentSlot)%slotsPerEpoch > slotsPerEpoch/2-2
 }
 
-func (h *AttesterHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
+func (h *baseHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
 	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 	return uint64(currentSlot+1)%slotsPerEpoch == 0
 }
