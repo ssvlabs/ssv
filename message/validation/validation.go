@@ -189,10 +189,6 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	validationMu := mv.getValidationLock(signedSSVMessage.SSVMessage.GetID())
-	validationMu.Lock()
-	defer validationMu.Unlock()
-
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
@@ -255,6 +251,14 @@ func (mv *messageValidator) getValidationLock(key spectypes.MessageID) *sync.Mut
 		return lock, nil
 	})
 	return lock
+}
+
+func (mv *messageValidator) withValidationLock(key spectypes.MessageID, fn func() error) error {
+	validationMu := mv.getValidationLock(key)
+	validationMu.Lock()
+	defer validationMu.Unlock()
+
+	return fn()
 }
 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {

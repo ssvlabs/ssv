@@ -47,28 +47,23 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
-
-	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
+	if err := mv.verifyConsensusMessageSignatures(signedSSVMessage); err != nil {
 		return consensusMessage, err
 	}
 
-	if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state); err != nil {
-		return consensusMessage, err
-	}
+	if err := mv.withValidationLock(ssvMessage.GetID(), func() error {
+		state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
 
-	for i := range signedSSVMessage.Signatures {
-		operatorID := signedSSVMessage.OperatorIDs[i]
-		signature := signedSSVMessage.Signatures[i]
-
-		if err := mv.signatureVerifier.VerifySignature(operatorID, ssvMessage, signature); err != nil {
-			e := ErrSignatureVerification
-			e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
-			return consensusMessage, e
+		if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
+			return err
 		}
-	}
 
-	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state); err != nil {
+		if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state); err != nil {
+			return err
+		}
+
+		return mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state)
+	}); err != nil {
 		return consensusMessage, err
 	}
 
@@ -166,6 +161,22 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 
 	if err := mv.validateJustifications(consensusMessage); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (mv *messageValidator) verifyConsensusMessageSignatures(signedSSVMessage *spectypes.SignedSSVMessage) error {
+	ssvMessage := signedSSVMessage.SSVMessage
+	for i := range signedSSVMessage.Signatures {
+		operatorID := signedSSVMessage.OperatorIDs[i]
+		signature := signedSSVMessage.Signatures[i]
+
+		if err := mv.signatureVerifier.VerifySignature(operatorID, ssvMessage, signature); err != nil {
+			e := ErrSignatureVerification
+			e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
+			return e
+		}
 	}
 
 	return nil
@@ -281,7 +292,9 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
+
 	randaoMsg := false
+	// Rule: Message must correspond to a known beacon duty when the role requires it.
 	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), msgSlot, committeeInfo.validatorIndices, randaoMsg); err != nil {
 		return err
 	}

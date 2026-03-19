@@ -43,24 +43,35 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, err
 	}
 
-	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
-	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state); err != nil {
+	if err := mv.verifyPartialSignatureMessageSignature(signedSSVMessage); err != nil {
 		return partialSignatureMessages, err
 	}
 
-	signature := signedSSVMessage.Signatures[0]
 	signer := signedSSVMessage.OperatorIDs[0]
-	if err := mv.signatureVerifier.VerifySignature(signer, ssvMessage, signature); err != nil {
-		e := ErrSignatureVerification
-		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", signer, err)
-		return partialSignatureMessages, e
-	}
+	if err := mv.withValidationLock(ssvMessage.GetID(), func() error {
+		state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
+		if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state); err != nil {
+			return err
+		}
 
-	if err := mv.updatePartialSignatureState(partialSignatureMessages, receivedFrom, state, signer, committeeInfo); err != nil {
+		return mv.updatePartialSignatureState(partialSignatureMessages, receivedFrom, state, signer, committeeInfo)
+	}); err != nil {
 		return partialSignatureMessages, err
 	}
 
 	return partialSignatureMessages, nil
+}
+
+func (mv *messageValidator) verifyPartialSignatureMessageSignature(signedSSVMessage *spectypes.SignedSSVMessage) error {
+	signature := signedSSVMessage.Signatures[0]
+	signer := signedSSVMessage.OperatorIDs[0]
+	if err := mv.signatureVerifier.VerifySignature(signer, signedSSVMessage.SSVMessage, signature); err != nil {
+		e := ErrSignatureVerification
+		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", signer, err)
+		return e
+	}
+
+	return nil
 }
 
 func (mv *messageValidator) validatePartialSignatureMessageSemantics(
@@ -158,6 +169,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	}
 
 	randaoMsg := partialSignatureMessages.Type == spectypes.RandaoPartialSig
+	// Rule: Message must correspond to a known beacon duty when the role requires it.
 	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeInfo.validatorIndices, randaoMsg); err != nil {
 		return err
 	}
