@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
+	"os"
+	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -12,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -187,6 +191,9 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 		return err
 	}
 
+	// TEST-ONLY: optionally inject unsorted signers to trigger validation on peers
+	data = maybeInjectUnsortedSigners(ctrl.logger, topicName, data)
+
 	go func() {
 		ctx, cancel := context.WithTimeout(ctrl.ctx, timeout)
 		defer cancel()
@@ -201,6 +208,53 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 	}()
 
 	return nil
+}
+
+// maybeInjectUnsortedSigners shuffles operator IDs in outgoing SignedSSVMessage when
+// SSV_TEST_SHUFFLE_SIGNERS is set. This is a test-only hook to validate peers reject
+// messages with ErrSignersNotSorted. Controlled via:
+//  - SSV_TEST_SHUFFLE_SIGNERS: enable when non-empty
+//  - SSV_TEST_SHUFFLE_RATE: optional 0.0..1.0 probability (default 1.0)
+func maybeInjectUnsortedSigners(logger *zap.Logger, topic string, data []byte) []byte {
+	if os.Getenv("SSV_TEST_SHUFFLE_SIGNERS") == "" {
+		return data
+	}
+
+	rate := 1.0
+	if v := os.Getenv("SSV_TEST_SHUFFLE_RATE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 && f <= 1 {
+			rate = f
+		}
+	}
+	if rand.Float64() > rate {
+		return data
+	}
+
+	msg := new(spectypes.SignedSSVMessage)
+	if err := msg.Decode(data); err != nil {
+		return data
+	}
+	if len(msg.OperatorIDs) < 2 {
+		return data
+	}
+	// Only perturb if currently sorted
+	if isSortedOperatorIDs(msg.OperatorIDs) {
+		msg.OperatorIDs[0], msg.OperatorIDs[1] = msg.OperatorIDs[1], msg.OperatorIDs[0]
+		if b, err := msg.Encode(); err == nil {
+			logger.Warn("TEST: injected unsorted signers", zap.String("topic", topic))
+			return b
+		}
+	}
+	return data
+}
+
+func isSortedOperatorIDs(ids []spectypes.OperatorID) bool {
+	for i := 1; i < len(ids); i++ {
+		if ids[i-1] > ids[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
