@@ -76,7 +76,7 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 		return messageKey(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer)), nil
 	}
 
-	return mKeyUndefined, fmt.Errorf("unexpected message type (expected types: qbft, partial-sig): %d", msg.MsgType)
+	return mKeyUndefined, fmt.Errorf("unexpected message type (expected types: event, qbft, partial-sig): %d", msg.MsgType)
 }
 
 func logWithMessageMetadata(logger *zap.Logger, msg *queue.SSVMessage) *zap.Logger {
