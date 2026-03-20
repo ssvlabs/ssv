@@ -2,45 +2,29 @@ package node
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/network"
-	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
 // CreateTestNode builds a test Node using a local network.
-func CreateTestNode(t *testing.T, n int, ctx context.Context) *Node {
-	pks := []string{
-		"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
-		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170",
-	}
-	ln, routers, err := createNetworkAndSubscribe(t, ctx, p2pv1.LocalNetOptions{
-		Nodes:        n,
-		MinConnected: n/2 - 1,
-		UseDiscv5:    false,
-	}, pks...)
-
-	require.NoError(t, err)
-	require.NotNil(t, routers)
-	require.NotNil(t, ln)
-
+func CreateTestNode(t *testing.T) *Node {
 	nodeMock := &NodeMock{}
 	nodeMock.HealthyMock.Store(nil)
 	nodeProber := nodeprobe.New(zap.L())
@@ -51,83 +35,73 @@ func CreateTestNode(t *testing.T, n int, ctx context.Context) *Node {
 	nodeProber.AddNode(node2, nodeMock, 10*time.Second, 5, 0)
 	nodeProber.AddNode(node3, nodeMock, 10*time.Second, 5, 0)
 
+	pIndex := &MockPeersIndex{
+		self: &records.NodeInfo{
+			NetworkID: "self",
+			Metadata: &records.NodeMetadata{
+				NodeVersion:   "self",
+				ExecutionNode: "self",
+				ConsensusNode: "self",
+				Subnets:       "self",
+			},
+		},
+		nodeInfo: &records.NodeInfo{
+			NetworkID: "mainnet",
+			Metadata: &records.NodeMetadata{
+				NodeVersion:   "latest",
+				ExecutionNode: "latest",
+				ConsensusNode: "latest",
+				Subnets:       "00000000000000000100000400000400",
+			},
+		},
+		peerSubnets: commons.AllSubnets,
+	}
+
+	ownPeerID, err := peer.Decode("16Uiu2HAmH9JrTKfYWKB9ewbbE5xRCRrLRkwrNywvMqMk8vo5vqU2")
+	require.NoError(t, err)
+	peer1ID, err := peer.Decode("12D3KooWHMqRy1xSTtoeey9HMYNWkLGToMmTJFccX2zxGQPz2S57")
+	require.NoError(t, err)
+	peer2ID, err := peer.Decode("12D3KooWPxxZ6TgcCjCp8JeEEATAFLtriNLGumBroBYYMXLyNrxH")
+	require.NoError(t, err)
+
+	net := &MockP2PNetwork{
+		LocalPeerValue: ownPeerID,
+		ListenAddressesValue: []ma.Multiaddr{
+			ma.StringCast("/ip4/1.2.3.4"),
+		},
+		PeersValue: []peer.ID{peer1ID, peer2ID},
+		ConnectednessByPeer: map[peer.ID]libp2pnetwork.Connectedness{
+			peer1ID: libp2pnetwork.Connected,
+			peer2ID: libp2pnetwork.Connected,
+		},
+		PeerstoreValue: &MockPeerstore{
+			AddrsByPeer: map[peer.ID][]ma.Multiaddr{
+				peer1ID: {ma.StringCast("/ip4/1.2.3.5")},
+				peer2ID: {ma.StringCast("/ip4/1.2.3.6")},
+			},
+		},
+		ConnsToPeerByPeer: nil,
+	}
+
+	tIndex := &MockTopicIndex{
+		peersByTopic: map[string][]peer.ID{
+			"topic 1": {peer1ID, peer2ID},
+		},
+	}
+
 	return NewNode(
 		[]string{
 			fmt.Sprintf("tcp://%s:%d", "localhost", 3030),
 			fmt.Sprintf("udp://%s:%d", "localhost", 3030),
 		},
-		ln.Nodes[0].(p2pv1.PeersIndexProvider).PeersIndex(),
-		ln.Nodes[0].(p2pv1.HostProvider).Host().Network(),
-		ln.Nodes[0].(TopicIndex),
+		pIndex,
+		net,
+		tIndex,
 		nodeProber,
 		node1,
 		node2,
 		node3,
 	)
-}
-
-// createNetworkAndSubscribe creates a local network and subscribes each node to validator topics.
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options p2pv1.LocalNetOptions, pks ...string) (*p2pv1.LocalNet, []*dummyRouter, error) {
-	logger, err := zap.NewDevelopment()
-
-	require.NoError(t, err)
-
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if len(ln.Nodes) != options.Nodes {
-		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), options.Nodes)
-	}
-
-	routers := make([]*dummyRouter, options.Nodes)
-
-	for i, node := range ln.Nodes {
-		routers[i] = &dummyRouter{i: i}
-		node.UseMessageRouter(routers[i])
-	}
-
-	var wg sync.WaitGroup
-	for _, pk := range pks {
-		vpk, err := hex.DecodeString(pk)
-
-		require.NoError(t, err, "failed to decode validator public key")
-
-		for _, node := range ln.Nodes {
-			wg.Add(1)
-
-			go func(node network.P2PNetwork, vpk []byte) {
-				defer wg.Done()
-				_ = node.Subscribe(spectypes.ValidatorPK(vpk))
-			}(node, vpk)
-		}
-	}
-	wg.Wait()
-
-	// allow time for subscriptions.
-	time.Sleep(time.Second)
-	for range pks {
-		for _, node := range ln.Nodes {
-			var peers []peer.ID
-			for len(peers) < 2 {
-				peers = node.Peers()
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-	}
-	return ln, routers, nil
-}
-
-// dummyRouter is a dummy message router.
-type dummyRouter struct {
-	count uint64
-	i     int
-}
-
-func (r *dummyRouter) Route(_ context.Context, _ network.DecodedSSVMessage) {
-	atomic.AddUint64(&r.count, 1)
 }
 
 // NodeMock is a dummy implementation of nodeprobe.Node.
@@ -150,12 +124,7 @@ type allPeersAndTopics = AllPeersAndTopicsJSON
 
 // TestNodeHandlers verifies the endpoints of the Node (identity, peers, health, topics).
 func TestNodeHandlers(t *testing.T) {
-	n := 4
-	ctx, cancel := context.WithCancel(t.Context())
-
-	defer cancel()
-
-	node := CreateTestNode(t, n, ctx)
+	node := CreateTestNode(t)
 
 	tests := []struct {
 		name    string

@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
@@ -15,6 +14,7 @@ import (
 
 type dutyHandler interface {
 	Setup(
+		ctx context.Context,
 		name string,
 		logger *zap.Logger,
 		beaconNode BeaconNode,
@@ -30,10 +30,15 @@ type dutyHandler interface {
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
+	WaitShutdown()
 }
 
 type baseHandler struct {
-	logger              *zap.Logger
+	logger *zap.Logger
+
+	// ctx controls the lifetime of all go-routines spawned by baseHandler.
+	ctx context.Context
+
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	beaconConfig        *networkconfig.Beacon
@@ -47,6 +52,7 @@ type baseHandler struct {
 }
 
 func (h *baseHandler) Setup(
+	ctx context.Context,
 	name string,
 	logger *zap.Logger,
 	beaconNode BeaconNode,
@@ -60,6 +66,7 @@ func (h *baseHandler) Setup(
 	indicesChange chan struct{},
 ) {
 	h.logger = logger.With(zap.String("handler", name))
+	h.ctx = ctx
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient
 	h.beaconConfig = beaconConfig
@@ -80,22 +87,14 @@ func (h *baseHandler) HandleInitialDuties(context.Context) {
 	// Do nothing
 }
 
-func (h *baseHandler) ctxWithDeadlineOnNextSlot(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
-	return h.ctxWithDeadlineOnSlot(ctx, slot+1)
+// shouldFetchNextEpoch returns true if it is a "good time" to fetch duties for the next epoch (typically, Beacon node
+// would be under less load during the mid-end time into the epoch vs during the beginning of the epoch).
+func (h *baseHandler) shouldFetchNextEpoch(currentSlot phase0.Slot) bool {
+	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	return uint64(currentSlot)%slotsPerEpoch > slotsPerEpoch/2-2
 }
 
-func (h *baseHandler) ctxWithDeadlineInOneEpoch(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
-	// Attestation and aggregation submissions are rewarded as long as they are included within
-	// SLOTS_PER_EPOCH slots of their target slot (i.e., from target slot up to and including target + SLOTS_PER_EPOCH).
-	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
-	// Sync committee duties have to use the same deadline because they are part of the committee role.
-	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
-	slotsPerEpoch := phase0.Slot(h.beaconConfig.SlotsPerEpoch)
-	return h.ctxWithDeadlineOnSlot(ctx, slot+slotsPerEpoch+1)
-}
-
-// ctxWithDeadlineOnSlot returns the derived context with a deadline set to the beginning of the passed slot
-// with some safety margin to account for clock skews.
-func (h *baseHandler) ctxWithDeadlineOnSlot(ctx context.Context, slot phase0.Slot) (context.Context, context.CancelFunc) {
-	return context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot).Add(100*time.Millisecond))
+func (h *baseHandler) atLastSlotOfCurrentEpoch(currentSlot phase0.Slot) bool {
+	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	return uint64(currentSlot+1)%slotsPerEpoch == 0
 }
