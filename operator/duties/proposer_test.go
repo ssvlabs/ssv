@@ -116,8 +116,8 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
-			handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
-			dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
+			handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
+			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 			waitForDuties = &SafeValue[bool]{}
 		)
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
