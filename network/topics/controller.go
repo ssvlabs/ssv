@@ -115,9 +115,9 @@ func (ctrl *topicsCtrl) UpdateScoreParams() error {
 	var errs error
 	topics := ctrl.ps.GetTopics()
 	for _, topicName := range topics {
-		topic := ctrl.container.Get(topicName)
+		topic := ctrl.container.Lookup(topicName)
 		if topic == nil {
-			errs = errors.Join(errs, fmt.Errorf("topic %s is not ready; ", topicName))
+			errs = errors.Join(errs, fmt.Errorf("topic %s not found in cache", topicName))
 			continue
 		}
 		p := ctrl.scoreParamsFactory(topicName)
@@ -149,7 +149,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 		return ctrl.ps.ListPeers(""), nil
 	}
 	name = commons.GetTopicFullName(name)
-	topic := ctrl.container.Get(name)
+	topic := ctrl.container.Lookup(name)
 	if topic == nil {
 		return nil, nil
 	}
