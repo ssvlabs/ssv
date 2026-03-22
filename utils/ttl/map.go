@@ -33,7 +33,6 @@ func New[Key comparable, Value any](ctx context.Context, lifespan, cleanupInterv
 			case <-ticker.C:
 				m.idxLastUpdatedAt.Range(func(key Key, t time.Time) bool {
 					if time.Since(t) > lifespan {
-						m.idxLastUpdatedAt.Delete(key)
 						m.Delete(key)
 					}
 					return true
