@@ -16,11 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
-var (
-	// ErrTopicNotReady happens when trying to access a topic which is not ready yet
-	ErrTopicNotReady = errors.New("topic is not ready")
-)
-
 // Controller is an interface for managing pubsub topics
 type Controller interface {
 	// Subscribe subscribes to the given topic
@@ -122,11 +117,11 @@ func (ctrl *topicsCtrl) UpdateScoreParams() error {
 		}
 		p := ctrl.scoreParamsFactory(topicName)
 		if p == nil {
-			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil; ", topicName))
+			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil", topicName))
 			continue
 		}
 		if err := topic.SetScoreParams(p); err != nil {
-			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %w; ", topicName, err))
+			errs = errors.Join(errs, fmt.Errorf("set score params for topic %s: %w", topicName, err))
 			continue
 		}
 	}
