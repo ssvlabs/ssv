@@ -255,11 +255,16 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start() error {
+func (n *p2pNetwork) Start() (err error) {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
 		return nil
 	}
+	defer func() {
+		if err != nil {
+			atomic.StoreInt32(&n.state, stateClosed)
+		}
+	}()
 
 	pAddrs, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
 		ID:    n.host.ID(),
