@@ -266,7 +266,7 @@ func (n *p2pNetwork) Start() error {
 		Addrs: n.host.Addrs(),
 	})
 	if err != nil {
-		n.logger.Fatal("could not get my address", zap.Error(err))
+		return fmt.Errorf("resolve p2p address: %w", err)
 	}
 	maStrs := make([]string, len(pAddrs))
 	for i, ima := range pAddrs {
@@ -439,6 +439,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
+	defer close(connector)
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 			if err := n.idx.CanConnect(e.AddrInfo.ID); err != nil {
@@ -453,7 +454,8 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
-		n.logger.Fatal("could not setup discovery", zap.Error(err))
+		n.logger.Error("could not setup discovery", zap.Error(err))
+		return
 	}
 }
 
