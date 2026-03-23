@@ -594,14 +594,14 @@ func TestCleanupStopsOnCancel(t *testing.T) {
 	// Cancel and verify no panic — cleanup goroutine should exit cleanly.
 	cancel()
 	select {
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(400 * time.Millisecond):
 	case <-t.Context().Done():
 	}
 
 	// After cancel, new entries should NOT be cleaned up (goroutine exited).
 	m.Set(4, "d")
 	select {
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(400 * time.Millisecond):
 	case <-t.Context().Done():
 	}
 	_, ok := m.Get(4)
