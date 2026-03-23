@@ -94,6 +94,7 @@ func (a *validationActor) run(mv *messageValidator, key spectypes.MessageID) {
 			}
 
 		case <-a.stopCh:
+			a.drainPending()
 			return
 		}
 	}
@@ -103,5 +104,21 @@ func (a *validationActor) verifyAndResubmit(req *validationRequest) {
 	err := req.verify()
 	if !a.submit(&validationVerified{request: req, err: err}) {
 		req.respond(errValidationActorClosed)
+	}
+}
+
+func (a *validationActor) drainPending() {
+	for {
+		select {
+		case raw := <-a.inbox:
+			switch msg := raw.(type) {
+			case *validationRequest:
+				msg.respond(errValidationActorClosed)
+			case *validationVerified:
+				msg.request.respond(errValidationActorClosed)
+			}
+		default:
+			return
+		}
 	}
 }

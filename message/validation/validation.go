@@ -231,7 +231,6 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 func (mv *messageValidator) getValidationActor(key spectypes.MessageID) *validationActor {
 	actor, _, _ := mv.validationActorsInflight.Do(key, func() (*validationActor, error) {
 		if cached := mv.validationActors.Get(key); cached != nil {
-			mv.validationActors.Touch(key)
 			return cached.Value(), nil
 		}
 
