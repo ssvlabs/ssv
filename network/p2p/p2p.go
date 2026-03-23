@@ -631,7 +631,11 @@ func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 
 		subnetPeersExcluding := totalSubnetPeers
 		for subnet := range totalSubnetPeers {
 			if pSubnets.IsSet(uint64(subnet)) { //nolint: gosec
-				subnetPeersExcluding[subnet] -= 1
+				// This subtraction here should never result into an underflow in practice (by construction),
+				// clamp to zero just in case that invariant is ever broken by a future change.
+				if subnetPeersExcluding[subnet] >= 1 {
+					subnetPeersExcluding[subnet] -= 1
+				}
 			}
 		}
 
