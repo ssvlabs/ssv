@@ -38,22 +38,23 @@ type eventByIDGetter interface {
 	EventByID(topic ethcommon.Hash) (*ethabi.Event, error)
 }
 
-func New(eventFilterer eventFilterer) *EventParser {
+// New creates an EventParser with the SSV contract and operator public key ABIs.
+func New(eventFilterer eventFilterer) (*EventParser, error) {
 	contractABI, err := contract.ContractMetaData.GetAbi()
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("parse contract ABI: %w", err)
 	}
 
 	operatorPublicKeyABI, err := contract.OperatorPublicKeyMetaData.GetAbi()
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("parse operator public key ABI: %w", err)
 	}
 
 	return &EventParser{
 		eventFilterer:        eventFilterer,
 		eventByIDGetter:      contractABI,
 		operatorPublicKeyABI: operatorPublicKeyABI,
-	}
+	}, nil
 }
 
 func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOperatorAdded, error) {
