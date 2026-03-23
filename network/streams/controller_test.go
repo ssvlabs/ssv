@@ -58,6 +58,24 @@ func TestStreamCtrl(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, res)
 	})
+
+	t.Run("reject oversized response", func(t *testing.T) {
+		ctrl0.(*streamCtrl).readWriteTimeout = time.Second
+		oversized := bytes.Repeat([]byte("x"), maxStreamMessageSize+1)
+
+		hosts[1].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {
+			s := NewStream(stream)
+			defer s.Close()
+			require.NoError(t, s.WriteWithTimeout(oversized, time.Second))
+		})
+
+		d, err := dummyMsg().Encode()
+		require.NoError(t, err)
+
+		res, err := ctrl0.Request(logger, hosts[1].ID(), prot, d)
+		require.ErrorIs(t, err, ErrStreamMessageTooLarge)
+		require.Nil(t, res)
+	})
 }
 
 func dummyMsg() *spectypes.SSVMessage {

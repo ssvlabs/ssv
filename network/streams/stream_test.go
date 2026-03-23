@@ -90,7 +90,7 @@ func TestStreamRejectsOversizedPayload(t *testing.T) {
 	defer strm.Close()
 
 	byts, err := strm.ReadWithTimeout(timeout)
-	require.ErrorIs(t, err, errStreamMessageTooLarge)
+	require.ErrorIs(t, err, ErrStreamMessageTooLarge)
 	require.Nil(t, byts)
 }
 

@@ -10,7 +10,7 @@ import (
 
 const maxStreamMessageSize = 1 << 20 // 1 MiB
 
-var errStreamMessageTooLarge = errors.New("stream message exceeds max size")
+var ErrStreamMessageTooLarge = errors.New("stream message exceeds max size")
 
 // Stream represents a stream in the system
 type Stream interface {
@@ -49,7 +49,9 @@ func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) 
 		return nil, err
 	}
 	if len(data) > maxStreamMessageSize {
-		return nil, errStreamMessageTooLarge
+		// Best-effort abort: the payload is invalid, and the oversize error below is the one callers should handle.
+		_ = ts.Reset()
+		return nil, ErrStreamMessageTooLarge
 	}
 
 	return data, nil

@@ -60,7 +60,7 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	requestsSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 
 	defer func() {
-		if err := s.Close(); err != nil {
+		if err := s.Close(); err != nil && !errors.Is(err, libp2pnetwork.ErrReset) {
 			logger.Debug("could not close stream", zap.Error(err))
 		}
 	}()
@@ -89,7 +89,7 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 	requestsReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
 
 	done := func() {
-		if err := s.Close(); err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
+		if err := s.Close(); err != nil && !errors.Is(err, libp2pnetwork.ErrReset) {
 			logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
 		}
 	}
