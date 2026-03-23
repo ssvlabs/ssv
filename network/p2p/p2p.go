@@ -142,8 +142,8 @@ func New(
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
-		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
-		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
+		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](ctx, 30*time.Minute, 3*time.Minute),
+		trimmedRecently:         ttl.New[peer.ID, struct{}](ctx, 30*time.Minute, 3*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err
@@ -255,18 +255,22 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start() error {
+func (n *p2pNetwork) Start() (err error) {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
-		// return errors.New("could not setup network: in ready state")
-		return nil
+		return fmt.Errorf("network already started")
 	}
+	defer func() {
+		if err != nil {
+			atomic.StoreInt32(&n.state, stateClosed)
+		}
+	}()
 
 	pAddrs, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
 		ID:    n.host.ID(),
 		Addrs: n.host.Addrs(),
 	})
 	if err != nil {
-		n.logger.Fatal("could not get my address", zap.Error(err))
+		return fmt.Errorf("resolve p2p address: %w", err)
 	}
 	maStrs := make([]string, len(pAddrs))
 	for i, ima := range pAddrs {
@@ -439,6 +443,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
+	defer close(connector)
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 			if err := n.idx.CanConnect(e.AddrInfo.ID); err != nil {
@@ -453,7 +458,8 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
-		n.logger.Fatal("could not setup discovery", zap.Error(err))
+		n.logger.Error("could not setup discovery", zap.Error(err))
+		return
 	}
 }
 
