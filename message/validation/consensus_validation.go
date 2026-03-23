@@ -47,23 +47,23 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	if err := mv.verifyConsensusMessageSignatures(signedSSVMessage); err != nil {
-		return consensusMessage, err
-	}
+	if err := mv.withValidationActor(
+		ssvMessage.GetID(),
+		committeeInfo,
+		func(state *ValidatorState) error {
+			if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
+				return err
+			}
 
-	if err := mv.withValidationLock(ssvMessage.GetID(), func() error {
-		state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
-
-		if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
-			return err
-		}
-
-		if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state); err != nil {
-			return err
-		}
-
-		return mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state)
-	}); err != nil {
+			return mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state)
+		},
+		func() error {
+			return mv.verifyConsensusMessageSignatures(signedSSVMessage)
+		},
+		func(state *ValidatorState) error {
+			return mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state)
+		},
+	); err != nil {
 		return consensusMessage, err
 	}
 

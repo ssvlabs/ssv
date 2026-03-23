@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"maps"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -28,11 +30,14 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-type observingSignatureVerifier struct {
-	called chan struct{}
+type blockingSignatureVerifier struct {
+	mu      sync.Mutex
+	started chan int
+	release chan struct{}
+	calls   int
 }
 
-type validationLockTestEnv struct {
+type validationActorTestEnv struct {
 	validator           *messageValidator
 	committeeID         spectypes.CommitteeID
 	committeeIdentifier spectypes.MessageID
@@ -40,16 +45,20 @@ type validationLockTestEnv struct {
 	ks                  *spectestingutils.TestKeySet
 }
 
-func (v *observingSignatureVerifier) VerifySignature(spectypes.OperatorID, *spectypes.SSVMessage, []byte) error {
-	select {
-	case v.called <- struct{}{}:
-	default:
-	}
+func (v *blockingSignatureVerifier) VerifySignature(spectypes.OperatorID, *spectypes.SSVMessage, []byte) error {
+	v.mu.Lock()
+	v.calls++
+	call := v.calls
+	v.mu.Unlock()
 
+	v.started <- call
+	<-v.release
 	return nil
 }
 
-func newValidationLockTestEnv(t *testing.T) validationLockTestEnv {
+func newValidationActorTestEnv(t *testing.T, verifier interface {
+	VerifySignature(spectypes.OperatorID, *spectypes.SSVMessage, []byte) error
+}) validationActorTestEnv {
 	ctrl := gomock.NewController(t)
 
 	logger := zaptest.NewLogger(t)
@@ -105,8 +114,6 @@ func newValidationLockTestEnv(t *testing.T) validationLockTestEnv {
 			AnyTimes()
 	}
 
-	verifier := &observingSignatureVerifier{called: make(chan struct{}, 1)}
-
 	validator := New(
 		netCfg,
 		validatorStore,
@@ -118,7 +125,7 @@ func newValidationLockTestEnv(t *testing.T) validationLockTestEnv {
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleCommittee)
 
-	return validationLockTestEnv{
+	return validationActorTestEnv{
 		validator:           validator,
 		committeeID:         committeeID,
 		committeeIdentifier: committeeIdentifier,
@@ -127,98 +134,118 @@ func newValidationLockTestEnv(t *testing.T) validationLockTestEnv {
 	}
 }
 
-func TestConsensusSignatureVerificationOutsideValidationLock(t *testing.T) {
-	env := newValidationLockTestEnv(t)
+func TestConsensusActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
+	verifier := &blockingSignatureVerifier{
+		started: make(chan int, 2),
+		release: make(chan struct{}, 2),
+	}
+	env := newValidationActorTestEnv(t, verifier)
 
 	slot := env.netCfg.FirstSlotAtEpoch(1)
-	signedSSVMessage := generateSignedMessage(env.ks, env.committeeIdentifier, slot)
+	signedSSVMessage := generateSignedMessage(env.ks, env.committeeIdentifier, slot, func(message *specqbft.Message) {
+		message.MsgType = specqbft.CommitMsgType
+	})
+	signedSSVMessage.FullData = nil
+
 	topicID := commons.CommitteeTopicID(env.committeeID)[0]
 	peerID, err := libp2ptest.RandPeerID()
 	require.NoError(t, err)
+	receivedAt := env.netCfg.SlotStartTime(slot)
 
-	validationMu := env.validator.getValidationLock(signedSSVMessage.SSVMessage.GetID())
-	validationMu.Lock()
-	locked := true
-	defer func() {
-		if locked {
-			validationMu.Unlock()
-		}
-	}()
+	done1 := make(chan error, 1)
+	done2 := make(chan error, 1)
 
-	done := make(chan error, 1)
 	go func() {
-		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, env.netCfg.SlotStartTime(slot))
-		done <- err
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		done1 <- err
 	}()
 
 	select {
-	case <-env.validator.signatureVerifier.(*observingSignatureVerifier).called:
+	case <-verifier.started:
 	case <-time.After(time.Second):
-		t.Fatal("signature verification did not start while the validation lock was held")
+		t.Fatal("first consensus signature verification did not start")
 	}
 
+	go func() {
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		done2 <- err
+	}()
+
 	select {
-	case err := <-done:
-		t.Fatalf("validation completed before the lock was released: %v", err)
-	default:
+	case <-verifier.started:
+	case <-time.After(time.Second):
+		t.Fatal("second consensus signature verification did not start while the first was still verifying")
 	}
 
-	validationMu.Unlock()
-	locked = false
+	verifier.release <- struct{}{}
+	verifier.release <- struct{}{}
 
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("validation did not complete after the lock was released")
+	err1 := <-done1
+	err2 := <-done2
+
+	require.True(t, (err1 == nil) != (err2 == nil), "expected exactly one consensus message to commit")
+
+	dupErr := ErrDuplicatedMessage
+	if err1 != nil {
+		require.ErrorIs(t, err1, dupErr)
+	} else {
+		require.ErrorIs(t, err2, dupErr)
 	}
 }
 
-func TestPartialSignatureVerificationOutsideValidationLock(t *testing.T) {
-	env := newValidationLockTestEnv(t)
+func TestPartialActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
+	verifier := &blockingSignatureVerifier{
+		started: make(chan int, 2),
+		release: make(chan struct{}, 2),
+	}
+	env := newValidationActorTestEnv(t, verifier)
 
-	slot := env.netCfg.FirstSlotAtEpoch(1)
-	ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(env.ks.Shares[1], 1, spec.DataVersionPhase0))
+	partialSignatureMessages := spectestingutils.PostConsensusAggregatorMsg(env.ks.Shares[1], 1, spec.DataVersionPhase0)
+	ssvMessage := spectestingutils.SSVMsgAggregator(nil, partialSignatureMessages)
 	ssvMessage.MsgID = env.committeeIdentifier
 	signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(env.ks, ssvMessage)
+
 	topicID := commons.CommitteeTopicID(env.committeeID)[0]
 	peerID, err := libp2ptest.RandPeerID()
 	require.NoError(t, err)
+	receivedAt := env.netCfg.SlotStartTime(partialSignatureMessages.Slot)
 
-	validationMu := env.validator.getValidationLock(signedSSVMessage.SSVMessage.GetID())
-	validationMu.Lock()
-	locked := true
-	defer func() {
-		if locked {
-			validationMu.Unlock()
-		}
-	}()
+	done1 := make(chan error, 1)
+	done2 := make(chan error, 1)
 
-	done := make(chan error, 1)
 	go func() {
-		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, env.netCfg.SlotStartTime(slot))
-		done <- err
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		done1 <- err
 	}()
 
 	select {
-	case <-env.validator.signatureVerifier.(*observingSignatureVerifier).called:
+	case <-verifier.started:
 	case <-time.After(time.Second):
-		t.Fatal("partial signature verification did not start while the validation lock was held")
+		t.Fatal("first partial signature verification did not start")
 	}
 
+	go func() {
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		done2 <- err
+	}()
+
 	select {
-	case err := <-done:
-		t.Fatalf("partial validation completed before the lock was released: %v", err)
-	default:
+	case <-verifier.started:
+	case <-time.After(time.Second):
+		t.Fatal("second partial signature verification did not start while the first was still verifying")
 	}
 
-	validationMu.Unlock()
-	locked = false
+	verifier.release <- struct{}{}
+	verifier.release <- struct{}{}
 
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(time.Second):
-		t.Fatal("partial validation did not complete after the lock was released")
+	err1 := <-done1
+	err2 := <-done2
+
+	require.True(t, (err1 == nil) != (err2 == nil), "expected exactly one partial signature message to commit")
+
+	if err1 != nil {
+		require.ErrorIs(t, err1, ErrTooManyPartialSigMessage)
+	} else {
+		require.ErrorIs(t, err2, ErrTooManyPartialSigMessage)
 	}
 }

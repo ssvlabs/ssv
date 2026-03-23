@@ -43,19 +43,20 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, err
 	}
 
-	if err := mv.verifyPartialSignatureMessageSignature(signedSSVMessage); err != nil {
-		return partialSignatureMessages, err
-	}
-
 	signer := signedSSVMessage.OperatorIDs[0]
-	if err := mv.withValidationLock(ssvMessage.GetID(), func() error {
-		state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
-		if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state); err != nil {
-			return err
-		}
-
-		return mv.updatePartialSignatureState(partialSignatureMessages, receivedFrom, state, signer, committeeInfo)
-	}); err != nil {
+	if err := mv.withValidationActor(
+		ssvMessage.GetID(),
+		committeeInfo,
+		func(state *ValidatorState) error {
+			return mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state)
+		},
+		func() error {
+			return mv.verifyPartialSignatureMessageSignature(signedSSVMessage)
+		},
+		func(state *ValidatorState) error {
+			return mv.updatePartialSignatureState(partialSignatureMessages, receivedFrom, state, signer, committeeInfo)
+		},
+	); err != nil {
 		return partialSignatureMessages, err
 	}
 

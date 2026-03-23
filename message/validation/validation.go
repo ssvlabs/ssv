@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -56,15 +55,11 @@ type messageValidator struct {
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
-	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
-	// the same ID apply any state modifications (during message validation - which is not
-	// stateless) in an isolated synchronized manner with respect to each other.
-	validationLockCache *ttlcache.Cache[spectypes.MessageID, *sync.Mutex]
-	// validationLocksInflight helps us prevent generating 2 different validation locks
-	// for messages that must lock on the same lock (messages with the same ID) when undergoing
-	// validation (that validation is not stateless - it often requires messageValidator to
-	// update some state).
-	validationLocksInflight singleflight.Group[spectypes.MessageID, *sync.Mutex]
+	// validationActors serialize mutable validation state per MessageID while allowing
+	// signature verification to run asynchronously outside the actor loop.
+	validationActors *ttlcache.Cache[spectypes.MessageID, *validationActor]
+	// validationActorsInflight prevents duplicate actor creation for the same MessageID.
+	validationActorsInflight singleflight.Group[spectypes.MessageID, *validationActor]
 	// states keeps track of signers(individual runners, of which every operator has multiple) per validator.
 	states *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 
@@ -83,13 +78,13 @@ func New(
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
-		logger:              zap.NewNop(),
-		netCfg:              netCfg,
-		validationLockCache: ttlcache.New[spectypes.MessageID, *sync.Mutex](),
-		validatorStore:      validatorStore,
-		operators:           operators,
-		dutyStore:           dutyStore,
-		signatureVerifier:   signatureVerifier,
+		logger:            zap.NewNop(),
+		netCfg:            netCfg,
+		validationActors:  ttlcache.New[spectypes.MessageID, *validationActor](),
+		validatorStore:    validatorStore,
+		operators:         operators,
+		dutyStore:         dutyStore,
+		signatureVerifier: signatureVerifier,
 	}
 
 	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
@@ -101,8 +96,12 @@ func New(
 		opt(mv)
 	}
 
-	// Start automatic expired item deletion for validationLockCache.
-	go mv.validationLockCache.Start()
+	mv.validationActors.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[spectypes.MessageID, *validationActor]) {
+		item.Value().stop()
+	})
+
+	// Start automatic expired item deletion for validationActors.
+	go mv.validationActors.Start()
 	// Start automatic expired item deletion for states.
 	go mv.states.Start()
 
@@ -229,36 +228,43 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	return nil
 }
 
-func (mv *messageValidator) getValidationLock(key spectypes.MessageID) *sync.Mutex {
-	lock, _, _ := mv.validationLocksInflight.Do(key, func() (*sync.Mutex, error) {
-		cachedLock := mv.validationLockCache.Get(key)
-		if cachedLock != nil {
-			return cachedLock.Value(), nil
+func (mv *messageValidator) getValidationActor(key spectypes.MessageID) *validationActor {
+	actor, _, _ := mv.validationActorsInflight.Do(key, func() (*validationActor, error) {
+		if cached := mv.validationActors.Get(key); cached != nil {
+			mv.validationActors.Touch(key)
+			return cached.Value(), nil
 		}
 
-		lock := &sync.Mutex{}
-
-		// validationLockTTL specifies how much time a particular validation lock is meant to
-		// live. It must be large enough for validation lock to never expire while we still are
-		// expecting to process messages targeting that same validation lock. For a message
-		// that will get rejected due to being stale (even after acquiring some validation lock)
-		// it doesn't matter which exact lock will get acquired (because no state updates will
-		// be allowed to take place).
-		// 2 epoch duration is a safe TTL to use - message validation will reject processing
-		// for any message older than that.
-		mv.validationLockCache.Set(key, lock, 2*mv.netCfg.EpochDuration())
-
-		return lock, nil
+		actor := newValidationActor()
+		mv.validationActors.Set(key, actor, 2*mv.netCfg.EpochDuration())
+		go actor.run(mv, key)
+		return actor, nil
 	})
-	return lock
+	mv.validationActors.Touch(key)
+	return actor
 }
 
-func (mv *messageValidator) withValidationLock(key spectypes.MessageID, fn func() error) error {
-	validationMu := mv.getValidationLock(key)
-	validationMu.Lock()
-	defer validationMu.Unlock()
+func (mv *messageValidator) withValidationActor(
+	key spectypes.MessageID,
+	committeeInfo CommitteeInfo,
+	precheck func(*ValidatorState) error,
+	verify func() error,
+	commit func(*ValidatorState) error,
+) error {
+	req := &validationRequest{
+		committeeInfo: committeeInfo,
+		precheck:      precheck,
+		verify:        verify,
+		commit:        commit,
+		result:        make(chan error, 1),
+	}
 
-	return fn()
+	actor := mv.getValidationActor(key)
+	if !actor.submit(req) {
+		return errValidationActorClosed
+	}
+
+	return <-req.result
 }
 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
