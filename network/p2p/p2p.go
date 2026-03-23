@@ -591,59 +591,67 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	return n.cfg.TopicMaxPeers
 }
 
+// buildPeerTrimScores snapshots topic membership once and computes trim scores
+// for the given peers.
+//
+// ownSubnets is our local subscription bitset: which subnets this node cares
+// about when evaluating a peer's usefulness.
+//
+// totalSubnetPeers is the current connected peer count per subnet across all
+// peers in our topic mesh. For each candidate peer we subtract only that peer's
+// own contribution from this total before scoring it.
 func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 {
-	trimSnapshot := n.newPeerTrimSnapshot()
+	ownSubnets := n.SubscribedSubnets()
+	totalSubnetPeers := newSubnetPeers()
+	peerSubnetPeers := make(map[peer.ID]SubnetPeers)
+
+	for topic, peers := range n.PeersByTopic() {
+		subnet, ok := n.topicSubnet(topic)
+		if !ok {
+			continue
+		}
+
+		totalSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+		for _, peerID := range peers {
+			peerContribution := peerSubnetPeers[peerID]
+			peerContribution[subnet]++
+			peerSubnetPeers[peerID] = peerContribution
+		}
+	}
+
 	scores := make(map[peer.ID]float64, len(peerIDs))
 	for _, peerID := range peerIDs {
-		peerContribution := trimSnapshot.peerSubnetPeers[peerID]
 		peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-		scores[peerID] = trimSnapshot.score(peerContribution, peerSubnets)
+		subnetPeersExcluding := totalSubnetPeers
+		for subnet := range subnetPeersExcluding {
+			peerContribution := peerSubnetPeers[peerID][subnet]
+			if peerContribution > subnetPeersExcluding[subnet] {
+				// peerSubnetPeers is built from the same topic membership snapshot as
+				// totalSubnetPeers, so underflow should be impossible. Clamp to zero if
+				// that invariant is ever broken by a future change.
+				subnetPeersExcluding[subnet] = 0
+				continue
+			}
+			subnetPeersExcluding[subnet] -= peerContribution
+		}
+
+		scores[peerID] = subnetPeersExcluding.Score(ownSubnets, peerSubnets)
 	}
 	return scores
 }
 
-type peerTrimSnapshot struct {
-	ownSubnets       commons.Subnets
-	totalSubnetPeers SubnetPeers
-	peerSubnetPeers  map[peer.ID]SubnetPeers
-}
-
-func (n *p2pNetwork) newPeerTrimSnapshot() peerTrimSnapshot {
-	snapshot := peerTrimSnapshot{
-		ownSubnets:       n.SubscribedSubnets(),
-		totalSubnetPeers: newSubnetPeers(),
-		peerSubnetPeers:  make(map[peer.ID]SubnetPeers),
+// topicSubnet parses a topic name into a subnet index and logs malformed topics.
+func (n *p2pNetwork) topicSubnet(topic string) (int, bool) {
+	subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
+	if err != nil {
+		n.logger.Error("failed to parse topic", zap.String("topic", topic), zap.Error(err))
+		return 0, false
 	}
-
-	for topic, peers := range n.PeersByTopic() {
-		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
-		if err != nil {
-			n.logger.Error("failed to parse topic", zap.String("topic", topic), zap.Error(err))
-			continue
-		}
-		if subnet < 0 || subnet >= commons.SubnetsCount {
-			n.logger.Error("invalid topic", zap.String("topic", topic), zap.Int("subnet", int(subnet)))
-			continue
-		}
-
-		for _, peerID := range peers {
-			snapshot.totalSubnetPeers[subnet]++
-
-			// peerSubnetPeers is populated from the same topic membership snapshot as
-			// totalSubnetPeers, so each peer contribution count is a subset of the
-			// corresponding total and can be subtracted safely when scoring.
-			peerSubnetPeers := snapshot.peerSubnetPeers[peerID]
-			peerSubnetPeers[subnet]++
-			snapshot.peerSubnetPeers[peerID] = peerSubnetPeers
-		}
+	if subnet < 0 || subnet >= commons.SubnetsCount {
+		n.logger.Error("invalid topic", zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+		return 0, false
 	}
-
-	return snapshot
-}
-
-func (s peerTrimSnapshot) score(peerContribution SubnetPeers, peerSubnets commons.Subnets) float64 {
-	subnetPeersExcluding := s.totalSubnetPeers.Subtract(peerContribution)
-	return subnetPeersExcluding.Score(s.ownSubnets, peerSubnets)
+	return int(subnet), true
 }
 
 // SubnetPeers contains the number of peers we are connected to for each subnet.
@@ -667,22 +675,6 @@ func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 		sum[i] = a[i] + b[i]
 	}
 	return sum
-}
-
-// Subtract returns the element-wise difference between two subnet peer snapshots.
-// In trim scoring, b is expected to be a per-peer contribution derived from the
-// same topic membership snapshot as a, so each b[i] should be less than or equal
-// to a[i]. If a future caller violates that relationship, the result is clamped
-// to 0 for that subnet instead of allowing uint16 underflow.
-func (a SubnetPeers) Subtract(b SubnetPeers) SubnetPeers {
-	var diff SubnetPeers
-	for i := range a {
-		if b[i] > a[i] {
-			continue
-		}
-		diff[i] = a[i] - b[i]
-	}
-	return diff
 }
 
 // Score estimates how many valuable subnets the given peer would contribute.

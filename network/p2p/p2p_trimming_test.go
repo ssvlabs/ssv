@@ -337,16 +337,6 @@ func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 	}, scores)
 }
 
-func TestSubnetPeersSubtract_ClampsUnderflow(t *testing.T) {
-	base := newSubnetPeers()
-	base[3] = 1
-
-	subtracted := newSubnetPeers()
-	subtracted[3] = 2
-
-	assert.Equal(t, uint16(0), base.Subtract(subtracted)[3])
-}
-
 func BenchmarkChoosePeersToTrim_150Peers(b *testing.B) {
 	ctx := context.Background()
 	localHost := newBenchmarkHost(b)
