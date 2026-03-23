@@ -36,34 +36,49 @@ type validationActor struct {
 	stopOnce    sync.Once
 	lifecycleMu sync.Mutex
 	stopped     bool
+	active      int
+	drained     *sync.Cond
 }
 
 func newValidationActor() *validationActor {
-	return &validationActor{
+	actor := &validationActor{
 		inbox:  make(chan any, 64),
 		stopCh: make(chan struct{}),
 	}
+	actor.drained = sync.NewCond(&actor.lifecycleMu)
+	return actor
 }
 
 func (a *validationActor) stop() {
 	a.stopOnce.Do(func() {
 		a.lifecycleMu.Lock()
-		defer a.lifecycleMu.Unlock()
-
 		a.stopped = true
+		for a.active > 0 {
+			a.drained.Wait()
+		}
 		close(a.stopCh)
+		a.lifecycleMu.Unlock()
 	})
 }
 
 func (a *validationActor) submit(msg any) bool {
 	a.lifecycleMu.Lock()
-	defer a.lifecycleMu.Unlock()
-
 	if a.stopped {
+		a.lifecycleMu.Unlock()
 		return false
 	}
+	a.active++
+	a.lifecycleMu.Unlock()
 
 	a.inbox <- msg
+
+	a.lifecycleMu.Lock()
+	a.active--
+	if a.active == 0 {
+		a.drained.Broadcast()
+	}
+	a.lifecycleMu.Unlock()
+
 	return true
 }
 
@@ -105,6 +120,7 @@ func (a *validationActor) run(mv *messageValidator, key spectypes.MessageID) {
 
 func (a *validationActor) verifyAndResubmit(req *validationRequest) {
 	err := req.verify()
+	// Callers block on req.result, so a stopped actor must still produce a terminal response.
 	if !a.submit(&validationVerified{request: req, err: err}) {
 		req.respond(errValidationActorClosed)
 	}

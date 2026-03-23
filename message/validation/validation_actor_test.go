@@ -2,6 +2,7 @@ package validation
 
 import (
 	"bytes"
+	"context"
 	"maps"
 	"slices"
 	"sync"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	libp2ptest "github.com/libp2p/go-libp2p/core/test"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -205,19 +207,19 @@ func TestPartialActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	}
 	env := newValidationActorTestEnv(t, verifier)
 
-	partialSignatureMessages := spectestingutils.PostConsensusAggregatorMsg(env.ks.Shares[1], 1, spec.DataVersionPhase0)
-	newSignedMessage := func() *spectypes.SignedSSVMessage {
+	newSignedMessage := func() (*spectypes.SignedSSVMessage, phase0.Slot) {
+		partialSignatureMessages := spectestingutils.PostConsensusAggregatorMsg(env.ks.Shares[1], 1, spec.DataVersionPhase0)
 		ssvMessage := spectestingutils.SSVMsgAggregator(nil, partialSignatureMessages)
 		ssvMessage.MsgID = env.committeeIdentifier
-		return spectestingutils.SignPartialSigSSVMessage(env.ks, ssvMessage)
+		return spectestingutils.SignPartialSigSSVMessage(env.ks, ssvMessage), partialSignatureMessages.Slot
 	}
-	signedSSVMessage1 := newSignedMessage()
-	signedSSVMessage2 := newSignedMessage()
+	signedSSVMessage1, slot := newSignedMessage()
+	signedSSVMessage2, _ := newSignedMessage()
 
 	topicID := commons.CommitteeTopicID(env.committeeID)[0]
 	peerID, err := libp2ptest.RandPeerID()
 	require.NoError(t, err)
-	receivedAt := env.netCfg.SlotStartTime(partialSignatureMessages.Slot)
+	receivedAt := env.netCfg.SlotStartTime(slot)
 
 	done1 := make(chan error, 1)
 	done2 := make(chan error, 1)
@@ -257,4 +259,18 @@ func TestPartialActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	} else {
 		require.ErrorIs(t, err2, ErrTooManyPartialSigMessage)
 	}
+}
+
+func TestValidationActorClosedIsIgnored(t *testing.T) {
+	verifier := &blockingSignatureVerifier{
+		started: make(chan int, 1),
+		release: make(chan struct{}, 1),
+	}
+	env := newValidationActorTestEnv(t, verifier)
+
+	peerID, err := libp2ptest.RandPeerID()
+	require.NoError(t, err)
+
+	result := env.validator.handleValidationError(context.Background(), peerID, nil, errValidationActorClosed)
+	require.Equal(t, pubsub.ValidationIgnore, result)
 }
