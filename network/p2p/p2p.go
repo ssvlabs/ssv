@@ -596,19 +596,19 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 //
 // The peer-scores are calculated based on:
 //   - ownSubnets is the desired set of subnets we want to be connected to
-//   - totalSubnetPeers is our own currently connected peer count per subnet across all
+//   - ownSubnetPeers is our own currently connected peer count per subnet across all
 //     peers in our topic mesh
 //   - peerSubnets tracks all the subnets each of our peers is connected to
 //
 // Algo:
-//   - calculate (take snapshot of) ownSubnets, totalSubnetPeers, peerSubnets
+//   - calculate (take snapshot of) ownSubnets, ownSubnetPeers, peerSubnets
 //   - for each candidate peer we need to score:
 //   - calculate subnetPeersExcluding (currently connected subnets IF that candidate peer is excluded/disconnected)
 //   - use SubnetPeers.Score to calculate the final peer-score for each peer (based on: subnetPeersExcluding, desired
 //     set of subnets, subnets this peer is connected to)
 func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 {
 	ownSubnets := n.SubscribedSubnets()
-	totalSubnetPeers := newSubnetPeers()
+	ownSubnetPeers := newSubnetPeers()
 	peerSubnets := make(map[peer.ID]commons.Subnets)
 
 	for topic, peers := range n.PeersByTopic() {
@@ -617,7 +617,7 @@ func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 
 			continue
 		}
 
-		totalSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+		ownSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
 		for _, peerID := range peers {
 			peerContribution := peerSubnets[peerID]
 			peerContribution.Set(subnet)
@@ -628,8 +628,8 @@ func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 
 	scores := make(map[peer.ID]float64, len(peerIDs))
 	for _, peerID := range peerIDs {
 		pSubnets := peerSubnets[peerID]
-		subnetPeersExcluding := totalSubnetPeers
-		for subnet := range totalSubnetPeers {
+		subnetPeersExcluding := ownSubnetPeers
+		for subnet := range ownSubnetPeers {
 			if pSubnets.IsSet(uint64(subnet)) { //nolint: gosec
 				// This subtraction here should never result into an underflow in practice (by construction),
 				// clamp to zero just in case that invariant is ever broken by a future change.
