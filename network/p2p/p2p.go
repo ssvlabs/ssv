@@ -257,8 +257,7 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start() (err error) {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
-		// return errors.New("could not setup network: in ready state")
-		return nil
+		return fmt.Errorf("network already started")
 	}
 	defer func() {
 		if err != nil {
