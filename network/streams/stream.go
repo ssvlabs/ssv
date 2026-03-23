@@ -8,6 +8,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const maxStreamMessageSize = 1 << 20 // 1 MiB
+
+var errStreamMessageTooLarge = errors.New("stream message exceeds max size")
+
 // Stream represents a stream in the system
 type Stream interface {
 	core.Stream
@@ -38,7 +42,17 @@ func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) 
 	if err := ts.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		return nil, errors.Wrap(err, "could not set read deadline")
 	}
-	return io.ReadAll(ts.Stream)
+
+	// Read one byte past the limit so oversized payloads are rejected instead of silently truncated.
+	data, err := io.ReadAll(io.LimitReader(ts.Stream, maxStreamMessageSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxStreamMessageSize {
+		return nil, errStreamMessageTooLarge
+	}
+
+	return data, nil
 }
 
 // WriteWithTimeout reads next message with timeout
