@@ -149,6 +149,37 @@ func TestProposerRunnerProcessPreConsensusDoesNotCacheBlindedBlock(t *testing.T)
 	require.Nil(t, runner.cachedBlindedBlockSSZ)
 }
 
+func TestProposerRunnerProcessPreConsensusReturnsContextCanceledDuringProposerDelay(t *testing.T) {
+	t.Parallel()
+
+	version := spec.DataVersionDeneb
+	duty := spectestingutils.TestingProposerDutyV(version)
+	cfg := cloneTestNetworkConfig()
+	cfg.GenesisTime = time.Now().Add(-time.Duration(duty.Slot)*cfg.SlotDuration + 250*time.Millisecond)
+
+	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 500*time.Millisecond, cfg)
+
+	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold)
+	require.NoError(t, err)
+
+	logger := zap.NewNop()
+	for operatorID := spectypes.OperatorID(1); operatorID < keySet.Threshold; operatorID++ {
+		msg := spectestingutils.PreConsensusRandaoMsgV(keySet.Shares[operatorID], operatorID, version)
+		require.NoError(t, runner.ProcessPreConsensus(context.Background(), logger, msg))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	finalMsg := spectestingutils.PreConsensusRandaoMsgV(keySet.Shares[keySet.Threshold], keySet.Threshold, version)
+	err = runner.ProcessPreConsensus(ctx, logger, finalMsg)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 0, beacon.getCalls)
+	require.Nil(t, runner.cachedFullBlock)
+	require.Nil(t, runner.state().RunningInstance)
+}
+
 func TestRemainingProposerDelay(t *testing.T) {
 	t.Parallel()
 
@@ -199,6 +230,26 @@ func TestRemainingProposerDelay(t *testing.T) {
 			require.Equal(t, tt.want, runner.remainingProposerDelay(slot, tt.now))
 		})
 	}
+}
+
+func TestProposerRunnerStartNewDutySkipsRandaoSigningWhenDoppelgangerBlocks(t *testing.T) {
+	t.Parallel()
+
+	version := spec.DataVersionDeneb
+	duty := spectestingutils.TestingProposerDutyV(version)
+	dg := &stubDoppelganger{canSign: false}
+	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
+	runner, _, network := newProposerRunnerForTest(t, beacon, dg, 0, nil)
+
+	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, 3)
+	require.NoError(t, err)
+
+	require.Equal(t, 0, countPartialSignatureBroadcastsByType(t, network, spectypes.RandaoPartialSig))
+	require.Equal(t, 0, beacon.getCalls)
+	require.Nil(t, runner.cachedFullBlock)
+	require.Nil(t, runner.state().RunningInstance)
+	require.False(t, runner.state().Finished)
+	require.Empty(t, dg.reportQuorum)
 }
 
 func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelgangerBlocks(t *testing.T) {
