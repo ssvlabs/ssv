@@ -23,14 +23,11 @@ func New[Key comparable, Value any](ctx context.Context, lifespan, cleanupInterv
 		idxLastUpdatedAt: hashmap.Map[Key, time.Time]{},
 	}
 	go func() {
-		ticker := time.NewTicker(cleanupInterval)
-		defer ticker.Stop()
-
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-time.After(cleanupInterval):
 				m.idxLastUpdatedAt.Range(func(key Key, t time.Time) bool {
 					if time.Since(t) > lifespan {
 						m.Delete(key)
