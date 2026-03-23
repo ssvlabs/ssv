@@ -208,7 +208,7 @@ func TestBuildPeerTrimScores_ExcludesCandidateFromSubnetCounts(t *testing.T) {
 
 	assert.Equal(
 		t,
-		4.0, // duo
+		4.0, // solo
 		singleTrimScore(network, candidate),
 	)
 }
@@ -233,7 +233,7 @@ func TestBuildPeerTrimScores_IgnoresInvalidTopics(t *testing.T) {
 
 	assert.Equal(
 		t,
-		4.0, // duo
+		4.0, // solo
 		singleTrimScore(network, candidate),
 	)
 }
