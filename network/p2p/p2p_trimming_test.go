@@ -168,9 +168,6 @@ func TestBuildPeerTrimScores_CharacterizesDeadSoloDuoScoring(t *testing.T) {
 	other2 := peer.ID("other-2")
 	other3 := peer.ID("other-3")
 
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(candidate, subnetsFor(0, 1, 2, 3)))
-
 	network := newTrimTestNetwork(
 		nil,
 		&testTopicsController{
@@ -182,19 +179,20 @@ func TestBuildPeerTrimScores_CharacterizesDeadSoloDuoScoring(t *testing.T) {
 				"3": {candidate, other1, other2, other3},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(0, 1, 2, 3),
 	)
 
-	assert.Equal(t, 21.0, singleTrimScore(network, candidate))
+	assert.Equal(
+		t,
+		21.0, // dead + solo + duo
+		singleTrimScore(network, candidate),
+	)
 }
 
 func TestBuildPeerTrimScores_ExcludesCandidateFromSubnetCounts(t *testing.T) {
 	candidate := peer.ID("candidate")
 	other := peer.ID("other")
-
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(candidate, subnetsFor(1)))
 
 	network := newTrimTestNetwork(
 		nil,
@@ -204,19 +202,20 @@ func TestBuildPeerTrimScores_ExcludesCandidateFromSubnetCounts(t *testing.T) {
 				"1": {candidate, other},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(1),
 	)
 
-	assert.Equal(t, 4.0, singleTrimScore(network, candidate))
+	assert.Equal(
+		t,
+		4.0, // duo
+		singleTrimScore(network, candidate),
+	)
 }
 
 func TestBuildPeerTrimScores_IgnoresInvalidTopics(t *testing.T) {
 	candidate := peer.ID("candidate")
 	other := peer.ID("other")
-
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(candidate, subnetsFor(0)))
 
 	network := newTrimTestNetwork(
 		nil,
@@ -228,11 +227,15 @@ func TestBuildPeerTrimScores_IgnoresInvalidTopics(t *testing.T) {
 				"999":          {candidate},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(0),
 	)
 
-	assert.Equal(t, 4.0, singleTrimScore(network, candidate))
+	assert.Equal(
+		t,
+		4.0, // duo
+		singleTrimScore(network, candidate),
+	)
 }
 
 func TestChoosePeersToTrim_SelectsLowestScorePeers(t *testing.T) {
@@ -310,11 +313,6 @@ func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 	mediumValuePeer := peer.ID("medium-value")
 	lowValuePeer := peer.ID("low-value")
 
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(highValuePeer, subnetsFor(0)))
-	require.True(t, idx.UpdatePeerSubnets(mediumValuePeer, subnetsFor(1)))
-	require.True(t, idx.UpdatePeerSubnets(lowValuePeer, subnetsFor(3)))
-
 	network := newTrimTestNetwork(
 		nil,
 		&testTopicsController{
@@ -325,14 +323,14 @@ func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 				"3": {lowValuePeer},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(0, 1),
 	)
 
 	scores := network.buildPeerTrimScores([]peer.ID{highValuePeer, mediumValuePeer, lowValuePeer})
 	assert.Equal(t, map[peer.ID]float64{
-		highValuePeer:   16,
-		mediumValuePeer: 4,
+		highValuePeer:   16 + 4, // dead + solo
+		mediumValuePeer: 4,      // solo
 		lowValuePeer:    0,
 	}, scores)
 }

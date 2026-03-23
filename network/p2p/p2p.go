@@ -381,7 +381,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 }
 
 // choosePeersToTrim returns a map of peers that are least-valuable to us based on how much
-// (dead/solo/duo) they contribute to us (as defined by peerScore func).
+// (dead/solo/duo) they contribute to us.
 func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[peer.ID]struct{} {
 	myPeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
@@ -654,7 +654,7 @@ func (n *p2pNetwork) topicSubnet(topic string) (uint64, bool) {
 	return uint64(subnet), true
 }
 
-// SubnetPeers contains the number of peers we are connected to for each subnet.
+// SubnetPeers maps subnets to the number of peers connected to each of those subnets.
 type SubnetPeers [commons.SubnetsCount]uint16
 
 func newSubnetPeers() SubnetPeers {
