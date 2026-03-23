@@ -142,10 +142,15 @@ func TestConsensusActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	env := newValidationActorTestEnv(t, verifier)
 
 	slot := env.netCfg.FirstSlotAtEpoch(1)
-	signedSSVMessage := generateSignedMessage(env.ks, env.committeeIdentifier, slot, func(message *specqbft.Message) {
-		message.MsgType = specqbft.CommitMsgType
-	})
-	signedSSVMessage.FullData = nil
+	newSignedMessage := func() *spectypes.SignedSSVMessage {
+		signedSSVMessage := generateSignedMessage(env.ks, env.committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.CommitMsgType
+		})
+		signedSSVMessage.FullData = nil
+		return signedSSVMessage
+	}
+	signedSSVMessage1 := newSignedMessage()
+	signedSSVMessage2 := newSignedMessage()
 
 	topicID := commons.CommitteeTopicID(env.committeeID)[0]
 	peerID, err := libp2ptest.RandPeerID()
@@ -156,7 +161,7 @@ func TestConsensusActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	done2 := make(chan error, 1)
 
 	go func() {
-		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage1, topicID, peerID, receivedAt)
 		done1 <- err
 	}()
 
@@ -167,7 +172,7 @@ func TestConsensusActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	}
 
 	go func() {
-		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage2, topicID, peerID, receivedAt)
 		done2 <- err
 	}()
 
@@ -201,9 +206,13 @@ func TestPartialActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	env := newValidationActorTestEnv(t, verifier)
 
 	partialSignatureMessages := spectestingutils.PostConsensusAggregatorMsg(env.ks.Shares[1], 1, spec.DataVersionPhase0)
-	ssvMessage := spectestingutils.SSVMsgAggregator(nil, partialSignatureMessages)
-	ssvMessage.MsgID = env.committeeIdentifier
-	signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(env.ks, ssvMessage)
+	newSignedMessage := func() *spectypes.SignedSSVMessage {
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, partialSignatureMessages)
+		ssvMessage.MsgID = env.committeeIdentifier
+		return spectestingutils.SignPartialSigSSVMessage(env.ks, ssvMessage)
+	}
+	signedSSVMessage1 := newSignedMessage()
+	signedSSVMessage2 := newSignedMessage()
 
 	topicID := commons.CommitteeTopicID(env.committeeID)[0]
 	peerID, err := libp2ptest.RandPeerID()
@@ -214,7 +223,7 @@ func TestPartialActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	done2 := make(chan error, 1)
 
 	go func() {
-		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage1, topicID, peerID, receivedAt)
 		done1 <- err
 	}()
 
@@ -225,7 +234,7 @@ func TestPartialActorVerifiesSameKeyMessagesConcurrently(t *testing.T) {
 	}
 
 	go func() {
-		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		_, err := env.validator.handleSignedSSVMessage(signedSSVMessage2, topicID, peerID, receivedAt)
 		done2 <- err
 	}()
 

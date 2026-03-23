@@ -31,9 +31,11 @@ type validationVerified struct {
 }
 
 type validationActor struct {
-	inbox    chan any
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	inbox       chan any
+	stopCh      chan struct{}
+	stopOnce    sync.Once
+	lifecycleMu sync.Mutex
+	stopped     bool
 }
 
 func newValidationActor() *validationActor {
@@ -45,23 +47,24 @@ func newValidationActor() *validationActor {
 
 func (a *validationActor) stop() {
 	a.stopOnce.Do(func() {
+		a.lifecycleMu.Lock()
+		defer a.lifecycleMu.Unlock()
+
+		a.stopped = true
 		close(a.stopCh)
 	})
 }
 
 func (a *validationActor) submit(msg any) bool {
-	select {
-	case <-a.stopCh:
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+
+	if a.stopped {
 		return false
-	default:
 	}
 
-	select {
-	case a.inbox <- msg:
-		return true
-	case <-a.stopCh:
-		return false
-	}
+	a.inbox <- msg
+	return true
 }
 
 func (a *validationActor) run(mv *messageValidator, key spectypes.MessageID) {
