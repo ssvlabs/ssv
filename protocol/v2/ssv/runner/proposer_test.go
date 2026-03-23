@@ -155,10 +155,10 @@ func TestProposerRunnerProcessPreConsensusReturnsContextCanceledDuringProposerDe
 	version := spec.DataVersionDeneb
 	duty := spectestingutils.TestingProposerDutyV(version)
 	cfg := cloneTestNetworkConfig()
-	cfg.GenesisTime = time.Now().Add(-time.Duration(duty.Slot)*cfg.SlotDuration + 250*time.Millisecond)
+	cfg.GenesisTime = time.Now().Add(-time.Duration(duty.Slot)*cfg.SlotDuration + time.Second)
 
 	beacon := newProposerTestBeacon(spectestingutils.TestingBeaconBlockV(version))
-	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 500*time.Millisecond, cfg)
+	runner, keySet, _ := newProposerRunnerForTest(t, beacon, &stubDoppelganger{canSign: true}, 3*time.Second, cfg)
 
 	err := runner.StartNewDuty(context.Background(), zap.NewNop(), duty, keySet.Threshold)
 	require.NoError(t, err)
