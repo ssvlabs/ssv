@@ -385,7 +385,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 }
 
 // choosePeersToTrim returns a map of peers that are least-valuable to us based on how much
-// (dead/solo/duo) they contribute to us (as defined by peerScore func).
+// (dead/solo/duo) they contribute to us.
 func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[peer.ID]struct{} {
 	myPeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
@@ -393,10 +393,11 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 		return nil
 	}
 
+	peerScores := n.buildPeerTrimScores(myPeers)
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
 		// sort in asc order (peers with the lowest scores come first)
-		aScore := n.peerScore(a)
-		bScore := n.peerScore(b)
+		aScore := peerScores[a]
+		bScore := peerScores[b]
 		if aScore < bScore {
 			return -1
 		}
@@ -609,37 +610,75 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	return n.cfg.TopicMaxPeers
 }
 
-// peerScore calculates peer score based on how valuable this peer would have been if we didn't
-// have him, but then connected with.
-func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
-	// Compute number of peers we're connected to for each subnet excluding peer with peerID.
-	subnetPeersExcluding := newSubnetPeers()
+// buildPeerTrimScores snapshots topic membership once and computes trim scores
+// for the given peers.
+//
+// The peer-scores are calculated based on:
+//   - ownSubnets is the desired set of subnets we want to be connected to
+//   - ownSubnetPeers is our own currently connected peer count per subnet across all
+//     peers in our topic mesh
+//   - peerSubnets tracks all the subnets each of our peers is connected to
+//
+// Algo:
+//   - calculate (take snapshot of) ownSubnets, ownSubnetPeers, peerSubnets
+//   - for each candidate peer we need to score:
+//   - calculate subnetPeersExcluding (currently connected subnets IF that candidate peer is excluded/disconnected)
+//   - use SubnetPeers.Score to calculate the final peer-score for each peer (based on: subnetPeersExcluding, desired
+//     set of subnets, subnets this peer is connected to)
+func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 {
+	ownSubnets := n.SubscribedSubnets()
+	ownSubnetPeers := newSubnetPeers()
+	peerSubnets := make(map[peer.ID]commons.Subnets)
+
 	for topic, peers := range n.PeersByTopic() {
-		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
-		if err != nil {
-			n.logger.Error("failed to parse topic",
-				zap.String("topic", topic), zap.Error(err))
+		subnet, ok := n.topicSubnet(topic)
+		if !ok {
 			continue
 		}
-		if subnet < 0 || subnet >= commons.SubnetsCount {
-			n.logger.Error("invalid topic",
-				zap.String("topic", topic), zap.Int("subnet", int(subnet)))
-			continue
-		}
-		for _, pID := range peers {
-			if pID == peerID {
-				continue
-			}
-			subnetPeersExcluding[subnet]++
+
+		ownSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+		for _, peerID := range peers {
+			peerContribution := peerSubnets[peerID]
+			peerContribution.Set(subnet)
+			peerSubnets[peerID] = peerContribution
 		}
 	}
 
-	ownSubnets := n.SubscribedSubnets()
-	peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-	return subnetPeersExcluding.Score(ownSubnets, peerSubnets)
+	scores := make(map[peer.ID]float64, len(peerIDs))
+	for _, peerID := range peerIDs {
+		pSubnets := peerSubnets[peerID]
+		subnetPeersExcluding := ownSubnetPeers
+		for subnet := range ownSubnetPeers {
+			if pSubnets.IsSet(uint64(subnet)) { //nolint: gosec
+				// This subtraction here should never result into an underflow in practice (by construction),
+				// clamp to zero just in case that invariant is ever broken by a future change.
+				if subnetPeersExcluding[subnet] >= 1 {
+					subnetPeersExcluding[subnet] -= 1
+				}
+			}
+		}
+
+		advertisedSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
+		scores[peerID] = subnetPeersExcluding.Score(ownSubnets, advertisedSubnets)
+	}
+	return scores
 }
 
-// SubnetPeers contains the number of peers we are connected to for each subnet.
+// topicSubnet parses a topic name into a subnet index and logs malformed topics.
+func (n *p2pNetwork) topicSubnet(topic string) (uint64, bool) {
+	subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
+	if err != nil {
+		n.logger.Error("failed to parse topic", zap.String("topic", topic), zap.Error(err))
+		return 0, false
+	}
+	if subnet < 0 || subnet >= commons.SubnetsCount {
+		n.logger.Error("invalid topic", zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+		return 0, false
+	}
+	return uint64(subnet), true
+}
+
+// SubnetPeers maps subnets to the number of peers connected to each of those subnets.
 type SubnetPeers [commons.SubnetsCount]uint16
 
 func newSubnetPeers() SubnetPeers {
