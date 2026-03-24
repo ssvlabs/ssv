@@ -390,10 +390,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    event.Slot,
-						CurrentDutyDependentRootChanged: false,
+						Slot:                             event.Slot,
+						CurrentDutyDependentRootChanged:  false,
 						PreviousDutyDependentRootChanged: true,
-						EpochTransition: true,
+						EpochTransition:                  true,
 					}
 				}
 			} else {
@@ -406,10 +406,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    event.Slot,
-						CurrentDutyDependentRootChanged: false,
+						Slot:                             event.Slot,
+						CurrentDutyDependentRootChanged:  false,
 						PreviousDutyDependentRootChanged: true,
-						EpochTransition: false,
+						EpochTransition:                  false,
 					}
 				}
 
@@ -421,10 +421,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    event.Slot,
-						CurrentDutyDependentRootChanged: true,
+						Slot:                             event.Slot,
+						CurrentDutyDependentRootChanged:  true,
 						PreviousDutyDependentRootChanged: false,
-						EpochTransition: false,
+						EpochTransition:                  false,
 					}
 				}
 			}
