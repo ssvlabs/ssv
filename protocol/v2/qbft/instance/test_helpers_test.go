@@ -25,6 +25,19 @@ type instanceTestEnv struct {
 	timer   *roundtimer.TestQBFTTimer
 }
 
+type spyNetwork struct {
+	broadcasted []*spectypes.SignedSSVMessage
+	onBroadcast func(*spectypes.SignedSSVMessage) error
+}
+
+func (n *spyNetwork) Broadcast(msgID spectypes.MessageID, message *spectypes.SignedSSVMessage) error {
+	n.broadcasted = append(n.broadcasted, message)
+	if n.onBroadcast != nil {
+		return n.onBroadcast(message)
+	}
+	return nil
+}
+
 type testValueChecker struct{}
 
 func (testValueChecker) CheckValue(data []byte) error {
@@ -90,6 +103,10 @@ func (e *instanceTestEnv) setLeader(operatorID spectypes.OperatorID) {
 	e.config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return operatorID
 	}
+}
+
+func (e *instanceTestEnv) setNetwork(network specqbft.Network) {
+	e.config.Network = network
 }
 
 func (e *instanceTestEnv) hash(fullData []byte) [32]byte {
