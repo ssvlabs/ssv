@@ -12,4 +12,3 @@ func ValidateCursor(cur string) error {
 	_, err := parseCursor(cur)
 	return err
 }
-
