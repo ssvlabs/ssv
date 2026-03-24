@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
@@ -182,7 +183,8 @@ func setupEventHandler(
 	if useMockCtrl {
 		tExecutor := mocks.NewMockTaskExecutor(ctrl)
 
-		parser := eventparser.New(contractFilterer)
+		parser, err := eventparser.New(contractFilterer)
+		require.NoError(t, err)
 
 		eh, err := eventhandler.New(
 			nodeStorage,
@@ -213,7 +215,8 @@ func setupEventHandler(
 		OperatorDataStore: operatorDataStore,
 	}, exporter.Options{})
 
-	parser := eventparser.New(contractFilterer)
+	parser, err := eventparser.New(contractFilterer)
+	require.NoError(t, err)
 
 	eh, err := eventhandler.New(
 		nodeStorage,
