@@ -334,40 +334,30 @@ func TestScheduler_Proposer_Reorg_Previous(t *testing.T) {
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: trigger reorg
+		// STEP 4: trigger reorg on previous dependent root change (same epoch, no epoch transition).
+		// Proposer duties depend on the current duty dependent root, not the previous one,
+		// so no refetch should happen for the current epoch.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch + 1,
 				PreviousDutyDependentRoot: phase0.Root{0x02},
 			},
 		}
-		dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
-			{
-				PubKey:         phase0.BLSPubKey{1, 2, 3},
-				Slot:           phase0.Slot(testSlotsPerEpoch + 4),
-				ValidatorIndex: phase0.ValidatorIndex(1),
-			},
-		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: wait for no action to be taken
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 6: The first assigned duty should not be executed
+		// STEP 6: The originally assigned duty should be executed (no refetch happened, original duties remain)
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+3))
-		ticker.Send(phase0.Slot(testSlotsPerEpoch + 3))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
-
-		// STEP 7: The second assigned duty should be executed
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+4))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
-		ticker.Send(phase0.Slot(testSlotsPerEpoch + 4))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch + 3))
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// Stop scheduler & wait for graceful exit.
@@ -421,7 +411,9 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: trigger reorg
+		// STEP 4: trigger reorg on previous dependent root change (same epoch, no epoch transition).
+		// Proposer duties depend on the current duty dependent root, not the previous one,
+		// so no refetch should happen for the current epoch.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch + 1,
@@ -436,7 +428,7 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: trigger indices change
 		scheduler.indicesChg <- struct{}{}
@@ -717,7 +709,8 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: trigger reorg
+		// STEP 4: trigger reorg on current dependent root change.
+		// Proposer duties depend on the current duty dependent root, so a refetch should happen immediately.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                     testSlotsPerEpoch + testSlotsPerEpoch/2 + 1,
@@ -732,9 +725,9 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
-		// STEP 5: wait for proposer duties to be re-fetched for the current epoch
+		// STEP 5: wait for proposer duties to be fetched for the next epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 2))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
@@ -826,8 +819,8 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: trigger reorg & check no action is taken in the current slot since it only affects the next epoch
-		// (we'll fetch the duties for the next epoch on the next slot-tick).
+		// STEP 4: trigger reorg on current dependent root change.
+		// Proposer duties depend on the current duty dependent root, so a refetch should happen immediately.
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                     testSlotsPerEpoch + testSlotsPerEpoch/2 + 1,
@@ -842,7 +835,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 2))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
