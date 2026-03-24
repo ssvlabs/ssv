@@ -218,34 +218,41 @@ func (a *Auditor) Start(ctx context.Context, tickerProvider slotticker.Provider)
 		return
 	}
 
-	// Protect the node from auditor failures.
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				a.logger.Error("auditor panicked", zap.Any("panic", r))
-			}
-		}()
-
 		t := tickerProvider()
 		pruneEvery := phase0.Slot(a.cfg.SlotsPerEpoch) // prune once/epoch
 
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.Next():
-				nowSlot := t.Slot()
-				if uint64(nowSlot) < a.opts.DelaySlots {
-					continue
-				}
-				auditSlot := phase0.Slot(uint64(nowSlot) - a.opts.DelaySlots)
-				a.auditBestEffort(ctx, auditSlot)
+			// Per-iteration recovery: a single panic must not permanently stop the auditor loop.
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						a.logger.Error("auditor loop panicked", zap.Any("panic", r))
+					}
+				}()
 
-				if pruneEvery > 0 && auditSlot%pruneEvery == 0 {
-					a.pruneBestEffort(ctx, nowSlot)
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.Next():
+					nowSlot := t.Slot()
+					if uint64(nowSlot) < a.opts.DelaySlots {
+						return
+					}
+					auditSlot := phase0.Slot(uint64(nowSlot) - a.opts.DelaySlots)
+					a.auditBestEffort(ctx, auditSlot)
+
+					if pruneEvery > 0 && auditSlot%pruneEvery == 0 {
+						a.pruneBestEffort(ctx, nowSlot)
+						a.pruneMemoryBestEffort(nowSlot)
+					}
+				case s := <-a.reauditCh:
+					a.auditBestEffort(ctx, s)
 				}
-			case s := <-a.reauditCh:
-				a.auditBestEffort(ctx, s)
+			}()
+
+			if ctx.Err() != nil {
+				return
 			}
 		}
 	}()
@@ -255,6 +262,11 @@ func (a *Auditor) auditBestEffort(ctx context.Context, slot phase0.Slot) {
 	if !a.Enabled() {
 		return
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			a.logger.Error("audit slot panicked", fields.Slot(slot), zap.Any("panic", r))
+		}
+	}()
 	if err := a.AuditSlot(ctx, slot); err != nil {
 		a.logger.Warn("audit slot failed", fields.Slot(slot), zap.Error(err))
 	}
@@ -276,6 +288,11 @@ func (a *Auditor) pruneBestEffort(ctx context.Context, nowSlot phase0.Slot) {
 	if retSlotsI64 <= 0 {
 		return
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			a.logger.Error("prune panicked", zap.Any("panic", r))
+		}
+	}()
 	// #nosec G115 -- retSlotsI64 is checked to be > 0 above.
 	retSlots := phase0.Slot(uint64(retSlotsI64))
 	if retSlots == 0 {
@@ -287,6 +304,64 @@ func (a *Auditor) pruneBestEffort(ctx context.Context, nowSlot phase0.Slot) {
 	cutoff := nowSlot - retSlots
 	if err := a.store.Prune(cutoff); err != nil {
 		a.logger.Warn("prune failed", zap.Error(err), zap.Uint64("cutoff_slot", uint64(cutoff)))
+	}
+}
+
+func (a *Auditor) pruneMemoryBestEffort(nowSlot phase0.Slot) {
+	if !a.Enabled() {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			a.logger.Error("memory prune panicked", zap.Any("panic", r))
+		}
+	}()
+	a.pruneMemory(nowSlot)
+}
+
+func (a *Auditor) pruneMemory(nowSlot phase0.Slot) {
+	const keepEpochs = uint64(4)
+
+	keepSlots := phase0.Slot(keepEpochs*a.cfg.SlotsPerEpoch + a.opts.DelaySlots + 1)
+	var cutoffSlot phase0.Slot
+	if nowSlot > keepSlots {
+		cutoffSlot = nowSlot - keepSlots
+	}
+
+	nowEpoch := a.cfg.EstimatedEpochAtSlot(nowSlot)
+	nowPeriod := a.cfg.EstimatedSyncCommitteePeriodAtEpoch(nowEpoch)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	for slot := range a.lastScheduleCompute {
+		if slot < cutoffSlot {
+			delete(a.lastScheduleCompute, slot)
+		}
+	}
+	for slot := range a.scheduleJobDrops {
+		if slot < cutoffSlot {
+			delete(a.scheduleJobDrops, slot)
+		}
+	}
+	for k, ev := range a.lastDutyFetch {
+		switch {
+		case ev.Epoch != nil:
+			// Keep a small window of epochs per role.
+			if uint64(*ev.Epoch)+keepEpochs < uint64(nowEpoch) {
+				delete(a.lastDutyFetch, k)
+			}
+		case ev.Period != nil:
+			// Keep a small window of periods per role.
+			if *ev.Period+keepEpochs < nowPeriod {
+				delete(a.lastDutyFetch, k)
+			}
+		default:
+			// Fallback: if neither epoch nor period is set, rely on time.
+			if !ev.At.IsZero() && time.Since(ev.At) > 2*time.Hour {
+				delete(a.lastDutyFetch, k)
+			}
+		}
 	}
 }
 

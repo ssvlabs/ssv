@@ -104,6 +104,74 @@ func (b *fakeBeacon) SyncCommitteeDuties(_ context.Context, _ phase0.Epoch, indi
 	return out, nil
 }
 
+type panicTraces struct{}
+
+func (p panicTraces) GetCommitteeDuties(_ phase0.Slot, _ ...spectypes.BeaconRole) ([]*exporter.CommitteeDutyTrace, error) {
+	panic("boom")
+}
+func (p panicTraces) GetScheduled(_ phase0.Slot) (map[phase0.ValidatorIndex]rolemask.Mask, error) {
+	return map[phase0.ValidatorIndex]rolemask.Mask{}, nil
+}
+func (p panicTraces) GetCommitteeDutyLinks(_ phase0.Slot) ([]*exporter.CommitteeDutyLink, error) {
+	return nil, nil
+}
+
+func TestAuditor_AuditBestEffort_RecoversFromPanic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	reg := regmocks.NewMockValidatorStore(ctrl)
+
+	a := New(zap.NewNop(), networkconfig.TestNetwork.Beacon, panicTraces{}, dutystore.New(), reg, nil, &memStore{}, Options{Enabled: true})
+	require.NotPanics(t, func() { a.auditBestEffort(context.Background(), phase0.Slot(64)) })
+}
+
+func TestAuditor_PruneMemory_EvictsOldEntries(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	reg := regmocks.NewMockValidatorStore(ctrl)
+
+	cfg := networkconfig.TestNetwork.Beacon
+	a := New(zap.NewNop(), cfg, &fakeTraceReader{}, dutystore.New(), reg, nil, &memStore{}, Options{Enabled: true, DelaySlots: 4})
+
+	nowSlot := phase0.Slot(1000)
+	cutoffSlot := nowSlot - phase0.Slot(4*cfg.SlotsPerEpoch+a.opts.DelaySlots+1)
+
+	a.lastScheduleCompute[cutoffSlot-1] = ScheduleComputeEvent{Slot: cutoffSlot - 1}
+	a.lastScheduleCompute[cutoffSlot+1] = ScheduleComputeEvent{Slot: cutoffSlot + 1}
+	a.scheduleJobDrops[cutoffSlot-1] = 1
+	a.scheduleJobDrops[cutoffSlot+1] = 1
+
+	oldEpoch := cfg.EstimatedEpochAtSlot(nowSlot) - 10
+	a.RecordDutyFetch(DutyFetchEvent{Role: spectypes.BNRoleAttester, Epoch: &oldEpoch, At: time.Now().Add(-3 * time.Hour)})
+	curEpoch := cfg.EstimatedEpochAtSlot(nowSlot)
+	a.RecordDutyFetch(DutyFetchEvent{Role: spectypes.BNRoleAttester, Epoch: &curEpoch, At: time.Now()})
+
+	oldPeriod := cfg.EstimatedSyncCommitteePeriodAtEpoch(curEpoch) - 10
+	a.RecordDutyFetch(DutyFetchEvent{Role: spectypes.BNRoleSyncCommittee, Period: &oldPeriod, At: time.Now().Add(-3 * time.Hour)})
+	curPeriod := cfg.EstimatedSyncCommitteePeriodAtEpoch(curEpoch)
+	a.RecordDutyFetch(DutyFetchEvent{Role: spectypes.BNRoleSyncCommittee, Period: &curPeriod, At: time.Now()})
+
+	a.pruneMemory(nowSlot)
+
+	_, hasOldCompute := a.lastScheduleCompute[cutoffSlot-1]
+	_, hasNewCompute := a.lastScheduleCompute[cutoffSlot+1]
+	require.False(t, hasOldCompute)
+	require.True(t, hasNewCompute)
+	_, hasOldDrops := a.scheduleJobDrops[cutoffSlot-1]
+	_, hasNewDrops := a.scheduleJobDrops[cutoffSlot+1]
+	require.False(t, hasOldDrops)
+	require.True(t, hasNewDrops)
+
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	for _, ev := range a.lastDutyFetch {
+		if ev.Epoch != nil {
+			require.GreaterOrEqual(t, uint64(*ev.Epoch), uint64(curEpoch))
+		}
+		if ev.Period != nil {
+			require.GreaterOrEqual(t, *ev.Period, curPeriod)
+		}
+	}
+}
+
 func TestAuditor_ScheduleMissingIndex(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	reg := regmocks.NewMockValidatorStore(ctrl)
