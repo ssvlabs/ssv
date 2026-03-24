@@ -163,10 +163,9 @@ Auditor emits metrics under the `ssv.dutytracer.auditor.*` namespace:
 - `ssv.dutytracer.auditor.findings.total{reason=...}`
 - `ssv.dutytracer.auditor.findings.dropped{reason=...,drop_why=...}`
 - `ssv.dutytracer.auditor.last_audited_slot`
-- `ssv.dutytracer.auditor.rpc.attester.requests`, `.errors`
-- `ssv.dutytracer.auditor.rpc.sync.requests`, `.errors`
+- `ssv.dutytracer.auditor.rpc.requests{role=...}`
+- `ssv.dutytracer.auditor.rpc.errors{role=...}`
 
 Recommended alerts:
 - sustained non-zero `findings.total` for reasons that indicate systemic errors (`SCHEDULE_READ_FAILED`, `SCHEDULE_JOB_DROPPED`, `TRACE_SLOT_MISATTRIBUTED`)
 - spike in `findings.dropped{drop_why="cap_reached"}` (means store isn’t capturing full diversity; rely on logs + increase cap only if necessary)
-
