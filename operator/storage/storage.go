@@ -8,7 +8,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -159,19 +158,19 @@ func (s *storage) BumpNonce(rw basedb.ReadWriter, owner common.Address) error {
 func (s *storage) DropRegistryData() error {
 	err := s.dropLastProcessedBlock()
 	if err != nil {
-		return errors.Wrap(err, "failed to drop last processed block")
+		return fmt.Errorf("drop last processed block: %w", err)
 	}
 	err = s.DropShares()
 	if err != nil {
-		return errors.Wrap(err, "failed to drop operators")
+		return fmt.Errorf("drop shares: %w", err)
 	}
 	err = s.DropOperators()
 	if err != nil {
-		return errors.Wrap(err, "failed to drop recipients")
+		return fmt.Errorf("drop operators: %w", err)
 	}
 	err = s.DropRecipients()
 	if err != nil {
-		return errors.Wrap(err, "failed to drop shares")
+		return fmt.Errorf("drop recipients: %w", err)
 	}
 	return nil
 }
