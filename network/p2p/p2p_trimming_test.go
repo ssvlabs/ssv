@@ -7,16 +7,13 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
-	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -60,116 +57,11 @@ func (c *testTopicsController) Close() error {
 
 var _ topics.Controller = (*testTopicsController)(nil)
 
-type testPeerIndex struct {
-	subnets peers.SubnetsIndex
-}
-
-func newTestPeerIndex() *testPeerIndex {
-	return &testPeerIndex{
-		subnets: peers.NewSubnetsIndex(),
-	}
-}
-
-func (i *testPeerIndex) Connectedness(peer.ID) p2pnet.Connectedness {
-	return p2pnet.NotConnected
-}
-
-func (i *testPeerIndex) CanConnect(peer.ID) error {
-	return nil
-}
-
-func (i *testPeerIndex) AtLimit(p2pnet.Direction) bool {
-	return false
-}
-
-func (i *testPeerIndex) IsBad(peer.ID) bool {
-	return false
-}
-
-func (i *testPeerIndex) Score(peer.ID, ...*peers.NodeScore) error {
-	return nil
-}
-
-func (i *testPeerIndex) GetScore(peer.ID, ...string) ([]peers.NodeScore, error) {
-	return nil, nil
-}
-
-func (i *testPeerIndex) SelfSealed() ([]byte, error) {
-	return nil, nil
-}
-
-func (i *testPeerIndex) Self() *records.NodeInfo {
-	return nil
-}
-
-func (i *testPeerIndex) UpdateSelfRecord(func(*records.NodeInfo) *records.NodeInfo) {
-}
-
-func (i *testPeerIndex) SetNodeInfo(peer.ID, *records.NodeInfo) {
-}
-
-func (i *testPeerIndex) NodeInfo(peer.ID) *records.NodeInfo {
-	return nil
-}
-
-func (i *testPeerIndex) PeerInfo(peer.ID) *peers.PeerInfo {
-	return nil
-}
-
-func (i *testPeerIndex) AddPeerInfo(peer.ID, ma.Multiaddr, p2pnet.Direction) {
-}
-
-func (i *testPeerIndex) UpdatePeerInfo(peer.ID, func(*peers.PeerInfo)) {
-}
-
-func (i *testPeerIndex) State(peer.ID) peers.PeerState {
-	return peers.StateUnknown
-}
-
-func (i *testPeerIndex) SetState(peer.ID, peers.PeerState) {
-}
-
-func (i *testPeerIndex) UpdatePeerSubnets(id peer.ID, subnets commons.Subnets) bool {
-	return i.subnets.UpdatePeerSubnets(id, subnets)
-}
-
-func (i *testPeerIndex) GetSubnetPeers(subnet int) []peer.ID {
-	return i.subnets.GetSubnetPeers(subnet)
-}
-
-func (i *testPeerIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
-	return i.subnets.GetPeerSubnets(id)
-}
-
-func (i *testPeerIndex) GetSubnetsStats() *peers.SubnetsStats {
-	return i.subnets.GetSubnetsStats()
-}
-
-func (i *testPeerIndex) SetScores(map[peer.ID]float64) {
-}
-
-func (i *testPeerIndex) GetGossipScore(peer.ID) (float64, bool) {
-	return 0, false
-}
-
-func (i *testPeerIndex) HasBadGossipScore(peer.ID) (bool, float64) {
-	return false, 0
-}
-
-func (i *testPeerIndex) Close() error {
-	return nil
-}
-
-var _ peers.Index = (*testPeerIndex)(nil)
-
 func TestBuildPeerTrimScores_CharacterizesDeadSoloDuoScoring(t *testing.T) {
 	candidate := peer.ID("candidate")
 	other1 := peer.ID("other-1")
 	other2 := peer.ID("other-2")
 	other3 := peer.ID("other-3")
-
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(candidate, subnetsFor(0, 1, 2, 3)))
 
 	network := newTrimTestNetwork(
 		nil,
@@ -182,19 +74,20 @@ func TestBuildPeerTrimScores_CharacterizesDeadSoloDuoScoring(t *testing.T) {
 				"3": {candidate, other1, other2, other3},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(0, 1, 2, 3),
 	)
 
-	assert.Equal(t, 21.0, singleTrimScore(network, candidate))
+	assert.Equal(
+		t,
+		21.0, // dead + solo + duo
+		singleTrimScore(network, candidate),
+	)
 }
 
 func TestBuildPeerTrimScores_ExcludesCandidateFromSubnetCounts(t *testing.T) {
 	candidate := peer.ID("candidate")
 	other := peer.ID("other")
-
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(candidate, subnetsFor(1)))
 
 	network := newTrimTestNetwork(
 		nil,
@@ -204,19 +97,20 @@ func TestBuildPeerTrimScores_ExcludesCandidateFromSubnetCounts(t *testing.T) {
 				"1": {candidate, other},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(1),
 	)
 
-	assert.Equal(t, 4.0, singleTrimScore(network, candidate))
+	assert.Equal(
+		t,
+		4.0, // solo
+		singleTrimScore(network, candidate),
+	)
 }
 
 func TestBuildPeerTrimScores_IgnoresInvalidTopics(t *testing.T) {
 	candidate := peer.ID("candidate")
 	other := peer.ID("other")
-
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(candidate, subnetsFor(0)))
 
 	network := newTrimTestNetwork(
 		nil,
@@ -228,11 +122,15 @@ func TestBuildPeerTrimScores_IgnoresInvalidTopics(t *testing.T) {
 				"999":          {candidate},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(0),
 	)
 
-	assert.Equal(t, 4.0, singleTrimScore(network, candidate))
+	assert.Equal(
+		t,
+		4.0, // solo
+		singleTrimScore(network, candidate),
+	)
 }
 
 func TestChoosePeersToTrim_SelectsLowestScorePeers(t *testing.T) {
@@ -246,11 +144,6 @@ func TestChoosePeersToTrim_SelectsLowestScorePeers(t *testing.T) {
 	connectHosts(t, ctx, localHost, mediumValuePeer)
 	connectHosts(t, ctx, localHost, lowValuePeer)
 
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(highValuePeer.ID(), subnetsFor(0)))
-	require.True(t, idx.UpdatePeerSubnets(mediumValuePeer.ID(), subnetsFor(1)))
-	require.True(t, idx.UpdatePeerSubnets(lowValuePeer.ID(), subnetsFor(3)))
-
 	network := newTrimTestNetwork(
 		localHost,
 		&testTopicsController{
@@ -262,7 +155,7 @@ func TestChoosePeersToTrim_SelectsLowestScorePeers(t *testing.T) {
 			},
 			allPeers: []peer.ID{highValuePeer.ID(), mediumValuePeer.ID(), lowValuePeer.ID()},
 		},
-		idx,
+		nil,
 		subnetsFor(0, 1),
 	)
 
@@ -281,11 +174,6 @@ func TestChoosePeersToTrim_TrimInboundOnlySkipsOutboundPeers(t *testing.T) {
 	connectHosts(t, ctx, inboundPeer, localHost)
 	connectHosts(t, ctx, highValueInboundPeer, localHost)
 
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(outboundPeer.ID(), subnetsFor(3)))
-	require.True(t, idx.UpdatePeerSubnets(inboundPeer.ID(), subnetsFor(1)))
-	require.True(t, idx.UpdatePeerSubnets(highValueInboundPeer.ID(), subnetsFor(0)))
-
 	network := newTrimTestNetwork(
 		localHost,
 		&testTopicsController{
@@ -297,7 +185,7 @@ func TestChoosePeersToTrim_TrimInboundOnlySkipsOutboundPeers(t *testing.T) {
 			},
 			allPeers: []peer.ID{outboundPeer.ID(), inboundPeer.ID(), highValueInboundPeer.ID()},
 		},
-		idx,
+		nil,
 		subnetsFor(0, 1),
 	)
 
@@ -310,11 +198,6 @@ func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 	mediumValuePeer := peer.ID("medium-value")
 	lowValuePeer := peer.ID("low-value")
 
-	idx := newTestPeerIndex()
-	require.True(t, idx.UpdatePeerSubnets(highValuePeer, subnetsFor(0)))
-	require.True(t, idx.UpdatePeerSubnets(mediumValuePeer, subnetsFor(1)))
-	require.True(t, idx.UpdatePeerSubnets(lowValuePeer, subnetsFor(3)))
-
 	network := newTrimTestNetwork(
 		nil,
 		&testTopicsController{
@@ -325,14 +208,14 @@ func TestBuildPeerTrimScores_ComputesScoresForAllCandidates(t *testing.T) {
 				"3": {lowValuePeer},
 			},
 		},
-		idx,
+		nil,
 		subnetsFor(0, 1),
 	)
 
 	scores := network.buildPeerTrimScores([]peer.ID{highValuePeer, mediumValuePeer, lowValuePeer})
 	assert.Equal(t, map[peer.ID]float64{
-		highValuePeer:   16,
-		mediumValuePeer: 4,
+		highValuePeer:   16 + 4, // dead + solo
+		mediumValuePeer: 4,      // solo
 		lowValuePeer:    0,
 	}, scores)
 }
@@ -354,14 +237,12 @@ func BenchmarkChoosePeersToTrim_150Peers(b *testing.B) {
 	}
 
 	allPeers := make([]peer.ID, 0, peerCount)
-	idx := newTestPeerIndex()
 	for i := 0; i < peerCount; i++ {
 		remoteHost := newBenchmarkHost(b)
 		connectHostsForBenchmark(b, ctx, localHost, remoteHost)
 
 		peerID := remoteHost.ID()
 		subnet := uint64(i % topicCount)
-		require.True(b, idx.UpdatePeerSubnets(peerID, subnetsFor(subnet)))
 		topicsByName[commons.SubnetTopicID(subnet)] = append(topicsByName[commons.SubnetTopicID(subnet)], peerID)
 		allPeers = append(allPeers, peerID)
 	}
@@ -373,7 +254,7 @@ func BenchmarkChoosePeersToTrim_150Peers(b *testing.B) {
 			peersByTopic: topicsByName,
 			allPeers:     allPeers,
 		},
-		idx,
+		nil,
 		subnetsFor(0, 1, 2, 3, 4, 5, 6, 7),
 	)
 
