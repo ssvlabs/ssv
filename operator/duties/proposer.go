@@ -157,6 +157,8 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
+			refetchCurrentEpoch := reorgEvent.CurrentDutyDependentRootChanged ||
+				(reorgEvent.PreviousDutyDependentRootChanged && reorgEvent.EpochTransition)
 			logger := h.logger.With(
 				zap.String("epoch_slot_pos", buildStr),
 				zap.Uint64("current_epoch", uint64(currentEpoch)),
@@ -165,7 +167,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			logger.Info("🔀 reorg event received",
 				zap.Any("event", reorgEvent),
-				zap.Bool("refetch_current_epoch_duties", !reorgEvent.Current),
+				zap.Bool("refetch_current_epoch_duties", refetchCurrentEpoch),
 				zap.Bool("refetch_next_epoch_duties", true),
 			)
 
@@ -177,14 +179,9 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
 				defer cancel()
 
-				// 1) Declare intents.
-				if !reorgEvent.Current {
-					// Reorg on the previous epoch means the duties for the current epoch might have changed, so
-					// we want to re-fetch them.
+				if refetchCurrentEpoch {
 					h.dutyFetchIntents[currentEpoch] = false
 				}
-				// Reorg on the previous or current epoch means the duties for the next epoch might have changed, so
-				// we want to re-fetch them.
 				h.dutyFetchIntents[nextEpoch] = false
 
 				// 2) Process certain intents immediately.
