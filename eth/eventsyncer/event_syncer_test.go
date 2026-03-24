@@ -214,7 +214,8 @@ func setupEventHandler(
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
 
-	parser := eventparser.New(contractFilterer)
+	parser, err := eventparser.New(contractFilterer)
+	require.NoError(t, err)
 
 	dgHandler := doppelganger.NoOpHandler{}
 
