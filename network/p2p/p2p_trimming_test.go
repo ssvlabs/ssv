@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -270,6 +271,31 @@ func singleTrimScore(network *p2pNetwork, peerID peer.ID) float64 {
 }
 
 func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.Index, ownSubnets commons.Subnets) *p2pNetwork {
+	if idx == nil {
+		if host != nil {
+			idx = peers.NewPeersIndex(zap.NewNop(), host.Network(), nil, func(string) int { return 0 }, nil, peers.NewGossipScoreIndex())
+		} else {
+			idx = peers.NewPeersIndex(zap.NewNop(), nil, nil, func(string) int { return 0 }, nil, peers.NewGossipScoreIndex())
+		}
+		if topicsCtrl != nil {
+			for _, topic := range topicsCtrl.Topics() {
+				subnet, err := strconv.ParseUint(commons.GetTopicBaseName(topic), 10, 64)
+				if err != nil || subnet >= commons.SubnetsCount {
+					continue
+				}
+				peersByTopic, err := topicsCtrl.Peers(topic)
+				if err != nil {
+					continue
+				}
+				for _, peerID := range peersByTopic {
+					subnets, _ := idx.GetPeerSubnets(peerID)
+					subnets.Set(subnet)
+					idx.UpdatePeerSubnets(peerID, subnets)
+				}
+			}
+		}
+	}
+
 	return &p2pNetwork{
 		logger:                  zap.NewNop(),
 		host:                    host,
