@@ -25,14 +25,14 @@ func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
 		env.prepare(1, 3, root),
 	)
 
-	spy := &spyNetwork{
+	network := &recordingNetwork{
 		onBroadcast: func(message *spectypes.SignedSSVMessage) error {
 			require.Equal(t, specqbft.Round(1), env.inst.State.Round)
 			require.NotNil(t, env.inst.State.ProposalAcceptedForCurrentRound)
 			return nil
 		},
 	}
-	env.setNetwork(spy)
+	env.setNetwork(network)
 
 	err := env.inst.UponRoundTimeout(context.Background(), zap.NewNop())
 	require.NoError(t, err)
@@ -41,9 +41,9 @@ func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
 	require.Nil(t, env.inst.State.ProposalAcceptedForCurrentRound)
 	require.Equal(t, 1, env.timer.State.Timeouts)
 	require.Equal(t, specqbft.Round(2), env.timer.State.Round)
-	require.Len(t, spy.broadcasted, 1)
+	require.Len(t, network.broadcasted, 1)
 
-	msg, err := specqbft.NewProcessingMessage(spy.broadcasted[0])
+	msg, err := specqbft.NewProcessingMessage(network.broadcasted[0])
 	require.NoError(t, err)
 	require.Equal(t, specqbft.RoundChangeMsgType, msg.QBFTMessage.MsgType)
 	require.Equal(t, specqbft.Round(2), msg.QBFTMessage.Round)

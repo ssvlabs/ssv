@@ -25,12 +25,12 @@ type instanceTestEnv struct {
 	timer   *roundtimer.TestQBFTTimer
 }
 
-type spyNetwork struct {
+type recordingNetwork struct {
 	broadcasted []*spectypes.SignedSSVMessage
 	onBroadcast func(*spectypes.SignedSSVMessage) error
 }
 
-func (n *spyNetwork) Broadcast(msgID spectypes.MessageID, message *spectypes.SignedSSVMessage) error {
+func (n *recordingNetwork) Broadcast(msgID spectypes.MessageID, message *spectypes.SignedSSVMessage) error {
 	n.broadcasted = append(n.broadcasted, message)
 	if n.onBroadcast != nil {
 		return n.onBroadcast(message)
