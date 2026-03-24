@@ -831,10 +831,10 @@ func (a *Auditor) rpcCheckAttester(ctx context.Context, epoch phase0.Epoch, slot
 	if !a.opts.RPCFallback || a.beacon == nil || len(indices) == 0 {
 		return out, nil
 	}
-	attesterRPCRequests.Add(context.Background(), 1)
+	rpcRequests.Add(context.Background(), 1, rpcRoleAttr(string(RoleAttester)))
 	duties, err := a.beacon.AttesterDuties(ctx, epoch, indices)
 	if err != nil {
-		attesterRPCErrors.Add(context.Background(), 1)
+		rpcErrors.Add(context.Background(), 1, rpcRoleAttr(string(RoleAttester)))
 		return out, err
 	}
 	// Build index->duty slot map.
@@ -861,10 +861,10 @@ func (a *Auditor) rpcCheckSync(ctx context.Context, epoch phase0.Epoch, indices 
 	if !a.opts.RPCFallback || a.beacon == nil || len(indices) == 0 {
 		return out, nil
 	}
-	syncRPCRequests.Add(context.Background(), 1)
+	rpcRequests.Add(context.Background(), 1, rpcRoleAttr(string(RoleSyncCommittee)))
 	duties, err := a.beacon.SyncCommitteeDuties(ctx, epoch, indices)
 	if err != nil {
-		syncRPCErrors.Add(context.Background(), 1)
+		rpcErrors.Add(context.Background(), 1, rpcRoleAttr(string(RoleSyncCommittee)))
 		return out, err
 	}
 	seen := make(map[phase0.ValidatorIndex]struct{}, len(duties))

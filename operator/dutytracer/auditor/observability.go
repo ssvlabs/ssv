@@ -40,28 +40,16 @@ var (
 		),
 	)
 
-	attesterRPCRequests = metrics.New(
+	rpcRequests = metrics.New(
 		meter.Int64Counter(
-			metricName("rpc.attester.requests"),
-			metric.WithDescription("number of attester RPC fallback requests"),
+			metricName("rpc.requests"),
+			metric.WithDescription("number of beacon RPC fallback requests"),
 		),
 	)
-	attesterRPCErrors = metrics.New(
+	rpcErrors = metrics.New(
 		meter.Int64Counter(
-			metricName("rpc.attester.errors"),
-			metric.WithDescription("number of attester RPC fallback errors"),
-		),
-	)
-	syncRPCRequests = metrics.New(
-		meter.Int64Counter(
-			metricName("rpc.sync.requests"),
-			metric.WithDescription("number of sync committee RPC fallback requests"),
-		),
-	)
-	syncRPCErrors = metrics.New(
-		meter.Int64Counter(
-			metricName("rpc.sync.errors"),
-			metric.WithDescription("number of sync committee RPC fallback errors"),
+			metricName("rpc.errors"),
+			metric.WithDescription("number of beacon RPC fallback errors"),
 		),
 	)
 )
@@ -76,4 +64,8 @@ func reasonAttr(reason string) metric.AddOption {
 
 func dropWhyAttr(why string) metric.AddOption {
 	return metric.WithAttributes(attribute.String(observability.InstrumentName(observabilityNamespace, "drop_why"), why))
+}
+
+func rpcRoleAttr(role string) metric.AddOption {
+	return metric.WithAttributes(attribute.String(observability.InstrumentName(observabilityNamespace, "role"), role))
 }
