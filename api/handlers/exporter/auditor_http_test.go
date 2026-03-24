@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/api"
 	audit "github.com/ssvlabs/ssv/operator/dutytracer/auditor"
 )
 
@@ -38,6 +39,34 @@ func TestAuditorFindings_DefaultRangeUsesLastAuditedSlot(t *testing.T) {
 	require.Equal(t, phase0.Slot(744), a.lastQuery.From)
 	require.Equal(t, phase0.Slot(1000), a.lastQuery.To)
 	require.Equal(t, 100, a.lastQuery.Limit)
+}
+
+func TestAuditorFindings_InvalidOrderReturns400(t *testing.T) {
+	a := &fakeAuditAccessor{status: audit.Status{Enabled: true, LastAuditedSlot: 1000}}
+	e := &Exporter{logger: zap.NewNop(), audit: a}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/exporter/auditor/findings?order=bogus", nil)
+	rec := httptest.NewRecorder()
+	err := e.AuditorFindings(rec, req)
+	require.Error(t, err)
+
+	var apiErr *api.ErrorResponse
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.Code)
+}
+
+func TestAuditorFindings_InvalidCursorReturns400(t *testing.T) {
+	a := &fakeAuditAccessor{status: audit.Status{Enabled: true, LastAuditedSlot: 1000}}
+	e := &Exporter{logger: zap.NewNop(), audit: a}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/exporter/auditor/findings?cursor=not-a-cursor", nil)
+	rec := httptest.NewRecorder()
+	err := e.AuditorFindings(rec, req)
+	require.Error(t, err)
+
+	var apiErr *api.ErrorResponse
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, http.StatusBadRequest, apiErr.Code)
 }
 
 func TestAuditorStatus_ReturnsStatus(t *testing.T) {

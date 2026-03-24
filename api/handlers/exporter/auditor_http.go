@@ -106,13 +106,19 @@ func toAuditQuery(req *AuditorFindingsRequest, lastAuditedSlot uint64) (audit.Qu
 		To:    phase0.Slot(to),
 		Limit: limit,
 	}
-	if req.Order != "" {
-		q.Order = strings.TrimSpace(req.Order)
-	} else {
-		q.Order = "desc"
+	order := strings.ToLower(strings.TrimSpace(req.Order))
+	if order == "" {
+		order = "desc"
 	}
+	if order != "asc" && order != "desc" {
+		return audit.Query{}, fmt.Errorf("invalid order: %s", req.Order)
+	}
+	q.Order = order
 	if req.Cursor != "" {
 		c := strings.TrimSpace(req.Cursor)
+		if err := audit.ValidateCursor(c); err != nil {
+			return audit.Query{}, err
+		}
 		q.Cursor = &c
 	}
 
@@ -172,9 +178,6 @@ func resolveSlotRange(from, to, lastN *uint64, lastAuditedSlot uint64) (uint64, 
 	// lastN provided: infer missing edges from lastAuditedSlot.
 	if lastN != nil {
 		n := *lastN
-		if n == 0 {
-			return 0, 0, fmt.Errorf("lastN must be > 0")
-		}
 		end := lastAuditedSlot
 		if to != nil {
 			end = *to
