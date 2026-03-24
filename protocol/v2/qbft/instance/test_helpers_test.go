@@ -52,6 +52,8 @@ func (testValueChecker) CheckValue(data []byte) error {
 
 func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instanceTestEnv {
 	t.Helper()
+	require.GreaterOrEqual(t, int(operatorID), 1, "operatorID must be in Testing4SharesSet range [1,4]")
+	require.LessOrEqual(t, int(operatorID), 4, "operatorID must be in Testing4SharesSet range [1,4]")
 
 	keys := spectestingutils.Testing4SharesSet()
 	committeeMember := spectestingutils.TestingCommitteeMember(keys)

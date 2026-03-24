@@ -168,15 +168,17 @@ func TestUponRoundChangeWithPartialQuorumBumpsRoundAndBroadcastsRoundChange(t *t
 	require.Equal(t, []spectypes.OperatorID{2}, msg.SignedMessage.OperatorIDs)
 }
 
-func TestUponRoundChangeReturnsEarlyOnDuplicateOrExistingQuorum(t *testing.T) {
+func TestUponRoundChangeReturnsEarlyOnDuplicate(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	msg := env.roundChange(2, 1, specqbft.NoRound, [32]byte{}, nil, nil)
 	env.addMessages(env.inst.State.RoundChangeContainer, msg)
 
 	require.NoError(t, env.inst.uponRoundChange(context.Background(), zap.NewNop(), msg))
 	require.Empty(t, env.network.BroadcastedMsgs)
+}
 
-	env = newInstanceTestEnv(t, 2)
+func TestUponRoundChangeReturnsEarlyWhenQuorumAlreadyExists(t *testing.T) {
+	env := newInstanceTestEnv(t, 2)
 	env.addMessages(
 		env.inst.State.RoundChangeContainer,
 		env.roundChange(2, 1, specqbft.NoRound, [32]byte{}, nil, nil),

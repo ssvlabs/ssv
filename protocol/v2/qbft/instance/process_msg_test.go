@@ -88,6 +88,8 @@ func TestProcessMsgConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// Intentionally reuse the same message pointer to exercise dedup/idempotent
+			// processing while ProcessMsg serializes handler execution through processMsgF.
 			_, _, _, err := env.inst.ProcessMsg(context.Background(), zap.NewNop(), msg)
 			errs <- err
 		}()
