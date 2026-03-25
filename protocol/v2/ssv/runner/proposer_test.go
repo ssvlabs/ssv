@@ -16,13 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon"
+	blindutil "github.com/ssvlabs/ssv/v2/protocol/v2/blockchain/beacon/blind"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
+	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
 type proposerTestBeacon struct {
