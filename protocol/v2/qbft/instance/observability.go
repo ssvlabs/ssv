@@ -1,6 +1,8 @@
 package instance
 
 import (
+	"sync"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -51,11 +53,11 @@ var (
 			metric.WithUnit("{change}"),
 			metric.WithDescription("number of round changes with their reasons")))
 
-	committeeInputProposalComparisonCounter = metrics.New(
-		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "committee.input_proposal_comparisons"),
-			metric.WithUnit("{observation}"),
-			metric.WithDescription("number of committee input and proposal value comparisons")))
+	// committeeInputProposalComparisonCounter is lazily initialized to work around
+	// an OTel delegate instrument issue where counters added to an existing var block
+	// don't properly register with the Prometheus exporter.
+	committeeInputProposalComparisonCounter metric.Int64Counter
+	committeeInputProposalComparisonOnce    sync.Once
 )
 
 func stageAttribute(stage stage) attribute.KeyValue {

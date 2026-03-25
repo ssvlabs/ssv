@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -38,11 +39,8 @@ var (
 			metric.WithDescription("db interaction duration"),
 			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
 
-	tracerCommitteeInputProposalComparisonCounter = metrics.New(
-		meter.Int64Counter(
-			metricName("committee.input_proposal_comparisons"),
-			metric.WithUnit("{observation}"),
-			metric.WithDescription("number of committee input and proposal value comparison observations")))
+	tracerCommitteeInputProposalComparisonCounter metric.Int64Counter
+	tracerCommitteeInputProposalComparisonOnce    sync.Once
 )
 
 func metricName(name string) string {
@@ -50,6 +48,13 @@ func metricName(name string) string {
 }
 
 func recordCommitteeInputProposalComparison(ctx context.Context, match bool) {
+	tracerCommitteeInputProposalComparisonOnce.Do(func() {
+		tracerCommitteeInputProposalComparisonCounter = metrics.New(
+			meter.Int64Counter(
+				metricName("committee.input_proposal_comparisons"),
+				metric.WithUnit("{observation}"),
+				metric.WithDescription("number of committee input and proposal value comparison observations")))
+	})
 	tracerCommitteeInputProposalComparisonCounter.Add(
 		ctx,
 		1,

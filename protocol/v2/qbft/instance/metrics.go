@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 type metricsRecorder struct {
@@ -73,6 +74,13 @@ func (m *metricsRecorder) RecordRoundChange(ctx context.Context, round specqbft.
 }
 
 func (m *metricsRecorder) RecordCommitteeInputProposalComparison(ctx context.Context, match bool) {
+	committeeInputProposalComparisonOnce.Do(func() {
+		committeeInputProposalComparisonCounter = metrics.New(
+			meter.Int64Counter(
+				observability.InstrumentName(observabilityNamespace, "committee.input_proposal_comparisons"),
+				metric.WithUnit("{observation}"),
+				metric.WithDescription("number of committee input and proposal value comparisons")))
+	})
 	committeeInputProposalComparisonCounter.Add(
 		ctx,
 		1,
