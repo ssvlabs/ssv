@@ -457,7 +457,7 @@ func TestGetOrInsertHangIssue67(t *testing.T) {
 	wg.Wait()
 }
 
-// See https://github.com/ssvlabs/ssv/v2/issues/1682
+// See https://github.com/ssvlabs/ssv/issues/1682
 func TestIssue1682(t *testing.T) {
 	t.Parallel()
 

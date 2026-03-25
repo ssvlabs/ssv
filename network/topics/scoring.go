@@ -131,7 +131,7 @@ func scoreInspector(logger *zap.Logger,
 			p7 := peerScores.BehaviourPenalty
 			w7 := peerScoreParams.BehaviourPenaltyWeight
 
-			// Short logs per topic https://github.com/ssvlabs/ssv/v2/issues/1666
+			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
 			if inspections%logFrequency != 0 {

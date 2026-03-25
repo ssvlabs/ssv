@@ -472,7 +472,7 @@ func (n *p2pNetwork) isReady() bool {
 // NOTE: it won't subscribe to the subnets (use subscribeToFixedSubnets for that)
 func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
-	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/v2/pull/990
+	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	ticker := time.NewTicker(time.Second)
 	registeredSubnets := commons.Subnets{}
 	defer ticker.Stop()

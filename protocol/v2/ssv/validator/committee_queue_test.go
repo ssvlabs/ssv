@@ -1479,7 +1479,7 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 // This test suite highlights a known behavior where the queue drops messages when full,
 // even high-priority ones, due to its non-blocking intake.
 // This behavior and potential improvements are tracked
-// in GitHub issue #1680 (https://github.com/ssvlabs/ssv/v2/issues/1680).
+// in GitHub issue #1680 (https://github.com/ssvlabs/ssv/issues/1680).
 func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
