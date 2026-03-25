@@ -12,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 // StreamResponder abstracts the stream access with a simpler interface that accepts only the data to send
@@ -74,6 +76,9 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	}
 	res, err := stream.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
+		if errors.Is(err, ErrStreamMessageTooLarge) {
+			n.observeOversizedPayload(logger, peerID, stream.Protocol(), "response")
+		}
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
 
@@ -96,6 +101,9 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 
 	data, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
+		if errors.Is(err, ErrStreamMessageTooLarge) {
+			n.observeOversizedPayload(logger, stream.Conn().RemotePeer(), stream.Protocol(), "request")
+		}
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
 
@@ -109,4 +117,18 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
 		return nil
 	}, done, nil
+}
+
+func (n *streamCtrl) observeOversizedPayload(logger *zap.Logger, peerID peer.ID, protocolID protocol.ID, direction string) {
+	oversizedPayloadsCounter.Add(
+		n.ctx,
+		1,
+		metric.WithAttributes(protocolIDAttribute(protocolID), streamDirectionAttribute(direction)),
+	)
+	logger.Warn(
+		"rejected oversized stream payload",
+		fields.PeerID(peerID),
+		zap.String(fields.FieldProtocolID, string(protocolID)),
+		zap.String("direction", direction),
+	)
 }

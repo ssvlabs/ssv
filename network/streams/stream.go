@@ -49,7 +49,8 @@ func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) 
 		return nil, err
 	}
 	if len(data) > maxStreamMessageSize {
-		// Best-effort abort: the payload is invalid, and the oversize error below is the one callers should handle.
+		// Best-effort abort: the payload is invalid, and callers should handle ErrStreamMessageTooLarge
+		// while suppressing the follow-up ErrReset on their deferred Close().
 		_ = ts.Reset()
 		return nil, ErrStreamMessageTooLarge
 	}
