@@ -1,11 +1,12 @@
 package streams
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core"
-	"github.com/pkg/errors"
 )
 
 const maxStreamMessageSize = 1 << 20 // 1 MiB
@@ -40,7 +41,7 @@ func NewStream(s core.Stream) Stream {
 // ReadWithTimeout reads with timeout
 func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
 	if err := ts.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return nil, errors.Wrap(err, "could not set read deadline")
+		return nil, fmt.Errorf("set read deadline: %w", err)
 	}
 
 	// Read one byte past the limit so oversized payloads are rejected instead of silently truncated.
@@ -58,17 +59,19 @@ func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) 
 	return data, nil
 }
 
-// WriteWithTimeout reads next message with timeout
+// WriteWithTimeout writes data to stream with timeout
 func (ts *streamWrapper) WriteWithTimeout(data []byte, timeout time.Duration) error {
 	if err := ts.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		return errors.Wrap(err, "could not set write deadline")
+		return fmt.Errorf("set write deadline: %w", err)
 	}
 
 	n := len(data)
 	bytesWritten, err := ts.Write(data)
-	if bytesWritten != n {
-		return errors.Errorf("written bytes (%d) to sync stream doesnt match input data (%d)", bytesWritten, n)
+	if err != nil {
+		return fmt.Errorf("write stream: %w", err)
 	}
-
-	return err
+	if bytesWritten != n {
+		return fmt.Errorf("wrote %d of %d bytes: %w", bytesWritten, n, io.ErrShortWrite)
+	}
+	return nil
 }
