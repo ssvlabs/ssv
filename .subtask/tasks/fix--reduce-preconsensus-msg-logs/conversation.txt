@@ -1,0 +1,99 @@
+# Harness: codex
+# Session: 019bbcfc-cb49-7b01-a909-c2cdafd564a7
+
+<lead>
+Find the log statement for '📬 got pre-consensus message' in the codebase and implement a solution to reduce its volume. Look in protocol/v2/ssv/runner/ or similar paths. Prefer consolidating into a summary log at the end of pre-consensus phase that shows total messages received and which signers sent them. Make sure duty debugging remains possible.
+</lead>
+
+<worker>
+- Removed the per-message DEBUG log `"📬 got pre-consensus message"` and instead record counts in-memory per duty (`protocol/v2/ssv/runner/runner.go:234`).
+- Augmented the existing `"🎯 got pre-consensus quorum"` log to include a one-time per-duty summary: `pre_consensus_msgs_total`, `pre_consensus_msgs_unique_signers`, `pre_consensus_msgs_by_signer`, plus `quorum_reached_by` (`protocol/v2/ssv/runner/runner.go:247`).
+- Added/reset per-duty tracking in `BaseRunner` so the summary stays correlated with the current `duty_id` already attached to the logger (`protocol/v2/ssv/runner/runner.go:81`, `protocol/v2/ssv/runner/preconsensus_msg_log.go:20`).
+- Tests: `go test ./protocol/v2/ssv/runner/...` and `go test -run=^$ ./...`.
+- Committed on `fix/reduce-preconsensus-msg-logs`: `99ffe3183`.
+</worker>
+
+<lead>
+The current implementation tracks message counts per signer, but there's only 1 message per signer per duty, so counts aren't useful.
+
+Instead, change to track TIMING information:
+1. Record WHEN we received a message from each signer (relative to slot start time)
+2. Track overall time to reach pre-consensus quorum
+
+The summary log should show something like:
+```
+🎯 got pre-consensus quorum  
+   time_to_quorum=0.8s  
+   signer_timings=[{signer:1,at:+0.2s},{signer:2,at:+0.5s},{signer:3,at:+0.8s}]
+   quorum_reached_by=3
+```
+
+Where `+0.2s` means "slot start time + 0.2 seconds".
+
+To get slot start time, you can compute it from:
+- slot number (from the duty)  
+- genesis time and slot duration from networkconfig
+
+Look at how other code computes slot timing, e.g., in `operator/duties/scheduler/` or `beacon/` packages.
+</lead>
+
+<worker>
+- Updated pre-consensus logging to record **first-seen timing per signer** (relative to slot start) and emit a **single quorum summary** (`protocol/v2/ssv/runner/runner.go:241`, `protocol/v2/ssv/runner/preconsensus_msg_log.go:54`).
+- Slot start time is captured at duty start via `NetworkConfig.SlotStartTime(duty.DutySlot())` and used as the reference for `+0.XXXXXs` offsets (`protocol/v2/ssv/runner/runner.go:199`).
+- `"🎯 got pre-consensus quorum"` now logs: `time_to_quorum`, `signer_timings=[{signer,at}]`, `quorum_reached_by` (plus existing `quorum_roots`) (`protocol/v2/ssv/runner/preconsensus_msg_log.go:89`, `protocol/v2/ssv/runner/runner.go:255`).
+- Tests: `go test ./protocol/v2/ssv/runner/...`.
+- Commit: `8e1f951bf` (on top of the earlier verbosity-reduction commit).
+</worker>
+
+<lead>
+Change request: Only apply the timing-based summary logging to AGGREGATOR duties. For other duty types (proposer, sync committee, etc.), keep the original per-message logging behavior.
+
+The simplest approach:
+1. In `basePreConsensusMsgProcessing`, check the duty type (e.g., `b.State.RunningDuty.Type`)
+2. If it's an aggregator duty, use the new timing summary approach
+3. If it's any other duty type, use the original per-message DEBUG logging
+
+This keeps the bloat minimal while reducing logs only for the high-volume aggregator duties.
+
+Look at how duty types are defined in the spec types to check for aggregator.
+</lead>
+
+<worker>
+- Gated timing-based pre-consensus summary logging to **aggregator duties only** by checking `*spectypes.ValidatorDuty` with `Type == spectypes.BNRoleAggregator` (`protocol/v2/ssv/runner/runner.go:104`).
+- For aggregator duties: initialize slot-start reference + record signer timing, and emit the quorum summary fields on `"🎯 got pre-consensus quorum"` (`protocol/v2/ssv/runner/runner.go:216`, `protocol/v2/ssv/runner/runner.go:259`).
+- For non-aggregator duties: restored the original per-message DEBUG log `"📬 got pre-consensus message"` (with `signer` + `validators`) and the original quorum log (`protocol/v2/ssv/runner/runner.go:276`).
+- Tests: `go test ./protocol/v2/ssv/runner/...`; commit `a89167809`.
+</worker>
+
+<lead>
+Also include SYNC_COMMITTEE_CONTRIBUTION duties in the timing-based summary logging (same as aggregator).
+
+So the condition should be: aggregator OR sync committee contribution → use timing summary
+Otherwise → use original per-message logging
+</lead>
+
+<worker>
+- Updated the timing-summary gate to include **`BNRoleSyncCommitteeContribution`** in addition to **`BNRoleAggregator`** via `isTimingSummaryPreConsensusDuty` (`protocol/v2/ssv/runner/runner.go:104`).
+- Both `baseSetupForNewDuty` and `basePreConsensusMsgProcessing` now use timing summary for **aggregator OR sync committee contribution**, otherwise fall back to the original per-message DEBUG logging (`protocol/v2/ssv/runner/runner.go:217`, `protocol/v2/ssv/runner/runner.go:260`).
+- Tests: `go test ./protocol/v2/ssv/runner/...`; commit `d1a46038d`.
+</worker>
+
+<lead>
+Check whether the mutex `preConsensusMsgLogMu` is actually needed.
+
+Investigate:
+1. Does BaseRunner already run inside a mutex or single execution loop?
+2. Is `basePreConsensusMsgProcessing` ever called concurrently for the same duty?
+3. Look at how other BaseRunner state is accessed - does it use mutexes?
+
+If the mutex is not needed, remove it to reduce complexity.
+</lead>
+
+<worker>
+- `BaseRunner` pre-consensus processing runs in a single per-role queue-consumer loop: `Validator.Start()` spawns one `StartQueueConsumer` per role, and that loop calls the handler synchronously (no concurrent handler calls). See `protocol/v2/ssv/validator/startup.go:22` and `protocol/v2/ssv/validator/queue_validator.go:80`.
+- `basePreConsensusMsgProcessing` is only reached via `Validator.ProcessMessage → dutyRunner.ProcessPreConsensus` inside that same loop, so it’s not called concurrently for the same duty/runner. See `protocol/v2/ssv/validator/validator.go:129`.
+- Timer timeouts enqueue messages into the queue; they don’t call runner methods directly, so they don’t introduce concurrent `ProcessPreConsensus` calls. See `protocol/v2/ssv/validator/timer.go:19`.
+- Given the above, `preConsensusMsgLogMu` wasn’t protecting against any real concurrent access path; I removed it and the associated lock/unlock calls (`protocol/v2/ssv/runner/runner.go:85`, `protocol/v2/ssv/runner/preconsensus_msg_log.go:24`).
+- Tests: `go test ./protocol/v2/ssv/runner/...`; commit `cba6b4eb6`.
+</worker>
+

@@ -1,0 +1,16 @@
+# Harness: codex
+# Session: 019bbcfc-d6fa-7e90-a451-e22650d3ca01
+
+<lead>
+Find the log statements in the exporter code for 'processed event', 'share not found, created a new one', 'processing event', and 'quorum reached after flush'. Move per-event logs to TRACE, add batch summary logs like 'Processed N events from block X'. Look in exporter/ directory and any event processing code.
+</lead>
+
+<worker>
+- Added a real `TRACE` log level (`observability/log/trace.go:8`) and config parsing/encoding support (`observability/log/global.go:17`); enable with `global.LogLevel: trace`.
+- Moved per-event registry handler logs (“processing event”, “processed event”, “share not found, created a new one”) to TRACE (`eth/eventhandler/handlers.go:54`, `eth/eventhandler/handlers.go:205`).
+- Kept the per-block batch log at DEBUG (“processed events from block”) for visibility (`eth/eventhandler/event_handler.go:123`).
+- Kept “quorum reached after flush” at DEBUG (`operator/dutytracer/collector.go:1181`).
+- Ran `go test ./eth/eventhandler ./observability/log` and `go test ./... -run TestDoesNotExist -count=0`; committed as `d1ce56b8f`.
+- Updated `.subtask/tasks/fix--reduce-exporter-logs/PROGRESS.json` (left uncommitted).
+</worker>
+

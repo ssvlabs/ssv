@@ -1,0 +1,7 @@
+[
+  { "step": "Locate pre-consensus message log", "done": true },
+  { "step": "Replace per-message log with summary", "done": true },
+  { "step": "Add timing-based quorum summary", "done": true },
+  { "step": "Run tests and validate", "done": true },
+  { "step": "Commit changes", "done": true }
+]

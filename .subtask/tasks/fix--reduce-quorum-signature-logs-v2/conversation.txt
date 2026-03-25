@@ -1,0 +1,19 @@
+# Harness: codex
+# Session: 019bbe69-369e-77c2-9af9-e6fbaf9d9e81
+
+<lead>
+Find the log statements for '🎯 got pre-consensus quorum' and '🧩 reconstructed partial signature'. Combine these into a single summary log per duty: 'Quorum reached for duty X: N/M signers, signature reconstructed successfully'. Move the detailed per-signer info to TRACE level. Look in protocol/v2/ssv/runner/ or protocol/v2/qbft/.
+</lead>
+
+<worker>
+**Changes**
+- Added a real TRACE log level (below DEBUG) plus lazy helpers `Trace`/`TraceWith` (`observability/log/global.go:17`, `observability/log/trace.go:8`).
+- Moved `"🎯 got pre-consensus quorum"` (and post-consensus) logs to TRACE and made them lazy so we don’t JSON-marshal `quorum_roots` unless TRACE is enabled (`protocol/v2/ssv/runner/runner.go:233`).
+- Replaced `"🧩 reconstructed partial signature"` with one DEBUG summary per reconstruction: `Quorum reached for duty X: N/M signers, signature reconstructed successfully`; per-signer list is now TRACE as `quorum_signers`; reconstruction failures log at ERROR (`protocol/v2/ssv/runner/quorum_reconstruction_log.go:16`).
+- Updated all signature reconstruction call sites (committee/proposer/aggregator/sync committee/voluntary exit/validator registration) to use the shared wrapper (`protocol/v2/ssv/runner/committee.go:595`).
+
+**Tests**
+- Pass: `go test ./protocol/v2/ssv/runner`, `go test ./observability/log`.
+- Note: `go test ./...` still times out in `network/topics` (`TestTopicManager/happy_flow`, mDNS).
+</worker>
+

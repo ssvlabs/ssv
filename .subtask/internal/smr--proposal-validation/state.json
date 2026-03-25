@@ -1,0 +1,13 @@
+{
+  "workspace": "/Users/bloxyosherlutzki/.subtask/workspaces/-Users-bloxyosherlutzki-dev-ssv-scout-src-ssv--10",
+  "last_delivered_cwd": "/Users/bloxyosherlutzki/.subtask/workspaces/-Users-bloxyosherlutzki-dev-ssv-scout-src-ssv--10",
+  "session_id": "019c04d4-194b-76c1-889e-471e7c02cc12",
+  "base_commit": "8808f67d0660821aa3991017272655fbecfbfa04",
+  "prompt_delivered": true,
+  "agent_replied": true,
+  "supervisor_pid": 71725,
+  "status": "error",
+  "stage": "doing",
+  "last_error": "Reconnecting... 1/5 (unexpected status 403 Forbidden: , url: https://chatgpt.com/backend-api/codex/responses, request id: 9c50fd9369c69d70-TLV)",
+  "started_at": "2026-01-28T15:38:54.775748+02:00"
+}

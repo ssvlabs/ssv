@@ -137,6 +137,9 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 }
 
 func (c *Collector) ObserveCommitteeBeaconVoteComparison(ctx context.Context, observation qbft.CommitteeBeaconVoteComparisonObservation) {
+	if c == nil {
+		return
+	}
 	recordCommitteeInputProposalComparison(ctx, observation.Match)
 
 	c.logger.Debug("committee beacon vote input/proposal comparison observed",

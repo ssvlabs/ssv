@@ -1,0 +1,15 @@
+# Harness: codex
+# Session: 019bbe69-3b2f-79d0-b5ea-dba8bfc8ac92
+
+<lead>
+Find the log statements for 'signed attestation data' and 'signed aggregator selection proof'. Move successful signing logs to TRACE level, keep failures at DEBUG. Consider adding a batch summary log 'Signed N attestations for slot X'. Look in protocol/v2/ssv/runner/ and beacon/ directories.
+</lead>
+
+<worker>
+- Added a custom TRACE level (`trace` config) below DEBUG for zap (`observability/log/level.go:1`, `observability/log/global.go:17`) + tests (`observability/log/global_test.go:1`).
+- Moved `"signed attestation data"` success logging to TRACE (lazy) and kept signing failures at WARN with `validator`, `slot`, `duty_id` (`protocol/v2/ssv/runner/committee.go:484`).
+- Added per-slot DEBUG batch summary: `"Signed N attestations for slot X"` (`protocol/v2/ssv/runner/committee.go:423`).
+- Added TRACE audit log for successful aggregator selection proof signing + WARN on failures (preserves `validator`, `slot`, `duty_id`) (`protocol/v2/ssv/runner/aggregator.go:391`).
+- Ran `go test ./observability/log ./protocol/v2/ssv/runner`; committed as `a73756035` (local `go test ./...` timed out in `github.com/ssvlabs/ssv/network/topics`).
+</worker>
+

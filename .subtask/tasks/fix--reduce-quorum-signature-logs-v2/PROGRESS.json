@@ -1,0 +1,7 @@
+[
+  { "step": "Create progress tracker", "done": true },
+  { "step": "Locate quorum and reconstruction logs", "done": true },
+  { "step": "Combine logs and reduce verbosity", "done": true },
+  { "step": "Run tests", "done": true },
+  { "step": "Commit changes", "done": true }
+]

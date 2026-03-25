@@ -1,0 +1,7 @@
+# Harness: codex
+# Session: 019bbcfc-d805-74f2-8d9c-8a9644b8f011
+
+<lead>
+Find the log statements for 'signed attestation data' and 'signed aggregator selection proof'. Move successful signing logs to TRACE level, keep failures at DEBUG. Consider adding a batch summary log 'Signed N attestations for slot X'. Look in protocol/v2/ssv/runner/ and beacon/ directories.
+</lead>
+

@@ -1,0 +1,15 @@
+# Harness: codex
+# Session: 019bbcfc-d452-7433-b8f7-539ea007e98d
+
+<lead>
+Find the log statements for '🎯 got pre-consensus quorum' and '🧩 reconstructed partial signature'. Combine these into a single summary log per duty: 'Quorum reached for duty X: N/M signers, signature reconstructed successfully'. Move the detailed per-signer info to TRACE level. Look in protocol/v2/ssv/runner/ or protocol/v2/qbft/.
+</lead>
+
+<worker>
+- Added TRACE log level support (< DEBUG) and `trace` config option: `observability/log/levels.go:1`, `observability/log/global.go:15`.
+- `🎯 got pre-consensus quorum` is now TRACE; DEBUG logs a single “quorum reached + reconstructed” summary with signer counts, full signer list at TRACE: `protocol/v2/ssv/runner/runner.go:245`, `protocol/v2/ssv/runner/proposer.go:152`.
+- Committee `🧩 reconstructed partial signature` moved to TRACE and replaced with one DEBUG per-root summary (+ TRACE signer list): `protocol/v2/ssv/runner/committee.go:656`, `protocol/v2/ssv/runner/committee.go:735`.
+- Tests: `go test ./observability/log ./protocol/v2/ssv/runner` passed; `go test ./...` times out in `github.com/ssvlabs/ssv/network/p2p` (~10m).
+- Commit: `2b4c7319f` (branch `fix/reduce-quorum-signature-logs`).
+</worker>
+

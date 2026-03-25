@@ -1,0 +1,21 @@
+# Harness: codex
+# Session: 019c04d3-9971-7ee2-8ac5-c9eb65dfb685
+
+<lead>
+Implement the SMR quorum calculation functions as described in the task. Focus on:
+
+1. Adding SMR-specific quorum functions that coexist with existing QBFT functions
+2. The formula is: f = (n+1)/5 (rounded down), quorum = 4f-1
+3. For validation: n >= 5f-1 must hold
+4. Add comprehensive tests
+
+Start by reading the existing quorum code in protocol/v2/types/ssvshare.go to understand the current implementation, then add the SMR functions alongside them.
+</lead>
+
+<worker>
+- Added (5f-1)-SMR quorum helpers `ComputeSMRF`, `ComputeSMRQuorum`, `ValidSMRCommitteeSize`, plus `SMRCommitteeMember` wrapper with `HasSMRQuorum`/`GetSMRQuorum` in `protocol/v2/types/ssvshare.go:245`.
+- Added unit tests covering sizes (4, 7, 10, 13), boundary/edge cases, and QBFT vs SMR comparisons in `protocol/v2/types/ssvshare_test.go:104`.
+- Created progress tracker at `.subtask/tasks/smr--quorum/PROGRESS.json:1`.
+- Ran `go test ./protocol/v2/types` and `go test ./... -run '^$'`; committed as `b3aa89e9f` on `smr/quorum`.
+</worker>
+

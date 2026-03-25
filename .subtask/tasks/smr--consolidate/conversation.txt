@@ -1,0 +1,25 @@
+# Harness: codex
+# Session: 019c050d-45ab-72b1-b8d8-440b6f2e8bde
+
+<lead>
+Consolidate all SMR implementations from the parallel branches into a single coherent package.
+
+Start by examining each workspace to understand what was implemented:
+1. Check each workspace's protocol/v2/qbft/smr/ directory
+2. Identify the best implementation of each component
+3. Create a unified smr/ package using:
+   - TimeoutCertificate from timeout-certificate branch (has proper locking logic)
+   - Quorum functions from quorum branch
+   - Update proposal-validation to use real types (not stubs)
+
+The workspaces are at:
+- smr/quorum: workspace --6
+- smr/timeout-certificate: workspace --7  
+- smr/status-messages: workspace --8
+- smr/view-change: workspace --9
+- smr/proposal-validation: workspace --10
+- smr/integration: workspace --11
+
+Focus on making all types compatible and tests passing.
+</lead>
+

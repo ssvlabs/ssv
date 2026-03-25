@@ -1,0 +1,12 @@
+{
+  "workspace": "/Users/bloxyosherlutzki/.subtask/workspaces/-Users-bloxyosherlutzki-dev-ssv-scout-src-ssv--14",
+  "last_delivered_cwd": "/Users/bloxyosherlutzki/.subtask/workspaces/-Users-bloxyosherlutzki-dev-ssv-scout-src-ssv--14",
+  "session_id": "019c0547-7f25-7ff0-8914-14a0e50238cd",
+  "base_commit": "04f315174b8ba3379b8c639420c0bfc9f0a9cc3d",
+  "prompt_delivered": true,
+  "supervisor_pid": 88054,
+  "status": "error",
+  "stage": "plan",
+  "last_error": "You've hit your usage limit. To get more access now, send a request to your admin or try again at 8:38 PM.",
+  "started_at": "2026-01-28T17:44:57.463703+02:00"
+}

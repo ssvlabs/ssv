@@ -1,0 +1,7 @@
+[
+  { "step": "Locate exporter event log statements", "done": true },
+  { "step": "Add TRACE level + move per-event logs to TRACE", "done": true },
+  { "step": "Confirm batch per-block processing logs remain", "done": true },
+  { "step": "Run targeted tests/compilation", "done": true },
+  { "step": "Commit changes", "done": true }
+]

@@ -1,0 +1,6 @@
+{
+  "harness": "claude",
+  "options": {
+    "model": "sonnet"
+  }
+}

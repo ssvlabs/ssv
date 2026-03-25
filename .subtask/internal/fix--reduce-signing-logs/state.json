@@ -1,0 +1,11 @@
+{
+  "workspace": "/Users/bloxyosherlutzki/.subtask/workspaces/-Users-bloxyosherlutzki-dev-ssv-scout-src-ssv--5",
+  "session_id": "019bbcfc-d805-74f2-8d9c-8a9644b8f011",
+  "prompt_delivered": true,
+  "agent_replied": true,
+  "supervisor_pid": 87008,
+  "status": "closed",
+  "stage": "implement",
+  "last_error": "Reconnecting... 2/5 (stream disconnected before completion: Transport error: network error: error decoding response body)",
+  "started_at": "2026-01-14T16:50:45.501324+02:00"
+}

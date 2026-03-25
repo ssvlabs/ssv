@@ -1,0 +1,6 @@
+[
+  { "step": "Locate attestation and aggregator signing logs", "done": true },
+  { "step": "Reduce successful signing logs to TRACE", "done": true },
+  { "step": "Add low-volume batch summary logs", "done": true },
+  { "step": "Run tests and commit changes", "done": true }
+]

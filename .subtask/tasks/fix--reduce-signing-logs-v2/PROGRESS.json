@@ -1,0 +1,22 @@
+[
+  {
+    "step": "Create progress tracker file",
+    "done": true
+  },
+  {
+    "step": "Locate signing log statements",
+    "done": true
+  },
+  {
+    "step": "Reduce success logs to TRACE",
+    "done": true
+  },
+  {
+    "step": "Add batch summary log",
+    "done": true
+  },
+  {
+    "step": "Run tests and commit",
+    "done": true
+  }
+]

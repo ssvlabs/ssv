@@ -224,19 +224,10 @@ func (i *Instance) ProposerForRound(round specqbft.Round) spectypes.OperatorID {
 }
 
 func (i *Instance) observeCommitteeInputProposalComparison(ctx context.Context, msg *specqbft.ProcessingMessage, proposalRoot [32]byte) {
-	i.logger.Info("observeCommitteeInputProposalComparison called",
-		zap.Int("runner_role", int(i.metrics.runnerRole)),
-		zap.Int("expected_role", int(spectypes.RoleCommittee)),
-		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
-		zap.Uint64("first_round", uint64(specqbft.FirstRound)),
-		zap.Int("start_value_len", len(i.StartValue)),
-	)
 	if i.metrics.runnerRole != spectypes.RoleCommittee {
-		i.logger.Info("early return: role mismatch")
 		return
 	}
 	if msg.QBFTMessage.Round != specqbft.FirstRound {
-		i.logger.Info("early return: round mismatch")
 		return
 	}
 
@@ -247,7 +238,6 @@ func (i *Instance) observeCommitteeInputProposalComparison(ctx context.Context, 
 	}
 
 	match := bytes.Equal(inputRoot[:], proposalRoot[:])
-	i.logger.Info("recording committee input proposal comparison metric", zap.Bool("match", match))
 	i.metrics.RecordCommitteeInputProposalComparison(ctx, match)
 
 	observer := i.config.GetCommitteeBeaconVoteObserver()

@@ -1,0 +1,7 @@
+[
+  { "step": "Inspect existing quorum code", "done": true },
+  { "step": "Implement SMR quorum helpers", "done": true },
+  { "step": "Add CommitteeMember SMR wrapper", "done": true },
+  { "step": "Add unit tests", "done": true },
+  { "step": "Run tests and commit", "done": true }
+]

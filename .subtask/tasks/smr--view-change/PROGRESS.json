@@ -1,0 +1,9 @@
+[
+  { "step": "Create SMR view-change types", "done": true },
+  { "step": "Implement TimeoutManager", "done": true },
+  { "step": "Implement ViewChangeHandler + StatusCollector", "done": true },
+  { "step": "Integrate with QBFT Instance timeout", "done": true },
+  { "step": "Add SMR timeout support to roundtimer", "done": true },
+  { "step": "Add SMR unit tests", "done": true },
+  { "step": "Run go test ./... (blocked: network/p2p package times out)", "done": false }
+]

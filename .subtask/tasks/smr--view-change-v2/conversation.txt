@@ -1,0 +1,7 @@
+# Harness: codex
+# Session: 019c0547-7f25-7ff0-8914-14a0e50238cd
+
+<lead>
+Draft PLAN.md. First read protocol/v2/qbft/smr/timeout_certificate.go and block.go to understand existing types. Then plan TimeoutManager and ViewChangeHandler that use these types. Focus on simplicity.
+</lead>
+

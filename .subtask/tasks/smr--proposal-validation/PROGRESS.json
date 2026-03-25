@@ -1,0 +1,7 @@
+[
+  { "step": "Create SMR proposal types", "done": true },
+  { "step": "Implement SMR proposal validation", "done": true },
+  { "step": "Integrate SMR with isValidProposal", "done": true },
+  { "step": "Add and run tests", "done": true },
+  { "step": "Format and commit", "done": true }
+]

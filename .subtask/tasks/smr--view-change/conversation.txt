@@ -1,0 +1,34 @@
+# Harness: codex
+# Session: 019c04d3-f88c-7c51-b547-3420c071de2a
+
+<lead>
+Implement the SMR view change protocol as described in the task.
+
+Key requirements:
+1. Create TimeoutManager to handle timeout message generation and collection
+2. Create ViewChangeHandler to coordinate the view change process
+3. Implement timeout generation per spec 5.1:
+   - Trigger on timer expiry
+   - Include highest voted block in timeout message
+4. Implement view entry logic per spec 5.2:
+   - Collect 4f-1 timeout messages meeting conditions
+   - Form TC and update local T_high
+   - Send status message to new leader
+5. Integrate with existing timer infrastructure
+
+This task depends on smr/timeout-certificate and smr/status-messages, so use placeholder interfaces if needed and note dependencies.
+</lead>
+
+<worker>
+**Implemented**
+- Added SMR `TimeoutManager` with TC formation + Section 5.2 safety check (4f-1 + (a)/(b)) in `protocol/v2/qbft/smr/timeout_manager.go:11`.
+- Added `ViewChangeHandler` (+ `StatusCollector`, proposal justification Case A/B, and `(2p+2)Δ` config) in `protocol/v2/qbft/smr/view_change.go:171`.
+- Integrated SMR behind `Instance.IsSMRMode()` + `SetViewChangeHandler()` in `protocol/v2/qbft/instance/instance.go:76`, and routed timeouts to SMR in `protocol/v2/qbft/instance/timeout.go:16`.
+- Added `RoundTimer.SetTimeoutFunc()` so SMR can enforce `(2p+2)Δ` timeouts when using `*RoundTimer` in `protocol/v2/qbft/roundtimer/timer.go:84`.
+- Progress tracking in `.subtask/tasks/smr--view-change/PROGRESS.json:1`.
+
+**Tests**
+- Added `Timeout`/`TC`/view-entry/leader-justification/timer-integration tests in `protocol/v2/qbft/smr/view_change_test.go:20`.
+- `go test ./protocol/v2/qbft/smr` passes; `go test ./...` still times out in `network/p2p` (10m) which appears unrelated to these changes.
+</worker>
+

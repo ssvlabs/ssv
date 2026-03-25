@@ -1,0 +1,15 @@
+# Harness: codex
+# Session: 019bbcfc-cf6f-77b0-b5d2-9752ca344924
+
+<lead>
+Find the log statements for 'ℹ️ starting duty processing' and '🔧 executing validator duty' in the codebase. Implement a solution that batches these logs - instead of logging per-validator, log 'Starting N attestation duties for slot X' with the list of validator indices. Look in operator/duties/ or protocol/v2/ssv/runner/.
+</lead>
+
+<worker>
+- Found log callsites at `protocol/v2/ssv/validator/validator.go:97`, `protocol/v2/ssv/validator/committee.go:93`, and `operator/duties/scheduler.go:416`.
+- Batched per-validator “executing duty” logs into a single DEBUG log per slot/role in `operator/duties/scheduler.go:416` (message like “Starting N attestation duties for slot X”, plus `validator_indices` and `duty_id_template`).
+- Reduced “ℹ️ starting duty processing” noise: validator duties no longer log at INFO; they log at DEBUG only for proposal/sync/registration/exit roles in `protocol/v2/ssv/validator/validator.go:97`, and committee duty start is DEBUG with count in `protocol/v2/ssv/validator/committee.go:93`.
+- Tests: `go test ./operator/duties/... ./protocol/v2/ssv/validator/...`
+- Committed as `4814041c0` on `fix/reduce-duty-processing-logs`; progress tracked in `.subtask/tasks/fix--reduce-duty-processing-logs/PROGRESS.json`.
+</worker>
+

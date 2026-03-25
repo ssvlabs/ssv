@@ -1,0 +1,36 @@
+# Harness: codex
+# Session: 019c04d4-3880-7610-9cdd-93cef8b895b8
+
+<lead>
+Implement SMR integration and testing as described in the task.
+
+Key requirements:
+1. Create SMRConfig with proper defaults
+2. Update Instance to support SMR components:
+   - Add SMR state (viewChange handler, highestTC)
+   - Initialize SMR components when SMR mode enabled
+3. Create message router for SMR message types
+4. Comprehensive integration tests:
+   - Happy path: 2-round consensus without timeouts
+   - Timeout/view change scenarios
+   - Edge cases (conflicting blocks, late messages)
+   - QBFT backward compatibility
+5. Benchmark tests comparing SMR vs QBFT latency
+
+This task depends on all other smr/* tasks. Focus on integration patterns and tests, using interfaces where concrete implementations aren't yet available.
+</lead>
+
+<worker>
+- Added SMR config + validation in `protocol/v2/qbft/smr/config.go:13`, and extended QBFT config interface with `IsSMRMode()` / `GetSMRConfig()` in `protocol/v2/qbft/config.go:20`.
+- Integrated SMR into the QBFT instance (SMR state + message routing + SMR-only msg validation) in `protocol/v2/qbft/instance/instance.go:40` and `protocol/v2/qbft/instance/smr.go:22`.
+- Implemented SMR router + TC/status collection + SMR message types (`TimeoutMsgType=4`, `StatusMsgType=5`) in `protocol/v2/qbft/smr/router.go:11` and used SMR commit quorum path in `protocol/v2/qbft/instance/commit.go:62`.
+- Added SMR integration tests + QBFT backward-compat checks in `protocol/v2/qbft/smr/integration_test.go:172`.
+- Added SMR vs QBFT benchmarks (committee sizes 4/7/10) in `protocol/v2/qbft/smr/benchmark_test.go:102`.
+- Documented SMR mode + config + migration notes in `docs/SMR.md:1` and linked it from `README.md:51`; progress tracked in `.subtask/tasks/smr--integration/PROGRESS.json`.
+
+Commands run/available:
+- `go test ./protocol/v2/qbft/...`
+- `go test -race ./protocol/v2/qbft/...`
+- `go test ./protocol/v2/qbft/smr -bench . -run '^$'`
+</worker>
+

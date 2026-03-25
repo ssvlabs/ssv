@@ -1,0 +1,7 @@
+[
+  { "step": "Scan existing SMR patterns", "done": true },
+  { "step": "Implement StatusMessage", "done": true },
+  { "step": "Implement StatusCollector", "done": true },
+  { "step": "Add unit tests", "done": true },
+  { "step": "Run and fix tests", "done": true }
+]

@@ -1,0 +1,7 @@
+[
+  { "step": "Scan existing QBFT types", "done": true },
+  { "step": "Implement SMR block + helpers", "done": true },
+  { "step": "Implement timeout certificate logic", "done": true },
+  { "step": "Add comprehensive unit tests", "done": true },
+  { "step": "Run tests and commit", "done": true }
+]

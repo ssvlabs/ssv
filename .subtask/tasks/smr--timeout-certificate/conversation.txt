@@ -1,0 +1,24 @@
+# Harness: codex
+# Session: 019c04d3-b875-7f82-80c0-4d177e210a54
+
+<lead>
+Implement the Timeout Certificate (TC) data structure as described in the task.
+
+Key requirements:
+1. Create new package at protocol/v2/qbft/smr/
+2. Implement TC struct with timeout message collection
+3. Implement the critical TC locking logic from spec section 6.1:
+   - Condition 1: >=2f-1 compatible blocks + no conflicts
+   - Condition 2: >=2f compatible blocks + no leader timeout
+4. Add comprehensive tests
+
+Start by reading the existing QBFT code structure to understand patterns used, then create the new SMR package with TC implementation.
+</lead>
+
+<worker>
+- Added new SMR package with `Block` + helpers (`BlockExtends`, `BlocksConflict`, `HighestBlock`) in `protocol/v2/qbft/smr/block.go:1`.
+- Implemented `TimeoutMessage`/`TimeoutCertificate` with quorum (`4f-1`), full validation (view/signers/signatures), and TC locking logic (conditions 1 & 2) in `protocol/v2/qbft/smr/timeout_certificate.go:1`.
+- Added unit tests for validation, locking scenarios, conflict detection, and edge cases in `protocol/v2/qbft/smr/timeout_certificate_test.go:1`.
+- Ran `go test ./protocol/v2/... -count=1` and committed the changes (`acfdfaf8e`).
+</worker>
+

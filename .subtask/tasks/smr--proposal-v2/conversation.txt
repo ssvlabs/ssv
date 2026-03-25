@@ -1,0 +1,7 @@
+# Harness: codex
+# Session: 019c0548-1e9f-7b51-81f0-5134c7203690
+
+<lead>
+Draft PLAN.md. First read protocol/v2/qbft/smr/*.go to understand existing types. Plan SMRProposal and validation that uses TimeoutCertificate.LocksBlock(). Note: StatusMessage type will be added by smr/status-v2 task - you can reference it in your plan. Focus on simplicity.
+</lead>
+

@@ -1,0 +1,20 @@
+# Harness: codex
+# Session: 019c04d4-194b-76c1-889e-471e7c02cc12
+
+<lead>
+Implement SMR proposal validation as described in the task.
+
+Key requirements:
+1. Create SMRProposal type with Block, View, ParentQC, and Proof (TC or StatusSet)
+2. Implement SMRProof interface for both TCProof and StatusSetProof
+3. Implement ValidateSMRProposal function per spec 4.2:
+   - For first block of view: validate proof locks the proposed block
+     - If TC proof: verify TC locks block
+     - If StatusSet proof: verify highest TC in set locks block
+   - For subsequent blocks: verify extends highest certified
+4. Integrate with existing isValidProposal when IsSMRMode()
+5. Add comprehensive tests
+
+This task depends on smr/timeout-certificate and smr/status-messages.
+</lead>
+

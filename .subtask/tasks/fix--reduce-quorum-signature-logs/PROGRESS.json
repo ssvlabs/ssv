@@ -1,0 +1,6 @@
+[
+  { "step": "Locate quorum and reconstruction logs", "done": true },
+  { "step": "Implement combined summary + TRACE details", "done": true },
+  { "step": "Run tests and verify log levels", "done": true },
+  { "step": "Commit changes", "done": true }
+]

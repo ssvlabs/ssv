@@ -1,0 +1,7 @@
+[
+  { "step": "Create PROGRESS.json tracker", "done": true },
+  { "step": "Inspect duty log callsites", "done": true },
+  { "step": "Batch duty logs and adjust levels", "done": true },
+  { "step": "Run targeted Go tests", "done": true },
+  { "step": "Commit changes", "done": true }
+]

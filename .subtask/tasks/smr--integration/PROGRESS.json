@@ -1,0 +1,8 @@
+[
+  { "step": "Inspect existing SMR code", "done": true },
+  { "step": "Add SMRConfig + IConfig extensions", "done": true },
+  { "step": "Integrate SMR into QBFT instance", "done": true },
+  { "step": "Add SMR message router", "done": true },
+  { "step": "Write integration and benchmark tests", "done": true },
+  { "step": "Update docs and run full test suite", "done": true }
+]

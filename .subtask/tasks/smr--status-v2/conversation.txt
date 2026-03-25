@@ -1,0 +1,15 @@
+# Harness: codex
+# Session: 019c0547-6c0b-7b82-b580-669f76282136
+
+<lead>
+Draft PLAN.md. First read the existing code in protocol/v2/qbft/smr/ to understand the types (TimeoutCertificate, Block, OperatorID). Then plan how to add StatusMessage and StatusCollector that use these existing types. Focus on simplicity - don't over-engineer.
+</lead>
+
+<lead>
+Draft PLAN.md for StatusMessage implementation
+</lead>
+
+<lead>
+Draft PLAN.md for implementing StatusMessage and StatusCollector. First read the existing code in protocol/v2/qbft/smr/ to understand the types.
+</lead>
+

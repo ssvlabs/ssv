@@ -1,0 +1,32 @@
+name: default
+description: Simple task execution
+
+instructions:
+    worker: |
+        Create PROGRESS.json to track your steps:
+        ```json
+        [
+            {"step": "First step", "done": false},
+            {"step": "Second step", "done": false}
+        ]
+        ```
+        Update `done: true` as you complete each step, or revise as needed. Commit when finished.
+
+stages:
+    - name: implement
+      instructions: |
+          Worker is implementing.
+
+          Check progress: `subtask show <task>`
+          When ready: `subtask stage <task> review`
+
+    - name: review
+      instructions: |
+          Review code at `cd $(subtask workspace <task>)`
+
+          Request changes: `subtask resume <task> "Please..."`
+          When ready: `subtask stage <task> ready`
+
+    - name: ready
+      instructions: |
+          Task is ready. Notify human and ask them if they want to merge or create a PR.

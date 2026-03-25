@@ -1,0 +1,25 @@
+# Harness: codex
+# Session: 019c04d3-d6e3-77e0-ba6d-e17ed95a519c
+
+<lead>
+Implement Status Messages for SMR view change as described in the task.
+
+Key requirements:
+1. Create StatusMessage struct with (previousView, QC, highestTC, signature)
+2. Create StatusCollector for leader to collect 4f-1 status messages
+3. Implement leader initialization logic (spec 5.3):
+   - Case A: TC in status messages locks a block -> use that block
+   - Case B: Otherwise use block from highest TC in status set
+4. Add comprehensive tests
+
+Start by reading the existing message types in the codebase to follow similar patterns.
+</lead>
+
+<worker>
+- Added SMR status messages + collector in `protocol/v2/qbft/smr/status.go:1` (sign/verify against committee operator RSA pubkeys, view/QC/TC validation, quorum = `n-f` (4f-1 for 5f-1 committees), and starting-block selection with Case A/Case B proof output).
+- Added unit coverage in `protocol/v2/qbft/smr/status_test.go:1` (sign/validate, quorum detection, starting-block determination for both cases, duplicate/wrong-view edge cases).
+- Tracked task progress in `.subtask/tasks/smr--status-messages/PROGRESS.json:1`.
+
+Run: `go test ./protocol/v2/qbft/smr`
+</worker>
+
