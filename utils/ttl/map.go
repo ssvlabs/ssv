@@ -1,36 +1,40 @@
 package ttl
 
 import (
+	"context"
 	"time"
 
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-// Map implements a thread-safe map with a sync.Map under the hood.
+// Map implements a thread-safe map with automatic TTL-based expiry.
 type Map[Key comparable, Value any] struct {
 	*hashmap.Map[Key, Value]
 	idxLastUpdatedAt hashmap.Map[Key, time.Time]
 }
 
-func New[Key comparable, Value any](lifespan, cleanupInterval time.Duration) *Map[Key, Value] {
+// New creates a TTL map that automatically removes entries older than lifespan.
+// The cleanup goroutine runs every cleanupInterval and exits when ctx is canceled.
+// After ctx is canceled, the map remains readable but should not be used for new writes —
+// cleanup is permanently stopped and timestamp metadata from new writes will not be reclaimed.
+func New[Key comparable, Value any](ctx context.Context, lifespan, cleanupInterval time.Duration) *Map[Key, Value] {
 	m := &Map[Key, Value]{
 		Map:              hashmap.New[Key, Value](),
 		idxLastUpdatedAt: hashmap.Map[Key, time.Time]{},
 	}
 	go func() {
-		// TODO: use time.After when Go is updated to 1.23
-		ticker := time.NewTicker(cleanupInterval)
-		defer ticker.Stop()
-
-		// TODO - consider terminating with ctx.Done() to make this ttl map garbage-collectable
-		for range ticker.C {
-			m.idxLastUpdatedAt.Range(func(key Key, t time.Time) bool {
-				if time.Since(t) > lifespan {
-					m.idxLastUpdatedAt.Delete(key)
-					m.Delete(key)
-				}
-				return true
-			})
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(cleanupInterval):
+				m.idxLastUpdatedAt.Range(func(key Key, t time.Time) bool {
+					if time.Since(t) > lifespan {
+						m.Delete(key)
+					}
+					return true
+				})
+			}
 		}
 	}()
 	return m
@@ -39,7 +43,6 @@ func New[Key comparable, Value any](lifespan, cleanupInterval time.Duration) *Ma
 func (m *Map[Key, Value]) GetOrSet(key Key, value Value) (Value, bool) {
 	result, loaded := m.Map.GetOrSet(key, value)
 	if !loaded {
-		// gotta update timestamp sine we've just set value for this key
 		m.idxLastUpdatedAt.Set(key, time.Now())
 	}
 	return result, loaded
@@ -48,10 +51,19 @@ func (m *Map[Key, Value]) GetOrSet(key Key, value Value) (Value, bool) {
 func (m *Map[Key, Value]) CompareAndSwap(key Key, oldValue, newValue Value) (swapped bool) {
 	swapped = m.Map.CompareAndSwap(key, oldValue, newValue)
 	if swapped {
-		// gotta update timestamp sine we've just set value for this key
 		m.idxLastUpdatedAt.Set(key, time.Now())
 	}
 	return swapped
+}
+
+func (m *Map[Key, Value]) Delete(key Key) bool {
+	m.idxLastUpdatedAt.Delete(key)
+	return m.Map.Delete(key)
+}
+
+func (m *Map[Key, Value]) GetAndDelete(key Key) (Value, bool) {
+	m.idxLastUpdatedAt.Delete(key)
+	return m.Map.GetAndDelete(key)
 }
 
 func (m *Map[Key, Value]) Set(key Key, value Value) {

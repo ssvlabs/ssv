@@ -1,11 +1,11 @@
 package streams
 
 import (
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core"
-	"github.com/pkg/errors"
 )
 
 // Stream represents a stream in the system
@@ -36,22 +36,24 @@ func NewStream(s core.Stream) Stream {
 // ReadWithTimeout reads with timeout
 func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
 	if err := ts.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return nil, errors.Wrap(err, "could not set read deadline")
+		return nil, fmt.Errorf("set read deadline: %w", err)
 	}
 	return io.ReadAll(ts.Stream)
 }
 
-// WriteWithTimeout reads next message with timeout
+// WriteWithTimeout writes data to stream with timeout
 func (ts *streamWrapper) WriteWithTimeout(data []byte, timeout time.Duration) error {
 	if err := ts.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		return errors.Wrap(err, "could not set write deadline")
+		return fmt.Errorf("set write deadline: %w", err)
 	}
 
 	n := len(data)
 	bytesWritten, err := ts.Write(data)
-	if bytesWritten != n {
-		return errors.Errorf("written bytes (%d) to sync stream doesnt match input data (%d)", bytesWritten, n)
+	if err != nil {
+		return fmt.Errorf("write stream: %w", err)
 	}
-
-	return err
+	if bytesWritten != n {
+		return fmt.Errorf("wrote %d of %d bytes: %w", bytesWritten, n, io.ErrShortWrite)
+	}
+	return nil
 }
