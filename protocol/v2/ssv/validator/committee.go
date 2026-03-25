@@ -311,7 +311,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		return nil
 	case message.SSVEventMsgType:
 		eventMsg, ok := msg.Body.(*types.EventMsg)
-		if !ok {
+		if !ok || eventMsg == nil {
 			return fmt.Errorf("could not decode event message (slot=%d)", slot)
 		}
 

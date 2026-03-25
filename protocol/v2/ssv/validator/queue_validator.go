@@ -127,7 +127,7 @@ func (v *Validator) StartQueueConsumer(
 				// If no duty is running, pop only ExecuteDuty messages.
 				filter = func(m *queue.SSVMessage) bool {
 					e, ok := m.Body.(*types.EventMsg)
-					if !ok {
+					if !ok || e == nil {
 						return false
 					}
 					return e.Type == types.ExecuteDuty
@@ -165,7 +165,7 @@ func (v *Validator) StartQueueConsumer(
 				continue
 			}
 
-			msgKey, err := v.mKey(msg)
+			msgKey, err := mKey(msg)
 			if err != nil {
 				v.logger.Error("couldn't build msgKey, dropping message", zap.Error(err))
 				continue
@@ -331,9 +331,4 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	}
 
 	return logger, nil
-}
-
-// mKey is a wrapper that provides a logger to report errors (if any).
-func (v *Validator) mKey(msg *queue.SSVMessage) (messageKey, error) {
-	return mKey(msg)
 }

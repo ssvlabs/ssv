@@ -28,12 +28,27 @@ type SSVMessage struct {
 func (d *SSVMessage) DecodedSSVMessage() {}
 
 func (d *SSVMessage) Slot() (phase0.Slot, error) {
+	var errNilMessageBody = fmt.Errorf("nil SSVMessage body")
+
+	if d.Body == nil {
+		return 0, errNilMessageBody
+	}
+
 	switch m := d.Body.(type) {
 	case *specqbft.Message:
+		if m == nil {
+			return 0, errNilMessageBody
+		}
 		return phase0.Slot(m.Height), nil
 	case *spectypes.PartialSignatureMessages:
+		if m == nil {
+			return 0, errNilMessageBody
+		}
 		return m.Slot, nil
 	case *ssvtypes.EventMsg:
+		if m == nil {
+			return 0, errNilMessageBody
+		}
 		switch m.Type {
 		case ssvtypes.Timeout:
 			data, err := m.GetTimeoutData()
@@ -45,6 +60,9 @@ func (d *SSVMessage) Slot() (phase0.Slot, error) {
 			data, err := m.GetExecuteDutyData()
 			if err != nil {
 				return 0, fmt.Errorf("get ExecuteDuty data: %w", err)
+			}
+			if data.Duty == nil {
+				return 0, fmt.Errorf("nil duty data in EventMsg")
 			}
 			return data.Duty.Slot, nil
 		default:
@@ -162,15 +180,22 @@ func scoreMessageType(m *SSVMessage) int {
 
 // scoreMessageSubtype returns an integer score for the message's type.
 func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
-	_, isConsensusMessage := m.Body.(*specqbft.Message)
-
 	var (
+		isConsensusMessage     = false
 		isPreConsensusMessage  = false
 		isPostConsensusMessage = false
 	)
-	if mm, ok := m.Body.(*spectypes.PartialSignatureMessages); ok && mm != nil {
-		isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
-		isPreConsensusMessage = !isPostConsensusMessage
+
+	switch mm := m.Body.(type) {
+	case *specqbft.Message:
+		if mm != nil {
+			isConsensusMessage = true
+		}
+	case *spectypes.PartialSignatureMessages:
+		if mm != nil {
+			isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
+			isPreConsensusMessage = !isPostConsensusMessage
+		}
 	}
 
 	// Current height.
@@ -251,15 +276,22 @@ func isDecidedMessage(s *State, m *SSVMessage) bool {
 
 // scoreCommitteeMessageSubtype returns an integer score for the message's type.
 func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
-	_, isConsensusMessage := m.Body.(*specqbft.Message)
-
 	var (
+		isConsensusMessage     = false
 		isPreConsensusMessage  = false
 		isPostConsensusMessage = false
 	)
-	if mm, ok := m.Body.(*spectypes.PartialSignatureMessages); ok && mm != nil {
-		isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
-		isPreConsensusMessage = !isPostConsensusMessage
+
+	switch mm := m.Body.(type) {
+	case *specqbft.Message:
+		if mm != nil {
+			isConsensusMessage = true
+		}
+	case *spectypes.PartialSignatureMessages:
+		if mm != nil {
+			isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
+			isPreConsensusMessage = !isPostConsensusMessage
+		}
 	}
 
 	// Current height.

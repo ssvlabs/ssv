@@ -146,7 +146,7 @@ func (c *Committee) ConsumeQueue(
 			continue
 		}
 
-		msgKey, err := c.mKey(msg)
+		msgKey, err := mKey(msg)
 		if err != nil {
 			logger.Error("couldn't build msgKey, dropping message", zap.Error(err))
 			continue
@@ -303,9 +303,4 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 	}
 
 	return logger, nil
-}
-
-// mKey is a wrapper that provides a logger to report errors (if any).
-func (c *Committee) mKey(msg *queue.SSVMessage) (messageKey, error) {
-	return mKey(msg)
 }
