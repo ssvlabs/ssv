@@ -127,6 +127,8 @@ type p2pNetwork struct {
 	trimmedRecently *ttl.Map[peer.ID, struct{}]
 }
 
+var _ HealthChecker = (*p2pNetwork)(nil)
+
 // New creates a new p2p network
 func New(
 	logger *zap.Logger,
