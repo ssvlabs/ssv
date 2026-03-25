@@ -658,13 +658,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if cfg.SSVAPIPort > 0 {
-			if cfg.SSVAPIAddress == "" {
-				logger.Warn("SSV API address not configured; listening on all interfaces",
-					zap.Int("port", cfg.SSVAPIPort),
-					zap.String("config_key", "SSVAPIAddress"),
-					zap.String("recommended_address", "127.0.0.1"),
-				)
-			}
+			warnIfSSVAPIAddressUnset(logger, cfg.SSVAPIAddress, cfg.SSVAPIPort)
 			apiServer := apiserver.New(
 				logger,
 				net.JoinHostPort(cfg.SSVAPIAddress, strconv.Itoa(cfg.SSVAPIPort)),
@@ -696,6 +690,18 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func warnIfSSVAPIAddressUnset(logger *zap.Logger, address string, port int) {
+	if address != "" {
+		return
+	}
+
+	logger.Warn("SSV API address not configured; listening on all interfaces",
+		zap.Int("port", port),
+		zap.String("config_key", "SSVAPIAddress"),
+		zap.String("recommended_address", "127.0.0.1"),
+	)
 }
 
 func ensureNoMissingKeys(

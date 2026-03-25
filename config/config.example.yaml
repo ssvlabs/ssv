@@ -54,7 +54,7 @@ MetricsAPIPort: 15000
 EnableTraces: false
 
 # These settings enable the SSV API at the specified address+port. Refer to the documentation at https://bloxapp.github.io/ssv/
-# Prefer 127.0.0.1 address and use 0.0.0.0 only when remote access is intentional and protected by network controls (to prevent potential resource-intensive attacks).
-# SSVAPIAddress defaults to 0.0.0.0 if not specified (for backward compatibility).
+# Prefer 127.0.0.1 and listen on all interfaces only when remote access is intentional and protected by network controls (to prevent potential resource-intensive attacks).
+# If SSVAPIAddress is omitted, the API listens on all interfaces (for backward compatibility).
 # SSVAPIAddress: 127.0.0.1
 # SSVAPIPort: 16000
