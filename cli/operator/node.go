@@ -1032,7 +1032,7 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 			return nil, errors.New("custom domain type must be 4 bytes")
 		}
 
-		// https://github.com/ssvlabs/ssv/v2/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
+		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
 		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
 		binary.BigEndian.PutUint32(ssvConfig.DomainType[:], postForkDomain)
 
