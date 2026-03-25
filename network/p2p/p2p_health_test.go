@@ -32,6 +32,12 @@ func TestP2PNetwork_Healthy(t *testing.T) {
 			wantErr:         "discovery bootstrap failed",
 		},
 		{
+			name:            "not ready takes precedence over discovery failed",
+			state:           stateClosed,
+			discoveryFailed: true,
+			wantErr:         "p2p network not ready",
+		},
+		{
 			name:      "canceled context",
 			state:     stateReady,
 			cancelCtx: true,
@@ -47,7 +53,7 @@ func TestP2PNetwork_Healthy(t *testing.T) {
 				n.discoveryFailed.Store(true)
 			}
 
-			ctx := context.Background()
+			ctx := t.Context()
 			if tt.cancelCtx {
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithCancel(ctx)
