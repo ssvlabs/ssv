@@ -143,8 +143,11 @@ func TestBloomCrossCheck_NoFalseRecovery(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	logsCh, errCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
+	// Use fetchLogsInBatches directly with verifyBloom=true to actually exercise bloom checks.
+	currentBlock, err := env.client.client.BlockNumber(t.Context())
 	require.NoError(t, err)
+
+	logsCh, errCh := env.client.fetchLogsInBatches(t.Context(), 0, currentBlock, true)
 
 	allLogs := make([]ethtypes.Log, 0, totalBlocks)
 	for block := range logsCh {

@@ -18,6 +18,10 @@ import (
 // verifyLogsWithBloom cross-checks the logs returned by FilterLogs against each block's
 // bloom filter. Blocks that returned no logs but whose bloom filter matches the contract
 // address are retried individually to recover potentially dropped events (a known Geth bug).
+//
+// This is a block-level check only — it assumes all-or-nothing drops (an entire block's
+// logs are missing). Partial drops (some logs present, some missing within the same block)
+// have not been observed and are not handled here.
 func (ec *ExecutionClient) verifyLogsWithBloom(ctx context.Context, logs []ethtypes.Log, fromBlock, toBlock uint64) ([]ethtypes.Log, error) {
 	// Build a set of blocks that already have logs in the result.
 	blocksWithLogs := make(map[uint64]bool)
