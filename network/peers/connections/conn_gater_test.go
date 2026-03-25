@@ -78,6 +78,16 @@ func TestConnGaterInterceptAcceptRateLimitsByIP(t *testing.T) {
 
 	otherIPConn := &testConn{remoteMultiaddr: mustMultiaddr("/ip4/192.0.2.2/tcp/13000")}
 	require.True(t, gater.InterceptAccept(otherIPConn))
+}
+
+func TestConnGaterInterceptAcceptRejectsDNSAddresses(t *testing.T) {
+	gater := &connGater{
+		logger:          zap.NewNop(),
+		atMaxPeersLimit: func() bool { return false },
+		atInboundLimit:  func() bool { return false },
+		ipLimiter:       leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
+		trimmedRecently: ttl.New[peer.ID, struct{}](t.Context(), time.Minute, time.Minute),
+	}
 
 	require.False(t, gater.InterceptAccept(&testConn{remoteMultiaddr: mustMultiaddr("/dns4/example.com/tcp/13000")}))
 }

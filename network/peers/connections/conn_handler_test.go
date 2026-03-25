@@ -80,8 +80,12 @@ func TestConnHandlerHandleDeduplicatesConcurrentOutboundHandshakes(t *testing.T)
 	<-handshaker.started
 	notify.ConnectedF(net, conn)
 
-	time.Sleep(100 * time.Millisecond)
-	require.Equal(t, 1, handshaker.CallCount())
+	// ConnectedF handles connections on background goroutines. Once the first
+	// handshake has started and is blocked, the second attempt should be ignored
+	// and must not start another handshake during this scheduling window.
+	require.Never(t, func() bool {
+		return handshaker.CallCount() > 1
+	}, 250*time.Millisecond, 10*time.Millisecond)
 
 	close(handshaker.release)
 
