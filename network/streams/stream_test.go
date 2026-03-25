@@ -2,6 +2,8 @@ package streams
 
 import (
 	"context"
+	"errors"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +15,27 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
 )
+
+type stubStream struct {
+	core.Stream
+
+	writeFn            func([]byte) (int, error)
+	setWriteDeadlineFn func(time.Time) error
+}
+
+func (s *stubStream) Write(p []byte) (int, error) {
+	if s.writeFn != nil {
+		return s.writeFn(p)
+	}
+	return len(p), nil
+}
+
+func (s *stubStream) SetWriteDeadline(t time.Time) error {
+	if s.setWriteDeadlineFn != nil {
+		return s.setWriteDeadlineFn(t)
+	}
+	return nil
+}
 
 func TestStream(t *testing.T) {
 	hosts := testHosts(t, 3)
@@ -64,6 +87,52 @@ func TestStream(t *testing.T) {
 	})
 
 	wg.Wait()
+}
+
+func TestWriteWithTimeout_ErrorPaths(t *testing.T) {
+	t.Run("write error preserves root cause", func(t *testing.T) {
+		rootErr := errors.New("boom")
+		s := NewStream(&stubStream{
+			writeFn: func(p []byte) (int, error) {
+				return len(p) - 1, rootErr
+			},
+		})
+
+		err := s.WriteWithTimeout([]byte("abc"), time.Second)
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, rootErr)
+		require.ErrorContains(t, err, "write stream")
+	})
+
+	t.Run("short write without error returns ErrShortWrite", func(t *testing.T) {
+		s := NewStream(&stubStream{
+			writeFn: func(p []byte) (int, error) {
+				return len(p) - 1, nil
+			},
+		})
+
+		err := s.WriteWithTimeout([]byte("abc"), time.Second)
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, io.ErrShortWrite)
+		require.ErrorContains(t, err, "wrote 2 of 3 bytes")
+	})
+
+	t.Run("set write deadline error is wrapped", func(t *testing.T) {
+		deadlineErr := errors.New("deadline failed")
+		s := NewStream(&stubStream{
+			setWriteDeadlineFn: func(t time.Time) error {
+				return deadlineErr
+			},
+		})
+
+		err := s.WriteWithTimeout([]byte("abc"), time.Second)
+
+		require.Error(t, err)
+		require.ErrorIs(t, err, deadlineErr)
+		require.ErrorContains(t, err, "set write deadline")
+	})
 }
 
 func testHosts(t *testing.T, n int) []host.Host {

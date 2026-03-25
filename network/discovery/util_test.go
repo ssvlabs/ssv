@@ -70,8 +70,8 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSV) *Option
 		ConnIndex:           connectionIndex,
 		SubnetsIdx:          subnetsIndex,
 		SSVConfig:           ssvConfig,
-		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
-		TrimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
+		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](t.Context(), time.Hour, time.Hour),
+		TrimmedRecently:     ttl.New[peer.ID, struct{}](t.Context(), time.Hour, time.Hour),
 	}
 }
 

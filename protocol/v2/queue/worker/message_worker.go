@@ -5,7 +5,10 @@ import (
 
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/v2/network"
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
 )
 
@@ -110,6 +113,35 @@ func (w *Worker) Size() int {
 	return len(w.queue)
 }
 
+func messageContextFields(msg *queue.SSVMessage) []zap.Field {
+	if msg == nil {
+		return nil
+	}
+
+	role := msg.MsgID.GetRoleType()
+	logFields := []zap.Field{
+		fields.MessageID(msg.MsgID),
+		fields.MessageType(msg.MsgType),
+		fields.RunnerRole(role),
+	}
+
+	if slot, err := msg.Slot(); err == nil {
+		logFields = append(logFields, fields.Slot(slot))
+	}
+
+	if role == spectypes.RoleCommittee {
+		executorID := msg.MsgID.GetDutyExecutorID()
+		if len(executorID) >= 32 {
+			var committeeID spectypes.CommitteeID
+			// committeeID is the last 16 bytes of the executorID
+			copy(committeeID[:], executorID[16:])
+			logFields = append(logFields, fields.CommitteeID(committeeID))
+		}
+	}
+
+	return logFields
+}
+
 // process the msg's from queue
 func (w *Worker) process(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	if w.handler == nil {
@@ -118,7 +150,7 @@ func (w *Worker) process(ctx context.Context, logger *zap.Logger, msg *queue.SSV
 	}
 	if err := w.handler(ctx, msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
-			logger.Debug("❌ failed to handle message", zap.Error(handlerErr))
+			logger.Debug("❌ failed to handle message", append(messageContextFields(msg), zap.Error(handlerErr))...)
 			return
 		}
 	}

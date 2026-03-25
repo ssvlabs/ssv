@@ -3,11 +3,16 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/ssvlabs/ssv/v2/network"
 	"github.com/ssvlabs/ssv/v2/observability/log"
@@ -160,6 +165,85 @@ func TestBuffer(t *testing.T) {
 	assertNoAsyncError(t, handlerErrCh)
 }
 
+func TestMessageContextFields(t *testing.T) {
+	t.Run("nil message", func(t *testing.T) {
+		require.Nil(t, messageContextFields(nil))
+	})
+
+	t.Run("committee message includes slot and committee id", func(t *testing.T) {
+		msgID := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+		fields := messageContextFields(&queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgID:   msgID,
+				MsgType: spectypes.SSVPartialSignatureMsgType,
+			},
+			Body: &spectypes.PartialSignatureMessages{Slot: 9},
+		})
+
+		require.Contains(t, fieldKeys(fields), "msg_id")
+		require.Contains(t, fieldKeys(fields), "msg_type")
+		require.Contains(t, fieldKeys(fields), "runner_role")
+		require.Contains(t, fieldKeys(fields), "slot")
+		require.Contains(t, fieldKeys(fields), "committee_id")
+	})
+
+	t.Run("validator message omits slot and committee id when slot unavailable", func(t *testing.T) {
+		msgID := spectypes.NewMsgID([4]byte{}, []byte("validator_pk"), spectypes.RoleAggregator)
+		fields := messageContextFields(&queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgID:   msgID,
+				MsgType: spectypes.SSVPartialSignatureMsgType,
+			},
+		})
+
+		require.Contains(t, fieldKeys(fields), "msg_id")
+		require.Contains(t, fieldKeys(fields), "msg_type")
+		require.Contains(t, fieldKeys(fields), "runner_role")
+		require.NotContains(t, fieldKeys(fields), "slot")
+		require.NotContains(t, fieldKeys(fields), "committee_id")
+	})
+}
+
+func TestWorkerProcess_LogsMessageContextOnError(t *testing.T) {
+	core, recorded := observer.New(zap.DebugLevel)
+	logger := zap.New(core)
+	msgID := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+
+	worker := &Worker{
+		handler: func(context.Context, network.DecodedSSVMessage) error {
+			return errors.New("handler boom")
+		},
+		errHandler: func(msg *queue.SSVMessage, err error) error {
+			require.EqualError(t, err, "handler boom")
+			return errors.New("wrapped boom")
+		},
+	}
+
+	msg := &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgID:   msgID,
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+		},
+		Body: &spectypes.PartialSignatureMessages{Slot: phase0.Slot(13)},
+	}
+
+	worker.process(t.Context(), logger, msg)
+
+	logs := recorded.FilterMessage("❌ failed to handle message").All()
+	require.Len(t, logs, 1)
+
+	fields := logs[0].ContextMap()
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
+
+	require.Equal(t, msgID.String(), fields["msg_id"])
+	require.Equal(t, "partial_signature", fields["msg_type"])
+	require.Contains(t, fields, "runner_role")
+	require.EqualValues(t, 13, fields["slot"])
+	require.EqualValues(t, "wrapped boom", fields["error"])
+	require.EqualValues(t, fmt.Sprintf("%x", committeeID), fields["committee_id"])
+}
+
 func assertNoAsyncError(t *testing.T, errCh <-chan error) {
 	t.Helper()
 	select {
@@ -167,4 +251,12 @@ func assertNoAsyncError(t *testing.T, errCh <-chan error) {
 		require.NoError(t, err)
 	default:
 	}
+}
+
+func fieldKeys(fields []zap.Field) map[string]struct{} {
+	keys := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		keys[field.Key] = struct{}{}
+	}
+	return keys
 }

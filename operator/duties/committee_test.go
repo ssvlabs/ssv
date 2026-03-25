@@ -344,9 +344,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		// no execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 2: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
-		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		// STEP 2: trigger a change in active indices & wait for attester duties to be re-fetched in slot 0
 		attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -359,24 +357,22 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-
-		// STEP 3: wait for attester duties to be fetched
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		scheduler.indicesChg <- struct{}{}
 		waitForDuties.Set(true)
-		ticker.Send(phase0.Slot(1))
-		// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
-		// This ensures that no attester duties are fetched before the cluster ticker is triggered,
-		// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-		time.Sleep(testSlotTickerTriggerDelay)
-
-		// wait for attester duties to be fetched
+		// wait for attester duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// wait for sync committee duties to be fetched
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// no execution should happen in slot 1
+		// no other fetching or execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: wait for committee duties to be executed
+		// STEP 3: wait for attester duties to be fetched in slot 1
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		ticker.Send(phase0.Slot(1))
+		// wait for committee duties to be fetched in slot 1
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+		// no other fetching or execution should happen in slot 1
+		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: wait for committee duties to be executed in slot 2
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 		startTime := time.Now()
 		aDuties, _ := attDuties.Get(0)
@@ -420,9 +416,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		// no execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 2: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
-		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		// STEP 2: trigger a change in active indices & wait for attester duties to be re-fetched in slot 0
 		attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -440,24 +434,22 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-
-		// STEP 3: wait for attester duties to be fetched
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		scheduler.indicesChg <- struct{}{}
 		waitForDuties.Set(true)
-		ticker.Send(phase0.Slot(1))
-		// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
-		// This ensures that no attester duties are fetched before the cluster ticker is triggered,
-		// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-		time.Sleep(testSlotTickerTriggerDelay)
-
-		// wait for attester duties to be fetched
+		// wait for attester duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// wait for sync committee duties to be fetched
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// no execution should happen in slot 1
+		// no other fetching or execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: wait for committee duties to be executed
+		// STEP 3: wait for attester duties to be fetched in slot 1
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		ticker.Send(phase0.Slot(1))
+		// wait for committee duties to be fetched in slot 1
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+		// no other fetching or execution should happen in slot 1
+		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: wait for committee duties to be executed in slot 2
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 		startTime := time.Now()
 		aDuties, _ := attDuties.Get(0)
@@ -509,9 +501,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 		// no execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 2: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
-		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		// STEP 2: trigger a change in active indices & wait for attester duties to be re-fetched in slot 0
 		attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 5},
@@ -519,24 +509,22 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(2),
 			},
 		})
-
-		// STEP 3: wait for attester duties to be fetched
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		scheduler.indicesChg <- struct{}{}
 		waitForDuties.Set(true)
-		ticker.Send(phase0.Slot(1))
-		// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
-		// This ensures that no attester duties are fetched before the cluster ticker is triggered,
-		// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-		time.Sleep(testSlotTickerTriggerDelay)
-
-		// wait for attester duties to be fetched
+		// wait for attester duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// wait for sync committee duties to be fetched
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		// no execution should happen in slot 1
+		// no other fetching or execution should happen in slot 0
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: wait for committee duties to be executed
+		// STEP 3: wait for attester duties to be fetched in slot 1
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		ticker.Send(phase0.Slot(1))
+		// wait for committee duties to be fetched in slot 1
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+		// no other fetching or execution should happen in slot 1
+		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: wait for committee duties to be executed in slot 2
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 		startTime := time.Now()
 		aDuties, _ := attDuties.Get(0)
@@ -584,11 +572,10 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			},
 		})
 
-		// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epoch, plus for
-		// sync committee duties to be fetched for the current period.
+		// STEP 1: (on startup) wait for attester duties to be fetched for the next epoch only (since we start at
+		// the last slot of the epoch), plus for sync committee duties to be fetched for the current period.
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) current epoch fetch-call
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
@@ -623,7 +610,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		// wait for attester duties to be fetched again for the current epoch
+		// wait for attester duties to be re-fetched for the current epoch
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		// no execution should happen in slot testSlotsPerEpoch*2
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -678,13 +665,12 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 			},
 		})
 
-		// STEP 1: (on startup) wait for attester duties to be fetched for the current and next epoch, plus for
-		// sync committee duties to be fetched for the current period.
+		// STEP 1: (on startup) wait for attester duties to be fetched for the next epoch only (since we start at
+		// the last slot of the epoch), plus for sync committee duties to be fetched for the current period.
 		waitForDuties.Set(true)
 		require.NoError(t, scheduler.Start(ctx))
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
-		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (attester) next epoch fetch-call
+		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout) // (sync committee) current epoch fetch-call
 
 		// STEP 2: trigger head event
 		e := &eth2apiv1.Event{
@@ -727,7 +713,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		attDuties.Delete(phase0.Epoch(2))
 
-		// STEP 6: wait for attester duties to be fetched again for the current epoch
+		// STEP 6: wait for attester duties to be re-fetched for the current epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
 		// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
@@ -819,7 +805,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 			},
 		})
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
-		// wait for attester duties to be fetched again for the current epoch
+		// wait for attester duties to be re-fetched for the current epoch
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 		// no execution should happen in slot testSlotsPerEpoch+1
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
