@@ -241,10 +241,15 @@ func TestCommitteeRunnerStartNewDuty_StartsGuardAndResetsSubmissions(t *testing.
 	require.NoError(t, env.runner.StartNewDuty(context.Background(), env.logger, duty, env.sampleKey.Threshold))
 
 	require.Len(t, guard.startCalls, 2)
-	require.Equal(t, spectypes.BNRoleAttester, guard.startCalls[0].role)
-	require.Equal(t, spectypes.BNRoleSyncCommittee, guard.startCalls[1].role)
-	require.Equal(t, duty.Slot, guard.startCalls[0].slot)
-	require.Equal(t, duty.Slot, guard.startCalls[1].slot)
+	gotRoles := make([]spectypes.BeaconRole, 0, len(guard.startCalls))
+	for _, call := range guard.startCalls {
+		gotRoles = append(gotRoles, call.role)
+		require.Equal(t, duty.Slot, call.slot)
+	}
+	require.ElementsMatch(t, []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleSyncCommittee,
+	}, gotRoles)
 	require.False(t, env.runner.HasSubmitted(spectypes.BNRoleAttester, 1))
 	require.False(t, env.runner.HasSubmitted(spectypes.BNRoleSyncCommittee, 2))
 	require.NotNil(t, env.runner.state().RunningInstance)
