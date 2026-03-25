@@ -71,3 +71,14 @@ func (m *metricsRecorder) RecordRoundChange(ctx context.Context, round specqbft.
 			reasonAttribute(reason)),
 	)
 }
+
+func (m *metricsRecorder) RecordCommitteeInputProposalComparison(ctx context.Context, match bool) {
+	committeeInputProposalComparisonCounter.Add(
+		ctx,
+		1,
+		metric.WithAttributes(
+			observability.RunnerRoleAttribute(m.runnerRole),
+			matchAttribute(match),
+		),
+	)
+}

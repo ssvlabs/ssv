@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -46,6 +48,7 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	if err != nil {
 		return errors.Wrap(err, "could not hash input data")
 	}
+	i.observeCommitteeInputProposalComparison(ctx, msg, r)
 
 	prepare, err := i.CreatePrepare(msgRound, r)
 	if err != nil {
@@ -218,6 +221,48 @@ func (i *Instance) Proposer() spectypes.OperatorID {
 func (i *Instance) ProposerForRound(round specqbft.Round) spectypes.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return i.config.GetProposerF()(i.State, round)
+}
+
+func (i *Instance) observeCommitteeInputProposalComparison(ctx context.Context, msg *specqbft.ProcessingMessage, proposalRoot [32]byte) {
+	if i.metrics.runnerRole != spectypes.RoleCommittee {
+		return
+	}
+	if msg.QBFTMessage.Round != specqbft.FirstRound {
+		return
+	}
+
+	inputRoot, err := specqbft.HashDataRoot(i.StartValue)
+	if err != nil {
+		i.logger.Debug("failed to hash committee input value for proposal comparison", zap.Error(err))
+		return
+	}
+
+	match := bytes.Equal(inputRoot[:], proposalRoot[:])
+	i.metrics.RecordCommitteeInputProposalComparison(ctx, match)
+
+	observer := i.config.GetCommitteeBeaconVoteObserver()
+	if observer == nil {
+		return
+	}
+
+	var msgID spectypes.MessageID
+	copy(msgID[:], msg.QBFTMessage.Identifier)
+	executorID := msgID.GetDutyExecutorID()
+	var committeeID spectypes.CommitteeID
+	if len(executorID) >= 32 {
+		copy(committeeID[:], executorID[16:])
+	}
+
+	observer.ObserveCommitteeBeaconVoteComparison(ctx, qbft.CommitteeBeaconVoteComparisonObservation{
+		Slot:          phase0.Slot(msg.QBFTMessage.Height),
+		CommitteeID:   committeeID,
+		OperatorID:    i.State.CommitteeMember.OperatorID,
+		ProposerID:    i.ProposerForRound(msg.QBFTMessage.Round),
+		CommitteeSize: uint64(len(i.State.CommitteeMember.Committee)),
+		InputRoot:     inputRoot,
+		ProposalRoot:  proposalRoot,
+		Match:         match,
+	})
 }
 
 // CreateProposal

@@ -1,6 +1,9 @@
 package qbft
 
 import (
+	"context"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -26,6 +29,23 @@ type IConfig interface {
 	GetTimer() roundtimer.Timer
 	// GetCutOffRound returns the round cut off
 	GetCutOffRound() specqbft.Round
+	// GetCommitteeBeaconVoteObserver returns a sink for committee BeaconVote input/proposal comparison observations.
+	GetCommitteeBeaconVoteObserver() CommitteeBeaconVoteObserver
+}
+
+type CommitteeBeaconVoteObserver interface {
+	ObserveCommitteeBeaconVoteComparison(ctx context.Context, observation CommitteeBeaconVoteComparisonObservation)
+}
+
+type CommitteeBeaconVoteComparisonObservation struct {
+	Slot          phase0.Slot
+	CommitteeID   spectypes.CommitteeID
+	OperatorID    spectypes.OperatorID
+	ProposerID    spectypes.OperatorID
+	CommitteeSize uint64
+	InputRoot     [32]byte
+	ProposalRoot  [32]byte
+	Match         bool
 }
 
 type Config struct {
@@ -35,6 +55,8 @@ type Config struct {
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
 	CutOffRound  specqbft.Round
+
+	CommitteeBeaconVoteObserver CommitteeBeaconVoteObserver
 }
 
 // GetShareSigner returns a BeaconSigner instance
@@ -64,4 +86,8 @@ func (c *Config) GetTimer() roundtimer.Timer {
 
 func (c *Config) GetCutOffRound() specqbft.Round {
 	return c.CutOffRound
+}
+
+func (c *Config) GetCommitteeBeaconVoteObserver() CommitteeBeaconVoteObserver {
+	return c.CommitteeBeaconVoteObserver
 }

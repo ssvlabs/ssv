@@ -197,6 +197,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		options.MessageValidator,
 		options.Graffiti,
 		options.ProposerDelay,
+		options.DutyTraceCollector,
 	)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
@@ -1023,9 +1024,10 @@ func SetupCommitteeRunners(
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: roundtimer.CutOffRound,
+			Network:                     options.Network,
+			Timer:                       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound:                 roundtimer.CutOffRound,
+			CommitteeBeaconVoteObserver: options.CommitteeBeaconVoteObserver,
 		}
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)

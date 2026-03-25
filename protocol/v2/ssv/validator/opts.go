@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -44,6 +45,8 @@ type CommonOptions struct {
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
 	ProposerDelay       time.Duration
+
+	CommitteeBeaconVoteObserver qbft.CommitteeBeaconVoteObserver
 }
 
 func NewCommonOptions(
@@ -62,23 +65,25 @@ func NewCommonOptions(
 	messageValidator validation.MessageValidator,
 	graffiti []byte,
 	proposerDelay time.Duration,
+	committeeBeaconVoteObserver qbft.CommitteeBeaconVoteObserver,
 ) *CommonOptions {
 	result := &CommonOptions{
-		NetworkConfig:       networkConfig,
-		Network:             network,
-		Beacon:              beacon,
-		Storage:             storage,
-		Signer:              signer,
-		OperatorSigner:      operatorSigner,
-		DoppelgangerHandler: doppelgangerHandler,
-		NewDecidedHandler:   newDecidedHandler,
-		FullNode:            fullNode,
-		ExporterOptions:     exporterOptions,
-		QueueSize:           1000,
-		GasLimit:            gasLimit,
-		MessageValidator:    messageValidator,
-		Graffiti:            graffiti,
-		ProposerDelay:       proposerDelay,
+		NetworkConfig:               networkConfig,
+		Network:                     network,
+		Beacon:                      beacon,
+		Storage:                     storage,
+		Signer:                      signer,
+		OperatorSigner:              operatorSigner,
+		DoppelgangerHandler:         doppelgangerHandler,
+		NewDecidedHandler:           newDecidedHandler,
+		FullNode:                    fullNode,
+		ExporterOptions:             exporterOptions,
+		QueueSize:                   1000,
+		GasLimit:                    gasLimit,
+		MessageValidator:            messageValidator,
+		Graffiti:                    graffiti,
+		ProposerDelay:               proposerDelay,
+		CommitteeBeaconVoteObserver: committeeBeaconVoteObserver,
 	}
 
 	// If full node, increase the queue size to make enough room for history sync batches to be pushed whole.

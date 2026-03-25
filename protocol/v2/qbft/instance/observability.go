@@ -50,6 +50,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "duty.rounds_changed"),
 			metric.WithUnit("{change}"),
 			metric.WithDescription("number of round changes with their reasons")))
+
+	committeeInputProposalComparisonCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "committee.input_proposal_comparisons"),
+			metric.WithUnit("{observation}"),
+			metric.WithDescription("number of committee input and proposal value comparisons")))
 )
 
 func stageAttribute(stage stage) attribute.KeyValue {
@@ -58,4 +64,8 @@ func stageAttribute(stage stage) attribute.KeyValue {
 
 func reasonAttribute(reason roundChangeReason) attribute.KeyValue {
 	return observability.RoundChangeReasonAttribute(string(reason))
+}
+
+func matchAttribute(match bool) attribute.KeyValue {
+	return attribute.Bool("ssv.validator.committee.input_proposal_match", match)
 }

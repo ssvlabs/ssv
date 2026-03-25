@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -26,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -132,6 +134,21 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 			c.evict(currentSlot)
 		}
 	}
+}
+
+func (c *Collector) ObserveCommitteeBeaconVoteComparison(ctx context.Context, observation qbft.CommitteeBeaconVoteComparisonObservation) {
+	recordCommitteeInputProposalComparison(ctx, observation.Match)
+
+	c.logger.Debug("committee beacon vote input/proposal comparison observed",
+		fields.Slot(observation.Slot),
+		fields.CommitteeID(observation.CommitteeID),
+		fields.OperatorID(observation.OperatorID),
+		zap.Uint64("proposer", observation.ProposerID),
+		zap.Uint64("committee_size", observation.CommitteeSize),
+		zap.Bool("match", observation.Match),
+		zap.String("input_root", hex.EncodeToString(observation.InputRoot[:])),
+		zap.String("proposal_root", hex.EncodeToString(observation.ProposalRoot[:])),
+	)
 }
 
 const slotTTL = 4
