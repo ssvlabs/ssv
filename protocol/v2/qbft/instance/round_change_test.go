@@ -107,32 +107,39 @@ func TestHasReceivedProposalJustificationForLeadingRound(t *testing.T) {
 }
 
 func TestIsProposalJustificationForLeadingRound(t *testing.T) {
-	env := newInstanceTestEnv(t, 1)
-	env.setLeader(1)
-	env.inst.State.Round = 2
-	value := []byte("proposal-value")
-	roundChanges := []*specqbft.ProcessingMessage{
-		env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil),
-		env.roundChange(2, 3, specqbft.NoRound, [32]byte{}, nil, nil),
-		env.roundChange(2, 4, specqbft.NoRound, [32]byte{}, nil, nil),
+	newLeadingRoundEnv := func(t *testing.T) (*instanceTestEnv, []byte, []*specqbft.ProcessingMessage, *specqbft.ProcessingMessage) {
+		t.Helper()
+
+		env := newInstanceTestEnv(t, 1)
+		env.setLeader(1)
+		env.inst.State.Round = 2
+		value := []byte("proposal-value")
+		roundChanges := []*specqbft.ProcessingMessage{
+			env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil),
+			env.roundChange(2, 3, specqbft.NoRound, [32]byte{}, nil, nil),
+			env.roundChange(2, 4, specqbft.NoRound, [32]byte{}, nil, nil),
+		}
+		return env, value, roundChanges, roundChanges[0]
 	}
-	roundChangeMsg := roundChanges[0]
 
 	t.Run("not proposer", func(t *testing.T) {
 		nonLeaderEnv := newInstanceTestEnv(t, 2)
 		nonLeaderEnv.setLeader(1)
 		nonLeaderEnv.inst.State.Round = 2
+		_, value, roundChanges, roundChangeMsg := newLeadingRoundEnv(t)
 		err := nonLeaderEnv.inst.isProposalJustificationForLeadingRound(roundChangeMsg, roundChanges, nil, value, 2)
 		require.ErrorContains(t, err, "not proposer")
 	})
 
 	t.Run("proposal round mismatch", func(t *testing.T) {
+		env, value, roundChanges, roundChangeMsg := newLeadingRoundEnv(t)
 		env.inst.State.ProposalAcceptedForCurrentRound = env.proposal(2, 1, value, env.hash(value), nil, nil)
 		err := env.inst.isProposalJustificationForLeadingRound(roundChangeMsg, roundChanges, nil, value, 2)
 		require.ErrorContains(t, err, "proposal round mismatch")
 	})
 
 	t.Run("accepts future round proposal", func(t *testing.T) {
+		env, value, roundChanges, roundChangeMsg := newLeadingRoundEnv(t)
 		env.inst.State.ProposalAcceptedForCurrentRound = nil
 		err := env.inst.isProposalJustificationForLeadingRound(roundChangeMsg, roundChanges, nil, value, 3)
 		require.NoError(t, err)
@@ -165,6 +172,7 @@ func TestUponRoundChangeWithPartialQuorumBumpsRoundAndBroadcastsRoundChange(t *t
 	msg := env.broadcastedProcessingMessage(0)
 	require.Equal(t, specqbft.RoundChangeMsgType, msg.QBFTMessage.MsgType)
 	require.Equal(t, specqbft.Round(2), msg.QBFTMessage.Round)
+	require.Equal(t, specqbft.NoRound, msg.QBFTMessage.DataRound)
 	require.Equal(t, []spectypes.OperatorID{2}, msg.SignedMessage.OperatorIDs)
 }
 
@@ -173,8 +181,10 @@ func TestUponRoundChangeReturnsEarlyOnDuplicate(t *testing.T) {
 	msg := env.roundChange(2, 1, specqbft.NoRound, [32]byte{}, nil, nil)
 	env.addMessages(env.inst.State.RoundChangeContainer, msg)
 
+	currentRound := env.inst.State.Round
 	require.NoError(t, env.inst.uponRoundChange(context.Background(), zap.NewNop(), msg))
 	require.Empty(t, env.network.BroadcastedMsgs)
+	require.Equal(t, currentRound, env.inst.State.Round)
 }
 
 func TestUponRoundChangeReturnsEarlyWhenQuorumAlreadyExists(t *testing.T) {
@@ -185,9 +195,11 @@ func TestUponRoundChangeReturnsEarlyWhenQuorumAlreadyExists(t *testing.T) {
 		env.roundChange(2, 3, specqbft.NoRound, [32]byte{}, nil, nil),
 		env.roundChange(2, 4, specqbft.NoRound, [32]byte{}, nil, nil),
 	)
+	currentRound := env.inst.State.Round
 	err := env.inst.uponRoundChange(context.Background(), zap.NewNop(), env.roundChange(2, 2, specqbft.NoRound, [32]byte{}, nil, nil))
 	require.NoError(t, err)
 	require.Empty(t, env.network.BroadcastedMsgs)
+	require.Equal(t, currentRound, env.inst.State.Round)
 }
 
 func TestUponRoundChangeAsLeaderBroadcastsProposalOnJustifiedQuorum(t *testing.T) {

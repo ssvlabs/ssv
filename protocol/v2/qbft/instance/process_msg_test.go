@@ -26,6 +26,7 @@ func TestBaseMsgValidationPastRoundDecidedCommitBypassesPastRoundGuard(t *testin
 	err := env.inst.BaseMsgValidation(msg)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "msg allows 1 signer")
+	require.NotContains(t, err.Error(), "past round")
 }
 
 func TestBaseMsgValidationPastRoundNonDecidedRejected(t *testing.T) {

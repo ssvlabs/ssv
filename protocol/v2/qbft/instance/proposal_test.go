@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"context"
 	"testing"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -17,7 +16,7 @@ func TestUponProposalFutureRoundBumpsAndBroadcastsPrepare(t *testing.T) {
 	fullData := []byte("proposal-value")
 	proposal := env.proposal(2, 1, fullData, env.hash(fullData), nil, nil)
 
-	err := env.inst.uponProposal(context.Background(), zap.NewNop(), proposal)
+	err := env.inst.uponProposal(t.Context(), zap.NewNop(), proposal)
 	require.NoError(t, err)
 
 	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
@@ -39,8 +38,8 @@ func TestUponProposalDuplicateIgnored(t *testing.T) {
 	fullData := []byte("proposal-value")
 	proposal := env.proposal(1, 1, fullData, env.hash(fullData), nil, nil)
 
-	require.NoError(t, env.inst.uponProposal(context.Background(), zap.NewNop(), proposal))
-	require.NoError(t, env.inst.uponProposal(context.Background(), zap.NewNop(), proposal))
+	require.NoError(t, env.inst.uponProposal(t.Context(), zap.NewNop(), proposal))
+	require.NoError(t, env.inst.uponProposal(t.Context(), zap.NewNop(), proposal))
 
 	require.Len(t, env.network.BroadcastedMsgs, 1)
 }

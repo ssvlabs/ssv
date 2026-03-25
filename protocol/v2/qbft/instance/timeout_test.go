@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"context"
 	"testing"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -34,7 +33,7 @@ func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
 	}
 	env.setNetwork(network)
 
-	err := env.inst.UponRoundTimeout(context.Background(), zap.NewNop())
+	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
 	require.NoError(t, err)
 
 	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
@@ -56,14 +55,19 @@ func TestUponRoundTimeoutForceStoppedInstance(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
 	env.inst.ForceStop()
 
-	err := env.inst.UponRoundTimeout(context.Background(), zap.NewNop())
+	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
 	require.ErrorContains(t, err, "instance stopped processing timeouts")
 }
 
-func TestUponRoundTimeoutAtCutOffRound(t *testing.T) {
+func TestUponRoundTimeoutStopsProcessingAfterReachingCutOffRound(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
-	env.config.CutOffRound = env.inst.State.Round
+	env.inst.StartValue = []byte("start-value")
+	env.config.CutOffRound = env.inst.State.Round + 1
 
-	err := env.inst.UponRoundTimeout(context.Background(), zap.NewNop())
+	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
+	require.NoError(t, err)
+	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
+
+	err = env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
 	require.ErrorContains(t, err, "instance stopped processing timeouts")
 }
