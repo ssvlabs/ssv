@@ -149,6 +149,9 @@ func (t *RoundTimer) Round() specqbft.Round {
 
 // TimeoutForRound stops any running timer and schedules a callback for the given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
+	// Optimistic early-exit: a narrow window exists between this check and
+	// timer creation where ctx could be canceled; the callback re-checks
+	// ctx.Err() to handle that case.
 	if t.ctx.Err() != nil {
 		return
 	}
@@ -158,6 +161,8 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	t.mtx.Lock()
 	atomic.StoreUint64(&t.round, uint64(round))
 	if t.timer != nil {
+		// Stop prevents future fires; if it returns false the callback goroutine
+		// may already be running — it will be suppressed by the round-number check.
 		t.timer.Stop()
 	}
 	t.timer = time.AfterFunc(timeout, func() {

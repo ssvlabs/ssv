@@ -61,13 +61,13 @@ func TestTimeoutForRound(t *testing.T) {
 			})
 		})
 
-		t.Run(fmt.Sprintf("TimeoutForRound - %s: context cancelled before arm", role), func(t *testing.T) {
+		t.Run(fmt.Sprintf("TimeoutForRound - %s: context canceled before arm", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				testTimeoutForRoundContextCancelled(t, role, specqbft.Round(1))
 			})
 		})
 
-		t.Run(fmt.Sprintf("TimeoutForRound - %s: context cancelled after arm", role), func(t *testing.T) {
+		t.Run(fmt.Sprintf("TimeoutForRound - %s: context canceled after arm", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				testTimeoutForRoundContextCancelledAfterArm(t, role, specqbft.Round(1))
 			})
@@ -192,7 +192,7 @@ func testTimeoutForRoundContextCancelled(t *testing.T, role spectypes.RunnerRole
 
 	// Early return should skip timer creation entirely.
 	timer.mtx.RLock()
-	require.Nil(t, timer.timer, "timer must not be created when context is already cancelled")
+	require.Nil(t, timer.timer, "timer must not be created when context is already canceled")
 	timer.mtx.RUnlock()
 
 	// Wait for the full round timeout to confirm no callback fires.
