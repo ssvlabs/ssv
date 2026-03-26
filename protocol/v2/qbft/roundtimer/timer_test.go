@@ -395,16 +395,16 @@ func testDeferredReplacedByNewRound(t *testing.T, role spectypes.RunnerRole) {
 	require.Equal(t, specqbft.Round(2), timer.deferred.round, "deferred must hold the latest round")
 	timer.mtx.RUnlock()
 
-	var firedRound specqbft.Round
+	var firedRound uint64
 	var count int32
 	timer.OnTimeout(specqbft.FirstHeight, func(round specqbft.Round) {
 		atomic.AddInt32(&count, 1)
-		firedRound = round
+		atomic.StoreUint64(&firedRound, uint64(round))
 	})
 
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + safeTestDelay)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count), "callback must fire exactly once")
-	require.Equal(t, specqbft.Round(2), firedRound, "callback must fire for the latest round")
+	require.Equal(t, uint64(specqbft.Round(2)), atomic.LoadUint64(&firedRound), "callback must fire for the latest round")
 }
 
 // testDeferredContextCancelled verifies that if the context is canceled
