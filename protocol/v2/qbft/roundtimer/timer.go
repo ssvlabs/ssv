@@ -159,12 +159,17 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	timeout := t.RoundTimeout(height, round)
 
 	t.mtx.Lock()
+	// round is read lock-free via Round(), so accesses stay atomic.
+	// The store happens while t.mtx is held only to keep round updates
+	// linearized with timer/done/deferred state changes.
 	atomic.StoreUint64(&t.round, uint64(round))
 	if t.timer != nil {
 		// Stop prevents future fires; if it returns false the callback goroutine
 		// may already be running — it will be suppressed by the round-number check.
 		t.timer.Stop()
 	}
+	// timeout can be negative for late-start duties — AfterFunc fires
+	// immediately but the callback blocks on RLock until we release mtx.
 	t.timer = time.AfterFunc(timeout, func() {
 		if t.ctx.Err() != nil {
 			return
