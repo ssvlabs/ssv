@@ -11,6 +11,7 @@ RUN apt-get update && apt upgrade -y && \
 WORKDIR /go/src/github.com/ssvlabs/ssv/
 COPY go.mod .
 COPY go.sum .
+COPY ssvsigner/go.mod ssvsigner/go.sum ./ssvsigner/
 RUN go mod download
 
 COPY . .

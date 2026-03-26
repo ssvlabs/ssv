@@ -1190,6 +1190,9 @@ func syncContractEvents(
 
 		// Sync ongoing registry events in the background, crash if ongoing sync has stopped because
 		// the SSV node cannot work without being up to date with Ethereum events.
+		// When block ordering looks wrong, stop the node instead of continuing
+		// with possibly incorrect event state. Until reorg handling exists,
+		// restart from persisted state is safer than guessing in-process.
 		go func() {
 			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
 			if err != nil && !errors.Is(err, context.Canceled) {
