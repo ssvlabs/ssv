@@ -147,40 +147,31 @@ func (t *RoundTimer) Round() specqbft.Round {
 	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
 }
 
-// TimeoutForRound times out for a given round.
+// TimeoutForRound stops any running timer and schedules a callback for the given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreUint64(&t.round, uint64(round))
+	if t.ctx.Err() != nil {
+		return
+	}
+
 	timeout := t.RoundTimeout(height, round)
 
-	// preparing the underlying timer
-	timer := t.timer
-	if timer == nil {
-		timer = time.NewTimer(timeout)
-	} else {
-		timer.Stop()
-		// draining the channel of existing timer
-		select {
-		case <-timer.C:
-		default:
-		}
+	t.mtx.Lock()
+	atomic.StoreUint64(&t.round, uint64(round))
+	if t.timer != nil {
+		t.timer.Stop()
 	}
-	timer.Reset(timeout)
-	// spawns a new goroutine to listen to the timer
-	go t.waitForRound(round, timer.C)
-}
-
-func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
-	select {
-	case <-t.ctx.Done():
-	case <-timeout:
-		if t.Round() == round {
-			func() {
-				t.mtx.RLock() // read t.done
-				defer t.mtx.RUnlock()
-				if done := t.done; done != nil {
-					done(round)
-				}
-			}()
+	t.timer = time.AfterFunc(timeout, func() {
+		if t.ctx.Err() != nil {
+			return
 		}
-	}
+		t.mtx.RLock()
+		currentRound := t.Round()
+		done := t.done
+		t.mtx.RUnlock()
+		if currentRound != round || done == nil {
+			return
+		}
+		done(round)
+	})
+	t.mtx.Unlock()
 }

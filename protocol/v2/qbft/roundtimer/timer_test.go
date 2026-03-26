@@ -1,6 +1,7 @@
 package roundtimer
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -51,6 +52,24 @@ func TestTimeoutForRound(t *testing.T) {
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: before elapsed", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				testTimeoutForRoundElapsed(t, role, specqbft.Round(2))
+			})
+		})
+
+		t.Run(fmt.Sprintf("TimeoutForRound - %s: timer stored and reused", role), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				testTimeoutForRoundTimerStored(t, role, specqbft.Round(1))
+			})
+		})
+
+		t.Run(fmt.Sprintf("TimeoutForRound - %s: context cancelled before arm", role), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				testTimeoutForRoundContextCancelled(t, role, specqbft.Round(1))
+			})
+		})
+
+		t.Run(fmt.Sprintf("TimeoutForRound - %s: context cancelled after arm", role), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				testTimeoutForRoundContextCancelledAfterArm(t, role, specqbft.Round(1))
 			})
 		})
 
@@ -126,6 +145,82 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + safeTestDelay)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
+}
+
+func testTimeoutForRoundTimerStored(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+	testBeaconConfig := setupTestBeaconConfig()
+	timer := setupTimer(t, testBeaconConfig, func(specqbft.Round) {}, role, threshold)
+
+	require.Nil(t, timer.timer, "timer should be nil before first call")
+
+	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
+
+	timer.mtx.RLock()
+	firstTimer := timer.timer
+	timer.mtx.RUnlock()
+	require.NotNil(t, firstTimer, "timer must be stored after TimeoutForRound")
+
+	// Second call must replace the timer (stop old, create new).
+	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2))
+
+	timer.mtx.RLock()
+	secondTimer := timer.timer
+	timer.mtx.RUnlock()
+	require.NotNil(t, secondTimer, "timer must be stored after second TimeoutForRound")
+	require.NotSame(t, firstTimer, secondTimer, "each call must create a new timer")
+}
+
+func testTimeoutForRoundContextCancelled(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+	testBeaconConfig := setupTestBeaconConfig()
+
+	var count int32
+	onTimeout := func(round specqbft.Round) {
+		atomic.AddInt32(&count, 1)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // cancel before arming
+
+	timer := New(ctx, testBeaconConfig, role, onTimeout)
+	timer.timeoutOptions = TimeoutOptions{
+		quickThreshold: threshold,
+		quick:          quickTimeout,
+		slow:           slowTimeout,
+	}
+
+	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
+
+	// Early return should skip timer creation entirely.
+	timer.mtx.RLock()
+	require.Nil(t, timer.timer, "timer must not be created when context is already cancelled")
+	timer.mtx.RUnlock()
+
+	// Wait for the full round timeout to confirm no callback fires.
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + safeTestDelay)
+	require.Equal(t, int32(0), atomic.LoadInt32(&count), "callback must not fire after context cancellation")
+}
+
+func testTimeoutForRoundContextCancelledAfterArm(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+	testBeaconConfig := setupTestBeaconConfig()
+
+	var count int32
+	onTimeout := func(round specqbft.Round) {
+		atomic.AddInt32(&count, 1)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	timer := New(ctx, testBeaconConfig, role, onTimeout)
+	timer.timeoutOptions = TimeoutOptions{
+		quickThreshold: threshold,
+		quick:          quickTimeout,
+		slow:           slowTimeout,
+	}
+
+	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
+	cancel() // cancel after arming but before timeout fires
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + safeTestDelay)
+	require.Equal(t, int32(0), atomic.LoadInt32(&count), "callback must not fire after context cancellation")
 }
 
 func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
