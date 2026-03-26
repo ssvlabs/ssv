@@ -39,14 +39,27 @@ type TimeoutOptions struct {
 	slow           time.Duration
 }
 
+// deferredTimeout stores a TimeoutForRound request that arrived before the
+// correct callback was registered for this duty's height. OnTimeout replays
+// it once the callback is set.
+type deferredTimeout struct {
+	height specqbft.Height
+	round  specqbft.Round
+}
+
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
 	mtx *sync.RWMutex
 	ctx context.Context
 	// timer is the underlying time.Timer
 	timer *time.Timer
-	// result holds the result of the timer
+	// done is the timeout callback for the current duty
 	done OnRoundTimeoutF
+	// doneHeight is the height for which done was registered
+	doneHeight specqbft.Height
+	// deferred stores a pending arm request when TimeoutForRound is called
+	// before the correct callback is registered for this duty
+	deferred *deferredTimeout
 	// round is the current round of the timer
 	round uint64
 	// timeoutOptions holds the timeoutOptions for the timer
@@ -134,12 +147,46 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	return time.Until(dutyStartTime.Add(timeoutDuration))
 }
 
-// OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
-	t.mtx.Lock() // write to t.done
+// armLocked stops any running timer and schedules a new AfterFunc for the
+// given height and round. Caller must hold t.mtx.
+func (t *RoundTimer) armLocked(height specqbft.Height, round specqbft.Round) {
+	if t.timer != nil {
+		t.timer.Stop()
+	}
+	t.timer = time.AfterFunc(t.RoundTimeout(height, round), func() {
+		if t.ctx.Err() != nil {
+			return
+		}
+		t.mtx.RLock()
+		currentRound := t.Round()
+		done := t.done
+		doneHeight := t.doneHeight
+		t.mtx.RUnlock()
+		if doneHeight != height || currentRound != round || done == nil {
+			return
+		}
+		done(round)
+	})
+}
+
+// OnTimeout registers the timeout callback for the given duty height.
+// If TimeoutForRound was called before the callback was registered (deferred),
+// OnTimeout replays the arm under the lock.
+func (t *RoundTimer) OnTimeout(height specqbft.Height, done OnRoundTimeoutF) {
+	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
 	t.done = done
+	t.doneHeight = height
+	d := t.deferred
+	t.deferred = nil
+
+	// Replay the deferred arm now that the correct callback is registered.
+	// Done under the lock to linearize against concurrent TimeoutForRound
+	// calls from message processing (proposal, round-change, timeout bump).
+	if d != nil && d.height == height && t.ctx.Err() == nil {
+		t.armLocked(d.height, d.round)
+	}
 }
 
 // Round returns a round.
@@ -148,35 +195,31 @@ func (t *RoundTimer) Round() specqbft.Round {
 }
 
 // TimeoutForRound stops any running timer and schedules a callback for the given round.
+// If the callback is not yet registered for this duty's height (nil or stale from a
+// previous duty), the request is deferred until OnTimeout registers the correct callback.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	// Optimistic early-exit: a narrow window exists between this check and
-	// timer creation where ctx could be canceled; the callback re-checks
-	// ctx.Err() to handle that case.
 	if t.ctx.Err() != nil {
 		return
 	}
 
-	timeout := t.RoundTimeout(height, round)
-
 	t.mtx.Lock()
 	atomic.StoreUint64(&t.round, uint64(round))
-	if t.timer != nil {
-		// Stop prevents future fires; if it returns false the callback goroutine
-		// may already be running — it will be suppressed by the round-number check.
-		t.timer.Stop()
+
+	if t.done == nil || t.doneHeight != height {
+		// Callback missing or registered for a different duty (stale).
+		// Stop any running timer and nil out the stale callback so that an
+		// in-flight AfterFunc that is past Stop but waiting on RLock will
+		// see done == nil and bail out.
+		if t.timer != nil {
+			t.timer.Stop()
+			t.timer = nil
+		}
+		t.done = nil
+		t.deferred = &deferredTimeout{height: height, round: round}
+		t.mtx.Unlock()
+		return
 	}
-	t.timer = time.AfterFunc(timeout, func() {
-		if t.ctx.Err() != nil {
-			return
-		}
-		t.mtx.RLock()
-		currentRound := t.Round()
-		done := t.done
-		t.mtx.RUnlock()
-		if currentRound != round || done == nil {
-			return
-		}
-		done(round)
-	})
+	t.deferred = nil
+	t.armLocked(height, round)
 	t.mtx.Unlock()
 }
