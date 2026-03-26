@@ -159,6 +159,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			refetchCurrentEpoch := reorgEvent.CurrentDutyDependentRootChanged ||
 				(reorgEvent.PreviousDutyDependentRootChanged && reorgEvent.EpochTransition)
+
 			logger := h.logger.With(
 				zap.String("epoch_slot_pos", buildStr),
 				zap.Uint64("current_epoch", uint64(currentEpoch)),
@@ -179,6 +180,8 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
 				defer cancel()
 
+				// Reorg with "CurrentDutyDependentRoot changed in the same epoch", or "PreviousDutyDependentRoot changed during the epoch transition" potentially affects duties for the current epoch.
+				// Any reorg always potentially affects duties for the next epoch.
 				if refetchCurrentEpoch {
 					h.dutyFetchIntents[currentEpoch] = false
 				}

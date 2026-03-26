@@ -507,12 +507,12 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: Ticker with no action
+		// STEP 3: Ticker with no action (currently at the Epoch Transition Slot, i.e the 1st slot of Epoch 2)
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch * 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 4: trigger reorg on epoch transition
+		// STEP 4: trigger reorg
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch * 2,
@@ -526,6 +526,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(1),
 			},
 		})
+
+		// The HandleHeadEvent should set the EpochTransition and PreviousDutyDependentRootChanged to true, allowing for refetching the duties in current Epoch
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
@@ -591,10 +593,11 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 				PreviousDutyDependentRoot: phase0.Root{0x01},
 			},
 		}
+
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 3: Ticker with no action
+		// STEP 3: Ticker with no action (currently at the Epoch Transition Slot, i.e the 1st slot of Epoch 2)
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch * 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -613,6 +616,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 				ValidatorIndex: phase0.ValidatorIndex(1),
 			},
 		})
+
+		// The HandleHeadEvent should set the EpochTransition and PreviousDutyDependentRootChanged to true, allowing for refetching the duties in current Epoch
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
