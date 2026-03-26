@@ -204,6 +204,9 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
+	// round is read lock-free via Round(), so accesses stay atomic.
+	// The store happens while t.mtx is held only to keep round updates
+	// linearized with timer/done/deferred state changes.
 	atomic.StoreUint64(&t.round, uint64(round))
 
 	if t.done == nil || t.doneHeight != height {
