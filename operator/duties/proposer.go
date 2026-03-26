@@ -33,8 +33,8 @@ type ProposerHandler struct {
 func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty], exporterMode bool) *ProposerHandler {
 	return &ProposerHandler{
 		duties:           duties,
-		exporterMode:     exporterMode,
 		dutyFetchIntents: make(map[phase0.Epoch]bool),
+		exporterMode:     exporterMode,
 	}
 }
 
