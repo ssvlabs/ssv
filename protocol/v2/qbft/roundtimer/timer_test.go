@@ -98,11 +98,10 @@ func setupTestBeaconConfig() *networkconfig.Beacon {
 func setupTimer(
 	t *testing.T,
 	beaconConfig *networkconfig.Beacon,
-	onTimeout OnRoundTimeoutF,
 	role spectypes.RunnerRole,
 	round specqbft.Round,
 ) *RoundTimer {
-	timer := New(t.Context(), beaconConfig, role, onTimeout)
+	timer := New(t.Context(), beaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: round,
 		quick:          quickTimeout,
@@ -120,7 +119,8 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(t, testBeaconConfig, onTimeout, role, threshold)
+	timer := setupTimer(t, testBeaconConfig, role, threshold)
+	timer.OnTimeout(specqbft.FirstHeight, onTimeout)
 
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
 
@@ -137,7 +137,8 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(t, testBeaconConfig, onTimeout, role, threshold)
+	timer := setupTimer(t, testBeaconConfig, role, threshold)
+	timer.OnTimeout(specqbft.FirstHeight, onTimeout)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
@@ -149,7 +150,8 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 
 func testTimeoutForRoundTimerStored(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
 	testBeaconConfig := setupTestBeaconConfig()
-	timer := setupTimer(t, testBeaconConfig, func(specqbft.Round) {}, role, threshold)
+	timer := setupTimer(t, testBeaconConfig, role, threshold)
+	timer.OnTimeout(specqbft.FirstHeight, func(specqbft.Round) {})
 
 	require.Nil(t, timer.timer, "timer should be nil before first call")
 
@@ -181,12 +183,13 @@ func testTimeoutForRoundContextCancelled(t *testing.T, role spectypes.RunnerRole
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel() // cancel before arming
 
-	timer := New(ctx, testBeaconConfig, role, onTimeout)
+	timer := New(ctx, testBeaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: threshold,
 		quick:          quickTimeout,
 		slow:           slowTimeout,
 	}
+	timer.OnTimeout(specqbft.FirstHeight, onTimeout)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
 
@@ -210,12 +213,13 @@ func testTimeoutForRoundContextCancelledAfterArm(t *testing.T, role spectypes.Ru
 
 	ctx, cancel := context.WithCancel(t.Context())
 
-	timer := New(ctx, testBeaconConfig, role, onTimeout)
+	timer := New(ctx, testBeaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: threshold,
 		quick:          quickTimeout,
 		slow:           slowTimeout,
 	}
+	timer.OnTimeout(specqbft.FirstHeight, onTimeout)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
 	cancel() // cancel after arming but before timeout fires
@@ -270,7 +274,7 @@ func testDeferredArming(t *testing.T, role spectypes.RunnerRole) {
 	testBeaconConfig := setupTestBeaconConfig()
 
 	// Create timer with nil callback (matches real construction in controller.go).
-	timer := New(t.Context(), testBeaconConfig, role, nil)
+	timer := New(t.Context(), testBeaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          quickTimeout,
@@ -305,7 +309,7 @@ func testDeferredArming(t *testing.T, role spectypes.RunnerRole) {
 func testDeferredArmingWithStaleCallback(t *testing.T, role spectypes.RunnerRole) {
 	testBeaconConfig := setupTestBeaconConfig()
 
-	timer := New(t.Context(), testBeaconConfig, role, nil)
+	timer := New(t.Context(), testBeaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          quickTimeout,
@@ -348,7 +352,7 @@ func testDeferredArmingWithStaleCallback(t *testing.T, role spectypes.RunnerRole
 func testStaleTimerStopped(t *testing.T, role spectypes.RunnerRole) {
 	testBeaconConfig := setupTestBeaconConfig()
 
-	timer := New(t.Context(), testBeaconConfig, role, nil)
+	timer := New(t.Context(), testBeaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          quickTimeout,
@@ -379,7 +383,7 @@ func testStaleTimerStopped(t *testing.T, role spectypes.RunnerRole) {
 func testDeferredReplacedByNewRound(t *testing.T, role spectypes.RunnerRole) {
 	testBeaconConfig := setupTestBeaconConfig()
 
-	timer := New(t.Context(), testBeaconConfig, role, nil)
+	timer := New(t.Context(), testBeaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(2),
 		quick:          quickTimeout,
@@ -414,7 +418,7 @@ func testDeferredContextCancelled(t *testing.T, role spectypes.RunnerRole) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 
-	timer := New(ctx, testBeaconConfig, role, nil)
+	timer := New(ctx, testBeaconConfig, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          quickTimeout,
@@ -454,11 +458,12 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 
 	for i := 0; i < 4; i++ {
 		go func(index int) {
-			timer := New(t.Context(), testBeaconConfig, role, func(round specqbft.Round) { onTimeout(index) })
+			timer := New(t.Context(), testBeaconConfig, role)
 			timer.timeoutOptions = TimeoutOptions{
 				quickThreshold: threshold,
 				quick:          quickTimeout,
 			}
+			timer.OnTimeout(specqbft.FirstHeight, func(round specqbft.Round) { onTimeout(index) })
 			timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
 		}(i)
 		// Introduce a sleep between creating timers to simulate a real-world scenario.
@@ -467,7 +472,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 
 	// To set up the correct expectations, we need to know when exactly this particular `role` is supposed to
 	// timeout (different roles time out at different times into slot). We need to use a reference-timer for that.
-	referenceTimer := New(t.Context(), testBeaconConfig, role, nil)
+	referenceTimer := New(t.Context(), testBeaconConfig, role)
 	referenceTimer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          quickTimeout,

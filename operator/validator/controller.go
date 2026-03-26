@@ -1024,7 +1024,7 @@ func SetupCommitteeRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
@@ -1085,7 +1085,7 @@ func SetupRunners(
 				return leader
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 

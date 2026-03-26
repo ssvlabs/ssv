@@ -70,13 +70,12 @@ type RoundTimer struct {
 	beaconConfig *networkconfig.Beacon
 }
 
-// New creates a new instance of RoundTimer.
-func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
+// New creates a new instance of RoundTimer. The timeout callback must be
+// registered separately via OnTimeout(height, done) before arming.
+func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole) *RoundTimer {
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
-		timer:        nil,
-		done:         done,
 		role:         role,
 		beaconConfig: beaconConfig,
 		timeoutOptions: TimeoutOptions{
@@ -203,6 +202,8 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	}
 
 	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
 	atomic.StoreUint64(&t.round, uint64(round))
 
 	if t.done == nil || t.doneHeight != height {
@@ -216,10 +217,8 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 		}
 		t.done = nil
 		t.deferred = &deferredTimeout{height: height, round: round}
-		t.mtx.Unlock()
 		return
 	}
 	t.deferred = nil
 	t.armLocked(height, round)
-	t.mtx.Unlock()
 }
