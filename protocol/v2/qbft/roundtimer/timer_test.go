@@ -442,6 +442,58 @@ func testDeferredContextCancelled(t *testing.T, role spectypes.RunnerRole) {
 	require.Equal(t, int32(0), atomic.LoadInt32(&count), "callback must not fire when context is canceled")
 }
 
+func TestNegativeTimeout(t *testing.T) {
+	// Negative RoundTimeout only applies to roles that use time.Until(slotStart + offset),
+	// not proposer which returns fixed positive durations.
+	roles := []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
+		spectypes.RoleAggregator,
+		spectypes.RoleSyncCommitteeContribution,
+	}
+
+	for _, role := range roles {
+		t.Run(fmt.Sprintf("NegativeTimeout - %s", role), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				testNegativeTimeout(t, role)
+			})
+		})
+	}
+}
+
+// testNegativeTimeout verifies that a late-start duty (where RoundTimeout
+// returns a negative duration) fires the callback immediately without
+// deadlocking. time.AfterFunc with a negative duration starts the callback
+// goroutine right away; it blocks on RLock until the caller releases the
+// write lock.
+func testNegativeTimeout(t *testing.T, role spectypes.RunnerRole) {
+	config := *networkconfig.TestNetwork.Beacon
+	config.SlotDuration = slotDuration
+	// Set genesis far in the past so RoundTimeout returns a negative duration.
+	config.GenesisTime = time.Now().Add(-10 * time.Minute)
+
+	timer := New(t.Context(), &config, role)
+	timer.timeoutOptions = TimeoutOptions{
+		quickThreshold: specqbft.Round(1),
+		quick:          quickTimeout,
+		slow:           slowTimeout,
+	}
+
+	var count int32
+	timer.OnTimeout(specqbft.FirstHeight, func(round specqbft.Round) {
+		atomic.AddInt32(&count, 1)
+	})
+
+	// Verify the timeout is indeed negative.
+	timeout := timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound)
+	require.Less(t, timeout, time.Duration(0), "timeout must be negative for a late-start duty")
+
+	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
+
+	// The callback should fire almost immediately (negative timeout).
+	<-time.After(safeTestDelay)
+	require.Equal(t, int32(1), atomic.LoadInt32(&count), "callback must fire immediately for negative timeout")
+}
+
 func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
 	testBeaconConfig := setupTestBeaconConfig()
 

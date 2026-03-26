@@ -152,6 +152,8 @@ func (t *RoundTimer) armLocked(height specqbft.Height, round specqbft.Round) {
 	if t.timer != nil {
 		t.timer.Stop()
 	}
+	// RoundTimeout can be negative for late-start duties — AfterFunc fires
+	// immediately but the callback blocks on RLock until we release mtx.
 	t.timer = time.AfterFunc(t.RoundTimeout(height, round), func() {
 		if t.ctx.Err() != nil {
 			return
