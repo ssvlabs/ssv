@@ -176,9 +176,12 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 type ReorgEvent struct {
 	// Slot is the reorg slot.
 	Slot phase0.Slot
-	// Current specifies if the reorg happened in the current epoch, false means the reorg happened in SOME previous
-	// epoch (not necessarily THE previous epoch).
-	Current bool
+	// CurrentDutyDependentRootChanged indicates if the current duty dependent root has changed.
+	CurrentDutyDependentRootChanged bool
+	// PreviousDutyDependentRootChanged indicates if the previous duty dependent root has changed.
+	PreviousDutyDependentRootChanged bool
+	// EpochTransition indicates if there has been an epoch transition.
+	EpochTransition bool
 }
 
 // Start initializes the Scheduler and begins its operation.
@@ -387,8 +390,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    event.Slot,
-						Current: false,
+						Slot:                             event.Slot,
+						CurrentDutyDependentRootChanged:  false,
+						PreviousDutyDependentRootChanged: true,
+						EpochTransition:                  true,
 					}
 				}
 			} else {
@@ -401,8 +406,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    event.Slot,
-						Current: false,
+						Slot:                             event.Slot,
+						CurrentDutyDependentRootChanged:  false,
+						PreviousDutyDependentRootChanged: true,
+						EpochTransition:                  false,
 					}
 				}
 
@@ -414,8 +421,10 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    event.Slot,
-						Current: true,
+						Slot:                             event.Slot,
+						CurrentDutyDependentRootChanged:  true,
+						PreviousDutyDependentRootChanged: false,
+						EpochTransition:                  false,
 					}
 				}
 			}
