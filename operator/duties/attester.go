@@ -177,7 +177,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			logger.Info("🔀 reorg event received",
 				zap.Any("event", reorgEvent),
 				zap.Bool("refetch_current_epoch_duties", refetchCurrentEpoch),
-				zap.Bool("refetch_next_epoch_duties", true),
 			)
 
 			func() {
@@ -189,10 +188,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				defer cancel()
 
 				// 1) Declare intents.
-				// Depending on whether the current or previous duty dependent root has changed, we might need to
-				// re-fetch the duties for the current epoch (if the current duty dependent root has changed) and/or
-				// next epoch (if the previous duty dependent root has changed) to ensure we have the up-to-date
-				// duties for all validators for both epochs.
+				// Attester duties for the current epoch are determined by the previous duty dependent root,
+				// so we re-fetch the current epoch only if it has changed. The next epoch is always re-fetched
+				// on any reorg to ensure we have the up-to-date duties for all validators.
 				if refetchCurrentEpoch {
 					h.dutyFetchIntents[currentEpoch] = false
 				}
@@ -299,21 +297,42 @@ func (h *AttesterHandler) executeAggregatorDuties(ctx context.Context, epoch pha
 }
 
 func (h *AttesterHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.Logger, currentEpoch phase0.Epoch, currentSlot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "attester.prepare_current_epoch"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(currentEpoch),
+			observability.BeaconSlotAttribute(currentSlot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleAttester),
+		))
+	defer span.End()
+
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch]; ok && !fulfilled {
 		logger.Debug("fetching duties for the current epoch")
 
 		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the current epoch failed", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
 
 		logger.Debug("fetching duties for the current epoch succeeded")
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *AttesterHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logger, currentEpoch phase0.Epoch, currentSlot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "attester.prepare_next_epoch"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(currentEpoch+1),
+			observability.BeaconSlotAttribute(currentSlot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleAttester),
+		))
+	defer span.End()
+
 	// Delaying the duty fetch until it's a "good time" allows us to do it when the beacon node should be less busy.
 	if fulfilled, ok := h.dutyFetchIntents[currentEpoch+1]; ok && !fulfilled && h.shouldFetchNextEpoch(currentSlot) {
 		logger.Debug("fetching duties for the next epoch")
@@ -321,12 +340,15 @@ func (h *AttesterHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 		err := h.fetchAndProcessDuties(ctx, logger, currentEpoch+1, currentSlot)
 		if err != nil {
 			logger.Error("fetching duties for the next epoch failed", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
 
 		logger.Debug("fetching duties for the next epoch succeeded")
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap.Logger, targetEpoch phase0.Epoch, currentSlot phase0.Slot) error {
