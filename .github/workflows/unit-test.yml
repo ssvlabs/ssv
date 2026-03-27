@@ -22,7 +22,7 @@ jobs:
 
       - name: Setup Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: go.mod
           # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
@@ -44,7 +44,7 @@ jobs:
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v5.5.3
         with:
           files: ./coverage.out
           flags: core
@@ -59,7 +59,7 @@ jobs:
 
       - name: Setup Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: ssvsigner/go.mod
           # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
@@ -81,7 +81,7 @@ jobs:
         run: make ssvsigner-test
 
       - name: Upload ssvsigner coverage report to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v5.5.3
         with:
           files: ./ssvsigner/coverage.out
           flags: ssvsigner

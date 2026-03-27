@@ -17,7 +17,7 @@ jobs:
 
       - name: Setup Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: go.mod
           # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
