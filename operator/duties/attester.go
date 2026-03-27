@@ -318,8 +318,6 @@ func (h *AttesterHandler) prepareCurrentEpoch(ctx context.Context, logger *zap.L
 		h.dutyFetchIntents[currentEpoch] = true // the intent has been fulfilled
 
 		logger.Debug("fetching duties for the current epoch succeeded")
-	} else {
-		span.AddEvent("no unfulfilled intent for current epoch")
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -348,8 +346,6 @@ func (h *AttesterHandler) prepareNextEpoch(ctx context.Context, logger *zap.Logg
 		h.dutyFetchIntents[currentEpoch+1] = true // the intent has been fulfilled
 
 		logger.Debug("fetching duties for the next epoch succeeded")
-	} else {
-		span.AddEvent("no unfulfilled intent for next epoch")
 	}
 
 	span.SetStatus(codes.Ok, "")
