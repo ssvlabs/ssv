@@ -9,6 +9,8 @@ import (
 	"github.com/libp2p/go-libp2p/core"
 )
 
+// This package only carries the node-info handshake.
+// Those payloads are only a few hundred bytes today, so 1 MiB is still a very generous limit.
 const maxStreamMessageSize = 1 << 20 // 1 MiB
 
 var ErrStreamMessageTooLarge = errors.New("stream message exceeds max size")
