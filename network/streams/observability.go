@@ -41,9 +41,20 @@ var (
 			observability.InstrumentName(observabilityNamespace, "responses.received"),
 			metric.WithUnit("{response}"),
 			metric.WithDescription("total number of stream responses received(as response to initiated by us request)")))
+
+	oversizedPayloadsCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "payloads.oversized"),
+			metric.WithUnit("{payload}"),
+			metric.WithDescription("total number of oversized stream payloads rejected")))
 )
 
 func protocolIDAttribute(id protocol.ID) attribute.KeyValue {
 	const attrName = "ssv.p2p.protocol.id"
 	return attribute.String(attrName, string(id))
+}
+
+func streamDirectionAttribute(direction string) attribute.KeyValue {
+	const attrName = "ssv.p2p.stream.direction"
+	return attribute.String(attrName, direction)
 }
