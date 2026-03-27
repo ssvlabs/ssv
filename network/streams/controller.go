@@ -54,10 +54,12 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	ctx, cancel := context.WithTimeout(n.ctx, n.dialTimeout)
 	defer cancel()
 
-	s, err := n.host.NewStream(ctx, peerID, protocol)
+	stream, err := n.host.NewStream(ctx, peerID, protocol)
 	if err != nil {
 		return nil, err
 	}
+
+	s := NewStream(stream)
 
 	requestsSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 
@@ -66,23 +68,22 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 			logger.Debug("could not close stream", zap.Error(err))
 		}
 	}()
-	stream := NewStream(s)
 
-	if err := stream.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
+	if err := s.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
 	}
 	if err := s.CloseWrite(); err != nil {
 		return nil, errors.Wrap(err, "could not close write stream")
 	}
-	res, err := stream.ReadWithTimeout(n.readWriteTimeout)
+	res, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
 		if errors.Is(err, ErrStreamMessageTooLarge) {
-			n.observeOversizedPayload(logger, peerID, stream.Protocol(), "response")
+			n.observeOversizedPayload(logger, peerID, s.Protocol(), "response")
 		}
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
 
-	responsesReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
+	responsesReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 	return res, nil
 }
 
@@ -91,18 +92,18 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byte, StreamResponder, func(), error) {
 	s := NewStream(stream)
 
-	requestsReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
+	requestsReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 
 	done := func() {
 		if err := s.Close(); err != nil && !errors.Is(err, libp2pnetwork.ErrReset) {
-			logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
+			logger.Debug("failed to close stream (handler)", zap.String("s_id", s.ID()), zap.Error(err))
 		}
 	}
 
 	data, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
 		if errors.Is(err, ErrStreamMessageTooLarge) {
-			n.observeOversizedPayload(logger, stream.Conn().RemotePeer(), stream.Protocol(), "request")
+			n.observeOversizedPayload(logger, s.Conn().RemotePeer(), s.Protocol(), "request")
 		}
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
@@ -114,7 +115,7 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 			return errors.Wrap(err, "could not write to stream")
 		}
 
-		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
+		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 		return nil
 	}, done, nil
 }
