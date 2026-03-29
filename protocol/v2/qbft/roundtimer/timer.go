@@ -3,7 +3,6 @@ package roundtimer
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -48,7 +47,7 @@ type RoundTimer struct {
 	// result holds the result of the timer
 	done OnRoundTimeoutF
 	// round is the current round of the timer
-	round uint64
+	round specqbft.Round
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
@@ -142,11 +141,6 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 	t.done = done
 }
 
-// Round returns a round.
-func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
-}
-
 // TimeoutForRound stops any running timer and schedules a callback for the given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
 	// Optimistic early-exit: a narrow window exists between this check and
@@ -159,10 +153,7 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	timeout := t.RoundTimeout(height, round)
 
 	t.mtx.Lock()
-	// round is read lock-free via Round(), so accesses stay atomic.
-	// The store happens while t.mtx is held only to keep round updates
-	// linearized with timer/done/deferred state changes.
-	atomic.StoreUint64(&t.round, uint64(round))
+	t.round = round
 	if t.timer != nil {
 		// Stop prevents future fires; if it returns false the callback goroutine
 		// may already be running — it will be suppressed by the round-number check.
@@ -175,13 +166,13 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 			return
 		}
 		t.mtx.RLock()
-		currentRound := t.Round()
-		done := t.done
-		t.mtx.RUnlock()
-		if currentRound != round || done == nil {
+		defer t.mtx.RUnlock()
+		if t.round != round {
 			return
 		}
-		done(round)
+		if t.done != nil {
+			t.done(round)
+		}
 	})
 	t.mtx.Unlock()
 }
