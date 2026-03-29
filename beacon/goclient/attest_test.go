@@ -100,10 +100,16 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 		slot1 := phase0.Slot(12345678)
 		slot2 := phase0.Slot(12345679)
 
-		server, serverGotRequests := createBeaconServer(t, beaconServerResponseOptions{})
+		server, serverGotRequests := createBeaconServer(t, beaconServerResponseOptions{
+			BlockRoot: roots[0],
+		})
 
 		client, err := createClient(t.Context(), server.URL, withWeightedAttestationData)
 		require.NoError(t, err)
+
+		parsedRoot := mustParseRoot(t, roots[0])
+		client.headCache.Set(slot1, parsedRoot, ttlcache.DefaultTTL)
+		client.headCache.Set(slot2, parsedRoot, ttlcache.DefaultTTL)
 
 		// First request with slot1.
 		gotResult1a, gotVersion, err := client.GetAttestationData(t.Context(), slot1)
@@ -202,7 +208,9 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 	})
 
 	t.Run("concurrency: race conditions and deadlocks", func(t *testing.T) {
-		server, serverGotRequests := createBeaconServer(t, beaconServerResponseOptions{WithAttestationDataEndpointError: false})
+		server, serverGotRequests := createBeaconServer(t, beaconServerResponseOptions{
+			BlockRoot: roots[0],
+		})
 
 		client, err := New(
 			t.Context(),
@@ -220,6 +228,11 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 		// slotStartPos start at some non-0 slot (GetAttestationData requests will be made in the slot
 		// range [slotStartPos, slotStartPos + slotsTotalCnt).
 		const slotStartPos = 100000000
+
+		parsedRoot := mustParseRoot(t, roots[0])
+		for i := 0; i < slotsTotalCnt; i++ {
+			client.headCache.Set(phase0.Slot(slotStartPos+i), parsedRoot, ttlcache.DefaultTTL)
+		}
 
 		gotResults := hashmap.New[phase0.Slot, *phase0.AttestationData]()
 
@@ -514,7 +527,9 @@ type beaconServerResponseOptions struct {
 	BeaconHeadersResponseDuration,
 	// AttestationDataResponseDuration helps configure scenarios where the '/eth/v1/validator/attestation_data' Beacon endpoint responds with a delay specified by this variable.
 	AttestationDataResponseDuration time.Duration
-	AttestationDataResponse        []byte
+	AttestationDataResponse []byte
+	// BlockRoot overrides the random block root in attestation data responses.
+	BlockRoot                      string
 	SlotReturnedFromHeaderEndpoint phase0.Slot
 }
 
@@ -600,10 +615,14 @@ func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*htt
 		if len(options.AttestationDataResponse) != 0 {
 			attestationDataResponse = options.AttestationDataResponse
 		} else {
+			blockRoot := options.BlockRoot
+			if blockRoot == "" {
+				blockRoot = roots[rand.Int()%len(roots)]
+			}
 			attestationDataResponse = createAttestationDataResponse(
 				slot,
 				phase0.CommitteeIndex(committeeIndex),
-				roots[rand.Int()%len(roots)],
+				blockRoot,
 				roots[rand.Int()%len(roots)],
 				roots[rand.Int()%len(roots)],
 				epochs[rand.Int()%len(epochs)],
@@ -641,6 +660,16 @@ func createAttestationDataResponse(
 	  }`, slot, committeeIndex, blockRoot, sourceEpoch, sourceRoot, targetEpoch, targetRoot))
 
 	return resp
+}
+
+// mustParseRoot converts a "0x"-prefixed hex string to phase0.Root.
+func mustParseRoot(t *testing.T, hexRoot string) phase0.Root {
+	t.Helper()
+	var root phase0.Root
+	b, err := hex.DecodeString(hexRoot[2:])
+	require.NoError(t, err)
+	copy(root[:], b)
+	return root
 }
 
 func TestVerifyAndRefetchIfStale_CacheMiss(t *testing.T) {
