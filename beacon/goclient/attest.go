@@ -114,7 +114,7 @@ func (gc *GoClient) verifyAndRefetchIfStale(
 	item := gc.headCache.Get(slot)
 	if item == nil {
 		attestationDataHeadCacheMissCounter.Add(ctx, 1)
-		return attData, false
+		return attData, true
 	}
 	expectedRoot := item.Value()
 

@@ -658,7 +658,7 @@ func TestVerifyAndRefetchIfStale_CacheMiss(t *testing.T) {
 	result, stale := gc.verifyAndRefetchIfStale(context.Background(), 100, attData)
 
 	require.Equal(t, attData, result, "should return original data on cache miss")
-	require.False(t, stale, "data is not stale on cache miss")
+	require.True(t, stale, "unverified data should be marked stale on cache miss")
 }
 
 func TestVerifyAndRefetchIfStale_CacheHit_Match(t *testing.T) {
