@@ -71,6 +71,7 @@ exporter:
   Enabled: true
   Mode: archive
 
+SSVAPIAddress: 127.0.0.1
 SSVAPIPort: 16000        # enables HTTP API, optional 
 WebSocketAPIPort: 16001  # enables WS API, optional
 WithPing: true
@@ -103,6 +104,7 @@ exporter:
   Mode: standard
   RetainSlots: 50400     # v1-compatible way to control memory use
 
+SSVAPIAddress: 127.0.0.1
 SSVAPIPort: 16000        # enables HTTP API, optional 
 WebSocketAPIPort: 16001  # enables WS API, optional
 WithPing: true
@@ -113,6 +115,8 @@ WithPing: true
 ## HTTP API overview (updated)
 
 Please refer to the new [OpenApi spec](https://github.com/ssvlabs/ssv/tree/stage/docs/api) (`docs/api/ssvnode.openapi.yaml|json`) for details. Below is a high-level overview of the new HTTP API endpoints.
+
+For operator deployments, prefer binding the HTTP API to `127.0.0.1` and only expose `0.0.0.0` when remote access is intentional and protected by network controls such as a private network, firewall, or reverse proxy.
 
 For each endpoint, the same filters can be sent via GET (query parameters) or POST (JSON body).
 

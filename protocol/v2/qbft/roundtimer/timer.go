@@ -3,7 +3,6 @@ package roundtimer
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -53,15 +52,15 @@ type RoundTimer struct {
 	ctx context.Context
 	// timer is the underlying time.Timer
 	timer *time.Timer
-	// done is the timeout callback for the current duty
-	done OnRoundTimeoutF
-	// doneHeight is the height for which done was registered
-	doneHeight specqbft.Height
+	// callback is the timeout callback for the current duty
+	callback OnRoundTimeoutF
+	// callbackHeight is the height for which callback was registered
+	callbackHeight specqbft.Height
 	// deferred stores a pending arm request when TimeoutForRound is called
 	// before the correct callback is registered for this duty
 	deferred *deferredTimeout
 	// round is the current round of the timer
-	round uint64
+	round specqbft.Round
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
@@ -71,7 +70,7 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer. The timeout callback must be
-// registered separately via OnTimeout(height, done) before arming.
+// registered separately via OnTimeout(height, callback) before arming.
 func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole) *RoundTimer {
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
@@ -152,6 +151,7 @@ func (t *RoundTimer) armLocked(height specqbft.Height, round specqbft.Round) {
 	if t.timer != nil {
 		t.timer.Stop()
 	}
+	t.round = round
 	// RoundTimeout can be negative for late-start duties — AfterFunc fires
 	// immediately but the callback blocks on RLock until we release mtx.
 	t.timer = time.AfterFunc(t.RoundTimeout(height, round), func() {
@@ -159,40 +159,41 @@ func (t *RoundTimer) armLocked(height specqbft.Height, round specqbft.Round) {
 			return
 		}
 		t.mtx.RLock()
-		currentRound := t.Round()
-		done := t.done
-		doneHeight := t.doneHeight
-		t.mtx.RUnlock()
-		if doneHeight != height || currentRound != round || done == nil {
+		defer t.mtx.RUnlock()
+		if t.callbackHeight != height || t.round != round || t.callback == nil {
 			return
 		}
-		done(round)
+		t.callback(round)
 	})
 }
 
 // OnTimeout registers the timeout callback for the given duty height.
 // If TimeoutForRound was called before the callback was registered (deferred),
 // OnTimeout replays the arm under the lock.
-func (t *RoundTimer) OnTimeout(height specqbft.Height, done OnRoundTimeoutF) {
+func (t *RoundTimer) OnTimeout(height specqbft.Height, callback OnRoundTimeoutF) {
+	if t.ctx.Err() != nil {
+		return
+	}
+
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	t.done = done
-	t.doneHeight = height
+	// Enforce monotonic height increases — reject stale registrations.
+	if height < t.callbackHeight {
+		return
+	}
+
+	t.callback = callback
+	t.callbackHeight = height
 	d := t.deferred
 	t.deferred = nil
 
 	// Replay the deferred arm now that the correct callback is registered.
 	// Done under the lock to linearize against concurrent TimeoutForRound
 	// calls from message processing (proposal, round-change, timeout bump).
-	if d != nil && d.height == height && t.ctx.Err() == nil {
+	if d != nil && d.height == height {
 		t.armLocked(d.height, d.round)
 	}
-}
-
-// Round returns a round.
-func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
 }
 
 // TimeoutForRound stops any running timer and schedules a callback for the given round.
@@ -206,21 +207,16 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	// round is read lock-free via Round(), so accesses stay atomic.
-	// The store happens while t.mtx is held only to keep round updates
-	// linearized with timer/done/deferred state changes.
-	atomic.StoreUint64(&t.round, uint64(round))
-
-	if t.done == nil || t.doneHeight != height {
+	if t.callback == nil || t.callbackHeight != height {
 		// Callback missing or registered for a different duty (stale).
 		// Stop any running timer and nil out the stale callback so that an
 		// in-flight AfterFunc that is past Stop but waiting on RLock will
-		// see done == nil and bail out.
+		// see callback == nil and bail out.
 		if t.timer != nil {
 			t.timer.Stop()
 			t.timer = nil
 		}
-		t.done = nil
+		t.callback = nil
 		t.deferred = &deferredTimeout{height: height, round: round}
 		return
 	}

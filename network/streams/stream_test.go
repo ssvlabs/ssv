@@ -1,6 +1,7 @@
 package streams
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -87,6 +88,61 @@ func TestStream(t *testing.T) {
 	})
 
 	wg.Wait()
+}
+
+func TestStreamRejectsOversizedPayload(t *testing.T) {
+	hosts := testHosts(t, 2)
+
+	timeout := time.Second
+	prot := protocol.ID("/protocol/oversized")
+	oversized := bytes.Repeat([]byte("x"), maxStreamMessageSize+1)
+
+	hosts[1].SetStreamHandler(prot, func(stream core.Stream) {
+		s := NewStream(stream)
+		defer s.Close()
+		require.NoError(t, s.WriteWithTimeout(oversized, timeout))
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), timeout*2)
+	defer cancel()
+
+	s, err := hosts[0].NewStream(ctx, hosts[1].ID(), prot)
+	require.NoError(t, err)
+
+	strm := NewStream(s)
+	defer strm.Close()
+
+	byts, err := strm.ReadWithTimeout(timeout)
+	require.ErrorIs(t, err, ErrStreamMessageTooLarge)
+	require.Nil(t, byts)
+}
+
+func TestStreamAcceptsPayloadAtLimit(t *testing.T) {
+	hosts := testHosts(t, 2)
+
+	timeout := time.Second
+	prot := protocol.ID("/protocol/limit")
+	atLimit := bytes.Repeat([]byte("x"), maxStreamMessageSize)
+
+	hosts[1].SetStreamHandler(prot, func(stream core.Stream) {
+		s := NewStream(stream)
+		defer s.Close()
+		require.NoError(t, s.WriteWithTimeout(atLimit, timeout))
+	})
+
+	ctx, cancel := context.WithTimeout(t.Context(), timeout*2)
+	defer cancel()
+
+	s, err := hosts[0].NewStream(ctx, hosts[1].ID(), prot)
+	require.NoError(t, err)
+
+	strm := NewStream(s)
+	defer strm.Close()
+
+	byts, err := strm.ReadWithTimeout(timeout)
+	require.NoError(t, err)
+	require.Len(t, byts, maxStreamMessageSize)
+	require.Equal(t, atLimit, byts)
 }
 
 func TestWriteWithTimeout_ErrorPaths(t *testing.T) {
