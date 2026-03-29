@@ -199,7 +199,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
 	for slot := range committee.Runners {
-		committee.Runners[slot].BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		committee.Runners[slot].NetworkConfig = networkconfig.TestNetwork
 		// Use test runner as signer source since deserialized runner has no signer
 		var signerSource runner.Runner
 		if testRunner, ok := test.Committee.Runners[slot]; ok {

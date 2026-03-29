@@ -268,10 +268,10 @@ func TestProposerRunnerProcessConsensusSkipsPostConsensusSigningWhenDoppelganger
 
 	consensusData := spectestingutils.TestProposerBlindedBlockConsensusDataV(version)
 	runner.measurements.StartConsensus()
-	require.NoError(t, runner.BaseRunner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
+	require.NoError(t, runner.decide(context.Background(), zap.NewNop(), duty.Slot, consensusData, runner.ValCheck))
 	consensusMsgs := spectestingutils.SSVDecidingMsgsForHeight(
 		consensusData,
-		runner.BaseRunner.QBFTController.Identifier,
+		runner.QBFTController.Identifier,
 		specqbft.Height(consensusData.Duty.Slot),
 		keySet,
 	)
@@ -431,7 +431,7 @@ func setupRunnerForPostConsensus(
 	t.Helper()
 
 	duty := spectestingutils.TestingProposerDutyV(consensusData.Version)
-	runner.BaseRunner.baseSetupForNewDuty(duty, keySet.Threshold)
+	runner.baseSetupForNewDuty(duty, keySet.Threshold)
 	runner.measurements.StartDutyFlow()
 	runner.measurements.StartConsensus()
 	runner.measurements.EndConsensus()
@@ -441,7 +441,7 @@ func setupRunnerForPostConsensus(
 	require.NoError(t, err)
 	runner.state().DecidedValue = encodedDecidedValue
 
-	msgID := spectypes.NewMsgID(runner.BaseRunner.NetworkConfig.DomainType, runner.GetShare().ValidatorPubKey[:], runner.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(runner.NetworkConfig.DomainType, runner.GetShare().ValidatorPubKey[:], runner.RunnerRoleType)
 	qbftConfig := protocoltesting.TestingConfig(zap.NewNop(), keySet)
 	qbftConfig.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return leaderID

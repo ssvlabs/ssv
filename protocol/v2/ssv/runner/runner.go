@@ -124,6 +124,10 @@ func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 	return b.Share
 }
 
+func (b *BaseRunner) HasRunningDuty() bool {
+	return b.hasRunningDuty()
+}
+
 func (b *BaseRunner) GetRole() spectypes.RunnerRole {
 	return b.RunnerRoleType
 }
@@ -149,6 +153,10 @@ func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
 	return b.State.GetRoot()
 }
 
+func (b *BaseRunner) GetNetworkConfig() *networkconfig.Network {
+	return b.NetworkConfig
+}
+
 func (b *BaseRunner) SetTimeoutFunc(fn TimeoutF) {
 	b.TimeoutF = fn
 }
@@ -158,7 +166,12 @@ func (b *BaseRunner) Encode() ([]byte, error) {
 }
 
 func (b *BaseRunner) Decode(data []byte) error {
-	return json.Unmarshal(data, &b)
+	if b == nil {
+		return fmt.Errorf("nil BaseRunner")
+	}
+	// Unmarshal into the receiver, not into a copy of the pointer.
+	// Unmarshalling into `&b` would only update the local pointer variable.
+	return json.Unmarshal(data, b)
 }
 
 func (b *BaseRunner) MarshalJSON() ([]byte, error) {

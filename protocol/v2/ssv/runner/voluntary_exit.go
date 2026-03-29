@@ -28,7 +28,7 @@ import (
 // need consensus nor post-consensus, it just performs pre-consensus with VoluntaryExitPartialSig
 // over a VoluntaryExit object to create a SignedVoluntaryExit
 type VoluntaryExitRunner struct {
-	BaseRunner *BaseRunner
+	*BaseRunner
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
@@ -65,12 +65,7 @@ func NewVoluntaryExitRunner(
 }
 
 func (r *VoluntaryExitRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewNonBeaconDuty(ctx, logger, r, duty.(*spectypes.ValidatorDuty), quorum)
-}
-
-// HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
-func (r *VoluntaryExitRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.baseStartNewNonBeaconDuty(ctx, logger, r, duty.(*spectypes.ValidatorDuty), quorum)
 }
 
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,
@@ -85,7 +80,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		span.SetAttributes(observability.ValidatorIndexAttribute(validatorIndex))
 	}
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
 		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
 		// also needs to be retried.
@@ -106,7 +101,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	fullSig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
@@ -193,7 +188,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode PartialSignatureMessages: %w", err)
@@ -230,7 +225,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.BaseRunner.State.CurrentDuty.DutySlot())
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
 	validatorIndex := r.state().CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
@@ -238,44 +233,8 @@ func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, e
 	}, nil
 }
 
-func (r *VoluntaryExitRunner) HasRunningQBFTInstance() bool {
-	return r.BaseRunner.HasRunningQBFTInstance()
-}
-
-func (r *VoluntaryExitRunner) HasAcceptedProposalForCurrentRound() bool {
-	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
-}
-
-func (r *VoluntaryExitRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
-	return r.BaseRunner.GetShares()
-}
-
-func (r *VoluntaryExitRunner) GetRole() spectypes.RunnerRole {
-	return r.BaseRunner.GetRole()
-}
-
-func (r *VoluntaryExitRunner) GetLastHeight() specqbft.Height {
-	return r.BaseRunner.GetLastHeight()
-}
-
-func (r *VoluntaryExitRunner) GetLastRound() specqbft.Round {
-	return r.BaseRunner.GetLastRound()
-}
-
-func (r *VoluntaryExitRunner) GetStateRoot() ([32]byte, error) {
-	return r.BaseRunner.GetStateRoot()
-}
-
-func (r *VoluntaryExitRunner) SetTimeoutFunc(fn TimeoutF) {
-	r.BaseRunner.SetTimeoutFunc(fn)
-}
-
 func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
 	return r.network
-}
-
-func (r *VoluntaryExitRunner) GetNetworkConfig() *networkconfig.Network {
-	return r.BaseRunner.NetworkConfig
 }
 
 func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
@@ -283,14 +242,14 @@ func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 }
 
 func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.Share {
 		return share
 	}
 	return nil
 }
 
 func (r *VoluntaryExitRunner) state() *State {
-	return r.BaseRunner.State
+	return r.State
 }
 
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
@@ -300,6 +259,30 @@ func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 
+func (r *VoluntaryExitRunner) MarshalJSON() ([]byte, error) {
+	type voluntaryExitRunnerJSON struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+	}
+
+	return json.Marshal(&voluntaryExitRunnerJSON{
+		BaseRunner: r.BaseRunner,
+	})
+}
+
+func (r *VoluntaryExitRunner) UnmarshalJSON(data []byte) error {
+	type voluntaryExitRunnerJSON struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+	}
+
+	aux := &voluntaryExitRunnerJSON{}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	r.BaseRunner = aux.BaseRunner
+	return nil
+}
+
 // Encode returns the encoded struct in bytes or error
 func (r *VoluntaryExitRunner) Encode() ([]byte, error) {
 	return json.Marshal(r)
@@ -307,7 +290,7 @@ func (r *VoluntaryExitRunner) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (r *VoluntaryExitRunner) Decode(data []byte) error {
-	return json.Unmarshal(data, &r)
+	return json.Unmarshal(data, r)
 }
 
 // GetRoot returns the root used for signing and verification
