@@ -145,9 +145,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	duty := r.state().CurrentDuty.(*spectypes.ValidatorDuty)
 
 	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
-	slotTime := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
-	proposeTime := slotTime.Add(r.proposerDelay)
-	if timeLeft := time.Until(proposeTime); timeLeft > 0 {
+	if timeLeft := r.remainingProposerDelay(duty.Slot, time.Now()); timeLeft > 0 {
 		select {
 		case <-time.After(timeLeft):
 		case <-ctx.Done():
@@ -526,6 +524,15 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 func (r *ProposerRunner) HasRunningQBFTInstance() bool {
 	return r.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (r *ProposerRunner) remainingProposerDelay(slot phase0.Slot, now time.Time) time.Duration {
+	slotTime := r.BaseRunner.NetworkConfig.SlotStartTime(slot)
+	proposeTime := slotTime.Add(r.proposerDelay)
+	if wait := proposeTime.Sub(now); wait > 0 {
+		return wait
+	}
+	return 0
 }
 
 func (r *ProposerRunner) HasAcceptedProposalForCurrentRound() bool {

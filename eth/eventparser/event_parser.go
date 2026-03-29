@@ -83,7 +83,7 @@ func (e *EventParser) unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error)
 
 	unpacked, ok := outField[0].([]byte)
 	if !ok {
-		return nil, fmt.Errorf("cast OperatorPublicKey to []byte: %w", err)
+		return nil, fmt.Errorf("unexpected OperatorPublicKey ABI output type %T", outField[0])
 	}
 
 	return unpacked, nil

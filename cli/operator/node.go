@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -115,6 +117,7 @@ type config struct {
 	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
 	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
 	WithPing                     bool                    `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
+	SSVAPIAddress                string                  `yaml:"SSVAPIAddress" env:"SSV_API_ADDRESS" env-description:"Listen address for SSV API server. Leave empty to listen on all interfaces; use 127.0.0.1 to keep it local-only"`
 	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
 	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
 	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
@@ -655,9 +658,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if cfg.SSVAPIPort > 0 {
+			warnIfSSVAPIAddressUnset(logger, cfg.SSVAPIAddress, cfg.SSVAPIPort)
 			apiServer := apiserver.New(
 				logger,
-				fmt.Sprintf(":%d", cfg.SSVAPIPort),
+				net.JoinHostPort(cfg.SSVAPIAddress, strconv.Itoa(cfg.SSVAPIPort)),
 				hnode.NewNode(
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
 					[]string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
@@ -686,6 +690,18 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func warnIfSSVAPIAddressUnset(logger *zap.Logger, address string, port int) {
+	if address != "" {
+		return
+	}
+
+	logger.Warn("SSV API address not configured; listening on all interfaces",
+		zap.Int("port", port),
+		zap.String("config_key", "SSVAPIAddress"),
+		zap.String("recommended_address", "127.0.0.1"),
+	)
 }
 
 func ensureNoMissingKeys(
@@ -1190,6 +1206,9 @@ func syncContractEvents(
 
 		// Sync ongoing registry events in the background, crash if ongoing sync has stopped because
 		// the SSV node cannot work without being up to date with Ethereum events.
+		// When block ordering looks wrong, stop the node instead of continuing
+		// with possibly incorrect event state. Until reorg handling exists,
+		// restart from persisted state is safer than guessing in-process.
 		go func() {
 			err := eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
 			if err != nil && !errors.Is(err, context.Canceled) {

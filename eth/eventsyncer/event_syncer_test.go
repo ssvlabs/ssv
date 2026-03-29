@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -305,4 +306,27 @@ func TestBlockBelowThreshold(t *testing.T) {
 		err := s.ensureBlockAboveThreshold(ctx, big.NewInt(1))
 		require.NoError(t, err)
 	})
+}
+
+func TestSyncOngoingPropagatesErrInferiorBlock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	executionClient := NewMockExecutionClient(ctrl)
+	eventHandlerMock := NewMockEventHandler(ctrl)
+
+	ctx := t.Context()
+	syncer := New(nil, executionClient, eventHandlerMock)
+
+	stream := make(chan executionclient.BlockLogs)
+
+	executionClient.EXPECT().
+		StreamLogs(ctx, uint64(11)).
+		Return(stream)
+	eventHandlerMock.EXPECT().
+		HandleBlockEventsStream(ctx, stream, true).
+		Return(uint64(12), true, fmt.Errorf("process block events: %w", eventhandler.ErrInferiorBlock))
+
+	err := syncer.SyncOngoing(ctx, 11)
+	require.Error(t, err)
+	require.ErrorIs(t, err, eventhandler.ErrInferiorBlock)
+	require.ErrorContains(t, err, "last processed block = 12")
 }
