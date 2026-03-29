@@ -265,6 +265,12 @@ func TestDeferredArming(t *testing.T) {
 				testDeferredContextCancelled(t, role)
 			})
 		})
+
+		t.Run(fmt.Sprintf("DeferredArming - %s: stale call during deferred window", role), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				testStaleDuringDeferredWindow(t, role)
+			})
+		})
 	}
 }
 
@@ -440,6 +446,67 @@ func testDeferredContextCancelled(t *testing.T, role spectypes.RunnerRole) {
 
 	<-time.After(quickTimeout + safeTestDelay)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count), "callback must not fire when context is canceled")
+}
+
+// testStaleDuringDeferredWindow verifies that a stale TimeoutForRound or OnTimeout
+// for height H cannot clobber a deferred arm for height H+1 during the window
+// between TimeoutForRound(H+1) and OnTimeout(H+1).
+func testStaleDuringDeferredWindow(t *testing.T, role spectypes.RunnerRole) {
+	testBeaconConfig := setupTestBeaconConfig()
+
+	timer := New(t.Context(), testBeaconConfig, role)
+	timer.timeoutOptions = TimeoutOptions{
+		quickThreshold: specqbft.Round(1),
+		quick:          quickTimeout,
+		slow:           slowTimeout,
+	}
+
+	// Duty H: register callback and arm.
+	timer.OnTimeout(specqbft.FirstHeight, func(specqbft.Round) {})
+	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
+
+	// Let duty H fire.
+	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + safeTestDelay)
+
+	// Duty H+1: TimeoutForRound arrives before OnTimeout — enters deferred window.
+	newHeight := specqbft.FirstHeight + 1
+	timer.TimeoutForRound(newHeight, specqbft.FirstRound)
+
+	timer.mtx.RLock()
+	require.NotNil(t, timer.deferred, "must have deferred for H+1")
+	require.Equal(t, newHeight, timer.deferred.height)
+	timer.mtx.RUnlock()
+
+	// Stale TimeoutForRound(H) arrives during the deferred window.
+	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(3))
+
+	// Deferred must still be for H+1, not overwritten by the stale call.
+	timer.mtx.RLock()
+	require.NotNil(t, timer.deferred, "deferred must survive stale call")
+	require.Equal(t, newHeight, timer.deferred.height, "deferred must still be for H+1")
+	timer.mtx.RUnlock()
+
+	// Stale OnTimeout(H) arrives during the deferred window.
+	timer.OnTimeout(specqbft.FirstHeight, func(specqbft.Round) {})
+
+	// Deferred must still be intact.
+	timer.mtx.RLock()
+	require.NotNil(t, timer.deferred, "deferred must survive stale OnTimeout")
+	require.Equal(t, newHeight, timer.deferred.height, "deferred must still be for H+1")
+	timer.mtx.RUnlock()
+
+	// Now the real OnTimeout(H+1) arrives — should replay.
+	var count int32
+	timer.OnTimeout(newHeight, func(round specqbft.Round) {
+		atomic.AddInt32(&count, 1)
+	})
+
+	timer.mtx.RLock()
+	require.NotNil(t, timer.timer, "timer must be armed after OnTimeout(H+1) replay")
+	timer.mtx.RUnlock()
+
+	<-time.After(timer.RoundTimeout(newHeight, specqbft.FirstRound) + safeTestDelay)
+	require.Equal(t, int32(1), atomic.LoadInt32(&count), "H+1 callback must fire exactly once")
 }
 
 func TestNegativeTimeout(t *testing.T) {

@@ -54,7 +54,7 @@ type RoundTimer struct {
 	timer *time.Timer
 	// callback is the timeout callback for the current duty
 	callback OnRoundTimeoutF
-	// callbackHeight is the height for which callback was registered
+	// callbackHeight is the highest duty height seen (registered or deferred)
 	callbackHeight specqbft.Height
 	// deferred stores a pending arm request when TimeoutForRound is called
 	// before the correct callback is registered for this duty
@@ -207,6 +207,11 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
+	// Reject stale calls from previous duties.
+	if height < t.callbackHeight {
+		return
+	}
+
 	if t.callback == nil || t.callbackHeight != height {
 		// Callback missing or registered for a different duty (stale).
 		// Stop any running timer and nil out the stale callback so that an
@@ -217,6 +222,7 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 			t.timer = nil
 		}
 		t.callback = nil
+		t.callbackHeight = height
 		t.deferred = &deferredTimeout{height: height, round: round}
 		return
 	}
