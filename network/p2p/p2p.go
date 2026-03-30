@@ -658,8 +658,7 @@ func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 
 			}
 		}
 
-		advertisedSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-		scores[peerID] = subnetPeersExcluding.Score(ownSubnets, advertisedSubnets)
+		scores[peerID] = subnetPeersExcluding.Score(ownSubnets, pSubnets)
 	}
 	return scores
 }

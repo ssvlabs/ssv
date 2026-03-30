@@ -410,7 +410,7 @@ func (c *Controller) handleNonCommitteeMessages(
 		}
 
 		subMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+		if !ok || subMsg == nil || subMsg.MsgType != specqbft.ProposalMsgType {
 			return nil
 		}
 

@@ -12,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/v2/observability/log/fields"
 )
 
 // StreamResponder abstracts the stream access with a simpler interface that accepts only the data to send
@@ -52,32 +54,36 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	ctx, cancel := context.WithTimeout(n.ctx, n.dialTimeout)
 	defer cancel()
 
-	s, err := n.host.NewStream(ctx, peerID, protocol)
+	stream, err := n.host.NewStream(ctx, peerID, protocol)
 	if err != nil {
 		return nil, err
 	}
 
+	s := NewStream(stream)
+
 	requestsSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 
 	defer func() {
-		if err := s.Close(); err != nil {
+		if err := s.Close(); err != nil && !errors.Is(err, libp2pnetwork.ErrReset) {
 			logger.Debug("could not close stream", zap.Error(err))
 		}
 	}()
-	stream := NewStream(s)
 
-	if err := stream.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
+	if err := s.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
 	}
 	if err := s.CloseWrite(); err != nil {
 		return nil, errors.Wrap(err, "could not close write stream")
 	}
-	res, err := stream.ReadWithTimeout(n.readWriteTimeout)
+	res, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
+		if errors.Is(err, ErrStreamMessageTooLarge) {
+			n.observeOversizedPayload(logger, peerID, s.Protocol(), "response")
+		}
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
 
-	responsesReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
+	responsesReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 	return res, nil
 }
 
@@ -86,16 +92,19 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byte, StreamResponder, func(), error) {
 	s := NewStream(stream)
 
-	requestsReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
+	requestsReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 
 	done := func() {
-		if err := s.Close(); err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
-			logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
+		if err := s.Close(); err != nil && !errors.Is(err, libp2pnetwork.ErrReset) {
+			logger.Debug("failed to close stream (handler)", zap.String("s_id", s.ID()), zap.Error(err))
 		}
 	}
 
 	data, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
+		if errors.Is(err, ErrStreamMessageTooLarge) {
+			n.observeOversizedPayload(logger, s.Conn().RemotePeer(), s.Protocol(), "request")
+		}
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
 
@@ -106,7 +115,21 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 			return errors.Wrap(err, "could not write to stream")
 		}
 
-		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
+		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
 		return nil
 	}, done, nil
+}
+
+func (n *streamCtrl) observeOversizedPayload(logger *zap.Logger, peerID peer.ID, protocolID protocol.ID, direction string) {
+	oversizedPayloadsCounter.Add(
+		n.ctx,
+		1,
+		metric.WithAttributes(protocolIDAttribute(protocolID), streamDirectionAttribute(direction)),
+	)
+	logger.Warn(
+		"rejected oversized stream payload",
+		fields.PeerID(peerID),
+		zap.String(fields.FieldProtocolID, string(protocolID)),
+		zap.String("direction", direction),
+	)
 }

@@ -1,6 +1,8 @@
 package operator
 
 import (
+	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -14,6 +16,70 @@ import (
 	kv "github.com/ssvlabs/ssv/v2/storage/badger"
 	"github.com/ssvlabs/ssv/v2/storage/basedb"
 )
+
+func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
+	t.Parallel()
+
+	t.Run("warns when address is empty", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		logger := zap.New(core)
+
+		warnIfSSVAPIAddressUnset(logger, "", 16000)
+
+		logs := recorded.All()
+		require.Len(t, logs, 1)
+		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
+		require.Equal(t, "SSV API address not configured; listening on all interfaces", logs[0].Message)
+		require.EqualValues(t, 16000, logs[0].ContextMap()["port"])
+		require.Equal(t, "SSVAPIAddress", logs[0].ContextMap()["config_key"])
+		require.Equal(t, "127.0.0.1", logs[0].ContextMap()["recommended_address"])
+	})
+
+	t.Run("does not warn when address is set", func(t *testing.T) {
+		core, recorded := observer.New(zapcore.WarnLevel)
+		logger := zap.New(core)
+
+		warnIfSSVAPIAddressUnset(logger, "127.0.0.1", 16000)
+
+		require.Len(t, recorded.All(), 0)
+	})
+}
+
+func Test_ssvAPIListenAddress(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		address string
+		port    int
+		want    string
+	}{
+		{
+			name: "empty address listens on all interfaces",
+			port: 16000,
+			want: ":16000",
+		},
+		{
+			name:    "ipv4 loopback",
+			address: "127.0.0.1",
+			port:    16000,
+			want:    "127.0.0.1:16000",
+		},
+		{
+			name:    "ipv6 loopback",
+			address: "::1",
+			port:    16000,
+			want:    "[::1]:16000",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := net.JoinHostPort(tc.address, strconv.Itoa(tc.port))
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
 
 func Test_verifyConfig(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))

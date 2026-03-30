@@ -3,7 +3,6 @@ package roundtimer
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -48,7 +47,7 @@ type RoundTimer struct {
 	// result holds the result of the timer
 	done OnRoundTimeoutF
 	// round is the current round of the timer
-	round uint64
+	round specqbft.Round
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
@@ -142,45 +141,39 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 	t.done = done
 }
 
-// Round returns a round.
-func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
-}
-
-// TimeoutForRound times out for a given round.
+// TimeoutForRound stops any running timer, waits for any in-flight callback to
+// finish, and schedules a new callback for the given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreUint64(&t.round, uint64(round))
+	// Optimistic early-exit: a narrow window exists between this check and
+	// timer creation where ctx could be canceled; the callback re-checks
+	// ctx.Err() to handle that case.
+	if t.ctx.Err() != nil {
+		return
+	}
+
 	timeout := t.RoundTimeout(height, round)
 
-	// preparing the underlying timer
-	timer := t.timer
-	if timer == nil {
-		timer = time.NewTimer(timeout)
-	} else {
-		timer.Stop()
-		// draining the channel of existing timer
-		select {
-		case <-timer.C:
-		default:
-		}
+	t.mtx.Lock()
+	t.round = round
+	if t.timer != nil {
+		// Stop prevents future fires; if it returns false the callback goroutine
+		// may already be running — it will be suppressed by the round-number check.
+		t.timer.Stop()
 	}
-	timer.Reset(timeout)
-	// spawns a new goroutine to listen to the timer
-	go t.waitForRound(round, timer.C)
-}
-
-func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
-	select {
-	case <-t.ctx.Done():
-	case <-timeout:
-		if t.Round() == round {
-			func() {
-				t.mtx.RLock() // read t.done
-				defer t.mtx.RUnlock()
-				if done := t.done; done != nil {
-					done(round)
-				}
-			}()
+	// timeout can be negative for late-start duties — AfterFunc fires
+	// immediately but the callback blocks on RLock until we release mtx.
+	t.timer = time.AfterFunc(timeout, func() {
+		if t.ctx.Err() != nil {
+			return
 		}
-	}
+		t.mtx.RLock()
+		defer t.mtx.RUnlock()
+		if t.round != round {
+			return
+		}
+		if t.done != nil {
+			t.done(round)
+		}
+	})
+	t.mtx.Unlock()
 }
