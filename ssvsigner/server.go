@@ -489,8 +489,9 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 
 	payload := ctx.PostBody()
 	if len(payload) == 0 {
-		logger.Warn("request has no payload")
-		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, errors.New("request payload is empty"))
+		err := errors.New("request payload is empty")
+		logger.Warn("invalid request", zap.Error(err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, err)
 		return
 	}
 
