@@ -4,9 +4,8 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"errors"
 	"io"
-
-	"github.com/pkg/errors"
 )
 
 func EncryptPayload(encryptionKey, plaintext []byte) ([]byte, error) {
