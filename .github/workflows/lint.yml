@@ -25,7 +25,7 @@ jobs:
           cache: false
 
       - name: Restore Go cache (lint)
-        uses: actions/cache@v4
+        uses: actions/cache.0.4
         with:
           path: |
             ~/go/pkg/mod
