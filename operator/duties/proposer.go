@@ -38,6 +38,8 @@ func (h *ProposerHandler) Name() string {
 	return spectypes.BNRoleProposer.String()
 }
 
+func (h *ProposerHandler) WaitShutdown() {}
+
 // HandleDuties manages the duty lifecycle, handling different cases:
 //
 // On First Run:
@@ -50,7 +52,7 @@ func (h *ProposerHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. ResetEpoch duties for the current epoch.
+//  2. EraseEpochData duties for the current epoch.
 //  3. Fetch duties for the current epoch.
 //
 // On Ticker event:
@@ -67,23 +69,28 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
+				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
+				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
 				defer cancel()
 
 				if h.fetchFirst {
 					h.fetchFirst = false
 					h.indicesChanged = false
 					h.processFetching(tickCtx, currentEpoch)
-					h.processExecution(tickCtx, currentEpoch, slot)
+					h.processExecution(tickCtx, currentEpoch, currentSlot)
 				} else {
-					h.processExecution(tickCtx, currentEpoch, slot)
+					h.processExecution(tickCtx, currentEpoch, currentSlot)
 					if h.indicesChanged {
 						h.indicesChanged = false
 						h.processFetching(tickCtx, currentEpoch)
@@ -92,26 +99,31 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			}()
 
 			// last slot of epoch
-			if uint64(slot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
-				h.duties.ResetEpoch(currentEpoch - 1)
+			if uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch == h.beaconConfig.SlotsPerEpoch-1 {
+				h.duties.EraseEpochData(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
+			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
 			if reorgEvent.Current {
-				h.duties.ResetEpoch(currentEpoch)
+				h.duties.EraseEpochData(currentEpoch)
 				h.fetchFirst = true
 			}
 
 		case <-h.indicesChange:
-			slot := h.beaconConfig.EstimatedCurrentSlot()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
 			h.indicesChanged = true
@@ -180,7 +192,10 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	}
 	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
-	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+	// Proposals need to be made within ~4s since the current slot start to be included on-chain, we'll make the
+	// deadline to be 1 slot for simplicity.
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
 }
