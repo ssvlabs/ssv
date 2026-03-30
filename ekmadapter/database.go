@@ -22,30 +22,6 @@ var (
 	_ ekm.ReadWriteTxn = basedb.Txn(nil)
 )
 
-func asReader(txn ekm.ReadTxn) (basedb.Reader, error) {
-	if txn == nil {
-		return nil, nil
-	}
-
-	reader, ok := txn.(basedb.Reader)
-	if !ok {
-		return nil, fmt.Errorf("unexpected read txn type %T", txn)
-	}
-	return reader, nil
-}
-
-func asReadWriter(txn ekm.ReadWriteTxn) (basedb.ReadWriter, error) {
-	if txn == nil {
-		return nil, nil
-	}
-
-	rw, ok := txn.(basedb.ReadWriter)
-	if !ok {
-		return nil, fmt.Errorf("unexpected write txn type %T", txn)
-	}
-	return rw, nil
-}
-
 func (a *databaseAdapter) Get(txn ekm.ReadTxn, prefix []byte, key []byte) (ekm.Obj, bool, error) {
 	reader, err := asReader(txn)
 	if err != nil {
@@ -87,4 +63,28 @@ func (a *databaseAdapter) Delete(txn ekm.ReadWriteTxn, prefix []byte, key []byte
 
 func (a *databaseAdapter) DropPrefix(prefix []byte) error {
 	return a.db.DropPrefix(prefix)
+}
+
+func asReader(txn ekm.ReadTxn) (basedb.Reader, error) {
+	if txn == nil {
+		return nil, nil
+	}
+
+	reader, ok := txn.(basedb.Reader)
+	if !ok {
+		return nil, fmt.Errorf("unexpected read txn type %T", txn)
+	}
+	return reader, nil
+}
+
+func asReadWriter(txn ekm.ReadWriteTxn) (basedb.ReadWriter, error) {
+	if txn == nil {
+		return nil, nil
+	}
+
+	rw, ok := txn.(basedb.ReadWriter)
+	if !ok {
+		return nil, fmt.Errorf("unexpected write txn type %T", txn)
+	}
+	return rw, nil
 }
