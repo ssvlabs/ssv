@@ -2,15 +2,12 @@ package ssvsigner
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"strings"
@@ -470,7 +467,7 @@ func (s *Server) handleOperatorEncrypt(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	encrypted, err := encryptPayload(encryptionKey, payload)
+	encrypted, err := keys.EncryptPayload(encryptionKey, payload)
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
 		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
@@ -504,7 +501,7 @@ func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	decrypted, err := decryptPayload(encryptionKey, payload)
+	decrypted, err := keys.DecryptPayload(encryptionKey, payload)
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
 		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
@@ -528,40 +525,6 @@ func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logge
 	)
 	ctx.SetStatusCode(statusCode)
 	s.writeJSON(ctx, logger, resp)
-}
-
-func encryptPayload(encryptionKey, plaintext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(encryptionKey)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil
-}
-
-func decryptPayload(encryptionKey, nonceCipherText []byte) ([]byte, error) {
-	block, err := aes.NewCipher(encryptionKey)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	nonceSize := gcm.NonceSize()
-	if len(nonceCipherText) < nonceSize {
-		return nil, errors.New("malformed ciphertext")
-	}
-
-	nonce, ciphertext := nonceCipherText[:nonceSize], nonceCipherText[nonceSize:]
-	return gcm.Open(nil, nonce, ciphertext, nil)
 }
 
 func (s *Server) writeString(ctx *fasthttp.RequestCtx, logger *zap.Logger, str string) {

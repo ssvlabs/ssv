@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/internal/mocks"
-
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -432,7 +432,7 @@ func (s *ServerTestSuite) TestOperatorDataProtection() {
 
 	encryptionKey := []byte("0123456789abcdef0123456789abcdef")
 	payload := bytes.Repeat([]byte{0x23}, 32)
-	encryptedPayload, err := encryptPayload(encryptionKey, payload)
+	encryptedPayload, err := keys.EncryptPayload(encryptionKey, payload)
 	require.NoError(t, err)
 
 	s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
@@ -444,7 +444,7 @@ func (s *ServerTestSuite) TestOperatorDataProtection() {
 		resp, err := s.ServeHTTP("POST", PathOperatorEncrypt, payload)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
-		decrypted, err := decryptPayload(encryptionKey, resp.Body())
+		decrypted, err := keys.DecryptPayload(encryptionKey, resp.Body())
 		require.NoError(t, err)
 		assert.Equal(t, payload, decrypted)
 	})
