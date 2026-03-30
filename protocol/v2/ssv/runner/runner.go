@@ -165,6 +165,10 @@ func (b *BaseRunner) Encode() ([]byte, error) {
 	return json.Marshal(b)
 }
 
+// Decode unmarshals persisted runner state into the receiver.
+//
+// Note: decoded runners are intentionally partial; runtime dependencies (e.g. `NetworkConfig`, `TimeoutF`, and
+// runner-specific value checkers) must be rehydrated by the caller after decode.
 func (b *BaseRunner) Decode(data []byte) error {
 	if b == nil {
 		return fmt.Errorf("nil BaseRunner")
