@@ -141,7 +141,8 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 	t.done = done
 }
 
-// TimeoutForRound stops any running timer and schedules a callback for the given round.
+// TimeoutForRound stops any running timer, waits for any in-flight callback to
+// finish, and schedules a new callback for the given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
 	// Optimistic early-exit: a narrow window exists between this check and
 	// timer creation where ctx could be canceled; the callback re-checks
