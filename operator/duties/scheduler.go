@@ -392,7 +392,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 					!bytes.Equal(expectedPreviousDutyDependentRoot, event.PreviousDutyDependentRoot[:])
 
 				if previousDutyDependentRootChanged {
-					logger.Debug("🔀 reorg detected upon epoch transition: previuos dependent root changed",
+					logger.Debug("🔀 reorg detected upon epoch transition: previous dependent root changed",
 						zap.String("expected_previous_dependent_root", fmt.Sprintf("%#x", expectedPreviousDutyDependentRoot)),
 						zap.String("got_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])),
 						zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),

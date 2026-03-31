@@ -527,7 +527,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			},
 		})
 
-		// The HandleHeadEvent should set the EpochTransition and PreviousDutyDependentRootChanged to true, allowing for refetching the duties in current Epoch
+		// The HandleHeadEvent should set the CurrentDutyDependentRootChanged to true due to PreviousDutyDependentRoot
+		// have been changed, allowing for refetching the duties in current Epoch
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
@@ -617,7 +618,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 			},
 		})
 
-		// The HandleHeadEvent should set the EpochTransition and PreviousDutyDependentRootChanged to true, allowing for refetching the duties in current Epoch
+		// The HandleHeadEvent should set the CurrentDutyDependentRootChanged to true due to PreviousDutyDependentRoot
+		// have been changed, allowing for refetching the duties in current Epoch
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
