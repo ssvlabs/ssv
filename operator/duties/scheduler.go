@@ -391,7 +391,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 				// Epoch transition case:
 				// - the root tracked in s.currentDutyDependentRoot now describes the previous epoch, hence becomes
 				//   the expected previous dependent root
-				// - we use the lastest observed block-root from the previous epoch as the expected current dependent
+				// - we use the latest observed block-root from the previous epoch as the expected current dependent
 				//   root since it's the only thing we can compare the current dependent root we got with
 				epochTransition = true
 				expectedCurrentDutyDependentRoot = s.lastBlockRoot[:]
