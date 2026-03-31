@@ -258,6 +258,9 @@ func (n *Node) Start(ctx context.Context) error {
 			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
 		}
 	} else {
+		if !n.exporterOptions.Enabled || n.exporterOptions.Mode != exporter.ModeStandard {
+			n.logger.Fatal("duty scheduler is nil for non-exporter-standard node")
+		}
 		<-ctx.Done()
 	}
 

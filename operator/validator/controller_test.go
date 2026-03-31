@@ -130,6 +130,20 @@ func TestSetupRunnersExporter(t *testing.T) {
 	require.ErrorContains(t, err, "cannot set up duty runners in exporter mode")
 }
 
+func TestSetupCommitteeRunnersExporter(t *testing.T) {
+	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), &validator.Options{
+		CommonOptions: validator.CommonOptions{
+			ExporterOptions: exporter.Options{
+				Enabled: true,
+			},
+		},
+	})
+
+	runner, err := committeeRunnerFunc(0, nil, nil, nil)
+	require.Nil(t, runner)
+	require.ErrorContains(t, err, "cannot set up committee runners in exporter mode")
+}
+
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := log.TestLogger(t)
 	mockValidatorsMap := validators.New(t.Context())
