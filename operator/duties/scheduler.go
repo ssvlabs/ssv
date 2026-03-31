@@ -365,7 +365,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 	return func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 		if event.Slot != s.beaconConfig.EstimatedCurrentSlot() {
-			// No need to process outdated events here.
+			// No need to process outdated events here. Future events shouldn't be possible, unless there is
+			// a very large clock-drift - for simplicity, we don't handle this case either.
 			return
 		}
 
@@ -386,6 +387,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 				//   the expected previous dependent root
 				// - we cannot have any expectations for the current root since we don't have any recorded current root
 				//   to compare against
+
 				expectedPreviousDutyDependentRoot := s.currentDutyDependentRoot[:]
 
 				previousDutyDependentRootChanged := !bytes.Equal(expectedPreviousDutyDependentRoot, zeroRoot) &&
@@ -404,6 +406,8 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 					}
 				}
 			} else {
+				// Epoch in-progress case, either current or previous dependent root might have changed.
+
 				expectedCurrentDutyDependentRoot := s.currentDutyDependentRoot[:]
 				expectedPreviousDutyDependentRoot := s.previousDutyDependentRoot[:]
 
