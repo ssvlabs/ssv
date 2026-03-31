@@ -117,12 +117,17 @@ type Scheduler struct {
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
 
-	// waitCond coordinates access to headSlot for different go-routines
+	// waitCond coordinates access to headSlot for different go-routines.
 	waitCond *sync.Cond
 	headSlot phase0.Slot
 
-	lastBlockEpoch            phase0.Epoch
-	currentDutyDependentRoot  phase0.Root
+	// lastEpoch records the epoch of the last observed block.
+	lastEpoch phase0.Epoch
+	// lastBlockRoot records the root of the last observed block.
+	lastBlockRoot phase0.Root
+	// currentDutyDependentRoot records the canonical root of epoch CURRENT-1.
+	currentDutyDependentRoot phase0.Root
+	// previousDutyDependentRoot records the canonical root of epoch CURRENT-2.
 	previousDutyDependentRoot phase0.Root
 
 	exporterMode bool
@@ -376,59 +381,45 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
 
 		// Check for reorg & fire corresponding ReorgEvent if needed.
-		if s.lastBlockEpoch != 0 {
+		if s.lastEpoch != 0 {
 			zeroRoot := new(phase0.Root)[:]
 
-			if currentEpoch > s.lastBlockEpoch {
+			epochTransition := false
+			expectedCurrentDutyDependentRoot := s.currentDutyDependentRoot[:]
+			expectedPreviousDutyDependentRoot := s.previousDutyDependentRoot[:]
+			if currentEpoch > s.lastEpoch {
 				// Epoch transition case:
 				// - the root tracked in s.currentDutyDependentRoot now describes the previous epoch, hence becomes
 				//   the expected previous dependent root
-				// - we cannot have any expectations for the current root since we don't have any recorded current root
-				//   to compare against
+				// - we use the lastest observed block-root from the previous epoch as the expected current dependent
+				//   root since it's the only thing we can compare the current dependent root we got with
+				epochTransition = true
+				expectedCurrentDutyDependentRoot = s.lastBlockRoot[:]
+				expectedPreviousDutyDependentRoot = s.currentDutyDependentRoot[:]
+			}
 
-				expectedPreviousDutyDependentRoot := s.currentDutyDependentRoot[:]
+			currentDutyDependentRootChanged := !bytes.Equal(expectedCurrentDutyDependentRoot, zeroRoot) &&
+				!bytes.Equal(expectedCurrentDutyDependentRoot, event.CurrentDutyDependentRoot[:])
+			previousDutyDependentRootChanged := !bytes.Equal(expectedPreviousDutyDependentRoot, zeroRoot) &&
+				!bytes.Equal(expectedPreviousDutyDependentRoot, event.PreviousDutyDependentRoot[:])
 
-				previousDutyDependentRootChanged := !bytes.Equal(expectedPreviousDutyDependentRoot, zeroRoot) &&
-					!bytes.Equal(expectedPreviousDutyDependentRoot, event.PreviousDutyDependentRoot[:])
-
-				if previousDutyDependentRootChanged {
-					logger.Debug("🔀 reorg detected upon epoch transition: previous dependent root changed",
-						zap.String("expected_previous_dependent_root", fmt.Sprintf("%#x", expectedPreviousDutyDependentRoot)),
-						zap.String("got_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])),
-						zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),
-					)
-					s.reorg <- ReorgEvent{
-						CurrentDutyDependentRootChanged:  true, // because previous dependent root changed
-						PreviousDutyDependentRootChanged: true,
-					}
-				}
-			} else {
-				// Epoch in-progress case, either current or previous dependent root might have changed.
-
-				expectedCurrentDutyDependentRoot := s.currentDutyDependentRoot[:]
-				expectedPreviousDutyDependentRoot := s.previousDutyDependentRoot[:]
-
-				currentDutyDependentRootChanged := !bytes.Equal(expectedCurrentDutyDependentRoot, zeroRoot) &&
-					!bytes.Equal(expectedCurrentDutyDependentRoot, event.CurrentDutyDependentRoot[:])
-				previousDutyDependentRootChanged := !bytes.Equal(expectedPreviousDutyDependentRoot, zeroRoot) &&
-					!bytes.Equal(expectedPreviousDutyDependentRoot, event.PreviousDutyDependentRoot[:])
-
-				if currentDutyDependentRootChanged || previousDutyDependentRootChanged {
-					logger.Debug("🔀 reorg detected: dependent root(s) changed",
-						zap.String("expected_previous_dependent_root", fmt.Sprintf("%#x", expectedPreviousDutyDependentRoot)),
-						zap.String("got_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])),
-						zap.String("expected_current_dependent_root", fmt.Sprintf("%#x", expectedCurrentDutyDependentRoot)),
-						zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),
-					)
-					s.reorg <- ReorgEvent{
-						CurrentDutyDependentRootChanged:  currentDutyDependentRootChanged,
-						PreviousDutyDependentRootChanged: previousDutyDependentRootChanged,
-					}
+			if currentDutyDependentRootChanged || previousDutyDependentRootChanged {
+				logger.Debug("🔀 reorg detected: dependent root(s) changed",
+					zap.Bool("epoch_transition", epochTransition),
+					zap.String("expected_previous_dependent_root", fmt.Sprintf("%#x", expectedPreviousDutyDependentRoot)),
+					zap.String("got_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])),
+					zap.String("expected_current_dependent_root", fmt.Sprintf("%#x", expectedCurrentDutyDependentRoot)),
+					zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),
+				)
+				s.reorg <- ReorgEvent{
+					CurrentDutyDependentRootChanged:  currentDutyDependentRootChanged,
+					PreviousDutyDependentRootChanged: previousDutyDependentRootChanged,
 				}
 			}
 		}
 
-		s.lastBlockEpoch = currentEpoch
+		s.lastEpoch = currentEpoch
+		s.lastBlockRoot = event.Block
 		s.previousDutyDependentRoot = event.PreviousDutyDependentRoot
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
