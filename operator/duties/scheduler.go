@@ -174,8 +174,6 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 }
 
 type ReorgEvent struct {
-	// Slot is the reorg slot.
-	Slot phase0.Slot
 	// CurrentDutyDependentRootChanged indicates if the current duty dependent root change has been detected.
 	CurrentDutyDependentRootChanged bool
 	// PreviousDutyDependentRootChanged indicates if the previous duty dependent root change has been detected.
@@ -400,7 +398,6 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),
 					)
 					s.reorg <- ReorgEvent{
-						Slot:                             event.Slot,
 						CurrentDutyDependentRootChanged:  true, // because previous dependent root changed
 						PreviousDutyDependentRootChanged: true,
 					}
@@ -424,7 +421,6 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),
 					)
 					s.reorg <- ReorgEvent{
-						Slot:                             event.Slot,
 						CurrentDutyDependentRootChanged:  currentDutyDependentRootChanged,
 						PreviousDutyDependentRootChanged: previousDutyDependentRootChanged,
 					}
