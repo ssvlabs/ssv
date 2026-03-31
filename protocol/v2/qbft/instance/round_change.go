@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -435,10 +434,7 @@ func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.Signed
 		RoundChangeJustification: justificationsData,
 	}
 
-	signedMsg, err := ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not sign round change message")
-	}
-	signedMsg.FullData = fullData
-	return signedMsg, nil
+	// for testing purposes, we fail the signature
+	return nil, errors.Wrap(err, "could not sign round change message")
+
 }
