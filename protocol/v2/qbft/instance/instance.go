@@ -128,13 +128,18 @@ func (i *Instance) Start(
 		}
 		logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
-		const eventMsg = "📢 leader broadcasting proposal message"
-		logger.Debug(eventMsg)
-		span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:]))))
+		if i.GetConfig().GetQBFTSilentLeader() {
+			logger.Debug("qbft silent leader: skipping proposal broadcast (qa)")
+			span.AddEvent("qbft silent leader: proposal broadcast suppressed")
+		} else {
+			const eventMsg = "📢 leader broadcasting proposal message"
+			logger.Debug(eventMsg)
+			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:]))))
 
-		if err := i.Broadcast(proposal); err != nil {
-			logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
-			span.RecordError(err)
+			if err := i.Broadcast(proposal); err != nil {
+				logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
+				span.RecordError(err)
+			}
 		}
 	}
 

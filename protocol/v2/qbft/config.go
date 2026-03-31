@@ -26,15 +26,18 @@ type IConfig interface {
 	GetTimer() roundtimer.Timer
 	// GetCutOffRound returns the round cut off
 	GetCutOffRound() specqbft.Round
+	// GetQBFTSilentLeader returns whether this operator suppresses QBFT proposal broadcasts when leader (QA only).
+	GetQBFTSilentLeader() bool
 }
 
 type Config struct {
-	BeaconSigner ekm.BeaconSigner
-	Domain       spectypes.DomainType
-	ProposerF    specqbft.ProposerF
-	Network      specqbft.Network
-	Timer        roundtimer.Timer
-	CutOffRound  specqbft.Round
+	BeaconSigner      ekm.BeaconSigner
+	Domain            spectypes.DomainType
+	ProposerF         specqbft.ProposerF
+	Network           specqbft.Network
+	Timer             roundtimer.Timer
+	CutOffRound       specqbft.Round
+	QBFTSilentLeader  bool
 }
 
 // GetShareSigner returns a BeaconSigner instance
@@ -64,4 +67,8 @@ func (c *Config) GetTimer() roundtimer.Timer {
 
 func (c *Config) GetCutOffRound() specqbft.Round {
 	return c.CutOffRound
+}
+
+func (c *Config) GetQBFTSilentLeader() bool {
+	return c.QBFTSilentLeader
 }

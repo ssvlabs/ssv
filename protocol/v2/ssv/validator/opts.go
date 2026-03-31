@@ -44,6 +44,7 @@ type CommonOptions struct {
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
 	ProposerDelay       time.Duration
+	QBFTSilentLeader    bool
 }
 
 func NewCommonOptions(
@@ -62,6 +63,7 @@ func NewCommonOptions(
 	messageValidator validation.MessageValidator,
 	graffiti []byte,
 	proposerDelay time.Duration,
+	qbftSilentLeader bool,
 ) *CommonOptions {
 	result := &CommonOptions{
 		NetworkConfig:       networkConfig,
@@ -79,6 +81,7 @@ func NewCommonOptions(
 		MessageValidator:    messageValidator,
 		Graffiti:            graffiti,
 		ProposerDelay:       proposerDelay,
+		QBFTSilentLeader:    qbftSilentLeader,
 	}
 
 	// If full node, increase the queue size to make enough room for history sync batches to be pushed whole.

@@ -87,6 +87,7 @@ type ControllerOptions struct {
 	ValidatorSyncer                *metadata.Syncer
 	Graffiti                       []byte
 	ProposerDelay                  time.Duration
+	QBFTSilentLeader               bool `yaml:"QBFTSilentLeader" env:"SSV_QBFT_SILENT_LEADER" env-default:"false" env-description:"QA/testing only: suppress QBFT proposal broadcasts when this operator is round leader. Risk of missed duties if enabled; do not use in production."`
 
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
@@ -197,6 +198,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		options.MessageValidator,
 		options.Graffiti,
 		options.ProposerDelay,
+		options.QBFTSilentLeader,
 	)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
@@ -1017,15 +1019,16 @@ func SetupCommitteeRunners(
 ) validator.CommitteeRunnerFunc {
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType,
+			BeaconSigner:     options.Signer,
+			Domain:           options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: roundtimer.CutOffRound,
+			Network:          options.Network,
+			Timer:            roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound:      roundtimer.CutOffRound,
+			QBFTSilentLeader: options.QBFTSilentLeader,
 		}
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.Operator.CommitteeID[:], role)
@@ -1078,15 +1081,16 @@ func SetupRunners(
 
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			BeaconSigner: options.Signer,
-			Domain:       options.NetworkConfig.DomainType,
+			BeaconSigner:     options.Signer,
+			Domain:           options.NetworkConfig.DomainType,
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
 				return leader
 			},
-			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
-			CutOffRound: roundtimer.CutOffRound,
+			Network:          options.Network,
+			Timer:            roundtimer.New(ctx, options.NetworkConfig.Beacon, role, nil),
+			CutOffRound:      roundtimer.CutOffRound,
+			QBFTSilentLeader: options.QBFTSilentLeader,
 		}
 
 		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)

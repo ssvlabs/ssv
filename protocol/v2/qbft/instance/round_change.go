@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -12,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -84,8 +87,14 @@ func (i *Instance) uponRoundChange(
 
 		i.metrics.RecordRoundChange(ctx, prevRound, reasonJustified)
 
+		rcSigners := allSigners(i.State.RoundChangeContainer.MessagesForRound(prevRound))
+		if i.GetConfig().GetQBFTSilentLeader() {
+			logger.Debug("qbft silent leader: skipping proposal broadcast (qa)", zap.Any("round_change_signers", rcSigners))
+			return nil
+		}
+
 		logger.Debug("🔄 got justified round change, leader broadcasting proposal message",
-			zap.Any("round_change_signers", allSigners(i.State.RoundChangeContainer.MessagesForRound(prevRound))),
+			zap.Any("round_change_signers", rcSigners),
 		)
 
 		if err := i.Broadcast(proposal); err != nil {
@@ -434,7 +443,27 @@ func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.Signed
 		RoundChangeJustification: justificationsData,
 	}
 
-	// for testing purposes, we fail the signature
-	return nil, errors.New("injected fault: signing failure")
+	if isSSV002FaultRoundChangeSignInjected() {
+		return nil, errors.New("injected fault: signing failure")
+	}
 
+	signedMsg, err := ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not sign round change message")
+	}
+	signedMsg.FullData = fullData
+	return signedMsg, nil
+}
+
+func isSSV002FaultRoundChangeSignInjected() bool {
+	v := strings.TrimSpace(os.Getenv("SSV_002_FAULT"))
+	if v == "" {
+		return false
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "on", "active":
+		return true
+	default:
+		return false
+	}
 }
