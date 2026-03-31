@@ -249,10 +249,13 @@ func (eh *EventHandler) handleShareCreation(
 			return nil, fmt.Errorf("could not add share encrypted key: %w", err)
 		}
 
-		// Set the minimum participation epoch to match slashing protection.
+		// Set the minimum participation epoch to match slashing protection. The estimated current epoch
+		// is used as the base here because we don't know if another instance of our operator has been
+		// running in the past and potentially signed something conflicting, so we err on the safe side.
+		//
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
-		// the minimum participation epoch
+		// the minimum participation epoch.
 		//
 		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
 		// because the node will crash and attempt to sync events again updating the participation epoch.
@@ -432,10 +435,13 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
-		// Set the minimum participation epoch to match slashing protection.
+		// Set the minimum participation epoch to match slashing protection. The estimated current epoch
+		// is used as the base here because we don't know if another instance of our operator has been
+		// running in the past and potentially signed something conflicting, so we err on the safe side.
+		//
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
-		// the minimum participation epoch
+		// the minimum participation epoch.
 		//
 		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
 		// because the node will crash and attempt to sync events again updating the participation epoch.

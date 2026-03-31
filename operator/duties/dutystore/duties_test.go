@@ -43,14 +43,14 @@ func TestDutiesSetAndQuery(t *testing.T) {
 	assert.ElementsMatch(t, []phase0.ValidatorIndex{1, 2}, indices)
 }
 
-func TestDutiesResetEpoch(t *testing.T) {
+func TestDutiesEraseEpochData(t *testing.T) {
 	duties := NewDuties[eth2apiv1.ProposerDuty]()
 	epoch := phase0.Epoch(1)
 	duties.Set(epoch, []StoreDuty[eth2apiv1.ProposerDuty]{
 		{Slot: 10, ValidatorIndex: 1, Duty: &eth2apiv1.ProposerDuty{}},
 	})
 
-	duties.ResetEpoch(epoch)
+	duties.EraseEpochData(epoch)
 	assert.False(t, duties.IsEpochSet(epoch))
 	assert.Nil(t, duties.CommitteeSlotDuties(epoch, 10))
 	assert.Nil(t, duties.ValidatorDuty(epoch, 10, 1))

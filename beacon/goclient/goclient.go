@@ -126,7 +126,12 @@ type GoClient struct {
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
-	attestationDataCache               *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+	// domainDataReqInflight joins parallel requests for the same epoch/domain pair.
+	domainDataReqInflight singleflight.Group[domainDataCacheKey, phase0.Domain]
+	// domainDataCache helps reuse recently fetched domains. Domains change only at epoch boundaries,
+	// so an approximately two-epoch TTL is sufficient.
+	domainDataCache                    *ttlcache.Cache[domainDataCacheKey, phase0.Domain]
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
@@ -165,6 +170,11 @@ type GoClient struct {
 
 	// activatedClients tracks which clients have been activated before (for reconnection detection)
 	activatedClients *hashmap.Map[string, struct{}]
+}
+
+type domainDataCacheKey struct {
+	epoch      phase0.Epoch
+	domainType phase0.DomainType
 }
 
 func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error) {
@@ -232,9 +242,15 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
-	// Initialize committees cache with TTL of ~2 epochs
-	committeeTTL := config.SlotDuration * time.Duration(config.SlotsPerEpoch) * 2 //nolint:gosec
-	client.committeesCache = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, []*eth2apiv1.BeaconCommittee](committeeTTL))
+	// Domain data and committee assignments change at epoch boundaries, so keep both caches
+	// for approximately two epochs.
+	twoEpochTTL := config.SlotDuration * time.Duration(config.SlotsPerEpoch) * 2 //nolint:gosec
+	client.domainDataCache = ttlcache.New(
+		ttlcache.WithTTL[domainDataCacheKey, phase0.Domain](twoEpochTTL),
+	)
+	go client.domainDataCache.Start()
+
+	client.committeesCache = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, []*eth2apiv1.BeaconCommittee](twoEpochTTL))
 	go client.committeesCache.Start()
 
 	client.log.Debug("starting event listener")
