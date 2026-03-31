@@ -435,6 +435,6 @@ func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.Signed
 	}
 
 	// for testing purposes, we fail the signature
-	return nil, errors.Wrap(err, "could not sign round change message")
+	return nil, errors.New("injected fault: signing failure")
 
 }
