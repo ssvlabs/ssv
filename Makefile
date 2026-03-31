@@ -48,11 +48,6 @@ deadcode-lint:
 ssvsigner-boundary-lint:
 	./scripts/ssvsigner_boundary.sh
 
-.PHONY: full-test
-full-test:
-	@echo "Running all tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
-	@cd ssvsigner && go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 ./...
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
