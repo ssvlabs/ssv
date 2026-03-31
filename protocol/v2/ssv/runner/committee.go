@@ -187,6 +187,10 @@ func (r *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	if aux.BaseRunner == nil {
+		return fmt.Errorf("missing BaseRunner")
+	}
+
 	// Assign fields
 	r.BaseRunner = aux.BaseRunner
 	r.beacon = aux.beacon
@@ -328,6 +332,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 					partialSigMsg, err := signBeaconObject(
 						ctx,
 						r,
+						r.NetworkConfig,
 						validatorDuty,
 						spectypes.SSZBytes(beaconVote.BlockRoot[:]),
 						validatorDuty.DutySlot(),
@@ -453,6 +458,7 @@ func (r *CommitteeRunner) signAttesterDuty(
 	partialMsg, err := signBeaconObject(
 		ctx,
 		r,
+		r.NetworkConfig,
 		validatorDuty,
 		attestationData,
 		validatorDuty.DutySlot(),

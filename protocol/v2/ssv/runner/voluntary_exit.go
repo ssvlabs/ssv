@@ -169,6 +169,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	msg, err := signBeaconObject(
 		ctx,
 		r,
+		r.NetworkConfig,
 		duty.(*spectypes.ValidatorDuty),
 		voluntaryExit,
 		duty.DutySlot(),
@@ -269,6 +270,10 @@ func (r *VoluntaryExitRunner) UnmarshalJSON(data []byte) error {
 	aux := &voluntaryExitRunnerJSON{}
 	if err := json.Unmarshal(data, aux); err != nil {
 		return err
+	}
+
+	if aux.BaseRunner == nil {
+		return fmt.Errorf("missing BaseRunner")
 	}
 
 	r.BaseRunner = aux.BaseRunner

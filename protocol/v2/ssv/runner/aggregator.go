@@ -213,6 +213,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	msg, err := signBeaconObject(
 		ctx,
 		r,
+		r.NetworkConfig,
 		r.State.CurrentDuty.(*spectypes.ValidatorDuty),
 		aggregateAndProofHashRoot,
 		decidedValue.Duty.Slot,
@@ -388,6 +389,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	msg, err := signBeaconObject(
 		ctx,
 		r,
+		r.NetworkConfig,
 		duty.(*spectypes.ValidatorDuty),
 		spectypes.SSZUint64(duty.DutySlot()),
 		duty.DutySlot(),
@@ -462,15 +464,15 @@ func (r *AggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 func (r *AggregatorRunner) MarshalJSON() ([]byte, error) {
 	type aggregatorRunnerJSON struct {
 		BaseRunner *BaseRunner `json:"BaseRunner"`
-		// ValCheck is intentionally marshaled to preserve the historical runner state JSON shape
+		// ValCheck is intentionally kept in the JSON to preserve the historical runner state shape
 		// (and thus runner state roots used by spec tests). It is a runtime-only dependency and
-		// is ignored on decode.
+		// is ignored on decode, so it is always marshaled as `null` for determinism.
 		ValCheck any `json:"ValCheck"`
 	}
 
 	return json.Marshal(&aggregatorRunnerJSON{
 		BaseRunner: r.BaseRunner,
-		ValCheck:   r.ValCheck,
+		ValCheck:   nil,
 	})
 }
 
@@ -483,6 +485,10 @@ func (r *AggregatorRunner) UnmarshalJSON(data []byte) error {
 	aux := &aggregatorRunnerJSON{}
 	if err := json.Unmarshal(data, aux); err != nil {
 		return err
+	}
+
+	if aux.BaseRunner == nil {
+		return fmt.Errorf("missing BaseRunner")
 	}
 
 	r.BaseRunner = aux.BaseRunner

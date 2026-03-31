@@ -188,6 +188,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	msg, err := signBeaconObject(
 		ctx,
 		r,
+		r.NetworkConfig,
 		duty.(*spectypes.ValidatorDuty),
 		vr,
 		duty.DutySlot(),
@@ -300,6 +301,10 @@ func (r *ValidatorRegistrationRunner) UnmarshalJSON(data []byte) error {
 	aux := &validatorRegistrationRunnerJSON{}
 	if err := json.Unmarshal(data, aux); err != nil {
 		return err
+	}
+
+	if aux.BaseRunner == nil {
+		return fmt.Errorf("missing BaseRunner")
 	}
 
 	r.BaseRunner = aux.BaseRunner

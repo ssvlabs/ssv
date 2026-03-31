@@ -58,14 +58,21 @@ func TestAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	beforeRoot, err := r.GetRoot()
+	require.NoError(t, err)
+
 	data, err := r.Encode()
 	require.NoError(t, err)
-	require.Contains(t, string(data), "\"ValCheck\"")
+	require.Contains(t, string(data), "\"ValCheck\":null")
 
 	var decoded AggregatorRunner
 	require.NoError(t, decoded.Decode(data))
 	decoded.NetworkConfig = cloneTestNetworkConfig()
 
+	afterRoot, err := decoded.GetRoot()
+	require.NoError(t, err)
+
+	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleAggregator, decoded.GetRole())
 	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
@@ -96,14 +103,21 @@ func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
 	require.NoError(t, err)
 
 	r := runnerIface.(*ProposerRunner)
+	beforeRoot, err := r.GetRoot()
+	require.NoError(t, err)
+
 	data, err := r.Encode()
 	require.NoError(t, err)
-	require.Contains(t, string(data), "\"ValCheck\"")
+	require.Contains(t, string(data), "\"ValCheck\":null")
 
 	var decoded ProposerRunner
 	require.NoError(t, decoded.Decode(data))
 	decoded.NetworkConfig = cloneTestNetworkConfig()
 
+	afterRoot, err := decoded.GetRoot()
+	require.NoError(t, err)
+
+	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleProposer, decoded.GetRole())
 	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
@@ -130,14 +144,21 @@ func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	require.NoError(t, err)
 
 	r := runnerIface.(*SyncCommitteeAggregatorRunner)
+	beforeRoot, err := r.GetRoot()
+	require.NoError(t, err)
+
 	data, err := r.Encode()
 	require.NoError(t, err)
-	require.Contains(t, string(data), "\"ValCheck\"")
+	require.Contains(t, string(data), "\"ValCheck\":null")
 
 	var decoded SyncCommitteeAggregatorRunner
 	require.NoError(t, decoded.Decode(data))
 	decoded.NetworkConfig = cloneTestNetworkConfig()
 
+	afterRoot, err := decoded.GetRoot()
+	require.NoError(t, err)
+
+	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleSyncCommitteeContribution, decoded.GetRole())
 	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
