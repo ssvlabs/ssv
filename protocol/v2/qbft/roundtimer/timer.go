@@ -196,9 +196,10 @@ func (t *RoundTimer) OnTimeout(height specqbft.Height, callback OnRoundTimeoutF)
 	}
 }
 
-// TimeoutForRound stops any running timer and schedules a callback for the given round.
-// If the callback is not yet registered for this duty's height (nil or stale from a
-// previous duty), the request is deferred until OnTimeout registers the correct callback.
+// TimeoutForRound stops any running timer, waits for any in-flight callback to
+// finish, and schedules a new callback for the given round. If the callback is
+// not yet registered for this duty's height (nil or stale from a previous duty),
+// the request is deferred until OnTimeout registers the correct callback.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
 	if t.ctx.Err() != nil {
 		return
