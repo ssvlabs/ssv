@@ -166,13 +166,17 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
-			refetchCurrentEpoch := reorgEvent.PreviousDutyDependentRootChanged
 
 			logger := h.logger.With(
 				zap.String("epoch_slot_pos", buildStr),
 				zap.Uint64("current_epoch", uint64(currentEpoch)),
 				zap.Uint64("current_slot", uint64(currentSlot)),
 			)
+
+			// Attester duties for the current epoch are determined by the "previous duty dependent root",
+			// so we re-fetch the current epoch only if it has changed. The next epoch is always re-fetched
+			// on any reorg to ensure we have the up-to-date duties for all validators.
+			refetchCurrentEpoch := reorgEvent.PreviousDutyDependentRootChanged
 
 			logger.Info("🔀 reorg event received",
 				zap.Any("event", reorgEvent),
@@ -188,9 +192,6 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				defer cancel()
 
 				// 1) Declare intents.
-				// Attester duties for the current epoch are determined by the previous duty dependent root,
-				// so we re-fetch the current epoch only if it has changed. The next epoch is always re-fetched
-				// on any reorg to ensure we have the up-to-date duties for all validators.
 				if refetchCurrentEpoch {
 					h.dutyFetchIntents[currentEpoch] = false
 				}
