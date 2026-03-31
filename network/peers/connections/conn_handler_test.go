@@ -21,6 +21,7 @@ func TestConnHandlerHandleOutboundConnection(t *testing.T) {
 	peerInfos := peers.NewPeerInfoIndex()
 	discoveredPeers := ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute)
 	discoveredPeers.Set(pid, discovery.DiscoveredPeer{})
+	connIdx := &mock.MockConnectionIndex{}
 
 	handshaker := &testHandshaker{}
 	handler := NewConnHandler(
@@ -29,7 +30,7 @@ func TestConnHandlerHandleOutboundConnection(t *testing.T) {
 		handshaker,
 		func() commons.Subnets { return commons.ZeroSubnets },
 		peers.NewSubnetsIndex(),
-		&mock.MockConnectionIndex{},
+		connIdx,
 		peerInfos,
 		discoveredPeers,
 	)
@@ -47,7 +48,75 @@ func TestConnHandlerHandleOutboundConnection(t *testing.T) {
 		return peerInfos.State(pid) == peers.StateConnected
 	}, 3*time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, handshaker.CallCount())
-	require.False(t, discoveredPeers.Has(pid))
+	require.Eventually(t, func() bool {
+		return !discoveredPeers.Has(pid)
+	}, 3*time.Second, 10*time.Millisecond)
+}
+
+func TestConnHandlerHandleOutboundConnectionHandshakeFailureDisconnects(t *testing.T) {
+	pid := peer.ID("peer-outbound-fail")
+	peerInfos := peers.NewPeerInfoIndex()
+	handshaker := &testHandshaker{err: errTestHandshake}
+	handler := NewConnHandler(
+		t.Context(),
+		zap.NewNop(),
+		handshaker,
+		func() commons.Subnets { return commons.ZeroSubnets },
+		peers.NewSubnetsIndex(),
+		&mock.MockConnectionIndex{},
+		peerInfos,
+		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+	)
+
+	net := newTestNetwork()
+	conn := &testConn{
+		remotePeer:      pid,
+		remoteMultiaddr: mustMultiaddr("/ip4/127.0.0.1/tcp/13010"),
+		stats:           libp2pnetwork.ConnStats{Stats: libp2pnetwork.Stats{Direction: libp2pnetwork.DirOutbound}},
+	}
+
+	handler.Handle().ConnectedF(net, conn)
+
+	require.Eventually(t, func() bool {
+		return len(net.ClosedPeers()) == 1
+	}, 3*time.Second, 10*time.Millisecond)
+	require.Equal(t, []peer.ID{pid}, net.ClosedPeers())
+	require.Never(t, func() bool {
+		return peerInfos.State(pid) == peers.StateConnected
+	}, 250*time.Millisecond, 10*time.Millisecond)
+}
+
+func TestConnHandlerHandleOutboundConnectionRejectsAtLimit(t *testing.T) {
+	pid := peer.ID("peer-outbound-at-limit")
+	peerInfos := peers.NewPeerInfoIndex()
+	handshaker := &testHandshaker{}
+	handler := NewConnHandler(
+		t.Context(),
+		zap.NewNop(),
+		handshaker,
+		func() commons.Subnets { return commons.ZeroSubnets },
+		peers.NewSubnetsIndex(),
+		&mock.MockConnectionIndex{LimitValue: true},
+		peerInfos,
+		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+	)
+
+	net := newTestNetwork()
+	conn := &testConn{
+		remotePeer:      pid,
+		remoteMultiaddr: mustMultiaddr("/ip4/127.0.0.1/tcp/13011"),
+		stats:           libp2pnetwork.ConnStats{Stats: libp2pnetwork.Stats{Direction: libp2pnetwork.DirOutbound}},
+	}
+
+	handler.Handle().ConnectedF(net, conn)
+
+	require.Eventually(t, func() bool {
+		return len(net.ClosedPeers()) == 1
+	}, 3*time.Second, 10*time.Millisecond)
+	require.Equal(t, []peer.ID{pid}, net.ClosedPeers())
+	require.Never(t, func() bool {
+		return peerInfos.State(pid) == peers.StateConnected
+	}, 250*time.Millisecond, 10*time.Millisecond)
 }
 
 func TestConnHandlerHandleDeduplicatesConcurrentOutboundHandshakes(t *testing.T) {
@@ -98,6 +167,7 @@ func TestConnHandlerHandleInboundConnectionWaitsForHandshake(t *testing.T) {
 	pid := peer.ID("peer-inbound")
 	peerInfos := peers.NewPeerInfoIndex()
 	subnetsIndex := peers.NewSubnetsIndex()
+	handshaker := &testHandshaker{}
 	mySubnets := commons.ZeroSubnets
 	mySubnets.Set(1)
 	peerSubnets := commons.ZeroSubnets
@@ -107,7 +177,7 @@ func TestConnHandlerHandleInboundConnectionWaitsForHandshake(t *testing.T) {
 	handler := NewConnHandler(
 		t.Context(),
 		zap.NewNop(),
-		&testHandshaker{},
+		handshaker,
 		func() commons.Subnets { return mySubnets },
 		subnetsIndex,
 		&mock.MockConnectionIndex{},
@@ -123,18 +193,24 @@ func TestConnHandlerHandleInboundConnectionWaitsForHandshake(t *testing.T) {
 		stats:           libp2pnetwork.ConnStats{Stats: libp2pnetwork.Stats{Direction: libp2pnetwork.DirInbound}},
 	}
 
-	handler.Handle().ConnectedF(net, conn)
+	bundle := handler.Handle()
+	bundle.ConnectedF(net, conn)
 
-	time.AfterFunc(100*time.Millisecond, func() {
-		peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
-			info.LastHandshake = time.Now()
-			info.LastHandshakeError = nil
-		})
+	require.Eventually(t, func() bool {
+		return peerInfos.State(pid) == peers.StateDisconnected
+	}, 3*time.Second, 10*time.Millisecond)
+	require.NotEqual(t, peers.StateConnected, peerInfos.State(pid))
+	require.Equal(t, 0, handshaker.CallCount(), "inbound path must not initiate handshake")
+
+	peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
+		info.LastHandshake = time.Now().Add(time.Hour)
+		info.LastHandshakeError = nil
 	})
 
 	require.Eventually(t, func() bool {
 		return peerInfos.State(pid) == peers.StateConnected
 	}, 3*time.Second, 10*time.Millisecond)
+	require.Equal(t, 0, handshaker.CallCount(), "inbound path must not initiate handshake")
 	require.Empty(t, net.ClosedPeers())
 }
 
@@ -142,6 +218,7 @@ func TestConnHandlerHandleInboundConnectionRejectsPeerWithoutSharedSubnets(t *te
 	pid := peer.ID("peer-inbound-no-shared")
 	peerInfos := peers.NewPeerInfoIndex()
 	subnetsIndex := peers.NewSubnetsIndex()
+	handshaker := &testHandshaker{}
 	mySubnets := commons.ZeroSubnets
 	mySubnets.Set(1)
 	peerSubnets := commons.ZeroSubnets
@@ -151,7 +228,7 @@ func TestConnHandlerHandleInboundConnectionRejectsPeerWithoutSharedSubnets(t *te
 	handler := NewConnHandler(
 		t.Context(),
 		zap.NewNop(),
-		&testHandshaker{},
+		handshaker,
 		func() commons.Subnets { return mySubnets },
 		subnetsIndex,
 		&mock.MockConnectionIndex{},
@@ -167,19 +244,25 @@ func TestConnHandlerHandleInboundConnectionRejectsPeerWithoutSharedSubnets(t *te
 		stats:           libp2pnetwork.ConnStats{Stats: libp2pnetwork.Stats{Direction: libp2pnetwork.DirInbound}},
 	}
 
-	handler.Handle().ConnectedF(net, conn)
+	bundle := handler.Handle()
+	bundle.ConnectedF(net, conn)
 
-	time.AfterFunc(100*time.Millisecond, func() {
-		peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
-			info.LastHandshake = time.Now()
-			info.LastHandshakeError = nil
-		})
+	require.Eventually(t, func() bool {
+		return peerInfos.State(pid) == peers.StateDisconnected
+	}, 3*time.Second, 10*time.Millisecond)
+	require.NotEqual(t, peers.StateConnected, peerInfos.State(pid))
+	require.Equal(t, 0, handshaker.CallCount(), "inbound path must not initiate handshake")
+
+	peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
+		info.LastHandshake = time.Now().Add(time.Hour)
+		info.LastHandshakeError = nil
 	})
 
 	require.Eventually(t, func() bool {
 		return len(net.ClosedPeers()) == 1
 	}, 3*time.Second, 10*time.Millisecond)
 	require.Equal(t, []peer.ID{pid}, net.ClosedPeers())
+	require.Equal(t, 0, handshaker.CallCount(), "inbound path must not initiate handshake")
 	require.Equal(t, peers.StateDisconnected, peerInfos.State(pid))
 }
 
@@ -198,6 +281,7 @@ func TestConnHandlerDisconnectedF(t *testing.T) {
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
 	)
+	bundle := handler.Handle()
 
 	net := newTestNetwork()
 	conn := &testConn{
@@ -207,12 +291,76 @@ func TestConnHandlerDisconnectedF(t *testing.T) {
 	}
 
 	net.connectedness[pid] = libp2pnetwork.Connected
-	handler.Handle().DisconnectedF(net, conn)
+	bundle.DisconnectedF(net, conn)
 	require.Equal(t, peers.StateConnected, peerInfos.State(pid))
 
 	net.connectedness[pid] = libp2pnetwork.NotConnected
-	handler.Handle().DisconnectedF(net, conn)
+	bundle.DisconnectedF(net, conn)
 	require.Equal(t, peers.StateDisconnected, peerInfos.State(pid))
+}
+
+func TestConnHandlerHandleIgnoresAlreadyConnectedPeer(t *testing.T) {
+	pid := peer.ID("peer-already-connected")
+	peerInfos := peers.NewPeerInfoIndex()
+	peerInfos.SetState(pid, peers.StateConnected)
+	handshaker := &testHandshaker{}
+	handler := NewConnHandler(
+		t.Context(),
+		zap.NewNop(),
+		handshaker,
+		func() commons.Subnets { return commons.ZeroSubnets },
+		peers.NewSubnetsIndex(),
+		&mock.MockConnectionIndex{},
+		peerInfos,
+		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+	)
+
+	net := newTestNetwork()
+	conn := &testConn{
+		remotePeer:      pid,
+		remoteMultiaddr: mustMultiaddr("/ip4/127.0.0.1/tcp/13012"),
+		stats:           libp2pnetwork.ConnStats{Stats: libp2pnetwork.Stats{Direction: libp2pnetwork.DirOutbound}},
+	}
+
+	handler.Handle().ConnectedF(net, conn)
+
+	require.Never(t, func() bool {
+		return handshaker.CallCount() > 0
+	}, 250*time.Millisecond, 10*time.Millisecond)
+	require.Empty(t, net.ClosedPeers())
+	require.Equal(t, peers.StateConnected, peerInfos.State(pid))
+}
+
+func TestConnHandlerHandleIgnoresAlreadyConnectingPeer(t *testing.T) {
+	pid := peer.ID("peer-already-connecting")
+	peerInfos := peers.NewPeerInfoIndex()
+	peerInfos.SetState(pid, peers.StateConnecting)
+	handshaker := &testHandshaker{}
+	handler := NewConnHandler(
+		t.Context(),
+		zap.NewNop(),
+		handshaker,
+		func() commons.Subnets { return commons.ZeroSubnets },
+		peers.NewSubnetsIndex(),
+		&mock.MockConnectionIndex{},
+		peerInfos,
+		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+	)
+
+	net := newTestNetwork()
+	conn := &testConn{
+		remotePeer:      pid,
+		remoteMultiaddr: mustMultiaddr("/ip4/127.0.0.1/tcp/13013"),
+		stats:           libp2pnetwork.ConnStats{Stats: libp2pnetwork.Stats{Direction: libp2pnetwork.DirOutbound}},
+	}
+
+	handler.Handle().ConnectedF(net, conn)
+
+	require.Never(t, func() bool {
+		return handshaker.CallCount() > 0
+	}, 250*time.Millisecond, 10*time.Millisecond)
+	require.Empty(t, net.ClosedPeers())
+	require.Equal(t, peers.StateConnecting, peerInfos.State(pid))
 }
 
 func TestConnHandlerSharesEnoughSubnets(t *testing.T) {

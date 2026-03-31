@@ -24,6 +24,12 @@ func TestConnGaterInterceptAddrDial(t *testing.T) {
 	require.True(t, gater.InterceptAddrDial("good-peer", mustMultiaddr("/ip4/127.0.0.1/tcp/13000")))
 }
 
+func TestConnGaterInterceptPeerDial(t *testing.T) {
+	gater := &connGater{}
+
+	require.True(t, gater.InterceptPeerDial("peer"))
+}
+
 func TestConnGaterInterceptAcceptHonorsLimits(t *testing.T) {
 	t.Run("disabled bypasses limits", func(t *testing.T) {
 		gater := &connGater{
@@ -105,4 +111,12 @@ func TestConnGaterInterceptSecured(t *testing.T) {
 	require.False(t, gater.InterceptSecured(libp2pnetwork.DirInbound, "trimmed-peer", nil))
 	require.False(t, gater.InterceptSecured(libp2pnetwork.DirInbound, "bad-peer", nil))
 	require.True(t, gater.InterceptSecured(libp2pnetwork.DirOutbound, "good-peer", nil))
+}
+
+func TestConnGaterInterceptUpgraded(t *testing.T) {
+	gater := &connGater{}
+
+	allowed, reason := gater.InterceptUpgraded(&testConn{})
+	require.True(t, allowed)
+	require.Zero(t, reason)
 }

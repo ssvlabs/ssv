@@ -2,6 +2,7 @@ package peers
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -15,10 +16,13 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 )
 
+var errTestClosePeer = errors.New("test close peer error")
+
 type testNetwork struct {
-	mu          sync.Mutex
-	peers       []peer.ID
-	closedPeers []peer.ID
+	mu            sync.Mutex
+	peers         []peer.ID
+	closedPeers   []peer.ID
+	closePeerErrs map[peer.ID]error
 }
 
 func (n *testNetwork) Peerstore() peerstore.Peerstore { return nil }
@@ -31,6 +35,9 @@ func (n *testNetwork) ClosePeer(id peer.ID) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	if err := n.closePeerErrs[id]; err != nil {
+		return err
+	}
 	n.closedPeers = append(n.closedPeers, id)
 	return nil
 }
@@ -184,4 +191,35 @@ func TestConnManagerDisconnectFromIrrelevantPeersDisconnectsPeersWithUnknownSubn
 
 	require.Equal(t, 2, disconnected)
 	require.Equal(t, []peer.ID{unknownPeer, irrelevantPeer}, net.ClosedPeers())
+}
+
+func TestConnManagerDisconnectFromIrrelevantPeersDoesNotCountCloseErrorsAgainstQuota(t *testing.T) {
+	p1 := peer.ID("peer-1")
+	p2 := peer.ID("peer-2")
+	p3 := peer.ID("peer-3")
+
+	mySubnets := commons.ZeroSubnets
+	mySubnets.Set(1)
+	irrelevantSubnets := commons.ZeroSubnets
+	irrelevantSubnets.Set(2)
+
+	subnetsIdx := NewSubnetsIndex()
+	subnetsIdx.UpdatePeerSubnets(p1, irrelevantSubnets)
+	subnetsIdx.UpdatePeerSubnets(p2, irrelevantSubnets)
+	subnetsIdx.UpdatePeerSubnets(p3, irrelevantSubnets)
+
+	manager := connManager{
+		logger:     zap.NewNop(),
+		subnetsIdx: subnetsIdx,
+	}
+	net := &testNetwork{
+		closePeerErrs: map[peer.ID]error{
+			p1: errTestClosePeer,
+		},
+	}
+
+	disconnected := manager.DisconnectFromIrrelevantPeers(2, net, []peer.ID{p1, p2, p3}, mySubnets)
+
+	require.Equal(t, 2, disconnected)
+	require.Equal(t, []peer.ID{p2, p3}, net.ClosedPeers())
 }

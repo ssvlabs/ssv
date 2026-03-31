@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -20,6 +21,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
+
+var errTestHandshake = errors.New("test handshake error")
 
 type testConn struct {
 	remotePeer      peer.ID
