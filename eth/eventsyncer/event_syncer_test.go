@@ -191,7 +191,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	db *pebble.DB,
+	db *pebble.DBTemporary,
 	nodeStorage operatorstorage.Storage,
 	operatorData *registrystorage.OperatorData,
 	privateKey keys.OperatorPrivateKey,

@@ -700,7 +700,7 @@ func generateMaxPossibleShare() (*Share, error) {
 }
 
 type testStorage struct {
-	db             *pebble.DB
+	db             *pebble.DBTemporary
 	Operators      Operators
 	Shares         Shares
 	ValidatorStore ValidatorStore
