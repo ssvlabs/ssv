@@ -157,14 +157,17 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
-			refetchCurrentEpoch := reorgEvent.CurrentDutyDependentRootChanged ||
-				(reorgEvent.PreviousDutyDependentRootChanged && reorgEvent.EpochTransition)
 
 			logger := h.logger.With(
 				zap.String("epoch_slot_pos", buildStr),
 				zap.Uint64("current_epoch", uint64(currentEpoch)),
 				zap.Uint64("current_slot", uint64(currentSlot)),
 			)
+
+			// Proposer duties for the current epoch are determined by the "current duty dependent root",
+			// so we re-fetch the current epoch only if it has changed. The next epoch is always re-fetched
+			// on any reorg to ensure we have the up-to-date duties for all validators.
+			refetchCurrentEpoch := reorgEvent.CurrentDutyDependentRootChanged
 
 			logger.Info("🔀 reorg event received",
 				zap.Any("event", reorgEvent),
@@ -179,8 +182,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
 				defer cancel()
 
-				// Reorg with "CurrentDutyDependentRoot changed in the same epoch", or "PreviousDutyDependentRoot changed during the epoch transition" potentially affects duties for the current epoch.
-				// Any reorg always potentially affects duties for the next epoch.
+				// 1) Declare intents.
 				if refetchCurrentEpoch {
 					h.dutyFetchIntents[currentEpoch] = false
 				}

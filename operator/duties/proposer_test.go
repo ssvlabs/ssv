@@ -466,8 +466,8 @@ func TestScheduler_Proposer_Reorg_Previous_Indices_Changed(t *testing.T) {
 	})
 }
 
-// reorg previous dependent root changed
-func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
+// reorg current dependent root changed during epoch transition
+func TestScheduler_Proposer_Reorg_Epoch_Transition(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
 			handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
@@ -500,7 +500,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		e := &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch*2 - 1,
-				CurrentDutyDependentRoot:  phase0.Root{0x01},
+				Block:                     phase0.Root{0x03},
+				CurrentDutyDependentRoot:  phase0.Root{0x02},
 				PreviousDutyDependentRoot: phase0.Root{0x01},
 			},
 		}
@@ -516,6 +517,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch * 2,
+				Block:                     phase0.Root{0x05},
+				CurrentDutyDependentRoot:  phase0.Root{0x04},
 				PreviousDutyDependentRoot: phase0.Root{0x02},
 			},
 		}
@@ -527,7 +530,9 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			},
 		})
 
-		// The HandleHeadEvent should set the EpochTransition and PreviousDutyDependentRootChanged to true, allowing for refetching the duties in current Epoch
+		// The HandleHeadEvent should set the CurrentDutyDependentRootChanged to true due to the latest event.Block
+		// from the last epoch not matching the CurrentDutyDependentRoot on this event, allowing for refetching the
+		// duties in current Epoch.
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
@@ -557,8 +562,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	})
 }
 
-// reorg previous dependent root changed and the indices changed as well
-func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition_Indices_Changed(t *testing.T) {
+// reorg current dependent root changed during epoch transition, and the indices changed as well
+func TestScheduler_Proposer_Reorg_Epoch_Transition_Indices_Changed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var (
 			handler       = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty](), false)
@@ -589,7 +594,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		e := &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch*2 - 1,
-				CurrentDutyDependentRoot:  phase0.Root{0x01},
+				Block:                     phase0.Root{0x03},
+				CurrentDutyDependentRoot:  phase0.Root{0x02},
 				PreviousDutyDependentRoot: phase0.Root{0x01},
 			},
 		}
@@ -606,6 +612,8 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		e = &eth2apiv1.Event{
 			Data: &eth2apiv1.HeadEvent{
 				Slot:                      testSlotsPerEpoch * 2,
+				Block:                     phase0.Root{0x05},
+				CurrentDutyDependentRoot:  phase0.Root{0x04},
 				PreviousDutyDependentRoot: phase0.Root{0x02},
 			},
 		}
@@ -617,7 +625,9 @@ func TestScheduler_Proposer_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 			},
 		})
 
-		// The HandleHeadEvent should set the EpochTransition and PreviousDutyDependentRootChanged to true, allowing for refetching the duties in current Epoch
+		// The HandleHeadEvent should set the CurrentDutyDependentRootChanged to true due to the latest event.Block
+		// from the last epoch not matching the CurrentDutyDependentRoot on this event, allowing for refetching the
+		// duties in current Epoch.
 		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
