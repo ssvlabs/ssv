@@ -1038,13 +1038,13 @@ func TestScheduler_Proposer_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 - 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
-		// STEP 2: wait for duties to be fetched for the next epoch
+		// STEP 3: wait for duties to be fetched for the next epoch
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2-1))
 		waitForDuties.Set(true)
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 - 1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
-		// STEP 3: wait for proposer duties to be executed
+		// STEP 4: wait for proposer duties to be executed
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedProposerDuties(handler, duties)

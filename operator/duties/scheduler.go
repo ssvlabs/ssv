@@ -379,7 +379,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 			return
 		}
 		if event.Slot > s.beaconConfig.EstimatedCurrentSlot() {
-			// We don't handle future events to keep things simpple.
+			// We don't handle future events to keep things simple.
 			logger.Warn("got future head event from EL, most likely cause is clock-skew between SSV node and EL")
 			return
 		}
