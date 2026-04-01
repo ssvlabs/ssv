@@ -655,6 +655,7 @@ var StartNodeCmd = &cobra.Command{
 			if err := p2pNetwork.Start(); err != nil {
 				logger.Fatal("failed to start network", zap.Error(err))
 			}
+			nodeProber.AddNode(p2pNodeName, p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
 
 		if cfg.SSVAPIPort > 0 {

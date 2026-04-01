@@ -70,6 +70,11 @@ type HostProvider interface {
 	Host() host.Host
 }
 
+// HealthChecker provides health checking capability for the node prober.
+type HealthChecker interface {
+	Healthy(ctx context.Context) error
+}
+
 // p2pNetwork implements network.P2PNetwork
 type p2pNetwork struct {
 	parentCtx context.Context
@@ -79,18 +84,19 @@ type p2pNetwork struct {
 	logger *zap.Logger
 	cfg    *Config
 
-	host         host.Host
-	streamCtrl   streams.StreamController
-	idx          peers.Index
-	isIdxSet     atomic.Bool
-	disc         discovery.Service
-	topicsCtrl   topics.Controller
-	msgRouter    network.MessageRouter
-	msgResolver  topics.MsgPeersResolver
-	msgValidator validation.MessageValidator
-	connHandler  connections.ConnHandler
-	connGater    connmgrcore.ConnectionGater
-	trustedPeers []*peer.AddrInfo
+	host            host.Host
+	streamCtrl      streams.StreamController
+	idx             peers.Index
+	isIdxSet        atomic.Bool
+	discoveryFailed atomic.Bool
+	disc            discovery.Service
+	topicsCtrl      topics.Controller
+	msgRouter       network.MessageRouter
+	msgResolver     topics.MsgPeersResolver
+	msgValidator    validation.MessageValidator
+	connHandler     connections.ConnHandler
+	connGater       connmgrcore.ConnectionGater
+	trustedPeers    []*peer.AddrInfo
 
 	state int32
 
@@ -120,6 +126,8 @@ type p2pNetwork struct {
 	// are removed from this map after some time passes)
 	trimmedRecently *ttl.Map[peer.ID, struct{}]
 }
+
+var _ HealthChecker = (*p2pNetwork)(nil)
 
 // New creates a new p2p network
 func New(
@@ -459,6 +467,7 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
+		n.discoveryFailed.Store(true)
 		n.logger.Error("could not setup discovery", zap.Error(err))
 		return
 	}
@@ -466,6 +475,21 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 
 func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
+}
+
+// Healthy reports whether the p2p network is operating normally.
+// It satisfies the nodeprobe health-check interface.
+func (n *p2pNetwork) Healthy(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !n.isReady() {
+		return fmt.Errorf("p2p network not ready")
+	}
+	if n.discoveryFailed.Load() {
+		return fmt.Errorf("discovery bootstrap failed")
+	}
+	return nil
 }
 
 // UpdateSubnets will update the registered subnets according to active validators
