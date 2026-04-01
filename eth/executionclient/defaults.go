@@ -13,4 +13,7 @@ const (
 	DefaultHealthInvalidationInterval = 10 * time.Second
 
 	DefaultSyncDistanceTolerance = 5
+
+	DefaultBloomRetryAttempts = 3
+	DefaultBloomRetryDelay    = 2 * time.Second
 )
