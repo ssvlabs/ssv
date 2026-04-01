@@ -367,18 +367,22 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 // HandleHeadEvent handles the "head" events from the beacon node.
 func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1.HeadEvent) {
 	return func(ctx context.Context, event *eth2apiv1.HeadEvent) {
-		if event.Slot != s.beaconConfig.EstimatedCurrentSlot() {
-			// No need to process outdated events here. Future events shouldn't be possible, unless there is
-			// a very large clock-drift - for simplicity, we don't handle this case either.
-			return
-		}
-
 		currentSlot := event.Slot
 		currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 		slotNumber := uint64(currentSlot)%s.beaconConfig.SlotsPerEpoch + 1
 
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
+
+		if event.Slot < s.beaconConfig.EstimatedCurrentSlot() {
+			// No need to process outdated events here.
+			return
+		}
+		if event.Slot > s.beaconConfig.EstimatedCurrentSlot() {
+			// We don't handle future events to keep things simpple.
+			logger.Warn("got future head event from EL, most likely cause is clock-skew between SSV node and EL")
+			return
+		}
 
 		// Check for reorg & fire corresponding ReorgEvent if needed.
 		if s.lastEpoch != 0 {
