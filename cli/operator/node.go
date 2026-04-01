@@ -3,6 +3,7 @@ package operator
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -1127,7 +1128,10 @@ func probeRemoteNetworkKeyProtector(
 	ctx context.Context,
 	client *ssvsigner.Client,
 ) error {
-	probeKey := []byte("p2p-network-key-probe")
+	probeKey := make([]byte, 32)
+	if _, err := crand.Read(probeKey); err != nil {
+		return fmt.Errorf("generate remote data protector probe: %w", err)
+	}
 	encrypted, err := client.OperatorEncrypt(ctx, probeKey)
 	if err != nil {
 		return fmt.Errorf("probe remote data protector encrypt: %w", err)

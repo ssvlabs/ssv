@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -50,6 +51,18 @@ func newTestSSVSignerClient(t *testing.T) *ssvsigner.Client {
 	t.Cleanup(server.Close)
 
 	return ssvsigner.NewClient(server.URL, ssvsigner.WithLogger(zap.NewNop()))
+}
+
+type getOverrideDB struct {
+	basedb.Database
+	getFn func(prefix []byte, key []byte) (basedb.Obj, bool, error)
+}
+
+func (db getOverrideDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+	if db.getFn != nil {
+		return db.getFn(prefix, key)
+	}
+	return db.Database.Get(prefix, key)
 }
 
 func TestSetupPrivateKey(t *testing.T) {
@@ -243,6 +256,51 @@ func TestSetupPrivateKey(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, gcrypto.FromECDSA(privateKey), storedAfter.Value)
+	})
+
+	t.Run("returns DB errors from GetNetworkKey even when key is not found", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		expectedErr := errors.New("db read failed")
+		p2pStorage := identityStore{
+			db: getOverrideDB{
+				Database: db,
+				getFn: func(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+					return basedb.Obj{}, false, expectedErr
+				},
+			},
+			logger: logger,
+		}
+
+		_, _, err = p2pStorage.GetNetworkKey(ctx)
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("returns decode-specific error when stored key cannot be decrypted", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		privateKey, err := gcrypto.HexToECDSA(sk)
+		require.NoError(t, err)
+
+		p2pStorage := identityStore{
+			db:     db,
+			logger: logger,
+			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
+				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+			},
+			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
+				return bytes.Repeat([]byte{0xff}, 32), nil
+			},
+		}
+
+		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+
+		_, err = p2pStorage.SetupNetworkKey(ctx, "")
+		require.ErrorContains(t, err, "decode network key")
 	})
 
 	t.Run("NewIdentityStore", func(t *testing.T) {

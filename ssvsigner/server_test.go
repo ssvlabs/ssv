@@ -456,6 +456,17 @@ func (s *ServerTestSuite) TestOperatorDataProtection() {
 		assert.Equal(t, payload, resp.Body())
 	})
 
+	t.Run("returns internal error when operator key derivation fails on decrypt", func(t *testing.T) {
+		s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
+			return nil, errors.New("derive failed")
+		}
+		defer func() { s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) { return encryptionKey, nil } }()
+
+		resp, err := s.ServeHTTP("POST", PathOperatorDecrypt, encryptedPayload)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	})
+
 	t.Run("returns internal error when operator key derivation fails", func(t *testing.T) {
 		s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
 			return nil, errors.New("derive failed")
@@ -469,6 +480,12 @@ func (s *ServerTestSuite) TestOperatorDataProtection() {
 
 	t.Run("returns bad request when encrypt payload is empty", func(t *testing.T) {
 		resp, err := s.ServeHTTP("POST", PathOperatorEncrypt, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	})
+
+	t.Run("returns bad request when decrypt payload is empty", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", PathOperatorDecrypt, nil)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 	})

@@ -59,11 +59,11 @@ func NewIdentityStore(
 
 func (s identityStore) GetNetworkKey(ctx context.Context) (*ecdsa.PrivateKey, bool, error) {
 	obj, found, err := s.db.Get(prefix, netKeyPrefix)
-	if !found {
-		return nil, false, nil
-	}
 	if err != nil {
 		return nil, found, err
+	}
+	if !found {
+		return nil, false, nil
 	}
 	pk, _, err := decodeNetworkKey(ctx, obj.Value, s.unprotectFn)
 	if err != nil {
@@ -88,7 +88,7 @@ func (s identityStore) SetupNetworkKey(ctx context.Context, skEncoded string) (*
 		if keyFound {
 			privateKey, encrypted, err = decodeNetworkKey(ctx, obj.Value, s.unprotectFn)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get privateKey: %w", err)
+				return nil, fmt.Errorf("decode network key: %w", err)
 			}
 			privateKey.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
 			found = true

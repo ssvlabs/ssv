@@ -34,7 +34,7 @@ func DecryptPayload(encryptionKey, nonceCipherText []byte) ([]byte, error) {
 		return nil, err
 	}
 	nonceSize := gcm.NonceSize()
-	if len(nonceCipherText) < nonceSize {
+	if len(nonceCipherText) <= nonceSize {
 		return nil, errors.New("malformed ciphertext")
 	}
 
