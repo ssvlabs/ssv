@@ -26,12 +26,13 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		// timeout for, in practice this should never happen - but we need to handle this just in case.
 		q := v.Queues[identifier.GetRoleType()]
 		if q == nil {
+			logger.Error("❗ couldn't schedule timeout event due to missing queue")
 			return
 		}
 
 		msg, err := v.createTimerMessage(identifier, height, round)
 		if err != nil {
-			logger.Error("❗ failed to create timer msg", zap.Error(err))
+			logger.Error("❌ failed to create timer msg", zap.Error(err))
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
@@ -82,12 +83,13 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		// This is also possible if the queue got pruned already (due to becoming old and irrelevant).
 		q := c.Queues[phase0.Slot(height)]
 		if q.Q == nil {
+			logger.Debug("couldn't schedule timeout event due to missing queue (likely was pruned)")
 			return
 		}
 
 		msg, err := c.createTimerMessage(identifier, height, round)
 		if err != nil {
-			logger.Error("❗ failed to create timer msg", zap.Error(err))
+			logger.Error("❌ failed to create timer msg", zap.Error(err))
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)

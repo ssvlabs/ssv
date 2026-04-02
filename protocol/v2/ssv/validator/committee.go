@@ -326,10 +326,12 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			c.mtx.RUnlock()
 			if !found {
 				// Old runners are pruned, timeout-event issuer is unaware of that - that's why we can end up here
+				logger.Debug("event message: timeout event arrived, but targeted runner not found (likely was pruned)")
 				return nil
 			}
 			if !dutyRunner.HasRunningDuty() {
 				// Duties terminate eventually, timeout-event issuer is unaware of that - that's why we can end up here
+				logger.Debug("event message: timeout event arrived after duty has finished")
 				return nil
 			}
 
