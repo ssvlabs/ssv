@@ -325,7 +325,12 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			dutyRunner, found := c.Runners[slot]
 			c.mtx.RUnlock()
 			if !found {
-				return fmt.Errorf("event message: no committee runner found for slot %d", slot)
+				// Old runners are pruned, timeout-event issuer is unaware of that - that's why we can end up here
+				return nil
+			}
+			if !dutyRunner.HasRunningDuty() {
+				// Duties terminate eventually, timeout-event issuer is unaware of that - that's why we can end up here
+				return nil
 			}
 
 			timeoutData, err := eventMsg.GetTimeoutData()

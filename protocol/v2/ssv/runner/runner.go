@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -82,8 +81,17 @@ type DoppelgangerProvider interface {
 var _ Runner = new(CommitteeRunner)
 
 type BaseRunner struct {
-	mtx            sync.RWMutex
-	State          *State
+	// State stores the current runner state, this state corresponds to 1 particular duty the runner is
+	// currently busy with at the moment. The BaseRunner is not responsible for synchronizing any updates
+	// State might need to record - the caller is responsible to ensure the updates/reads (these can happen
+	// whenever runner's method is called to process a p2p message, or an event) are applied sequentially,
+	// plus the caller is also responsible for ensuring there is no race with moving on to the next duty
+	// (the baseSetupForNewDuty call).
+	// Note, the current implementation achieves concurrent safety by making sure every State read/update
+	// is done by the same go-routing, handling all the messages in queue.SSVMessage (p2p messages and events)
+	// sequentially.
+	State *State
+
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	NetworkConfig  *networkconfig.Network
@@ -193,16 +201,7 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
 
 // baseSetupForNewDuty is sets the runner for a new duty
 func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
-	// start new state
-	// start new state
-	// TODO nicer way to get quorum
-	state := NewRunnerState(quorum, duty)
-
-	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
-	// b.State but currently does not write to it
-	b.mtx.Lock() // writes to b.State
-	b.State = state
-	b.mtx.Unlock()
+	b.State = NewRunnerState(quorum, duty)
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -465,9 +464,6 @@ func (b *BaseRunner) decide(
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
 	if b.State == nil {
 		return false
 	}
@@ -476,16 +472,10 @@ func (b *BaseRunner) hasRunningDuty() bool {
 }
 
 func (b *BaseRunner) hasDutyAssigned() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
 	return b.State != nil
 }
 
 func (b *BaseRunner) hasDutyFinished() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
 	if b.State == nil {
 		return false
 	}
