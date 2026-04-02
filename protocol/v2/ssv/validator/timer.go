@@ -22,7 +22,7 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		v.mtx.RLock() // read-lock for v.Queues
 		defer v.mtx.RUnlock()
 
-		// If the relevant queue hasn't been initialized yet, there probably isn't a running duty we can issue a
+		// If the relevant queue hasn't been initialized yet, there isn't a running duty we can issue a
 		// timeout for, in practice this should never happen - but we need to handle this just in case.
 		q := v.Queues[identifier.GetRoleType()]
 		if q == nil {
@@ -77,7 +77,7 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		c.mtx.RLock() // read-lock for c.Queues
 		defer c.mtx.RUnlock()
 
-		// If the relevant queue hasn't been initialized yet, there probably isn't a running duty we can issue a
+		// If the relevant queue hasn't been initialized yet, there isn't a running duty we can issue a
 		// timeout for, in practice this should never happen - but we need to handle this just in case.
 		// This is also possible if the queue got pruned already (due to becoming old and irrelevant).
 		q := c.Queues[phase0.Slot(height)]

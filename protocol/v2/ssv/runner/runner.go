@@ -88,7 +88,7 @@ type BaseRunner struct {
 	// plus the caller is also responsible for ensuring there is no race with moving on to the next duty
 	// (the baseSetupForNewDuty call).
 	// Note, the current implementation achieves concurrent safety by making sure every State read/update
-	// is done by the same go-routing, handling all the messages in queue.SSVMessage (p2p messages and events)
+	// is done by the same go-routine, handling all the messages in queue.SSVMessage (p2p messages and events)
 	// sequentially.
 	State *State
 
