@@ -123,7 +123,9 @@ type Scheduler struct {
 
 	// lastEpoch records the epoch of the last observed block.
 	lastEpoch phase0.Epoch
-	// lastBlockRoot records the root of the last observed block.
+	// lastBlockRoot records the root of the last observed block, with the intent to end up with
+	// the value for the canonical root of epoch N that can be consulted during transition from
+	// epoch N to epoch N+1.
 	lastBlockRoot phase0.Root
 	// currentDutyDependentRoot records the canonical root of epoch CURRENT-1.
 	currentDutyDependentRoot phase0.Root
