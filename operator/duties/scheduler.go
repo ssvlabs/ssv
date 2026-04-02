@@ -388,16 +388,18 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		if s.lastEpoch != 0 {
 			zeroRoot := new(phase0.Root)[:]
 
-			epochTransition := false
+			epochTransition := currentEpoch > s.lastEpoch
+
 			expectedCurrentDutyDependentRoot := s.currentDutyDependentRoot[:]
 			expectedPreviousDutyDependentRoot := s.previousDutyDependentRoot[:]
-			if currentEpoch > s.lastEpoch {
+			if epochTransition {
 				// Epoch transition case:
 				// - the root tracked in s.currentDutyDependentRoot now describes the previous epoch, hence becomes
 				//   the expected previous dependent root
 				// - we use the latest observed block-root from the previous epoch as the expected current dependent
-				//   root since it's the only thing we can compare the current dependent root we got with
-				epochTransition = true
+				//   root since it's the only thing we can compare the current dependent root we got with. This might
+				//   produce a spurious (false-positive) reorg in case when another event overrode the canonical root
+				//   observed (and recorded as lastBlockRoot) during pior event(s) - but it works OK for us regardless.
 				expectedCurrentDutyDependentRoot = s.lastBlockRoot[:]
 				expectedPreviousDutyDependentRoot = s.currentDutyDependentRoot[:]
 			}
