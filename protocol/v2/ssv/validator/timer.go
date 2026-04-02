@@ -28,14 +28,12 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 
-		dr := v.DutyRunners[identifier.GetRoleType()]
-		if dr == nil {
-			// runner can be nil: expired committee runners are removed, but timeout event can still be. in this case we should just skip it
-			logger.Warn("❗no duty runner found for role", fields.RunnerRole(identifier.GetRoleType()))
+		runner := v.DutyRunners[identifier.GetRoleType()]
+		if runner == nil {
+			logger.Error("❗no duty runner found for role", fields.RunnerRole(identifier.GetRoleType()))
 			return
 		}
-		hasDuty := dr.HasRunningDuty()
-		if !hasDuty {
+		if !runner.HasRunningDuty() {
 			return
 		}
 
