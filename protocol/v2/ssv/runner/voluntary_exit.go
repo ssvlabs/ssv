@@ -254,7 +254,7 @@ func (r *VoluntaryExitRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
-func (r *VoluntaryExitRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+func (r *VoluntaryExitRunner) GetCurrentDutySlot() phase0.Slot {
 	return r.BaseRunner.GetCurrentDutySlot()
 }
 

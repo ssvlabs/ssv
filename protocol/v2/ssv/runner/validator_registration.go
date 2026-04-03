@@ -285,7 +285,7 @@ func (r *ValidatorRegistrationRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
-func (r *ValidatorRegistrationRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+func (r *ValidatorRegistrationRunner) GetCurrentDutySlot() phase0.Slot {
 	return r.BaseRunner.GetCurrentDutySlot()
 }
 

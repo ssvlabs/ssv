@@ -219,11 +219,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			if err != nil {
 				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
-			currentDutySlot, ok := dutyRunner.GetCurrentDutySlot()
-			if !ok {
-				return fmt.Errorf("event message: get current duty slot to compare vs timeout event slot: %w", err)
-			}
-			if timeoutData.Height != specqbft.Height(currentDutySlot) {
+			if timeoutData.Height != specqbft.Height(dutyRunner.GetCurrentDutySlot()) {
 				// Timeout events can be delayed in the queue until the runner already moved on to a new duty, we can
 				// safely skip these
 				return nil

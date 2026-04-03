@@ -547,7 +547,7 @@ func (r *ProposerRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
-func (r *ProposerRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+func (r *ProposerRunner) GetCurrentDutySlot() phase0.Slot {
 	return r.BaseRunner.GetCurrentDutySlot()
 }
 

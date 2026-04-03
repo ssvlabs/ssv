@@ -212,7 +212,7 @@ func (r *CommitteeRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
-func (r *CommitteeRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+func (r *CommitteeRunner) GetCurrentDutySlot() phase0.Slot {
 	return r.BaseRunner.GetCurrentDutySlot()
 }
 

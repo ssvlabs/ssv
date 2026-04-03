@@ -564,7 +564,7 @@ func (r *SyncCommitteeAggregatorRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+func (r *SyncCommitteeAggregatorRunner) GetCurrentDutySlot() phase0.Slot {
 	return r.BaseRunner.GetCurrentDutySlot()
 }
 
