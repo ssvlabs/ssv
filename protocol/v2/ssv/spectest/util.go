@@ -14,6 +14,10 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
+func hasStoredRunningInstance(baseRunner *runner.BaseRunner) bool {
+	return baseRunner != nil && baseRunner.State != nil && baseRunner.State.RunningInstance != nil
+}
+
 func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType string) runner.Runner {
 	var r runner.Runner
 
@@ -49,7 +53,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range cr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if cr.BaseRunner.State != nil && cr.BaseRunner.HasStartedQBFTInstance() {
+		if hasStoredRunningInstance(cr.BaseRunner) {
 			cr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.AggregatorRunner:
@@ -60,7 +64,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range ar.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if ar.BaseRunner.State != nil && ar.BaseRunner.HasStartedQBFTInstance() {
+		if hasStoredRunningInstance(ar.BaseRunner) {
 			ar.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ProposerRunner:
@@ -71,7 +75,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range pr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if pr.BaseRunner.State != nil && pr.BaseRunner.HasStartedQBFTInstance() {
+		if hasStoredRunningInstance(pr.BaseRunner) {
 			pr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
@@ -82,7 +86,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range scr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if scr.BaseRunner.State != nil && scr.BaseRunner.HasStartedQBFTInstance() {
+		if hasStoredRunningInstance(scr.BaseRunner) {
 			scr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ValidatorRegistrationRunner:
@@ -102,7 +106,7 @@ func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
 	}
 	if state := pr.BaseRunner.State; state != nil {
 		state.DecidedValue = normalizeProposerConsensusValue(state.DecidedValue)
-		if pr.BaseRunner.HasStartedQBFTInstance() {
+		if hasStoredRunningInstance(pr.BaseRunner) {
 			state.RunningInstance.StartValue = normalizeProposerConsensusValue(state.RunningInstance.StartValue)
 			if state.RunningInstance.State != nil {
 				state.RunningInstance.State.LastPreparedValue = normalizeProposerConsensusValue(state.RunningInstance.State.LastPreparedValue)
