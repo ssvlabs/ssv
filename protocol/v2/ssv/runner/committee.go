@@ -253,7 +253,7 @@ func (r *CommitteeRunner) state() *State {
 }
 
 func (r *CommitteeRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.BaseRunner.hasDutyRunning()
 }
 
 func (r *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {

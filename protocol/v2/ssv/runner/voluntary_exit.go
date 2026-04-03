@@ -70,7 +70,7 @@ func (r *VoluntaryExitRunner) StartNewDuty(ctx context.Context, logger *zap.Logg
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *VoluntaryExitRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.BaseRunner.hasDutyRunning()
 }
 
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,

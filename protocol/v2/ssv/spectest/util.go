@@ -49,7 +49,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range cr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if cr.BaseRunner.State != nil && cr.BaseRunner.State.RunningInstance != nil {
+		if cr.BaseRunner.HasStartedQBFTInstance() {
 			cr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.AggregatorRunner:
@@ -60,7 +60,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range ar.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if ar.BaseRunner.State != nil && ar.BaseRunner.State.RunningInstance != nil {
+		if ar.BaseRunner.HasStartedQBFTInstance() {
 			ar.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ProposerRunner:
@@ -71,7 +71,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range pr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if pr.BaseRunner.State != nil && pr.BaseRunner.State.RunningInstance != nil {
+		if pr.BaseRunner.HasStartedQBFTInstance() {
 			pr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
@@ -82,7 +82,7 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		for _, inst := range scr.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = valCheck
 		}
-		if scr.BaseRunner.State != nil && scr.BaseRunner.State.RunningInstance != nil {
+		if scr.BaseRunner.HasStartedQBFTInstance() {
 			scr.BaseRunner.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ValidatorRegistrationRunner:
@@ -102,7 +102,7 @@ func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
 	}
 	if state := pr.BaseRunner.State; state != nil {
 		state.DecidedValue = normalizeProposerConsensusValue(state.DecidedValue)
-		if state.RunningInstance != nil {
+		if pr.BaseRunner.HasStartedQBFTInstance() {
 			state.RunningInstance.StartValue = normalizeProposerConsensusValue(state.RunningInstance.StartValue)
 			if state.RunningInstance.State != nil {
 				state.RunningInstance.State.LastPreparedValue = normalizeProposerConsensusValue(state.RunningInstance.State.LastPreparedValue)
