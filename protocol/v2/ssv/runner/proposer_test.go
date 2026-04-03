@@ -431,7 +431,7 @@ func setupRunnerForPostConsensus(
 	t.Helper()
 
 	duty := spectestingutils.TestingProposerDutyV(consensusData.Version)
-	runner.BaseRunner.baseSetupForNewDuty(duty, keySet.Threshold)
+	runner.BaseRunner.State = NewRunnerState(keySet.Threshold, duty)
 	runner.measurements.StartDutyFlow()
 	runner.measurements.StartConsensus()
 	runner.measurements.EndConsensus()

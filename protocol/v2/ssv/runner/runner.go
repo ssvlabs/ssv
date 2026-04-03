@@ -199,18 +199,13 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
 	b.highestDecidedSlot = slot
 }
 
-// baseSetupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
-	b.State = NewRunnerState(quorum, duty)
-}
-
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
 		return fmt.Errorf("can't start duty: %w", err)
 	}
 
-	b.baseSetupForNewDuty(duty, quorum)
+	b.State = NewRunnerState(quorum, duty)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return fmt.Errorf("failed to execute duty: %w", err)
@@ -223,7 +218,7 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return fmt.Errorf("can't start non-beacon duty: %w", err)
 	}
-	b.baseSetupForNewDuty(duty, quorum)
+	b.State = NewRunnerState(quorum, duty)
 	return runner.executeDuty(ctx, logger, duty)
 }
 
@@ -462,25 +457,17 @@ func (b *BaseRunner) decide(
 	return nil
 }
 
-// hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
-func (b *BaseRunner) hasRunningDuty() bool {
-	if b.State == nil {
-		return false
-	}
-
-	return !b.State.Finished
-}
-
 func (b *BaseRunner) hasDutyAssigned() bool {
 	return b.State != nil
 }
 
-func (b *BaseRunner) hasDutyFinished() bool {
-	if b.State == nil {
-		return false
-	}
+// hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
+func (b *BaseRunner) hasRunningDuty() bool {
+	return b.hasDutyAssigned() && !b.State.Finished
+}
 
-	return b.State.Finished
+func (b *BaseRunner) hasDutyFinished() bool {
+	return b.hasDutyAssigned() && b.State.Finished
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {

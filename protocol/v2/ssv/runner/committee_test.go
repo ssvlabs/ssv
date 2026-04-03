@@ -259,7 +259,7 @@ func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
 	duty := spectestingutils.TestingAttesterDuty(spec.DataVersionElectra)
 
-	env.runner.BaseRunner.baseSetupForNewDuty(duty, env.sampleKey.Threshold)
+	env.runner.BaseRunner.State = NewRunnerState(env.sampleKey.Threshold, duty)
 
 	require.NoError(t, env.runner.executeDuty(context.Background(), env.logger, duty))
 	require.NotNil(t, env.runner.ValCheck)
