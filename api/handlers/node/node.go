@@ -10,9 +10,9 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/hprobe"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
 type Node struct {
@@ -22,10 +22,10 @@ type Node struct {
 	peersIndex peersIndex
 	topicIndex topicIndex
 
-	nodeProber          *nodeprobe.Prober
-	clNodeName          string
-	elNodeName          string
-	eventSyncerNodeName string
+	healthProber             *hprobe.HealthProber
+	clComponentName          string
+	elComponentName          string
+	eventSyncerComponentName string
 }
 
 func NewNode(
@@ -33,20 +33,20 @@ func NewNode(
 	peersIndex peersIndex,
 	network p2pNetwork,
 	topicIndex topicIndex,
-	nodeProber *nodeprobe.Prober,
-	clNodeName string,
-	elNodeName string,
+	healthProber *hprobe.HealthProber,
+	clComponentName string,
+	elComponentName string,
 	eventSyncerNodeName string,
 ) *Node {
 	return &Node{
-		listenAddresses:     listenAddresses,
-		peersIndex:          peersIndex,
-		topicIndex:          topicIndex,
-		network:             network,
-		nodeProber:          nodeProber,
-		clNodeName:          clNodeName,
-		elNodeName:          elNodeName,
-		eventSyncerNodeName: eventSyncerNodeName,
+		listenAddresses:          listenAddresses,
+		peersIndex:               peersIndex,
+		topicIndex:               topicIndex,
+		network:                  network,
+		healthProber:             healthProber,
+		clComponentName:          clComponentName,
+		elComponentName:          elComponentName,
+		eventSyncerComponentName: eventSyncerNodeName,
 	}
 }
 
@@ -115,9 +115,9 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check the health of Ethereum nodes and EventSyncer.
-	resp.BeaconNode = healthStatus{h.nodeProber.Probe(ctx, h.clNodeName)}
-	resp.ExecutionNode = healthStatus{h.nodeProber.Probe(ctx, h.elNodeName)}
-	resp.EventSyncer = healthStatus{h.nodeProber.Probe(ctx, h.eventSyncerNodeName)}
+	resp.BeaconNode = healthStatus{h.healthProber.Probe(ctx, h.clComponentName)}
+	resp.ExecutionNode = healthStatus{h.healthProber.Probe(ctx, h.elComponentName)}
+	resp.EventSyncer = healthStatus{h.healthProber.Probe(ctx, h.eventSyncerComponentName)}
 
 	return api.Render(w, r, resp)
 }
