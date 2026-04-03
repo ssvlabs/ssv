@@ -691,44 +691,58 @@ func TestChangingFilterState(t *testing.T) {
 //   - The count of processed messages matches the expected number for that scenario.
 func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 	testCases := []struct {
-		name              string
-		hasRunningDuty    bool
-		decided           bool
-		proposalAccepted  bool
-		messagesTypes     []specqbft.MessageType
-		expectedProcessed []bool
+		name               string
+		hasRunningDuty     bool
+		hasRunningInstance bool
+		decided            bool
+		proposalAccepted   bool
+		messagesTypes      []specqbft.MessageType
+		expectedProcessed  []bool
 	}{
 		{
-			name:              "no active duty",
-			hasRunningDuty:    false,
-			decided:           false,
-			proposalAccepted:  false,
-			messagesTypes:     []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
-			expectedProcessed: []bool{true, true, true}, // All messages processed with queue.FilterAny when no active duty
+			name:               "no active duty, no running instance",
+			hasRunningDuty:     false,
+			hasRunningInstance: false,
+			decided:            false,
+			proposalAccepted:   false,
+			messagesTypes:      []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
+			expectedProcessed:  []bool{true, true, true}, // All messages processed with queue.FilterAny when no active duty
 		},
 		{
-			name:              "no proposal accepted",
-			hasRunningDuty:    true,
-			decided:           false,
-			proposalAccepted:  false,
-			messagesTypes:     []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType},
-			expectedProcessed: []bool{true, false, false, true}, // Proposal and RoundChange should be processed
+			name:               "no active duty, lingering undecided instance",
+			hasRunningDuty:     false,
+			hasRunningInstance: true,
+			decided:            false,
+			proposalAccepted:   false,
+			messagesTypes:      []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
+			expectedProcessed:  []bool{true, false, false}, // Lingering undecided instance still triggers the consensus filter
 		},
 		{
-			name:              "proposal accepted but not decided",
-			hasRunningDuty:    true,
-			decided:           false,
-			proposalAccepted:  true,
-			messagesTypes:     []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
-			expectedProcessed: []bool{true, true, true}, // All consensus messages should be processed
+			name:               "no proposal accepted",
+			hasRunningDuty:     true,
+			hasRunningInstance: true,
+			decided:            false,
+			proposalAccepted:   false,
+			messagesTypes:      []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType},
+			expectedProcessed:  []bool{true, false, false, true}, // Proposal and RoundChange should be processed
 		},
 		{
-			name:              "decided",
-			hasRunningDuty:    true,
-			decided:           true,
-			proposalAccepted:  true,
-			messagesTypes:     []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
-			expectedProcessed: []bool{true, true, true}, // All should be processed
+			name:               "proposal accepted but not decided",
+			hasRunningDuty:     true,
+			hasRunningInstance: true,
+			decided:            false,
+			proposalAccepted:   true,
+			messagesTypes:      []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
+			expectedProcessed:  []bool{true, true, true}, // All consensus messages should be processed
+		},
+		{
+			name:               "decided",
+			hasRunningDuty:     true,
+			hasRunningInstance: true,
+			decided:            true,
+			proposalAccepted:   true,
+			messagesTypes:      []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
+			expectedProcessed:  []bool{true, true, true}, // All should be processed
 		},
 	}
 
@@ -750,7 +764,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			q := queueContainer{
 				Q: queue.New(logger, 10),
 				queueState: &queue.State{
-					HasRunningInstance: tc.hasRunningDuty,
+					HasRunningInstance: tc.hasRunningInstance,
 					Height:             specqbft.Height(slot),
 					Slot:               slot,
 					Round:              1,
@@ -764,17 +778,20 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				}
 			}
 
+			state := &runner.State{}
+			if tc.hasRunningInstance {
+				state.RunningInstance = &instance.Instance{
+					State: &specqbft.State{
+						Decided:                         tc.decided,
+						ProposalAcceptedForCurrentRound: proposalMsg,
+						Round:                           1,
+					},
+				}
+			}
+
 			committeeRunner := &runner.CommitteeRunner{
 				BaseRunner: &runner.BaseRunner{
-					State: &runner.State{
-						RunningInstance: &instance.Instance{
-							State: &specqbft.State{
-								Decided:                         tc.decided,
-								ProposalAcceptedForCurrentRound: proposalMsg,
-								Round:                           1,
-							},
-						},
-					},
+					State: state,
 				},
 			}
 
