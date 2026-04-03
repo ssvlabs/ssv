@@ -106,16 +106,13 @@ type BaseRunner struct {
 	highestDecidedSlot phase0.Slot
 }
 
+func (b *BaseRunner) HasStartedQBFTInstance() bool {
+	return b.hasRunningDuty() && b.State.RunningInstance != nil
+}
+
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
-	var runningInstance *instance.Instance
-	if b.hasRunningDuty() {
-		runningInstance = b.State.RunningInstance
-		if runningInstance != nil {
-			decided, _ := runningInstance.IsDecided()
-			return !decided
-		}
-	}
-	return false
+	// Note: RunningInstance.State cannot be nil for existing RunningInstance by construction.
+	return b.HasStartedQBFTInstance() && !b.State.RunningInstance.State.Decided
 }
 
 func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
@@ -269,7 +266,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.hasRunningDuty() && b.hasDutyAssigned() && b.State.RunningInstance != nil {
+	if b.hasRunningDuty() && b.hasDutyAssigned() && b.HasStartedQBFTInstance() {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 	if prevDecided {
@@ -405,7 +402,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 		return false, nil
 	}
 
-	if b.State.RunningInstance == nil {
+	if !b.HasStartedQBFTInstance() {
 		return false, spectypes.NewError(spectypes.DecidedWrongInstanceErrorCode, "decided wrong instance (running instance is nil)")
 	}
 

@@ -390,7 +390,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutil
 	if baseRunner.QBFTController != nil {
 		baseRunner.QBFTController = fixControllerForRun(logger, baseRunner.QBFTController, ks)
 		if baseRunner.State != nil {
-			if baseRunner.State.RunningInstance != nil {
+			if baseRunner.HasStartedQBFTInstance() {
 				operator := spectestingutils.TestingCommitteeMember(ks)
 				baseRunner.State.RunningInstance = fixInstanceForRun(logger, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
 			}

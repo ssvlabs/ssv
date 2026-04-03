@@ -96,28 +96,28 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
+		if r.BaseRunner.HasStartedQBFTInstance() {
 			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.AggregatorRunner:
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
+		if r.BaseRunner.HasStartedQBFTInstance() {
 			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.ProposerRunner:
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
+		if r.BaseRunner.HasStartedQBFTInstance() {
 			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
 		for _, inst := range r.BaseRunner.QBFTController.StoredInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
-		if r.BaseRunner.State.RunningInstance != nil {
+		if r.BaseRunner.HasStartedQBFTInstance() {
 			r.BaseRunner.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	}
