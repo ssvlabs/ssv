@@ -212,7 +212,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 			if !dutyRunner.HasRunningDuty() {
 				// Duties terminate eventually, timeout-event issuer is unaware of that - that's why we can end up here
-				logger.Debug("event message: timeout event arrived after duty has finished")
 				return nil
 			}
 
