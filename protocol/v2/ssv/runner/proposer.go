@@ -108,7 +108,7 @@ func (r *ProposerRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, d
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *ProposerRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.BaseRunner.hasDutyRunning()
 }
 
 func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {

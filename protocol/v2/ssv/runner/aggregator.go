@@ -101,7 +101,7 @@ func (r *AggregatorRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *AggregatorRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.BaseRunner.hasDutyRunning()
 }
 
 func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {

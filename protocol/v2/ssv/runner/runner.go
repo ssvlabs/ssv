@@ -107,7 +107,7 @@ type BaseRunner struct {
 }
 
 func (b *BaseRunner) HasStartedQBFTInstance() bool {
-	return b.hasRunningDuty() && b.State.RunningInstance != nil
+	return b.hasDutyAssigned() && b.State.RunningInstance != nil
 }
 
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
@@ -117,7 +117,7 @@ func (b *BaseRunner) HasRunningQBFTInstance() bool {
 
 func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 	var runningInstance *instance.Instance
-	if b.hasRunningDuty() {
+	if b.hasDutyRunning() {
 		runningInstance = b.State.RunningInstance
 		if runningInstance != nil {
 			return runningInstance.State.ProposalAcceptedForCurrentRound != nil
@@ -150,7 +150,7 @@ func (b *BaseRunner) GetLastHeight() specqbft.Height {
 }
 
 func (b *BaseRunner) GetLastRound() specqbft.Round {
-	if b.hasRunningDuty() {
+	if b.hasDutyRunning() {
 		inst := b.State.RunningInstance
 		if inst != nil {
 			return inst.State.Round
@@ -266,7 +266,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.hasRunningDuty() && b.hasDutyAssigned() && b.HasStartedQBFTInstance() {
+	if b.hasDutyRunning() && b.hasDutyAssigned() && b.HasStartedQBFTInstance() {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 	if prevDecided {
@@ -281,7 +281,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, err
 	}
 
-	if !b.hasRunningDuty() {
+	if !b.hasDutyRunning() {
 		logger.Debug("no running duty, applied consensus message but cannot progress further")
 		return false, nil, nil
 	}
@@ -467,8 +467,7 @@ func (b *BaseRunner) hasDutyAssigned() bool {
 	return b.State != nil
 }
 
-// hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
-func (b *BaseRunner) hasRunningDuty() bool {
+func (b *BaseRunner) hasDutyRunning() bool {
 	return b.hasDutyAssigned() && !b.State.Finished
 }
 
