@@ -266,7 +266,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.hasDutyRunning() && b.hasDutyAssigned() && b.HasStartedQBFTInstance() {
+	if b.hasDutyRunning() && b.HasStartedQBFTInstance() {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 	if prevDecided {
