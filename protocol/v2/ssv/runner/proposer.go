@@ -547,6 +547,10 @@ func (r *ProposerRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
+func (r *ProposerRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+	return r.BaseRunner.GetCurrentDutySlot()
+}
+
 func (r *ProposerRunner) GetLastHeight() specqbft.Height {
 	return r.BaseRunner.GetLastHeight()
 }

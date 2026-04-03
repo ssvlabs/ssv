@@ -254,6 +254,10 @@ func (r *VoluntaryExitRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
+func (r *VoluntaryExitRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+	return r.BaseRunner.GetCurrentDutySlot()
+}
+
 func (r *VoluntaryExitRunner) GetLastHeight() specqbft.Height {
 	return r.BaseRunner.GetLastHeight()
 }

@@ -285,6 +285,10 @@ func (r *ValidatorRegistrationRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
+func (r *ValidatorRegistrationRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+	return r.BaseRunner.GetCurrentDutySlot()
+}
+
 func (r *ValidatorRegistrationRunner) GetLastHeight() specqbft.Height {
 	return r.BaseRunner.GetLastHeight()
 }
