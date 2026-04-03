@@ -168,7 +168,7 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	if r.BaseRunner.State == nil || r.BaseRunner.State.CurrentDuty == nil {
+	if !r.BaseRunner.hasDutyAssigned() {
 		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
 	}
 	vr, err := r.buildValidatorRegistration(r.BaseRunner.State.CurrentDuty.DutySlot())
@@ -283,6 +283,10 @@ func (r *ValidatorRegistrationRunner) GetShares() map[phase0.ValidatorIndex]*spe
 
 func (r *ValidatorRegistrationRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
+}
+
+func (r *ValidatorRegistrationRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+	return r.BaseRunner.GetCurrentDutySlot()
 }
 
 func (r *ValidatorRegistrationRunner) GetLastHeight() specqbft.Height {

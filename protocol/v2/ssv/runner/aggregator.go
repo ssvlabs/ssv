@@ -492,6 +492,10 @@ func (r *AggregatorRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }
 
+func (r *AggregatorRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+	return r.BaseRunner.GetCurrentDutySlot()
+}
+
 func (r *AggregatorRunner) GetLastHeight() specqbft.Height {
 	return r.BaseRunner.GetLastHeight()
 }

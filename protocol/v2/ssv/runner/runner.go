@@ -31,6 +31,7 @@ type Getters interface {
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
 	GetRole() spectypes.RunnerRole
+	GetCurrentDutySlot() (phase0.Slot, bool)
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
 	GetStateRoot() ([32]byte, error)
@@ -134,6 +135,14 @@ func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 
 func (b *BaseRunner) GetRole() spectypes.RunnerRole {
 	return b.RunnerRoleType
+}
+
+func (b *BaseRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+	if !b.hasDutyAssigned() {
+		return 0, false
+	}
+
+	return b.State.CurrentDuty.DutySlot(), true
 }
 
 func (b *BaseRunner) GetLastHeight() specqbft.Height {
@@ -260,7 +269,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
+	if b.hasRunningDuty() && b.hasDutyAssigned() && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 	if prevDecided {
@@ -482,7 +491,7 @@ func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 
 func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	// assume CurrentDuty is not nil if state is not nil
-	if b.State != nil && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
+	if b.hasDutyAssigned() && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
 		return spectypes.NewError(
 			spectypes.DutyAlreadyPassedErrorCode,
 			fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), b.State.CurrentDuty.DutySlot()),
