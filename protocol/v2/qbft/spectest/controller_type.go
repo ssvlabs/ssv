@@ -70,12 +70,11 @@ func testTimerState(
 ) {
 	if runData.ExpectedTimerState != nil {
 		inst := contr.StoredInstances.FindInstance(contr.Height)
-		if inst != nil {
-			if timer, ok := inst.Timer().(*roundtimer.TestQBFTTimer); ok {
-				require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
-				require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
-			}
-		}
+		require.NotNilf(t, inst, "ExpectedTimerState set but no instance found at height %d", contr.Height)
+		timer, ok := inst.Timer().(*roundtimer.TestQBFTTimer)
+		require.True(t, ok)
+		require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
+		require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
 	}
 }
 
