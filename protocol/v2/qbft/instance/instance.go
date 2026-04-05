@@ -30,6 +30,7 @@ type Instance struct {
 	State  *specqbft.State
 	config qbft.IConfig
 	signer ssvtypes.OperatorSigner
+	timer  specqbft.Timer
 
 	processMsgF *spectypes.ThreadSafeF
 
@@ -79,11 +80,22 @@ func (i *Instance) ForceStop() {
 	i.forceStop = true
 }
 
+// SetTimer replaces the timer. Used in tests for instances not started via Start.
+func (i *Instance) SetTimer(timer specqbft.Timer) {
+	i.timer = timer
+}
+
+// Timer returns the instance timer.
+func (i *Instance) Timer() specqbft.Timer {
+	return i.timer
+}
+
 // Start is an interface implementation
 func (i *Instance) Start(
 	ctx context.Context,
 	value []byte,
 	height specqbft.Height,
+	timer specqbft.Timer,
 	valueChecker ssv.ValueChecker,
 ) {
 	_, span := tracer.Start(ctx,
@@ -107,7 +119,8 @@ func (i *Instance) Start(
 	i.bumpToRound(specqbft.FirstRound)
 	i.State.Height = height
 	i.ValueChecker = valueChecker
-	i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
+	i.timer = timer
+	i.timer.TimeoutForRound(specqbft.FirstRound)
 	i.metrics.StartStage(stageProposal)
 
 	// propose if this node is the proposer

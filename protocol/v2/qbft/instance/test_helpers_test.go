@@ -70,9 +70,10 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 			return 1
 		},
 		Network:     spectestingutils.NewTestingNetwork(operatorID, keys.OperatorKeys[operatorID]),
-		Timer:       roundtimer.NewTestingTimer(),
 		CutOffRound: spectestingutils.TestingCutOffRound,
 	}
+
+	testTimer := roundtimer.NewTestingTimer()
 
 	inst := NewInstance(
 		zap.NewNop(),
@@ -84,8 +85,9 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 	)
 	inst.StartValue = []byte("start-value")
 	inst.ValueChecker = testValueChecker{}
+	inst.SetTimer(testTimer)
 
-	timer, ok := config.GetTimer().(*roundtimer.TestQBFTTimer)
+	timer, ok := testTimer.(*roundtimer.TestQBFTTimer)
 	require.True(t, ok)
 
 	network, ok := config.GetNetwork().(*spectestingutils.TestingNetwork)

@@ -448,9 +448,6 @@ func (b *BaseRunner) decide(
 	input spectypes.Encoder,
 	valueChecker ssv.ValueChecker,
 ) error {
-	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
-	span := trace.SpanFromContext(ctx)
-
 	byts, err := input.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode input data for consensus: %w", err)
@@ -460,10 +457,14 @@ func (b *BaseRunner) decide(
 		return fmt.Errorf("input data invalid: %w", err)
 	}
 
+	height := specqbft.Height(slot)
+	timer := b.createTimer(ctx, logger, height)
+
 	newInstance, err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
-		specqbft.Height(slot),
+		height,
+		timer,
 		byts,
 		valueChecker,
 	)
@@ -476,9 +477,6 @@ func (b *BaseRunner) decide(
 
 	b.State.RunningInstance = newInstance
 
-	span.AddEvent("register timeout handler")
-	b.registerTimeoutHandler(ctx, logger, newInstance, b.QBFTController.Height)
-
 	return nil
 }
 
@@ -487,6 +485,15 @@ func (b *BaseRunner) hasDutyAssigned() bool {
 	defer b.mtx.RUnlock()
 
 	return b.State != nil
+}
+
+func (b *BaseRunner) finishDuty() {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+
+	if b.State != nil {
+		b.State.Finished = true
+	}
 }
 
 func (b *BaseRunner) hasDutyFinished() bool {

@@ -33,8 +33,9 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	msgRound := msg.QBFTMessage.Round
 
 	// A future justified proposal should bump us into future round and reset timer
-	if msgRound > i.State.Round {
-		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, msgRound)
+	// timer is nil for decoded instances that haven't gone through Start
+	if msgRound > i.State.Round && i.timer != nil {
+		i.timer.TimeoutForRound(msgRound)
 	}
 	i.bumpToRound(msgRound)
 
