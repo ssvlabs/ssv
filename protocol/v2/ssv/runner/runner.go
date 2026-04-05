@@ -90,7 +90,8 @@ type BaseRunner struct {
 	ssvtypes.OperatorSigner
 
 	// implementation vars
-	TimeoutF TimeoutF `json:"-"`
+	TimeoutF    TimeoutF           `json:"-"`
+	timerCancel context.CancelFunc `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
@@ -491,6 +492,10 @@ func (b *BaseRunner) finishDuty() {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
+	if b.timerCancel != nil {
+		b.timerCancel()
+		b.timerCancel = nil
+	}
 	if b.State != nil {
 		b.State.Finished = true
 	}
