@@ -64,6 +64,10 @@ func NewConnectionGater(
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
 func (n *connGater) InterceptPeerDial(id peer.ID) bool {
+	if n.isBadPeer(id) {
+		n.logger.Debug("preventing outbound dial to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 

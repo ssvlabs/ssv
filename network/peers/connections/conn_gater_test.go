@@ -25,9 +25,14 @@ func TestConnGaterInterceptAddrDial(t *testing.T) {
 }
 
 func TestConnGaterInterceptPeerDial(t *testing.T) {
-	gater := &connGater{}
+	gater := &connGater{
+		logger:          zap.NewNop(),
+		isBadPeer:       func(id peer.ID) bool { return id == "bad-peer" },
+		trimmedRecently: ttl.New[peer.ID, struct{}](t.Context(), time.Minute, time.Minute),
+	}
 
-	require.True(t, gater.InterceptPeerDial("peer"))
+	require.False(t, gater.InterceptPeerDial("bad-peer"))
+	require.True(t, gater.InterceptPeerDial("good-peer"))
 }
 
 func TestConnGaterInterceptAcceptHonorsLimits(t *testing.T) {
