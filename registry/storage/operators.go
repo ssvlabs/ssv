@@ -258,11 +258,17 @@ func (s *operatorsStorage) DeleteOperatorData(rw basedb.ReadWriter, id spectypes
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if op, found, _ := s.getOperatorData(nil, id); found {
+	op, found, _ := s.getOperatorData(nil, id)
+
+	if err := s.db.Using(rw).Delete(s.prefix, buildOperatorKey(id)); err != nil {
+		return err
+	}
+
+	if found {
 		delete(s.pubkeyIdx, op.PublicKey)
 	}
 
-	return s.db.Using(rw).Delete(s.prefix, buildOperatorKey(id))
+	return nil
 }
 
 func (s *operatorsStorage) DropOperators() error {
