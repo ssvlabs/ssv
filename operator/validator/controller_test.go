@@ -939,7 +939,10 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 	if err != nil {
 		return nil, func() {}
 	}
-	s := registrystorage.NewOperatorsStorage(logger, db, []byte("test"))
+	s, err := registrystorage.NewOperatorsStorage(logger, db, []byte("test"))
+	if err != nil {
+		return nil, func() {}
+	}
 	return s, func() {
 		db.Close()
 	}
