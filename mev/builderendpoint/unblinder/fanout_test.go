@@ -83,7 +83,7 @@ func TestFanoutUnblinder_AllFailReturnsNil(t *testing.T) {
 func TestFanoutUnblinder_CancelsLosingProvidersAfterSuccess(t *testing.T) {
 	t.Parallel()
 
-	cancelled := make(chan struct{})
+	canceled := make(chan struct{})
 	var attempts atomic.Int32
 
 	u := &unblinder.FanoutUnblinder{
@@ -92,7 +92,7 @@ func TestFanoutUnblinder_CancelsLosingProvidersAfterSuccess(t *testing.T) {
 			fakeProviderFunc(func(ctx context.Context, _ *builderapi.UnblindProposalOpts) (*builderapi.Response[*eth2api.VersionedSignedProposal], error) {
 				attempts.Add(1)
 				<-ctx.Done()
-				close(cancelled)
+				close(canceled)
 				return nil, ctx.Err()
 			}),
 		},
@@ -112,7 +112,7 @@ func TestFanoutUnblinder_CancelsLosingProvidersAfterSuccess(t *testing.T) {
 	}
 
 	select {
-	case <-cancelled:
+	case <-canceled:
 	case <-time.After(100 * time.Millisecond):
 		t.Fatalf("expected losing provider to be canceled after first success")
 	}

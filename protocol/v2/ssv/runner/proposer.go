@@ -184,8 +184,8 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		resultLabel = proposerGetBeaconBlockResultOK
 	}
 	finishOffset := time.Duration(0)
-	if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil {
-		slotStart := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
+	if r.BaseRunner != nil && r.NetworkConfig != nil {
+		slotStart := r.NetworkConfig.SlotStartTime(duty.Slot)
 		if !slotStart.IsZero() {
 			finishOffset = time.Since(slotStart)
 			if finishOffset < 0 {
@@ -806,8 +806,8 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 	}
 
 	slotOffsetMs := int64(0)
-	if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil && r.BaseRunner.NetworkConfig.Beacon != nil {
-		start := r.BaseRunner.NetworkConfig.SlotStartTime(slot)
+	if r.BaseRunner != nil && r.NetworkConfig != nil && r.NetworkConfig.Beacon != nil {
+		start := r.NetworkConfig.SlotStartTime(slot)
 		if !start.IsZero() {
 			slotOffsetMs = time.Since(start).Milliseconds()
 			if slotOffsetMs < 0 {
@@ -838,8 +838,8 @@ func (r *ProposerRunner) spawnMEVDryRunComparisonLogger(
 
 		// Enrich with offsets (start/finish) relative to slot start for precision.
 		slotStart := time.Time{}
-		if r.BaseRunner != nil && r.BaseRunner.NetworkConfig != nil && r.BaseRunner.NetworkConfig.Beacon != nil {
-			slotStart = r.BaseRunner.NetworkConfig.SlotStartTime(slot)
+		if r.BaseRunner != nil && r.NetworkConfig != nil && r.NetworkConfig.Beacon != nil {
+			slotStart = r.NetworkConfig.SlotStartTime(slot)
 			if !slotStart.IsZero() {
 				bs := baseline.StartedAt.Sub(slotStart).Milliseconds()
 				if bs < 0 {

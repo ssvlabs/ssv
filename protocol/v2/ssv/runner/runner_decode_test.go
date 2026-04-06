@@ -99,6 +99,7 @@ func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
 		0,
 		nil,
 		0,
+		nil,
 	)
 	require.NoError(t, err)
 

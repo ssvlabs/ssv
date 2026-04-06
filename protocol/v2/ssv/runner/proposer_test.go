@@ -415,6 +415,7 @@ func newProposerRunnerForTest(
 		0,
 		[]byte("graffiti"),
 		proposerDelay,
+		nil,
 	)
 	require.NoError(t, err)
 

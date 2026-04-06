@@ -180,9 +180,9 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 
 	s.exporterMode = opts.ExporterMode
 
-	if s.ctx != nil {
+	if cleanupCtx := s.ctx; cleanupCtx != nil {
 		go func() {
-			<-s.ctx.Done()
+			<-cleanupCtx.Done()
 			s.clearPrefetchPlans()
 		}()
 	}
