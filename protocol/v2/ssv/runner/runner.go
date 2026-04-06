@@ -31,15 +31,13 @@ type Getters interface {
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
 	GetRole() spectypes.RunnerRole
-	GetCurrentDutySlot() phase0.Slot
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
 	GetStateRoot() ([32]byte, error)
-	GetBeaconNode() beacon.BeaconNode
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
-	GetNetworkConfig() *networkconfig.Network
+	GetBeaconNode() beacon.BeaconNode
 }
 
 type Setters interface {
@@ -55,8 +53,6 @@ type Runner interface {
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
 	StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error
-	// HasRunningDuty returns true if it has a running duty
-	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
 	ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error
 	// ProcessConsensus processes all consensus msgs, returns error if can't process
@@ -171,8 +167,17 @@ func (b *BaseRunner) Encode() ([]byte, error) {
 	return json.Marshal(b)
 }
 
+// Decode unmarshals persisted runner state into the receiver.
+//
+// Note: decoded runners are intentionally partial; runtime dependencies (e.g. `NetworkConfig`, `TimeoutF`, and
+// runner-specific value checkers) must be rehydrated by the caller after decode.
 func (b *BaseRunner) Decode(data []byte) error {
-	return json.Unmarshal(data, &b)
+	if b == nil {
+		return fmt.Errorf("nil BaseRunner")
+	}
+	// Unmarshal into the receiver, not into a copy of the pointer.
+	// Unmarshalling into `&b` would only update the local pointer variable.
+	return json.Unmarshal(data, b)
 }
 
 func (b *BaseRunner) MarshalJSON() ([]byte, error) {
@@ -198,11 +203,6 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	byts, err := json.Marshal(alias)
 
 	return byts, err
-}
-
-// SetHighestDecidedSlot set highestDecidedSlot for base runner
-func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
-	b.highestDecidedSlot = slot
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -486,7 +486,7 @@ func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 }
 
 func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
-	// assume CurrentDuty is not nil if state is not nil
+	// CurrentDuty is not nil if State is not nil by construction.
 	if b.hasDutyAssigned() && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
 		return spectypes.NewError(
 			spectypes.DutyAlreadyPassedErrorCode,
@@ -497,5 +497,19 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 }
 
 func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+	if !b.hasDutyRunning() {
+		// Duties terminate eventually, timeout-event issuer is unaware of that - that's why we can end up here.
+		return nil
+	}
+
+	if timeoutData.Height != specqbft.Height(b.GetCurrentDutySlot()) {
+		// Validator-Runners are re-used to process duties targeting different slots (unlike Committee-Runners that
+		// are working with exactly one slot), thus for Validator-Runners timeout events can be delayed in the queue
+		// until the runner has already moved on to a new duty/slot - this is why timeout-event height(== slot)
+		// might be different from the actual current slot the runner is working with, and we just skip these delayed
+		// events as no longer relevant (the duty those are targeting has already expired).
+		return nil
+	}
+
 	return b.QBFTController.OnTimeout(ctx, logger, timeoutData)
 }

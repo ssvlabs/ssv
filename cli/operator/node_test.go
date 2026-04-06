@@ -1,7 +1,12 @@
 package operator
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -13,9 +18,22 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+func newTestSSVSignerClient(t *testing.T, register func(mux *http.ServeMux)) *ssvsigner.Client {
+	mux := http.NewServeMux()
+	if register != nil {
+		register(mux)
+	}
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	return ssvsigner.NewClient(server.URL, ssvsigner.WithLogger(zap.NewNop()))
+}
 
 func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
 	t.Parallel()
@@ -358,5 +376,48 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 				require.Equal(t, 1000*time.Millisecond, fields["max_safe_proposer_delay"])
 			})
 		}
+	})
+}
+
+func Test_probeRemoteNetworkKeyProtector(t *testing.T) {
+	t.Run("uses remote signer encrypt and decrypt endpoints when supported", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
+			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodPost, r.Method)
+				payload, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				_, err = w.Write(append([]byte("encrypted:"), payload...))
+				require.NoError(t, err)
+			})
+			mux.HandleFunc(ssvsigner.PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodPost, r.Method)
+				payload, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				_, err = w.Write(bytes.TrimPrefix(payload, []byte("encrypted:")))
+				require.NoError(t, err)
+			})
+		})
+
+		err := probeRemoteNetworkKeyProtector(context.Background(), client)
+		require.NoError(t, err)
+	})
+
+	t.Run("returns unsupported when remote signer does not support remote data protection", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, nil)
+
+		err := probeRemoteNetworkKeyProtector(context.Background(), client)
+		require.ErrorIs(t, err, ssvsigner.ErrOperatorDataProtectionUnsupported)
+	})
+
+	t.Run("fails instead of downgrading on transient remote signer fetch error", func(t *testing.T) {
+		client := newTestSSVSignerClient(t, func(mux *http.ServeMux) {
+			mux.HandleFunc(ssvsigner.PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "temporary upstream failure", http.StatusInternalServerError)
+			})
+		})
+
+		err := probeRemoteNetworkKeyProtector(context.Background(), client)
+		require.ErrorContains(t, err, "probe remote data protector encrypt")
+		require.ErrorContains(t, err, "unexpected status: 500")
 	})
 }

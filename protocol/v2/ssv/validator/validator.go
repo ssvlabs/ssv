@@ -210,19 +210,9 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		case ssvtypes.Timeout:
 			span.AddEvent("process validator message = event(timeout)")
 
-			if !dutyRunner.HasRunningDuty() {
-				// Duties terminate eventually, timeout-event issuer is unaware of that - that's why we can end up here
-				return nil
-			}
-
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
 				return fmt.Errorf("event message: get timeout data: %w", err)
-			}
-			if timeoutData.Height != specqbft.Height(dutyRunner.GetCurrentDutySlot()) {
-				// Timeout events can be delayed in the queue until the runner already moved on to a new duty, we can
-				// safely skip these
-				return nil
 			}
 
 			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {

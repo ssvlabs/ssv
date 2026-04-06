@@ -38,14 +38,27 @@ type TimeoutOptions struct {
 	slow           time.Duration
 }
 
+// deferredTimeout stores a TimeoutForRound request that arrived before the
+// correct callback was registered for this duty's height. OnTimeout replays
+// it once the callback is set.
+type deferredTimeout struct {
+	height specqbft.Height
+	round  specqbft.Round
+}
+
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
 	mtx *sync.RWMutex
 	ctx context.Context
 	// timer is the underlying time.Timer
 	timer *time.Timer
-	// result holds the result of the timer
-	done OnRoundTimeoutF
+	// callback is the timeout callback for the current duty
+	callback OnRoundTimeoutF
+	// callbackHeight is the highest duty height seen (registered or deferred)
+	callbackHeight specqbft.Height
+	// deferred stores a pending arm request when TimeoutForRound is called
+	// before the correct callback is registered for this duty
+	deferred *deferredTimeout
 	// round is the current round of the timer
 	round specqbft.Round
 	// timeoutOptions holds the timeoutOptions for the timer
@@ -56,13 +69,12 @@ type RoundTimer struct {
 	beaconConfig *networkconfig.Beacon
 }
 
-// New creates a new instance of RoundTimer.
-func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
+// New creates a new instance of RoundTimer. The timeout callback must be
+// registered separately via OnTimeout(height, callback) before arming.
+func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole) *RoundTimer {
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
-		timer:        nil,
-		done:         done,
 		role:         role,
 		beaconConfig: beaconConfig,
 		timeoutOptions: TimeoutOptions{
@@ -133,47 +145,88 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	return time.Until(dutyStartTime.Add(timeoutDuration))
 }
 
-// OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
-	t.mtx.Lock() // write to t.done
-	defer t.mtx.Unlock()
-
-	t.done = done
-}
-
-// TimeoutForRound stops any running timer, waits for any in-flight callback to
-// finish, and schedules a new callback for the given round.
-func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	// Optimistic early-exit: a narrow window exists between this check and
-	// timer creation where ctx could be canceled; the callback re-checks
-	// ctx.Err() to handle that case.
-	if t.ctx.Err() != nil {
-		return
-	}
-
-	timeout := t.RoundTimeout(height, round)
-
-	t.mtx.Lock()
-	t.round = round
+// armLocked stops any running timer and schedules a new AfterFunc for the
+// given height and round. Caller must hold t.mtx.
+func (t *RoundTimer) armLocked(height specqbft.Height, round specqbft.Round) {
 	if t.timer != nil {
-		// Stop prevents future fires; if it returns false the callback goroutine
-		// may already be running — it will be suppressed by the round-number check.
 		t.timer.Stop()
 	}
-	// timeout can be negative for late-start duties — AfterFunc fires
+	t.round = round
+	// RoundTimeout can be negative for late-start duties — AfterFunc fires
 	// immediately but the callback blocks on RLock until we release mtx.
-	t.timer = time.AfterFunc(timeout, func() {
+	t.timer = time.AfterFunc(t.RoundTimeout(height, round), func() {
 		if t.ctx.Err() != nil {
 			return
 		}
 		t.mtx.RLock()
 		defer t.mtx.RUnlock()
-		if t.round != round {
+		if t.callbackHeight != height || t.round != round || t.callback == nil {
 			return
 		}
-		if t.done != nil {
-			t.done(round)
-		}
+		t.callback(round)
 	})
-	t.mtx.Unlock()
+}
+
+// OnTimeout registers the timeout callback for the given duty height.
+// If TimeoutForRound was called before the callback was registered (deferred),
+// OnTimeout replays the arm under the lock.
+func (t *RoundTimer) OnTimeout(height specqbft.Height, callback OnRoundTimeoutF) {
+	if t.ctx.Err() != nil {
+		return
+	}
+
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	// Enforce monotonic height increases — reject stale registrations.
+	if height < t.callbackHeight {
+		return
+	}
+
+	t.callback = callback
+	t.callbackHeight = height
+	d := t.deferred
+	t.deferred = nil
+
+	// Replay the deferred arm now that the correct callback is registered.
+	// Done under the lock to linearize against concurrent TimeoutForRound
+	// calls from message processing (proposal, round-change, timeout bump).
+	if d != nil && d.height == height {
+		t.armLocked(d.height, d.round)
+	}
+}
+
+// TimeoutForRound stops any running timer, waits for any in-flight callback to
+// finish, and schedules a new callback for the given round. If the callback is
+// not yet registered for this duty's height (nil or stale from a previous duty),
+// the request is deferred until OnTimeout registers the correct callback.
+func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
+	if t.ctx.Err() != nil {
+		return
+	}
+
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	// Reject stale calls from previous duties.
+	if height < t.callbackHeight {
+		return
+	}
+
+	if t.callback == nil || t.callbackHeight != height {
+		// Callback missing or registered for a different duty (stale).
+		// Stop any running timer and nil out the stale callback so that an
+		// in-flight AfterFunc that is past Stop but waiting on RLock will
+		// see callback == nil and bail out.
+		if t.timer != nil {
+			t.timer.Stop()
+			t.timer = nil
+		}
+		t.callback = nil
+		t.callbackHeight = height
+		t.deferred = &deferredTimeout{height: height, round: round}
+		return
+	}
+	t.deferred = nil
+	t.armLocked(height, round)
 }

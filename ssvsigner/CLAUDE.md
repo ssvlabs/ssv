@@ -119,6 +119,8 @@ BATCH_SIZE=20 \
 | `/v1/validators/sign/{pubkey}` | POST | Sign beacon object with validator share |
 | `/v1/operator/identity` | GET | Get operator RSA public key |
 | `/v1/operator/sign` | POST | Sign data with operator RSA key |
+| `/v1/operator/encrypt` | POST | Encrypt data with the operator-derived storage key using the same encrypted format as local mode |
+| `/v1/operator/decrypt` | POST | Decrypt data from that same encrypted format |
 
 ## Key Flows
 
@@ -150,6 +152,7 @@ BATCH_SIZE=20 \
 ### Integration with SSV Node
 - SSV node uses `RemoteKeyManager` when configured with `SSVSignerEndpoint`
 - On startup, node validates signer availability and operator key consistency
+- On startup, node probes `/v1/operator/encrypt` and `/v1/operator/decrypt` to decide whether the persisted P2P network key can be protected with the remote operator key. Older `ssv-signer` versions that explicitly do not implement these endpoints still work for legacy plaintext records, but encrypted records require these endpoints or the original local operator key. Other fetch failures should fail startup instead of silently downgrading protection.
 - Configuration is locked to prevent switching between local/remote signing
 
 ### Error Handling
