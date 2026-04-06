@@ -38,6 +38,8 @@ const (
 	PathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
 	PathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
 	PathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
+	PathOperatorEncrypt  = "/v1/operator/encrypt"  // TODO: /api/v1/ssv/encrypt ?
+	PathOperatorDecrypt  = "/v1/operator/decrypt"  // TODO: /api/v1/ssv/decrypt ?
 )
 
 const (
@@ -78,7 +80,9 @@ func NewServer(
 	r.POST(PathValidatorsSign+"{identifier}", server.handleSignValidator)
 
 	r.GET(PathOperatorIdentity, server.handleOperatorIdentity)
-	r.POST(PathOperatorSign, server.handleSignOperator)
+	r.POST(PathOperatorSign, server.handleOperatorSign)
+	r.POST(PathOperatorEncrypt, server.handleOperatorEncrypt)
+	r.POST(PathOperatorDecrypt, server.handleOperatorDecrypt)
 
 	return server
 }
@@ -412,11 +416,11 @@ func (s *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
 	s.writeString(ctx, logger, pubKeyB64)
 }
 
-func (s *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
+func (s *Server) handleOperatorSign(ctx *fasthttp.RequestCtx) {
 	payload := ctx.PostBody()
 
 	logger := s.logger.With(
-		zap.String("method", "handleSignOperator"),
+		zap.String("method", "handleOperatorSign"),
 		zap.Int("payload_size", len(payload)),
 	)
 
@@ -438,6 +442,75 @@ func (s *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
 	logger.Info("request finished successfully")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	s.writeBytes(ctx, logger, signature)
+}
+
+func (s *Server) handleOperatorEncrypt(ctx *fasthttp.RequestCtx) {
+	logger := s.logger.With(
+		zap.String("method", "handleOperatorEncrypt"),
+		zap.Int("payload_size", len(ctx.PostBody())),
+	)
+
+	logger.Debug("received request")
+
+	payload := ctx.PostBody()
+	if len(payload) == 0 {
+		err := errors.New("request payload is empty")
+		logger.Warn("invalid request", zap.Error(err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, err)
+		return
+	}
+
+	encryptionKey, err := s.operatorPrivKey.EKMEncryptionKey()
+	if err != nil {
+		logger.Error("request failed", zap.Error(err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
+		return
+	}
+
+	encrypted, err := keys.EncryptPayload(encryptionKey, payload)
+	if err != nil {
+		logger.Error("request failed", zap.Error(err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
+		return
+	}
+
+	logger.Info("request finished successfully")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	s.writeBytes(ctx, logger, encrypted)
+}
+
+func (s *Server) handleOperatorDecrypt(ctx *fasthttp.RequestCtx) {
+	logger := s.logger.With(
+		zap.String("method", "handleOperatorDecrypt"),
+		zap.Int("payload_size", len(ctx.PostBody())),
+	)
+
+	logger.Debug("received request")
+
+	payload := ctx.PostBody()
+	if len(payload) == 0 {
+		err := errors.New("request payload is empty")
+		logger.Warn("invalid request", zap.Error(err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, err)
+		return
+	}
+
+	encryptionKey, err := s.operatorPrivKey.EKMEncryptionKey()
+	if err != nil {
+		logger.Error("request failed", zap.Error(err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
+		return
+	}
+
+	decrypted, err := keys.DecryptPayload(encryptionKey, payload)
+	if err != nil {
+		logger.Error("request failed", zap.Error(err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
+		return
+	}
+	logger.Info("request finished successfully")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	s.writeBytes(ctx, logger, decrypted)
 }
 
 func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, resp any, err error) {
