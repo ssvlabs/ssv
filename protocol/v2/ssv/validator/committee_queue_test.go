@@ -176,6 +176,9 @@ func newCommitteeRunnerForTest(
 						Round:                           round,
 					},
 				},
+				CurrentDuty: &spectypes.CommitteeDuty{
+					Slot: slot,
+				},
 			},
 		},
 	}

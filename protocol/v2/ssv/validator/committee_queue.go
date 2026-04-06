@@ -97,7 +97,7 @@ func (c *Committee) ConsumeQueue(
 	// sooner (vs which ones can wait till later).
 	rState := queue.State{
 		Quorum: c.CommitteeMember.GetQuorum(), // never changes for duty runner
-		// Slot: slot, // Slot is not used to prioritize messages
+		Slot:   r.GetCurrentDutySlot(),
 	}
 
 	for ctx.Err() == nil {

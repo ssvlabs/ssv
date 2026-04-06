@@ -126,7 +126,7 @@ func (v *Validator) StartQueueConsumer(
 			rState.HasRunningInstance = r.HasRunningQBFTInstance()
 			rState.Height = r.GetLastHeight()
 			rState.Round = r.GetLastRound()
-			// rState.Slot = slot // Slot is not used to prioritize messages
+			rState.Slot = r.GetCurrentDutySlot()
 
 			filter := queue.FilterAny
 			if !r.HasRunningDuty() {
