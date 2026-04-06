@@ -27,6 +27,7 @@ import (
 )
 
 type Getters interface {
+	HasRunningDuty() bool
 	HasRunningQBFTInstance() bool
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
@@ -100,6 +101,10 @@ type BaseRunner struct {
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
+}
+
+func (b *BaseRunner) HasRunningDuty() bool {
+	return b.hasDutyRunning()
 }
 
 func (b *BaseRunner) HasStartedQBFTInstance() bool {

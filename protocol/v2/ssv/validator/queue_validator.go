@@ -123,7 +123,16 @@ func (v *Validator) StartQueueConsumer(
 			state.Quorum = v.Operator.GetQuorum()
 
 			filter := queue.FilterAny
-			if state.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
+			if !r.HasRunningDuty() {
+				// If no duty is running, pop only ExecuteDuty messages.
+				filter = func(m *queue.SSVMessage) bool {
+					e, ok := m.Body.(*types.EventMsg)
+					if !ok || e == nil {
+						return false
+					}
+					return e.Type == types.ExecuteDuty
+				}
+			} else if state.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
 				// If no proposal was accepted for the current round, skip prepare & commit messages
 				// for the current height and round.
 				filter = func(m *queue.SSVMessage) bool {
