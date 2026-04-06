@@ -36,7 +36,7 @@ func NewNode(
 	healthProber *hprobe.HealthProber,
 	clComponentName string,
 	elComponentName string,
-	eventSyncerNodeName string,
+	eventSyncerComponentName string,
 ) *Node {
 	return &Node{
 		listenAddresses:          listenAddresses,
@@ -46,7 +46,7 @@ func NewNode(
 		healthProber:             healthProber,
 		clComponentName:          clComponentName,
 		elComponentName:          elComponentName,
-		eventSyncerComponentName: eventSyncerNodeName,
+		eventSyncerComponentName: eventSyncerComponentName,
 	}
 }
 
