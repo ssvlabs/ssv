@@ -94,7 +94,7 @@ func TestSchedulerPrefetchesBuilderBidsForCurrentSlotProposerDuties(t *testing.T
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	t.Cleanup(cancel)
 
-	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{duty})
+	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{duty}, time.Now().Add(time.Second))
 
 	select {
 	case <-dutyCalled:
@@ -168,7 +168,7 @@ func TestSchedulerDoesNotPrefetchForNextSlotDuties(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	t.Cleanup(cancel)
 
-	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{duty})
+	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{duty}, time.Now().Add(time.Second))
 
 	select {
 	case <-dutyCalled:
@@ -228,7 +228,7 @@ func TestSchedulerPrefetchExecutionClientErrorDoesNotBlockDutyExecution(t *testi
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	t.Cleanup(cancel)
 
-	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{duty})
+	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{duty}, time.Now().Add(time.Second))
 
 	select {
 	case <-dutyCalled:
@@ -290,7 +290,7 @@ func TestSchedulerPrefetchesOncePerBatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	t.Cleanup(cancel)
 
-	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{d1, d2})
+	s.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{d1, d2}, time.Now().Add(time.Second))
 
 	// Expect two prefetch calls (one per duty) and only one HeaderByNumber.
 	deadline := time.Now().Add(time.Second)

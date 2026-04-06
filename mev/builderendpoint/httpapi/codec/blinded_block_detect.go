@@ -28,7 +28,10 @@ func DetectConsensusVersionFromSignedBlindedBeaconBlockJSON(data []byte) (string
 		return "", fmt.Errorf("invalid body")
 	}
 
-	// Electra/Fulu introduce execution requests in the beacon block body.
+	// Electra and Fulu both include execution_requests, and in go-eth2-client Fulu reuses the
+	// Electra blinded block type. Without an explicit Eth-Consensus-Version header the JSON shape
+	// is therefore ambiguous, so the fallback detector intentionally treats the payload as Electra.
+	// The response version still comes from the unblinded proposal version.
 	if _, ok := body["execution_requests"]; ok {
 		return ConsensusVersionElectra, nil
 	}

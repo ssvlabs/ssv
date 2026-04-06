@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
-	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -27,7 +26,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -42,8 +40,8 @@ const (
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty)
-	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
+	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty, dutyDeadline time.Time)
+	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap, dutyDeadline time.Time)
 }
 
 // DutyExecutor is an interface for executing duty.
@@ -110,7 +108,13 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
-	logger                    *zap.Logger
+	logger *zap.Logger
+
+	// ctx controls the lifetime of all go-routines spawned by Scheduler.
+	ctx context.Context
+	// backgroundTasks tracks all go-routines spawned by Scheduler for graceful shutdown.
+	backgroundTasks sync.WaitGroup
+
 	beaconNode                BeaconNode
 	executionClient           ExecutionClient
 	beaconConfig              *networkconfig.Beacon
@@ -128,7 +132,6 @@ type Scheduler struct {
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
-	pool       *pool.ContextPool
 
 	// waitCond coordinates access to headSlot for different go-routines
 	waitCond *sync.Cond
@@ -139,9 +142,6 @@ type Scheduler struct {
 	previousDutyDependentRoot phase0.Root
 
 	exporterMode bool
-
-	// ctx is the scheduler's base context used for background work such as prefetch scheduling.
-	ctx context.Context
 
 	prefetchMu    sync.Mutex
 	prefetchPlans map[phase0.Slot]*slotPrefetchPlan
@@ -206,23 +206,25 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 }
 
 type ReorgEvent struct {
-	Slot     phase0.Slot
-	Previous bool
-	Current  bool
+	// Slot is the reorg slot.
+	Slot phase0.Slot
+	// Current specifies if the reorg happened in the current epoch, false means the reorg happened in SOME previous
+	// epoch (not necessarily THE previous epoch).
+	Current bool
 }
 
 // Start initializes the Scheduler and begins its operation.
 // Note: This function includes blocking operations, especially within the handler's HandleInitialDuties call,
 // which will block until initial duties are fully handled.
 func (s *Scheduler) Start(ctx context.Context) error {
-	s.logger.Info("duty scheduler started")
+	s.logger.Info("starting duty scheduler")
+
+	s.ctx = ctx
 
 	s.logger.Info("subscribing to head events")
-	if err := s.listenToHeadEvents(ctx); err != nil {
+	if err := s.listenToHeadEvents(s.ctx); err != nil {
 		return fmt.Errorf("failed to listen to head events: %w", err)
 	}
-
-	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
 
 	indicesChangeFeed := NewEventFeed[struct{}]()
 	reorgFeed := NewEventFeed[ReorgEvent]()
@@ -234,6 +236,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		reorgFeed.Subscribe(reorgCh)
 
 		handler.Setup(
+			ctx,
 			handler.Name(),
 			s.logger,
 			s.beaconNode,
@@ -248,18 +251,34 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		)
 
 		// This call is blocking.
-		handler.HandleInitialDuties(ctx)
+		handler.HandleInitialDuties(s.ctx)
 
-		s.pool.Go(func(ctx context.Context) error {
-			handler.HandleDuties(ctx)
-			return nil
-		})
+		s.backgroundTasks.Add(1)
+		go func() {
+			defer s.backgroundTasks.Done()
+			handler.HandleDuties(s.ctx)
+		}()
 	}
 
-	go s.SlotTicker(ctx)
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
+		indicesChangeFeed.FanOut(s.ctx, s.indicesChg)
+	}()
 
-	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
-	go reorgFeed.FanOut(ctx, s.reorg)
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
+		reorgFeed.FanOut(s.ctx, s.reorg)
+	}()
+
+	s.backgroundTasks.Add(1)
+	go func() {
+		defer s.backgroundTasks.Done()
+		s.SlotTicker(s.ctx)
+	}()
+
+	s.logger.Info("duty scheduler has started")
 
 	return nil
 }
@@ -275,7 +294,9 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
+	s.backgroundTasks.Add(1)
 	go func() {
+		defer s.backgroundTasks.Done()
 		for {
 			select {
 			case <-ctx.Done():
@@ -298,8 +319,16 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 	return nil
 }
 
+// Wait blocks until the Scheduler is finished with all it's tasks, also ensuring all the
+// handlers terminate before this func returns.
 func (s *Scheduler) Wait() error {
-	return s.pool.Wait()
+	s.backgroundTasks.Wait()
+
+	for _, handler := range s.handlers {
+		handler.WaitShutdown()
+	}
+
+	return nil
 }
 
 type EventFeed[T any] struct {
@@ -374,11 +403,13 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		}
 
 		// check for reorg
-		epoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
-		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
+		currentSlot := event.Slot
+		currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+		slotNumber := uint64(currentSlot)%s.beaconConfig.SlotsPerEpoch + 1
+		buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
-			if epoch > s.lastBlockEpoch {
+			if currentEpoch > s.lastBlockEpoch {
 				// Change of epoch.
 				// Ensure that the new previous dependent root is the same as the old current root.
 				if !bytes.Equal(s.previousDutyDependentRoot[:], zeroRoot[:]) &&
@@ -388,8 +419,8 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     event.Slot,
-						Previous: true,
+						Slot:    event.Slot,
+						Current: false,
 					}
 				}
 			} else {
@@ -402,8 +433,8 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     event.Slot,
-						Previous: true,
+						Slot:    event.Slot,
+						Current: false,
 					}
 				}
 
@@ -422,7 +453,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 			}
 		}
 
-		s.lastBlockEpoch = epoch
+		s.lastBlockEpoch = currentEpoch
 		s.previousDutyDependentRoot = event.PreviousDutyDependentRoot
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
@@ -446,7 +477,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 }
 
 // ExecuteDuties tries to execute the provided validator duties
-func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty, dutyDeadline time.Time) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
 		// Keeping check here to detect programming mistakes.
@@ -481,14 +512,14 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
+		s.backgroundTasks.Add(1)
 		go func() {
+			defer s.backgroundTasks.Done()
+
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+			dutyCtx, cancel := context.WithDeadline(s.ctx, dutyDeadline)
 			defer cancel()
-			if !withDeadline {
-				logger.Warn("parent-context has no deadline set")
-			}
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
 		}()
@@ -704,7 +735,7 @@ func (s *Scheduler) runSlotPrefetch(slot phase0.Slot) {
 }
 
 // ExecuteCommitteeDuties tries to execute the provided committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap, dutyDeadline time.Time) {
 	if s.exporterMode {
 		// We never execute duties in exporter mode. The handler should skip calling this method.
 		// Keeping check here to detect programming mistakes.
@@ -739,14 +770,14 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
+		s.backgroundTasks.Add(1)
 		go func() {
+			defer s.backgroundTasks.Done()
+
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
-			dutyCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+			dutyCtx, cancel := context.WithDeadline(s.ctx, dutyDeadline)
 			defer cancel()
-			if !withDeadline {
-				logger.Warn("parent-context has no deadline set")
-			}
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)

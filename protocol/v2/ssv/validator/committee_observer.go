@@ -243,6 +243,17 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 	for _, msg := range partialMsgs.Messages {
 		validator, exists := ncv.ValidatorStore.ValidatorByIndex(msg.ValidatorIndex)
 		if !exists {
+			ncv.logger.Debug("verify partial sig: validator share not found by index",
+				fields.MessageID(ncv.msgID),
+				fields.Slot(partialMsgs.Slot),
+				fields.OperatorID(msg.Signer),
+				zap.Uint64("validator_index", uint64(msg.ValidatorIndex)),
+				fields.Root(msg.SigningRoot),
+				zap.Int("partial_msgs_count", len(partialMsgs.Messages)),
+				zap.Int("slot_container_validators", len(slotValidators)),
+				zap.Int("post_consensus_container_slots", len(ncv.postConsensusContainer)),
+				zap.Bool("own_validator", false),
+			)
 			return fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
 		}
 		container, ok := slotValidators[msg.ValidatorIndex]
@@ -381,8 +392,8 @@ func (ncv *CommitteeObserver) SaveRoots(ctx context.Context, msg *queue.SSVMessa
 	}
 
 	qbftMsg, ok := msg.Body.(*specqbft.Message)
-	if !ok {
-		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
+	if !ok || qbftMsg == nil {
+		return fmt.Errorf("invalid qbft msg body, type: %T", msg.Body)
 	}
 
 	bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}

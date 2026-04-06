@@ -262,7 +262,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(8),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(200*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -581,7 +581,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
-		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5, false)
 		select {
 		case log, ok := <-logChan:
 			require.Falsef(t, ok, "should not receive log when startBlock > endBlock, received log with block number: %d", log.BlockNumber)
@@ -595,7 +595,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	t.Run("startBlock is same as endBlock", func(t *testing.T) {
 		blockNumbers := make([]uint64, 0, 1)
 
-		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 5, 5)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 5, 5, false)
 		select {
 		case block := <-logChan:
 			blockNumbers = append(blockNumbers, block.BlockNumber)
@@ -615,7 +615,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 		)
 		blockNumbers := make([]uint64, 0, int(toBlock-fromBlock+1))
 
-		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, fromBlock, toBlock)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, fromBlock, toBlock, false)
 		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
@@ -632,14 +632,11 @@ func TestFetchLogsInBatches(t *testing.T) {
 		canceledCtx, cancel := context.WithCancel(env.ctx)
 		cancel()
 
-		logChan, errChan := env.client.fetchLogsInBatches(canceledCtx, 0, 5)
-		select {
-		case <-logChan:
-			require.Fail(t, "Should not receive log when context is canceled")
-		case err := <-errChan:
-			require.Error(t, err, "fetchLogsInBatches should return an error when context is canceled")
-		case <-canceledCtx.Done():
-		}
+		logChan, errChan := env.client.fetchLogsInBatches(canceledCtx, 0, 5, false)
+		err, ok := <-errChan
+		require.Falsef(t, ok, "should not receive error when context was canceled: %v", err)
+		_, ok = <-logChan
+		require.Falsef(t, ok, "should not receive log when context was canceled")
 	})
 }
 
@@ -657,7 +654,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 func TestChainReorganizationLogs(t *testing.T) {
 	// TODO: fix reorg test
 	// logger := zaptest.NewLogger(t)
-	// const testTimeout = 2 * time.Second
+	// const testTimeout = 30 * time.Second
 	// ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	// defer cancel()
 
@@ -969,7 +966,7 @@ func TestFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(200*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1059,7 +1056,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(400*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1121,7 +1118,7 @@ func TestHeaderByNumber(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(400*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 

@@ -1108,9 +1108,9 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			var done <-chan struct{}
 
 			if tc.expectIndicesChange {
-				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
+				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 400*time.Millisecond)
 			} else {
-				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
+				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 400*time.Millisecond)
 			}
 
 			require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))

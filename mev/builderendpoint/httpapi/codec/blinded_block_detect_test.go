@@ -55,6 +55,22 @@ func TestDetectConsensusVersionFromSignedBlindedBeaconBlockJSON(t *testing.T) {
 			},
 			want: "electra",
 		},
+		{
+			name: "FuluWithoutHeaderFallsBackToElectra",
+			body: map[string]any{
+				"execution_requests": map[string]any{
+					"deposits":       []any{},
+					"withdrawals":    []any{},
+					"consolidations": []any{},
+				},
+				"execution_payload_header": map[string]any{
+					"parent_hash":     "0x" + zeros(64),
+					"blob_gas_used":   "0",
+					"excess_blob_gas": "0",
+				},
+			},
+			want: "electra",
+		},
 	}
 
 	for _, tt := range tests {
