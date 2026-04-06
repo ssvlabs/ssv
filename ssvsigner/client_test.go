@@ -596,6 +596,91 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 	}
 }
 
+func (s *SSVSignerClientSuite) TestOperatorDataProtection() {
+	t := s.T()
+
+	payload := bytes.Repeat([]byte{0x23}, 32)
+	encryptedPayload := bytes.Repeat([]byte{0x42}, 64)
+
+	t.Run("encrypt success", func(t *testing.T) {
+		s.resetMux()
+		s.mux.HandleFunc(PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, http.MethodPost, r.Method)
+			w.WriteHeader(http.StatusOK)
+			w.Write(encryptedPayload)
+		})
+
+		result, err := s.client.OperatorEncrypt(t.Context(), payload)
+		require.NoError(t, err)
+		assert.Equal(t, encryptedPayload, result)
+		assert.Equal(t, 1, s.serverHits)
+	})
+
+	t.Run("decrypt success", func(t *testing.T) {
+		s.resetMux()
+		s.mux.HandleFunc(PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, http.MethodPost, r.Method)
+			w.WriteHeader(http.StatusOK)
+			w.Write(payload)
+		})
+
+		result, err := s.client.OperatorDecrypt(t.Context(), encryptedPayload)
+		require.NoError(t, err)
+		assert.Equal(t, payload, result)
+		assert.Equal(t, 1, s.serverHits)
+	})
+
+	t.Run("returns unsupported sentinel on encrypt 404", func(t *testing.T) {
+		s.resetMux()
+		s.mux.HandleFunc(PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		})
+
+		_, err := s.client.OperatorEncrypt(t.Context(), payload)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrOperatorDataProtectionUnsupported)
+		assert.Equal(t, 1, s.serverHits)
+	})
+
+	t.Run("returns unsupported sentinel on decrypt 404", func(t *testing.T) {
+		s.resetMux()
+		s.mux.HandleFunc(PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		})
+
+		_, err := s.client.OperatorDecrypt(t.Context(), encryptedPayload)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrOperatorDataProtectionUnsupported)
+		assert.Equal(t, 1, s.serverHits)
+	})
+
+	t.Run("keeps non-unsupported encrypt failures as request errors", func(t *testing.T) {
+		s.resetMux()
+		s.mux.HandleFunc(PathOperatorEncrypt, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
+		_, err := s.client.OperatorEncrypt(t.Context(), payload)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "request failed")
+		require.NotErrorIs(t, err, ErrOperatorDataProtectionUnsupported)
+		assert.Equal(t, 1, s.serverHits)
+	})
+
+	t.Run("keeps non-unsupported decrypt failures as request errors", func(t *testing.T) {
+		s.resetMux()
+		s.mux.HandleFunc(PathOperatorDecrypt, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
+		_, err := s.client.OperatorDecrypt(t.Context(), encryptedPayload)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "request failed")
+		require.NotErrorIs(t, err, ErrOperatorDataProtectionUnsupported)
+		assert.Equal(t, 1, s.serverHits)
+	})
+}
+
 // TestMissingKeys tests the MissingKeys method which identifies keys present in local storage
 // but missing from the remote SSV signer service. It verifies proper key difference calculation
 // and error handling for various key combinations and server response scenarios.

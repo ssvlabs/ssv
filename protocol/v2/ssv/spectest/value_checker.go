@@ -228,8 +228,8 @@ func createValueChecker(r runner.Runner, signerSource ...runner.Runner) ssv.Valu
 
 		// Get slot from state or use testing default
 		slot := phase0.Slot(spectestingutils.TestingDutySlot)
-		if typedRunner.BaseRunner.State != nil && typedRunner.BaseRunner.State.CurrentDuty != nil {
-			slot = typedRunner.BaseRunner.State.CurrentDuty.DutySlot()
+		if typedRunner.State != nil && typedRunner.State.CurrentDuty != nil {
+			slot = typedRunner.State.CurrentDuty.DutySlot()
 		}
 
 		// Construct expected vote from TestingAttestationData (same pattern as testing/runner.go:69-73)
