@@ -3,6 +3,7 @@ package unblinder_test
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -77,4 +78,54 @@ func TestFanoutUnblinder_AllFailReturnsNil(t *testing.T) {
 	if got != nil {
 		t.Fatalf("expected nil unblinded proposal")
 	}
+}
+
+func TestFanoutUnblinder_CancelsLosingProvidersAfterSuccess(t *testing.T) {
+	t.Parallel()
+
+	cancelled := make(chan struct{})
+	var attempts atomic.Int32
+
+	u := &unblinder.FanoutUnblinder{
+		Providers: []unblinder.UnblindProvider{
+			fakeProvider{address: "winner", resp: &eth2api.VersionedSignedProposal{}},
+			fakeProviderFunc(func(ctx context.Context, _ *builderapi.UnblindProposalOpts) (*builderapi.Response[*eth2api.VersionedSignedProposal], error) {
+				attempts.Add(1)
+				<-ctx.Done()
+				close(cancelled)
+				return nil, ctx.Err()
+			}),
+		},
+		Retries:       1,
+		RetryInterval: time.Second,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	t.Cleanup(cancel)
+
+	got, err := u.UnblindBlock(ctx, &eth2api.VersionedSignedBlindedBeaconBlock{})
+	if err != nil {
+		t.Fatalf("unblind: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected unblinded proposal")
+	}
+
+	select {
+	case <-cancelled:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("expected losing provider to be canceled after first success")
+	}
+
+	if gotAttempts := attempts.Load(); gotAttempts != 1 {
+		t.Fatalf("expected losing provider to stop after first attempt, got %d", gotAttempts)
+	}
+}
+
+type fakeProviderFunc func(context.Context, *builderapi.UnblindProposalOpts) (*builderapi.Response[*eth2api.VersionedSignedProposal], error)
+
+func (fn fakeProviderFunc) Address() string { return "fake" }
+
+func (fn fakeProviderFunc) UnblindProposal(ctx context.Context, opts *builderapi.UnblindProposalOpts) (*builderapi.Response[*eth2api.VersionedSignedProposal], error) {
+	return fn(ctx, opts)
 }

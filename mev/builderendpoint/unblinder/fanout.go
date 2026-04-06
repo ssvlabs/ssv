@@ -33,6 +33,7 @@ type UnblindProvider interface {
 
 func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.VersionedSignedBlindedBeaconBlock) (*eth2api.VersionedSignedProposal, error) {
 	start := time.Now()
+	requestCtx := ctx
 
 	if u == nil {
 		return nil, nil
@@ -47,6 +48,8 @@ func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.Versi
 	}
 
 	proposal := toSignedBlindedProposal(block)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	respCh := make(chan *eth2api.VersionedSignedProposal, 1)
 	doneCh := make(chan struct{})
@@ -76,14 +79,15 @@ func (u *FanoutUnblinder) UnblindBlock(ctx context.Context, block *eth2api.Versi
 
 	select {
 	case resp := <-respCh:
-		recordUnblind(ctx, unblindModeFanout, unblindResultSuccess, time.Since(start))
+		cancel()
+		recordUnblind(requestCtx, unblindModeFanout, unblindResultSuccess, time.Since(start))
 		return resp, nil
 	case <-doneCh:
-		recordUnblind(ctx, unblindModeFanout, unblindResultNoPayload, time.Since(start))
+		recordUnblind(requestCtx, unblindModeFanout, unblindResultNoPayload, time.Since(start))
 		return nil, nil
-	case <-ctx.Done():
-		recordUnblind(ctx, unblindModeFanout, unblindResultError, time.Since(start))
-		return nil, ctx.Err()
+	case <-requestCtx.Done():
+		recordUnblind(requestCtx, unblindModeFanout, unblindResultError, time.Since(start))
+		return nil, requestCtx.Err()
 	}
 }
 
