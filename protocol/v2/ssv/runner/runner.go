@@ -135,14 +135,6 @@ func (b *BaseRunner) GetRole() spectypes.RunnerRole {
 	return b.RunnerRoleType
 }
 
-func (b *BaseRunner) GetCurrentDutySlot() phase0.Slot {
-	if !b.hasDutyAssigned() {
-		return 0
-	}
-
-	return b.State.CurrentDuty.DutySlot()
-}
-
 func (b *BaseRunner) GetLastHeight() specqbft.Height {
 	if ctrl := b.QBFTController; ctrl != nil {
 		return ctrl.Height
@@ -480,6 +472,14 @@ func (b *BaseRunner) hasDutyFinished() bool {
 	return b.hasDutyAssigned() && b.State.Finished
 }
 
+func (b *BaseRunner) currentDutySlot() phase0.Slot {
+	if !b.hasDutyAssigned() {
+		return 0
+	}
+	// State.CurrentDuty cannot be nil for non-nil State by construction.
+	return b.State.CurrentDuty.DutySlot()
+}
+
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 	if b.QBFTController.Height >= specqbft.Height(duty.DutySlot()) && b.QBFTController.Height != 0 {
 		return spectypes.NewError(
@@ -507,7 +507,7 @@ func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, time
 		return nil
 	}
 
-	if timeoutData.Height != specqbft.Height(b.GetCurrentDutySlot()) {
+	if timeoutData.Height != specqbft.Height(b.currentDutySlot()) {
 		// Validator-Runners are re-used to process duties targeting different slots (unlike Committee-Runners that
 		// are working with exactly one slot), thus for Validator-Runners timeout events can be delayed in the queue
 		// until the runner has already moved on to a new duty/slot - this is why timeout-event height(== slot)
