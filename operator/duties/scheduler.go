@@ -388,7 +388,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 
 		// Check for reorg & fire corresponding ReorgEvent if needed.
 		if s.lastEpoch != 0 {
-			zeroRoot := new(phase0.Root)[:]
+			var zeroRoot phase0.Root
 
 			epochTransition := currentEpoch > s.lastEpoch
 
@@ -401,14 +401,14 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 				// - we use the latest observed block-root from the previous epoch as the expected current dependent
 				//   root since it's the only thing we can compare the current dependent root we got with. This might
 				//   produce a spurious (false-positive) reorg in case when another event overrode the canonical root
-				//   observed (and recorded as lastBlockRoot) during pior event(s) - but it works OK for us regardless.
+				//   observed (and recorded as lastBlockRoot) during prior event(s) - but it works OK for us regardless.
 				expectedCurrentDutyDependentRoot = s.lastBlockRoot[:]
 				expectedPreviousDutyDependentRoot = s.currentDutyDependentRoot[:]
 			}
 
-			currentDutyDependentRootChanged := !bytes.Equal(expectedCurrentDutyDependentRoot, zeroRoot) &&
+			currentDutyDependentRootChanged := !bytes.Equal(expectedCurrentDutyDependentRoot, zeroRoot[:]) &&
 				!bytes.Equal(expectedCurrentDutyDependentRoot, event.CurrentDutyDependentRoot[:])
-			previousDutyDependentRootChanged := !bytes.Equal(expectedPreviousDutyDependentRoot, zeroRoot) &&
+			previousDutyDependentRootChanged := !bytes.Equal(expectedPreviousDutyDependentRoot, zeroRoot[:]) &&
 				!bytes.Equal(expectedPreviousDutyDependentRoot, event.PreviousDutyDependentRoot[:])
 
 			if currentDutyDependentRootChanged || previousDutyDependentRootChanged {
