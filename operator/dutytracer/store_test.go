@@ -32,7 +32,7 @@ func setCommitteeLink(c *Collector, slot phase0.Slot, validatorIndex phase0.Vali
 }
 
 func TestValidatorCommitteeMapping(t *testing.T) {
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	defer ctrl.Finish()
 	vstore := registrymocks.NewMockValidatorStore(ctrl)
 
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	index1 := phase0.ValidatorIndex(1)
 
 	// Setup db, shares & collector
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	dutyStore := store.New(db)
@@ -372,7 +372,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	defer ctrl.Finish()
 	vstore := registrymocks.NewMockValidatorStore(ctrl)
 
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1358,7 +1358,7 @@ func setupEventHandler(
 	operator *testOperator,
 	useMockCtrl bool,
 ) (*EventHandler, *mocks.MockTaskExecutor, error) {
-	db, err := pebble.NewTemporary(logger, basedb.Options{
+	db, err := pebble.NewTempDB(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	require.NoError(t, err)

@@ -407,7 +407,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		// TODO: add mock for peers.ScoreIndex
 	}
 
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

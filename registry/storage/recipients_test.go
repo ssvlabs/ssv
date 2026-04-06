@@ -327,7 +327,7 @@ func TestStorage_NonceManagement(t *testing.T) {
 
 func TestStorage_Persistence(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -502,7 +502,7 @@ func TestGetFeeRecipient(t *testing.T) {
 }
 
 func newRecipientStorageForTest(logger *zap.Logger) (storage.Recipients, func()) {
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

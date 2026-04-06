@@ -32,7 +32,7 @@ func _byteArray(input string) []byte {
 func getBaseStorage(t *testing.T, logger *zap.Logger) (basedb.Database, error) {
 	t.Helper()
 
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, err
 	}

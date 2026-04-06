@@ -10,12 +10,12 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-type DBTemporary struct {
+type TempDB struct {
 	*DB
 	cleanupPath string
 }
 
-func (pdb *DBTemporary) Close() error {
+func (pdb *TempDB) Close() error {
 	var err error
 	if pdb.DB != nil {
 		err = pdb.DB.Close()
@@ -26,8 +26,8 @@ func (pdb *DBTemporary) Close() error {
 	return err
 }
 
-// NewTemporary creates a temporary Pebble-backed DB and removes it on Close.
-func NewTemporary(logger *zap.Logger, _ basedb.Options) (*DBTemporary, error) {
+// NewTempDB creates a temporary Pebble-backed DB and removes it on Close.
+func NewTempDB(logger *zap.Logger, _ basedb.Options) (*TempDB, error) {
 	path, err := os.MkdirTemp("", "ssv-pebble-test-*")
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func NewTemporary(logger *zap.Logger, _ basedb.Options) (*DBTemporary, error) {
 		return nil, err
 	}
 
-	return &DBTemporary{
+	return &TempDB{
 		DB:          db,
 		cleanupPath: path,
 	}, nil

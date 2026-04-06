@@ -190,7 +190,7 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

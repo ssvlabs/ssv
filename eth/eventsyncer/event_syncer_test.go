@@ -107,7 +107,7 @@ func TestEventSyncer(t *testing.T) {
 	}
 
 	t.Run("client closed", func(t *testing.T) {
-		db, err := pebble.NewTemporary(logger, basedb.Options{
+		db, err := pebble.NewTempDB(logger, basedb.Options{
 			Ctx: ctx,
 		})
 		require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestEventSyncer(t *testing.T) {
 	})
 
 	t.Run("context canceled", func(t *testing.T) {
-		db, err := pebble.NewTemporary(logger, basedb.Options{
+		db, err := pebble.NewTempDB(logger, basedb.Options{
 			Ctx: ctx,
 		})
 		require.NoError(t, err)
@@ -191,7 +191,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	db *pebble.DBTemporary,
+	db *pebble.TempDB,
 	nodeStorage operatorstorage.Storage,
 	operatorData *registrystorage.OperatorData,
 	privateKey keys.OperatorPrivateKey,

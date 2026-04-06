@@ -161,7 +161,7 @@ func setupTest(t *testing.T) (basedb.Database, *zap.Logger) {
 	t.Helper()
 
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

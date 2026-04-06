@@ -77,7 +77,7 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	ctrl := gomock.NewController(t)
 	validatorMock := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

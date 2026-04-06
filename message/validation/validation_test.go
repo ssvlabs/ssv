@@ -69,7 +69,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	logger := zaptest.NewLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

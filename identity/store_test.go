@@ -50,7 +50,7 @@ func TestSetupPrivateKey(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			db, err := pebble.NewTemporary(logger, basedb.Options{})
+			db, err := pebble.NewTempDB(logger, basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
@@ -104,7 +104,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	}
 
 	t.Run("NewIdentityStore", func(t *testing.T) {
-		db, err := pebble.NewTemporary(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 

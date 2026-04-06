@@ -15,7 +15,7 @@ import (
 func newDB(t *testing.T, logger *zap.Logger) basedb.Database {
 	t.Helper()
 
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		t.Fatalf("create temporary pebble db: %v", err)
 	}
