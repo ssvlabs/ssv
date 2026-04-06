@@ -69,6 +69,11 @@ type HostProvider interface {
 	Host() host.Host
 }
 
+// HealthChecker provides health checking capability for the node prober.
+type HealthChecker interface {
+	Healthy(ctx context.Context) error
+}
+
 type statusWithSubnet struct {
 	status      committeeSubscriptionStatus
 	booleSubnet commons.Subnet
@@ -84,18 +89,19 @@ type p2pNetwork struct {
 	logger *zap.Logger
 	cfg    *Config
 
-	host         host.Host
-	streamCtrl   streams.StreamController
-	idx          peers.Index
-	isIdxSet     atomic.Bool
-	disc         discovery.Service
-	topicsCtrl   topics.Controller
-	msgRouter    network.MessageRouter
-	msgResolver  topics.MsgPeersResolver
-	msgValidator validation.MessageValidator
-	connHandler  connections.ConnHandler
-	connGater    connmgrcore.ConnectionGater
-	trustedPeers []*peer.AddrInfo
+	host            host.Host
+	streamCtrl      streams.StreamController
+	idx             peers.Index
+	isIdxSet        atomic.Bool
+	discoveryFailed atomic.Bool
+	disc            discovery.Service
+	topicsCtrl      topics.Controller
+	msgRouter       network.MessageRouter
+	msgResolver     topics.MsgPeersResolver
+	msgValidator    validation.MessageValidator
+	connHandler     connections.ConnHandler
+	connGater       connmgrcore.ConnectionGater
+	trustedPeers    []*peer.AddrInfo
 
 	state int32
 
@@ -126,6 +132,8 @@ type p2pNetwork struct {
 	trimmedRecently *ttl.Map[peer.ID, struct{}]
 }
 
+var _ HealthChecker = (*p2pNetwork)(nil)
+
 // New creates a new p2p network
 func New(
 	logger *zap.Logger,
@@ -147,8 +155,8 @@ func New(
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
-		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
-		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
+		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](ctx, 30*time.Minute, 3*time.Minute),
+		trimmedRecently:         ttl.New[peer.ID, struct{}](ctx, 30*time.Minute, 3*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err
@@ -260,18 +268,22 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 }
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
-func (n *p2pNetwork) Start() error {
+func (n *p2pNetwork) Start() (err error) {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
-		// return errors.New("could not setup network: in ready state")
-		return nil
+		return fmt.Errorf("network already started")
 	}
+	defer func() {
+		if err != nil {
+			atomic.StoreInt32(&n.state, stateClosed)
+		}
+	}()
 
 	pAddrs, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
 		ID:    n.host.ID(),
 		Addrs: n.host.Addrs(),
 	})
 	if err != nil {
-		n.logger.Fatal("could not get my address", zap.Error(err))
+		return fmt.Errorf("resolve p2p address: %w", err)
 	}
 	maStrs := make([]string, len(pAddrs))
 	for i, ima := range pAddrs {
@@ -386,7 +398,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 }
 
 // choosePeersToTrim returns a map of peers that are least-valuable to us based on how much
-// (dead/solo/duo) they contribute to us (as defined by peerScore func).
+// (dead/solo/duo) they contribute to us.
 func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[peer.ID]struct{} {
 	myPeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
@@ -394,10 +406,11 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 		return nil
 	}
 
+	peerScores := n.buildPeerTrimScores(myPeers)
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
 		// sort in asc order (peers with the lowest scores come first)
-		aScore := n.peerScore(a)
-		bScore := n.peerScore(b)
+		aScore := peerScores[a]
+		bScore := peerScores[b]
 		if aScore < bScore {
 			return -1
 		}
@@ -444,6 +457,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
+	defer close(connector)
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 			if err := n.idx.CanConnect(e.AddrInfo.ID); err != nil {
@@ -458,12 +472,29 @@ func (n *p2pNetwork) bootstrapDiscovery(connector chan peer.AddrInfo) {
 		})
 	}, 3)
 	if err != nil {
-		n.logger.Fatal("could not setup discovery", zap.Error(err))
+		n.discoveryFailed.Store(true)
+		n.logger.Error("could not setup discovery", zap.Error(err))
+		return
 	}
 }
 
 func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
+}
+
+// Healthy reports whether the p2p network is operating normally.
+// It satisfies the nodeprobe health-check interface.
+func (n *p2pNetwork) Healthy(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !n.isReady() {
+		return fmt.Errorf("p2p network not ready")
+	}
+	if n.discoveryFailed.Load() {
+		return fmt.Errorf("discovery bootstrap failed")
+	}
+	return nil
 }
 
 // UpdateSubnets refreshes discovery records and pubsub subscriptions based on
@@ -480,7 +511,11 @@ func (n *p2pNetwork) UpdateSubnets() {
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
-	for ; true; <-ticker.C {
+	for {
+		if n.ctx.Err() != nil {
+			return
+		}
+
 		start := time.Now()
 
 		alanSubnets, booleSubnets := n.subscribedSubnetsForCurrentEpoch()
@@ -514,115 +549,120 @@ func (n *p2pNetwork) UpdateSubnets() {
 		hasAlanChanges := addedAlanSubnets.HasActive() || removedAlanSubnets.HasActive()
 		hasBooleChanges := addedBooleSubnets.HasActive() || removedBooleSubnets.HasActive()
 		if !hasSubnetChanges && !hasAlanChanges && !hasBooleChanges {
-			continue
+			n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
+				self.Metadata.Subnets = n.currentSubnets.StringHex()
+				return self
+			})
+
+			var (
+				errs                 error
+				hasAdded, hasRemoved bool
+			)
+			if len(addedSubnets) > 0 {
+				var err error
+				hasAdded, err = n.disc.RegisterSubnets(addedSubnets...)
+				if err != nil {
+					n.logger.Debug("could not register subnets", zap.Error(err))
+					errs = errors.Join(errs, err)
+				}
+			}
+			if addedAlanSubnets.HasActive() {
+				for _, addedSubnet := range addedAlanSubnets.SubnetList() {
+					if err := n.subscribeSubnet(addedSubnet, false); err != nil {
+						n.logger.Debug("could not subscribe to subnet",
+							fields.Subnet(addedSubnet),
+							zap.String("fork", "Alan"),
+							zap.Error(err),
+						)
+						errs = errors.Join(errs, err)
+					} else {
+						n.logger.Debug("subscribed to subnet",
+							fields.Subnet(addedSubnet),
+							zap.String("fork", "Alan"),
+						)
+					}
+				}
+			}
+			if addedBooleSubnets.HasActive() {
+				for _, addedSubnet := range addedBooleSubnets.SubnetList() {
+					if err := n.subscribeSubnet(addedSubnet, true); err != nil {
+						n.logger.Debug("could not subscribe to subnet",
+							fields.Subnet(addedSubnet),
+							zap.String("fork", "Boole"),
+							zap.Error(err),
+						)
+						errs = errors.Join(errs, err)
+					} else {
+						n.logger.Debug("subscribed to subnet",
+							fields.Subnet(addedSubnet),
+							zap.String("fork", "Boole"),
+						)
+					}
+				}
+			}
+			if len(removedSubnets) > 0 {
+				var err error
+				hasRemoved, err = n.disc.DeregisterSubnets(removedSubnets...)
+				if err != nil {
+					n.logger.Debug("could not unregister subnets", zap.Error(err))
+					errs = errors.Join(errs, err)
+				}
+			}
+			if removedAlanSubnets.HasActive() {
+				for _, removedSubnet := range removedAlanSubnets.SubnetList() {
+					if err := n.unsubscribeSubnet(removedSubnet, false); err != nil {
+						n.logger.Debug("could not unsubscribe from subnet",
+							fields.Subnet(removedSubnet),
+							zap.String("fork", "Alan"),
+							zap.Error(err),
+						)
+						errs = errors.Join(errs, err)
+					} else {
+						n.logger.Debug("unsubscribed from subnet",
+							fields.Subnet(removedSubnet),
+							zap.String("fork", "Alan"),
+						)
+					}
+				}
+			}
+			if removedBooleSubnets.HasActive() {
+				for _, removedSubnet := range removedBooleSubnets.SubnetList() {
+					if err := n.unsubscribeSubnet(removedSubnet, true); err != nil {
+						n.logger.Debug("could not unsubscribe from subnet",
+							fields.Subnet(removedSubnet),
+							zap.Error(err),
+							zap.String("fork", "Boole"),
+						)
+						errs = errors.Join(errs, err)
+					} else {
+						n.logger.Debug("unsubscribed from subnet",
+							fields.Subnet(removedSubnet),
+							zap.String("fork", "Boole"),
+						)
+					}
+				}
+			}
+			if hasAdded || hasRemoved {
+				go n.disc.PublishENR()
+			}
+
+			subnetsList := commons.AllSubnets.SharedSubnets(n.currentSubnets)
+			n.logger.Debug("updated subnets",
+				zap.Any("added", addedSubnets),
+				zap.Any("removed", removedSubnets),
+				zap.Any("subnets", subnetsList),
+				zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
+				zap.Int("total_subnets", len(subnetsList)),
+				fields.Took(time.Since(start)),
+				zap.Error(errs),
+			)
 		}
 
-		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = n.currentSubnets.StringHex()
-			return self
-		})
-
-		// Register/unregister subnets for discovery.
-		var errs error
-		var hasAdded, hasRemoved bool
-		if len(addedSubnets) > 0 {
-			var err error
-			hasAdded, err = n.disc.RegisterSubnets(addedSubnets...)
-			if err != nil {
-				n.logger.Debug("could not register subnets", zap.Error(err))
-				errs = errors.Join(errs, err)
-			}
+		select {
+		case <-n.ctx.Done():
+			return
+		case <-ticker.C:
 		}
-		if addedAlanSubnets.HasActive() {
-			for _, addedSubnet := range addedAlanSubnets.SubnetList() {
-				if err := n.subscribeSubnet(addedSubnet, false); err != nil {
-					n.logger.Debug("could not subscribe to subnet",
-						fields.Subnet(addedSubnet),
-						zap.String("fork", "Alan"),
-						zap.Error(err),
-					)
-					errs = errors.Join(errs, err)
-				} else {
-					n.logger.Debug("subscribed to subnet",
-						fields.Subnet(addedSubnet),
-						zap.String("fork", "Alan"),
-					)
-				}
-			}
-		}
-		if addedBooleSubnets.HasActive() {
-			for _, addedSubnet := range addedBooleSubnets.SubnetList() {
-				if err := n.subscribeSubnet(addedSubnet, true); err != nil {
-					n.logger.Debug("could not subscribe to subnet",
-						fields.Subnet(addedSubnet),
-						zap.String("fork", "Boole"),
-						zap.Error(err),
-					)
-					errs = errors.Join(errs, err)
-				} else {
-					n.logger.Debug("subscribed to subnet",
-						fields.Subnet(addedSubnet),
-						zap.String("fork", "Boole"),
-					)
-				}
-			}
-		}
-		if len(removedSubnets) > 0 {
-			var err error
-			hasRemoved, err = n.disc.DeregisterSubnets(removedSubnets...)
-			if err != nil {
-				n.logger.Debug("could not unregister subnets", zap.Error(err))
-				errs = errors.Join(errs, err)
-			}
-		}
-		if removedAlanSubnets.HasActive() {
-			for _, removedSubnet := range removedAlanSubnets.SubnetList() {
-				if err := n.unsubscribeSubnet(removedSubnet, false); err != nil {
-					n.logger.Debug("could not unsubscribe from subnet",
-						fields.Subnet(removedSubnet),
-						zap.String("fork", "Alan"),
-						zap.Error(err),
-					)
-					errs = errors.Join(errs, err)
-				} else {
-					n.logger.Debug("unsubscribed from subnet",
-						fields.Subnet(removedSubnet),
-						zap.String("fork", "Alan"),
-					)
-				}
-			}
-		}
-		if removedBooleSubnets.HasActive() {
-			for _, removedSubnet := range removedBooleSubnets.SubnetList() {
-				if err := n.unsubscribeSubnet(removedSubnet, true); err != nil {
-					n.logger.Debug("could not unsubscribe from subnet",
-						fields.Subnet(removedSubnet),
-						zap.Error(err),
-						zap.String("fork", "Boole"),
-					)
-					errs = errors.Join(errs, err)
-				} else {
-					n.logger.Debug("unsubscribed from subnet",
-						fields.Subnet(removedSubnet),
-						zap.String("fork", "Boole"),
-					)
-				}
-			}
-		}
-		if hasAdded || hasRemoved {
-			go n.disc.PublishENR()
-		}
-
-		subnetsList := commons.AllSubnets.SharedSubnets(n.currentSubnets)
-		n.logger.Debug("updated subnets",
-			zap.Any("added", addedSubnets),
-			zap.Any("removed", removedSubnets),
-			zap.Any("subnets", subnetsList),
-			zap.Any("subscribed_topics", n.topicsCtrl.Topics()),
-			zap.Int("total_subnets", len(subnetsList)),
-			fields.Took(time.Since(start)),
-			zap.Error(errs),
-		)
 	}
 }
 
@@ -639,13 +679,17 @@ func (n *p2pNetwork) UpdateScoreParams() {
 		return n.cfg.NetworkConfig.EpochStartTime(nextEpoch)
 	}
 
-	// Create timer that triggers on the beginning of the next epoch
-	timer := time.NewTimer(time.Until(nextEpochStartingTime()))
+	timer := time.NewTimer(0)
 	defer timer.Stop()
 
-	// Run immediately and then once every epoch
-	for ; true; <-timer.C {
-		// Update score parameters
+	// Run immediately and then once every epoch.
+	for {
+		select {
+		case <-n.ctx.Done():
+			return
+		case <-timer.C:
+		}
+
 		err := n.topicsCtrl.UpdateScoreParams()
 		if err != nil {
 			n.logger.Debug("score parameters update failed", zap.Error(err))
@@ -666,37 +710,78 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	return n.cfg.TopicMaxPeers
 }
 
-// peerScore calculates peer score based on how valuable this peer would have been if we didn't
-// have him, but then connected with.
-func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
-	// Compute number of peers we're connected to for each subnet excluding peer with peerID.
-	subnetPeersExcluding := newSubnetPeers()
+// buildPeerTrimScores snapshots topic membership once and computes trim scores
+// for the given peers.
+//
+// The peer-scores are calculated based on:
+//   - ownSubnets is the desired set of subnets we want to be connected to
+//   - ownSubnetPeers is our own currently connected peer count per subnet across all
+//     peers in our topic mesh
+//   - peerSubnets tracks all the subnets each of our peers is connected to
+//
+// Algo:
+//   - calculate (take snapshot of) ownSubnets, ownSubnetPeers, peerSubnets
+//   - for each candidate peer we need to score:
+//   - calculate subnetPeersExcluding (currently connected subnets IF that candidate peer is excluded/disconnected)
+//   - use SubnetPeers.Score to calculate the final peer-score for each peer (based on: subnetPeersExcluding, desired
+//     set of subnets, subnets this peer is connected to)
+func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 {
+	ownSubnets := n.SubscribedSubnets()
+	ownSubnetPeers := newSubnetPeers()
+	peerSubnets := make(map[peer.ID]commons.Subnets)
+
 	for topic, peers := range n.PeersByTopic() {
-		subnet, err := commons.ParseTopicSubnet(topic)
-		if err != nil {
-			n.logger.Error("failed to parse topic",
-				zap.String("topic", topic), zap.Error(err))
+		subnet, ok := n.topicSubnet(topic)
+		if !ok {
 			continue
 		}
-		if uint64(subnet) >= commons.SubnetsCount {
-			n.logger.Error("invalid topic",
-				zap.String("topic", topic), fields.Subnet(subnet))
-			continue
-		}
-		for _, pID := range peers {
-			if pID == peerID {
-				continue
-			}
-			subnetPeersExcluding[uint64(subnet)]++
+
+		ownSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+		for _, peerID := range peers {
+			peerContribution := peerSubnets[peerID]
+			peerContribution.Set(subnet)
+			peerSubnets[peerID] = peerContribution
 		}
 	}
 
-	ownSubnets := n.SubscribedSubnets()
-	peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-	return subnetPeersExcluding.Score(ownSubnets, peerSubnets)
+	scores := make(map[peer.ID]float64, len(peerIDs))
+	for _, peerID := range peerIDs {
+		pSubnets := peerSubnets[peerID]
+		subnetPeersExcluding := ownSubnetPeers
+		for subnet := range ownSubnetPeers {
+			if pSubnets.IsSet(commons.Subnet(subnet)) { //nolint: gosec
+				// This subtraction here should never result into an underflow in practice (by construction),
+				// clamp to zero just in case that invariant is ever broken by a future change.
+				if subnetPeersExcluding[subnet] >= 1 {
+					subnetPeersExcluding[subnet] -= 1
+				}
+			}
+		}
+
+		scores[peerID] = subnetPeersExcluding.Score(ownSubnets, pSubnets)
+	}
+	return scores
 }
 
-// SubnetPeers contains the number of peers we are connected to for each subnet.
+// topicSubnet parses a topic name into a subnet index and logs malformed topics.
+func (n *p2pNetwork) topicSubnet(topic string) (commons.Subnet, bool) {
+	subnet, err := commons.ParseTopicSubnet(topic)
+	if err != nil {
+		n.logger.Error("failed to parse topic",
+			zap.String("topic", topic),
+			zap.Error(err))
+		return 0, false
+	}
+	if subnet >= commons.SubnetsCount {
+		n.logger.Error("invalid topic",
+			zap.String("topic", topic),
+			fields.Subnet(subnet))
+		return 0, false
+	}
+	return subnet, true
+}
+
+// SubnetPeers maps subnets to the number of peers connected to each of those subnets.
 type SubnetPeers [commons.SubnetsCount]uint16
 
 func newSubnetPeers() SubnetPeers {

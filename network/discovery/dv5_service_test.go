@@ -130,8 +130,8 @@ func TestCheckPeer(t *testing.T) {
 		subnetsIdx:          subnetIndex,
 		netCfg:              checkPeerTestNetCfg,
 		subnets:             mySubnets,
-		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
-		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
+		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](ctx, time.Hour, time.Hour),
+		trimmedRecently:     ttl.New[peer.ID, struct{}](ctx, time.Hour, time.Hour),
 	}
 
 	for _, test := range tests {

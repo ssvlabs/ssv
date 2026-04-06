@@ -14,6 +14,7 @@ const (
 	clNodeName          = "consensus client"
 	elNodeName          = "execution client"
 	eventSyncerNodeName = "event-syncer"
+	p2pNodeName         = "p2p"
 )
 
 // Common prober parameters we use for various prober-nodes.
@@ -23,14 +24,14 @@ const (
 	proberRetryDelay         = 10 * time.Second
 )
 
-const ethereumNodesUnhealthyFatalErrorMsg = "ethereum node(s) are not healthy"
+const nodesUnhealthyFatalErrorMsg = "node(s) are not healthy"
 
 func ensureEthereumNodesHealthy(ctx context.Context, logger *zap.Logger, p *nodeprobe.Prober) {
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := p.ProbeAll(probeCtx); err != nil {
-		logger.Fatal(ethereumNodesUnhealthyFatalErrorMsg, zap.Error(err))
+		logger.Fatal(nodesUnhealthyFatalErrorMsg, zap.Error(err))
 	}
 
 	logger.Info("ethereum node(s) are healthy")
@@ -51,7 +52,7 @@ func startNodeProber(ctx context.Context, logger *zap.Logger, p *nodeprobe.Probe
 			defer cancel()
 
 			if err := p.ProbeAll(probeCtx); err != nil {
-				logger.Fatal(ethereumNodesUnhealthyFatalErrorMsg, zap.Error(err))
+				logger.Fatal(nodesUnhealthyFatalErrorMsg, zap.Error(err))
 			}
 		}()
 

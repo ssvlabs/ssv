@@ -13,6 +13,7 @@ import (
 	context "context"
 	big "math/big"
 	reflect "reflect"
+	time "time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -48,27 +49,27 @@ func (m *MockDutiesExecutor) EXPECT() *MockDutiesExecutorMockRecorder {
 }
 
 // ExecuteCommitteeDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
+func (m *MockDutiesExecutor) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap, dutyDeadline time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteCommitteeDuties", ctx, duties)
+	m.ctrl.Call(m, "ExecuteCommitteeDuties", ctx, duties, dutyDeadline)
 }
 
 // ExecuteCommitteeDuties indicates an expected call of ExecuteCommitteeDuties.
-func (mr *MockDutiesExecutorMockRecorder) ExecuteCommitteeDuties(ctx, duties any) *gomock.Call {
+func (mr *MockDutiesExecutorMockRecorder) ExecuteCommitteeDuties(ctx, duties, dutyDeadline any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteCommitteeDuties), ctx, duties)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteCommitteeDuties), ctx, duties, dutyDeadline)
 }
 
 // ExecuteDuties mocks base method.
-func (m *MockDutiesExecutor) ExecuteDuties(ctx context.Context, duties []*types0.ValidatorDuty) {
+func (m *MockDutiesExecutor) ExecuteDuties(ctx context.Context, duties []*types0.ValidatorDuty, dutyDeadline time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ExecuteDuties", ctx, duties)
+	m.ctrl.Call(m, "ExecuteDuties", ctx, duties, dutyDeadline)
 }
 
 // ExecuteDuties indicates an expected call of ExecuteDuties.
-func (mr *MockDutiesExecutorMockRecorder) ExecuteDuties(ctx, duties any) *gomock.Call {
+func (mr *MockDutiesExecutorMockRecorder) ExecuteDuties(ctx, duties, dutyDeadline any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteDuties), ctx, duties)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuties", reflect.TypeOf((*MockDutiesExecutor)(nil).ExecuteDuties), ctx, duties, dutyDeadline)
 }
 
 // MockDutyExecutor is a mock of DutyExecutor interface.

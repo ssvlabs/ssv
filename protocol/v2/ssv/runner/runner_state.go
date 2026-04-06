@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -134,7 +135,7 @@ func (pcs *State) UnmarshalJSON(data []byte) error {
 	} else if aux.AggregatorCommitteeDuty != nil {
 		pcs.CurrentDuty = aux.AggregatorCommitteeDuty
 	} else {
-		panic("no starting duty")
+		return fmt.Errorf("no starting duty in state JSON")
 	}
 
 	return nil

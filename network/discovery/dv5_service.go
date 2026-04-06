@@ -157,7 +157,6 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	// Log every 10th skipped peer.
-	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
 	const logFrequency = 10
 	var skippedPeers uint64 = 0
 
@@ -192,7 +191,6 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
-	// TODO: uncomment errors once there are sufficient nodes with domain type.
 	peerDiscoveriesCounter.Add(ctx, 1)
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {

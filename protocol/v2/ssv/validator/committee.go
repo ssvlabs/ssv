@@ -370,7 +370,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		return nil
 	case message.SSVEventMsgType:
 		eventMsg, ok := msg.Body.(*types.EventMsg)
-		if !ok {
+		if !ok || eventMsg == nil {
 			return fmt.Errorf("could not decode event message (slot=%d)", slot)
 		}
 
@@ -384,21 +384,21 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, ok := c.runnerForRole(role, slot)
 			c.mtx.RUnlock()
 			if !ok {
-				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("no runner found for message's slot %d", slot))
+				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("event message: no runner found for message's slot %d", slot))
 			}
 
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
-				return fmt.Errorf("get timeout data: %w", err)
+				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
 
 			if err := r.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
-				return fmt.Errorf("timeout event: %w", err)
+				return fmt.Errorf("event message: process timeout event: %w", err)
 			}
 
 			return nil
 		default:
-			return fmt.Errorf("unknown event msg - %s", eventMsg.Type.String())
+			return fmt.Errorf("event message: unknown msg type - %s", eventMsg.Type.String())
 		}
 	default:
 		return fmt.Errorf("unknown message type: %d", msgType)

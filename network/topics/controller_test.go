@@ -360,21 +360,40 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	for i := 0; i < n; i++ {
 		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, scoreInspector)
 	}
+
+	connectPeers(t, ctx, peers)
+
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
-	for ctx.Err() == nil {
+	require.Eventually(t, func() bool {
 		done := 0
 		for _, p := range peers {
 			if atomic.LoadUint64(&p.connsCount) >= th {
 				done++
 			}
 		}
-		if done == len(peers) {
-			break
-		}
-	}
+		return done == len(peers)
+	}, 10*time.Second, 100*time.Millisecond)
 	t.Log("peers are connected")
 	return peers
+}
+
+func connectPeers(t *testing.T, ctx context.Context, peers []*P) {
+	t.Helper()
+
+	for i, p := range peers {
+		for j, other := range peers {
+			if i == j {
+				continue
+			}
+
+			info := peer.AddrInfo{
+				ID:    other.host.ID(),
+				Addrs: other.host.Addrs(),
+			}
+			require.NoError(t, p.host.Connect(ctx, info))
+		}
+	}
 }
 
 func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {

@@ -248,7 +248,7 @@ func (r *AggregatorCommitteeRunner) GetBeaconSigner() ekm.BeaconSigner {
 }
 
 func (r *AggregatorCommitteeRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.BaseRunner.HasRunningDuty()
 }
 
 func (r *AggregatorCommitteeRunner) GetBaseRunner() *BaseRunner {
@@ -706,7 +706,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 
 		msg, err := signBeaconObject(
 			ctx,
-			r, vDuty, hashRoot,
+			r, r.BaseRunner.NetworkConfig, vDuty, hashRoot,
 			aggCommDuty.DutySlot(),
 			spectypes.DomainAggregateAndProof,
 		)
@@ -747,7 +747,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		// Sign the contribution and proof
 		msg, err := signBeaconObject(
 			ctx,
-			r, vDuty, contribAndProof,
+			r, r.BaseRunner.NetworkConfig, vDuty, contribAndProof,
 			aggCommDuty.DutySlot(),
 			spectypes.DomainContributionAndProof,
 		)
@@ -1617,6 +1617,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 			partialSig, err := signBeaconObject(
 				ctx,
 				r,
+				r.BaseRunner.NetworkConfig,
 				vDuty,
 				spectypes.SSZUint64(duty.DutySlot()),
 				duty.DutySlot(),
@@ -1648,6 +1649,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 				partialSig, err := signBeaconObject(
 					ctx,
 					r,
+					r.BaseRunner.NetworkConfig,
 					vDuty,
 					data,
 					duty.DutySlot(),

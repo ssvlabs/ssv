@@ -20,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils"
 )
 
 type SyncCommitteeHandler struct {
@@ -74,7 +73,7 @@ func (h *SyncCommitteeHandler) WaitShutdown() {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. ResetEpoch duties for the current period.
+//  2. EraseEpochData duties for the current period.
 //  3. Fetch duties for the current period.
 //  4. If necessary, fetch duties for the next period.
 //
@@ -92,61 +91,71 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
-			period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
+				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
+				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
-				if !h.netCfg.BooleForkAtSlot(slot) {
+				if !h.netCfg.BooleForkAtSlot(currentSlot) {
 					// Before Boole fork: execute Alan sync committee contribution flow and fetch duties.
-					h.processExecution(tickCtx, period, slot)
+					h.processExecution(tickCtx, currentPeriod, currentSlot)
 				}
 
 				// After Boole fork: keep fetching duties (to pass them to both Committee and AggregatorCommittee handlers),
 				// but skip Alan execution, as the aggregator committee handler will be responsible for executing them.
-				h.processFetching(tickCtx, epoch, period, true)
+				h.processFetching(tickCtx, currentEpoch, currentPeriod, true)
 			}()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
 			periodSlots := h.slotsPerPeriod()
-			if uint64(slot)%periodSlots == periodSlots-h.preparationSlots-1 {
+			if uint64(currentSlot)%periodSlots == periodSlots-h.preparationSlots-1 {
 				h.fetchNextPeriod = true
 			}
 
 			// last slot of period
-			if slot == h.netCfg.LastSlotOfSyncPeriod(period) {
-				h.duties.Reset(period - 1)
+			if currentSlot == h.netCfg.LastSlotOfSyncPeriod(currentPeriod) {
+				h.duties.Reset(currentPeriod - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
-			epoch := h.netCfg.EstimatedEpochAtSlot(reorgEvent.Slot)
-			period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
-			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot) {
-				h.duties.Reset(period + 1)
+			if reorgEvent.Current && h.shouldFetchNextPeriod(currentSlot) {
+				h.duties.Reset(currentPeriod + 1)
 				h.fetchNextPeriod = true
 			}
 
 		case <-h.indicesChange:
-			slot := h.netCfg.EstimatedCurrentSlot()
-			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
-			period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			currentSlot := h.netCfg.EstimatedCurrentSlot()
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			h.logger.Info("🔁 indices change received", zap.String("period_epoch_slot_pos", buildStr))
 
 			h.fetchCurrentPeriod = true
 
 			// reset next period duties if in appropriate slot range
-			if h.shouldFetchNextPeriod(slot) {
+			if h.shouldFetchNextPeriod(currentSlot) {
 				h.fetchNextPeriod = true
 			}
 		}
@@ -170,9 +179,9 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 		h.fetchNextPeriod = true
 	}
 
-	epoch := h.netCfg.EstimatedCurrentEpoch()
-	period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, epoch, period, false)
+	currentEpoch := h.netCfg.EstimatedCurrentEpoch()
+	currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+	h.processFetching(ctx, currentEpoch, currentPeriod, false)
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
@@ -239,7 +248,10 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	}
 	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
-	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+	// Sync committee contributions are rewarded as long as they are included within 1 slot of their target slot
+	// (i.e., from target slot up to and including target + 1).
+	dutyDeadline := h.netCfg.SlotStartTime(slot + 1)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
 }
@@ -333,11 +345,8 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
-		subscriptionCtx, cancel, withDeadline := utils.CtxWithParentDeadline(ctx)
+		subscriptionCtx, cancel := context.WithCancel(h.ctx)
 		defer cancel()
-		if !withDeadline {
-			h.logger.Warn("parent-context has no deadline set")
-		}
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to subscribe sync committee to subnet", zap.Error(err))

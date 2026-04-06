@@ -78,8 +78,8 @@ func testingDiscoveryOptions(t *testing.T, netCfg *networkconfig.Network) *Optio
 		ConnIndex:           connectionIndex,
 		SubnetsIdx:          subnetsIndex,
 		NetworkConfig:       netCfg,
-		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
-		TrimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
+		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](t.Context(), time.Hour, time.Hour),
+		TrimmedRecently:     ttl.New[peer.ID, struct{}](t.Context(), time.Hour, time.Hour),
 	}
 }
 

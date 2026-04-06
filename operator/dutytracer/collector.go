@@ -690,6 +690,105 @@ func (c *Collector) collectLateMessage(ctx context.Context, msg *queue.SSVMessag
 	c.logger.Warn("exhausted retries for late message", fields.MessageID(msg.MsgID), zap.Int("tries", tries))
 }
 
+type partialSigVerifyCtx struct {
+	logger          *zap.Logger
+	runnerRole      spectypes.RunnerRole
+	slot            phase0.Slot
+	signer          spectypes.OperatorID
+	root            phase0.Root
+	committeeID     spectypes.CommitteeID
+	partialMsgsSize int
+}
+
+func (c *Collector) newPartialSigVerifyCtx(msg *queue.SSVMessage, pSigMessages *spectypes.PartialSignatureMessages) partialSigVerifyCtx {
+	runnerRole := msg.MsgID.GetRoleType()
+	slot := pSigMessages.Slot
+	var signer spectypes.OperatorID
+	var root phase0.Root
+	if len(pSigMessages.Messages) > 0 {
+		signer = ssvtypes.PartialSigMsgSigner(pSigMessages)
+		root = pSigMessages.Messages[0].SigningRoot
+	}
+
+	logger := c.logger.With(
+		fields.MessageID(msg.MsgID),
+		fields.MessageType(msg.MsgType),
+		fields.RunnerRole(runnerRole),
+		fields.Slot(slot),
+		fields.OperatorID(signer),
+		fields.Root(root),
+	)
+
+	ctx := partialSigVerifyCtx{
+		logger:          logger,
+		runnerRole:      runnerRole,
+		slot:            slot,
+		signer:          signer,
+		root:            root,
+		partialMsgsSize: len(pSigMessages.Messages),
+	}
+
+	if runnerRole == spectypes.RoleCommittee {
+		executorID := msg.MsgID.GetDutyExecutorID()
+		if len(executorID) >= 32 {
+			// committeeID is the last 16 bytes of the executorID
+			copy(ctx.committeeID[:], executorID[16:])
+			ctx.logger = logger.With(fields.CommitteeID(ctx.committeeID))
+		}
+	}
+
+	return ctx
+}
+
+func (c *Collector) summarizeMissingValidatorIndices(pSigMessages *spectypes.PartialSignatureMessages) (first phase0.ValidatorIndex, count int) {
+	for _, partialMsg := range pSigMessages.Messages {
+		if _, ok := c.validators.ValidatorByIndex(partialMsg.ValidatorIndex); !ok {
+			count++
+			if count == 1 {
+				first = partialMsg.ValidatorIndex
+			}
+		}
+	}
+	return first, count
+}
+
+func (c *Collector) wrapVerifyPartialSigErr(ctx partialSigVerifyCtx, pSigMessages *spectypes.PartialSignatureMessages, err error) error {
+	missingFirst, missingCount := c.summarizeMissingValidatorIndices(pSigMessages)
+
+	ctx.logger.Debug("❌ verify partial sig failed",
+		zap.Error(err),
+		zap.Int("partial_msgs_count", ctx.partialMsgsSize),
+		zap.Uint64("missing_first_validator_index", uint64(missingFirst)),
+		zap.Int("missing_validator_index_count", missingCount),
+	)
+
+	if ctx.runnerRole == spectypes.RoleCommittee {
+		return fmt.Errorf(
+			"verify partial sig (slot=%d committee_id=%x signer=%d root=%x partial_msgs=%d missing_first_validator_index=%d missing_validator_index_count=%d): %w",
+			ctx.slot,
+			ctx.committeeID,
+			ctx.signer,
+			ctx.root,
+			ctx.partialMsgsSize,
+			missingFirst,
+			missingCount,
+			err,
+		)
+	}
+
+	return fmt.Errorf(
+		"verify partial sig (slot=%d runner_role=%d signer=%d root=%x partial_msgs=%d missing_first_validator_index=%d missing_validator_index_count=%d): %w",
+		ctx.slot,
+		ctx.runnerRole,
+		ctx.signer,
+		ctx.root,
+		ctx.partialMsgsSize,
+		missingFirst,
+		missingCount,
+		err,
+	)
+}
+
 func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
 	start := time.Now()
 	//nolint:gosec
@@ -702,7 +801,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		subMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok {
+		if !ok || subMsg == nil {
 			return nil
 		}
 
@@ -862,8 +961,6 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 	}
 
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
-		logger := c.logger.With(zap.String("msg_id", msg.MsgID.String()))
-
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
 		if err != nil {
@@ -874,42 +971,36 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			return fmt.Errorf("no partial sig messages")
 		}
 
+		verifyCtx := c.newPartialSigVerifyCtx(msg, pSigMessages)
+
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
 			if err := pSigMessages.Validate(); err != nil {
 				return fmt.Errorf("validate partial sig: %w", err)
 			}
 
 			if err := verifySig(pSigMessages); err != nil {
-				return fmt.Errorf("verify partial sig: %w", err)
+				return c.wrapVerifyPartialSigErr(verifyCtx, pSigMessages, err)
 			}
 		}
 
-		executorID := msg.MsgID.GetDutyExecutorID()
-
 		// process partial sig for committee
-		if isCommitteeRunnerRole(msg.MsgID.GetRoleType()) {
-			var committeeID spectypes.CommitteeID
-			// committeeID is the last 16 bytes of the executorID
-			copy(committeeID[:], executorID[16:])
-
-			slot := pSigMessages.Slot
-			role := msg.MsgID.GetRoleType()
+		if isCommitteeRunnerRole(verifyCtx.runnerRole) {
 			var aggSelectionRoot phase0.Root
 			aggSelectionRootReady := false
 			if pSigMessages.Type == spectypes.AggregatorCommitteePartialSig {
-				root, err := c.getAggregatorSelectionRoot(ctx, slot)
+				root, err := c.getAggregatorSelectionRoot(ctx, verifyCtx.slot)
 				if err != nil {
 					c.logger.Warn("failed to compute aggregator selection root",
 						zap.Error(err),
-						fields.Slot(slot),
-						fields.CommitteeID(committeeID))
+						fields.Slot(verifyCtx.slot),
+						fields.CommitteeID(verifyCtx.committeeID))
 				} else {
 					aggSelectionRoot = root
 					aggSelectionRootReady = true
 				}
 			}
 
-			trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID, role)
+			trace, late, err := c.getOrCreateCommitteeTrace(verifyCtx.slot, verifyCtx.committeeID, verifyCtx.runnerRole)
 			if err != nil {
 				return err
 			}
@@ -924,11 +1015,11 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				aggSelectionRoot,
 				aggSelectionRootReady,
 			)
-			c.checkAndPublishQuorum(logger, pSigMessages, committeeID, trace)
+			c.checkAndPublishQuorum(verifyCtx.logger, pSigMessages, verifyCtx.committeeID, trace)
 
 			if late {
-				err := c.store.SaveCommitteeDuty(role, &trace.CommitteeDutyTrace)
-				_ = c.inFlightCommittee.Delete(committeeTraceKey{id: committeeID, role: role})
+				err := c.store.SaveCommitteeDuty(verifyCtx.runnerRole, &trace.CommitteeDutyTrace)
+				_ = c.inFlightCommittee.Delete(committeeTraceKey{id: verifyCtx.committeeID, role: verifyCtx.runnerRole})
 				return err
 			}
 
@@ -936,12 +1027,12 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		}
 
 		// process partial sig for validator
-		role, err := toBNRole(msg.MsgID.GetRoleType())
+		bnRole, err := toBNRole(verifyCtx.runnerRole)
 		if err != nil {
 			return err
 		}
 
-		trace, late, err := c.getOrCreateValidatorTrace(pSigMessages.Slot, role, pSigMessages.Messages[0].ValidatorIndex)
+		trace, late, err := c.getOrCreateValidatorTrace(pSigMessages.Slot, bnRole, pSigMessages.Messages[0].ValidatorIndex)
 		if err != nil {
 			return err
 		}
@@ -949,7 +1040,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		trace.Lock()
 		defer trace.Unlock()
 
-		roleDutyTrace := trace.getOrCreate(pSigMessages.Slot, role)
+		roleDutyTrace := trace.getOrCreate(pSigMessages.Slot, bnRole)
 
 		if roleDutyTrace.Validator == 0 {
 			roleDutyTrace.Validator = pSigMessages.Messages[0].ValidatorIndex

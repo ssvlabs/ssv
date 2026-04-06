@@ -82,15 +82,15 @@ func (mr *MockdutyHandlerMockRecorder) Name() *gomock.Call {
 }
 
 // Setup mocks base method.
-func (m *MockdutyHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, netCfg *networkconfig.Network, validatorProvider ValidatorProvider, validatorController ValidatorController, dutiesExecutor DutiesExecutor, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
+func (m *MockdutyHandler) Setup(ctx context.Context, name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, netCfg *networkconfig.Network, validatorProvider ValidatorProvider, validatorController ValidatorController, dutiesExecutor DutiesExecutor, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Setup", name, logger, beaconNode, executionClient, netCfg, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange)
+	m.ctrl.Call(m, "Setup", ctx, name, logger, beaconNode, executionClient, netCfg, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange)
 }
 
 // Setup indicates an expected call of Setup.
-func (mr *MockdutyHandlerMockRecorder) Setup(name, logger, beaconNode, executionClient, netCfg, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange any) *gomock.Call {
+func (mr *MockdutyHandlerMockRecorder) Setup(ctx, name, logger, beaconNode, executionClient, netCfg, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), name, logger, beaconNode, executionClient, netCfg, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), ctx, name, logger, beaconNode, executionClient, netCfg, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange)
 }
 
 // WaitShutdown mocks base method.

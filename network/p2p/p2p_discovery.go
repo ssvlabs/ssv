@@ -9,7 +9,6 @@ import (
 	"github.com/oleiade/lane/v2"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/async"
@@ -67,15 +66,8 @@ func (n *p2pNetwork) startDiscovery() error {
 		ownSubnets := n.SubscribedSubnets()
 		currentSubnetPeers := newSubnetPeers()
 		for topic, peers := range n.PeersByTopic() {
-			subnet, err := commons.ParseTopicSubnet(topic)
-			if err != nil {
-				n.logger.Error("failed to parse topic",
-					zap.String("topic", topic), zap.Error(err))
-				continue
-			}
-			if uint64(subnet) >= commons.SubnetsCount {
-				n.logger.Error("invalid topic",
-					zap.String("topic", topic), fields.Subnet(subnet))
+			subnet, ok := n.topicSubnet(topic)
+			if !ok {
 				continue
 			}
 			currentSubnetPeers[uint64(subnet)] = uint16(len(peers)) //nolint: gosec

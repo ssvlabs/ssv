@@ -101,8 +101,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				}
 				c.Runners[test.Duty.DutySlot()] = r
 				// Inform the duty guard of the running duty, if any, so that it won't reject it.
-				if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
-					duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
+				if r.State != nil && r.State.CurrentDuty != nil {
+					duty, ok := r.State.CurrentDuty.(*spectypes.CommitteeDuty)
 					if !ok {
 						panic("starting duty not found")
 					}

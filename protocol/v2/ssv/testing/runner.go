@@ -248,7 +248,7 @@ var ConstructBaseRunner = func(
 			dutyGuard,
 			dgHandler,
 		)
-		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
+		r.(*runner.CommitteeRunner).RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
 		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
@@ -531,7 +531,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			dgHandler,
 		)
 		if r != nil {
-			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
+			r.(*runner.CommitteeRunner).RunnerRoleType = spectestingutils.UnknownDutyType
 		}
 	default:
 		return nil, fmt.Errorf("unknown role type: %s", role)

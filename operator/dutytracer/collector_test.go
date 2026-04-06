@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -1304,6 +1305,161 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 			require.Equal(t, test.want, got)
 		})
 	}
+}
+
+func TestCollector_newPartialSigVerifyCtx_EmptyMessages(t *testing.T) {
+	collector := &Collector{logger: zap.NewNop()}
+	msg := &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgID: spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator),
+		},
+	}
+	pSigMessages := &spectypes.PartialSignatureMessages{
+		Slot:     12,
+		Messages: nil,
+	}
+
+	var got partialSigVerifyCtx
+	require.NotPanics(t, func() {
+		got = collector.newPartialSigVerifyCtx(msg, pSigMessages)
+	})
+
+	require.Equal(t, ssvtypes.RoleAggregator, got.runnerRole)
+	require.Equal(t, phase0.Slot(12), got.slot)
+	require.Zero(t, got.signer)
+	require.Zero(t, got.root)
+	require.Zero(t, got.partialMsgsSize)
+}
+
+func TestCollector_Collect_WrapVerifyPartialSigErrForValidator(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	core, recorded := observer.New(zap.DebugLevel)
+	logger := zap.New(core)
+
+	const (
+		slot         = phase0.Slot(12)
+		signer       = spectypes.OperatorID(7)
+		knownIndex   = phase0.ValidatorIndex(11)
+		missingIndex = phase0.ValidatorIndex(12)
+	)
+
+	verifyErr := errors.New("verify boom")
+	root := phase0.Root{1, 2, 3}
+	otherRoot := phase0.Root{4, 5, 6}
+	fakeSig := [96]byte{}
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().ValidatorByIndex(knownIndex).Return(&ssvtypes.SSVShare{}, true)
+	validators.EXPECT().ValidatorByIndex(missingIndex).Return(nil, false)
+
+	collector := New(logger, validators, nil, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
+	msgID := spectypes.NewMsgID([4]byte{}, []byte("pk"), ssvtypes.RoleAggregator)
+	pSigMessages := &spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{
+			{
+				ValidatorIndex:   knownIndex,
+				Signer:           signer,
+				PartialSignature: fakeSig[:],
+				SigningRoot:      root,
+			},
+			{
+				ValidatorIndex:   missingIndex,
+				Signer:           signer,
+				PartialSignature: fakeSig[:],
+				SigningRoot:      otherRoot,
+			},
+		},
+	}
+
+	data, err := pSigMessages.Encode()
+	require.NoError(t, err)
+
+	err = collector.Collect(t.Context(), buildPartialSigMessage(msgID, data), func(*spectypes.PartialSignatureMessages) error {
+		return verifyErr
+	})
+	require.ErrorIs(t, err, verifyErr)
+	require.ErrorContains(t, err, "verify partial sig")
+	require.ErrorContains(t, err, fmt.Sprintf("slot=%d", slot))
+	require.ErrorContains(t, err, fmt.Sprintf("runner_role=%d", ssvtypes.RoleAggregator))
+	require.ErrorContains(t, err, fmt.Sprintf("signer=%d", signer))
+	require.ErrorContains(t, err, fmt.Sprintf("root=%x", root))
+	require.ErrorContains(t, err, "partial_msgs=2")
+	require.ErrorContains(t, err, fmt.Sprintf("missing_first_validator_index=%d", missingIndex))
+	require.ErrorContains(t, err, "missing_validator_index_count=1")
+
+	logs := recorded.FilterMessage("❌ verify partial sig failed").All()
+	require.Len(t, logs, 1)
+	fields := logs[0].ContextMap()
+	require.EqualValues(t, 2, fields["partial_msgs_count"])
+	require.EqualValues(t, missingIndex, fields["missing_first_validator_index"])
+	require.EqualValues(t, 1, fields["missing_validator_index_count"])
+}
+
+func TestCollector_Collect_WrapVerifyPartialSigErrForCommittee(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish)
+
+	core, recorded := observer.New(zap.DebugLevel)
+	logger := zap.New(core)
+
+	const (
+		slot         = phase0.Slot(14)
+		signer       = spectypes.OperatorID(9)
+		missingIndex = phase0.ValidatorIndex(21)
+	)
+
+	verifyErr := errors.New("verify boom")
+	root := phase0.Root{9, 8, 7}
+	fakeSig := [96]byte{}
+
+	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
+	validators.EXPECT().ValidatorByIndex(missingIndex).Return(nil, false)
+
+	collector := New(logger, validators, nil, new(mockDutyTraceStore), networkconfig.TestNetwork.Beacon, nil, nil)
+	msgID := spectypes.NewMsgID([4]byte{}, []byte("committee_pk"), spectypes.RoleCommittee)
+	var committeeID spectypes.CommitteeID
+	copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
+
+	pSigMessages := &spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Slot: slot,
+		Messages: []*spectypes.PartialSignatureMessage{
+			{
+				ValidatorIndex:   missingIndex,
+				Signer:           signer,
+				PartialSignature: fakeSig[:],
+				SigningRoot:      root,
+			},
+		},
+	}
+
+	data, err := pSigMessages.Encode()
+	require.NoError(t, err)
+
+	err = collector.Collect(t.Context(), buildPartialSigMessage(msgID, data), func(*spectypes.PartialSignatureMessages) error {
+		return verifyErr
+	})
+	require.ErrorIs(t, err, verifyErr)
+	require.ErrorContains(t, err, "verify partial sig")
+	require.ErrorContains(t, err, fmt.Sprintf("slot=%d", slot))
+	require.ErrorContains(t, err, fmt.Sprintf("committee_id=%x", committeeID))
+	require.ErrorContains(t, err, fmt.Sprintf("signer=%d", signer))
+	require.ErrorContains(t, err, fmt.Sprintf("root=%x", root))
+	require.ErrorContains(t, err, "partial_msgs=1")
+	require.ErrorContains(t, err, fmt.Sprintf("missing_first_validator_index=%d", missingIndex))
+	require.ErrorContains(t, err, "missing_validator_index_count=1")
+
+	logs := recorded.FilterMessage("❌ verify partial sig failed").All()
+	require.Len(t, logs, 1)
+	fields := logs[0].ContextMap()
+	require.Equal(t, fmt.Sprintf("%x", committeeID), fields["committee_id"])
+	require.EqualValues(t, 1, fields["partial_msgs_count"])
+	require.EqualValues(t, missingIndex, fields["missing_first_validator_index"])
+	require.EqualValues(t, 1, fields["missing_validator_index_count"])
 }
 
 func TestCollector_lateMessage(t *testing.T) {

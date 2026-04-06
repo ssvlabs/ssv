@@ -332,3 +332,14 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 
 	return ln, routers, nil
 }
+
+func TestStartReturnsErrorWhenAlreadyStarted(t *testing.T) {
+	n := &p2pNetwork{}
+	atomic.StoreInt32(&n.state, stateReady)
+
+	err := n.Start()
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "network already started")
+	require.Equal(t, stateReady, atomic.LoadInt32(&n.state), "state should remain stateReady after double-start error")
+}

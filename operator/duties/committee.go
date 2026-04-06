@@ -110,22 +110,28 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			if h.isAggregator && !h.netCfg.BooleForkAtSlot(slot) {
+
+			if h.isAggregator && !h.netCfg.BooleForkAtSlot(currentSlot) {
 				continue
 			}
-			epoch := h.netCfg.EstimatedEpochAtSlot(slot)
-			period := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			slotsPerEpoch := phase0.Slot(h.netCfg.SlotsPerEpoch)
-			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%slotsPerEpoch+1)
+
+			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
+			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+			slotNumber := uint64(currentSlot)%h.netCfg.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", currentPeriod, currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineInOneEpoch(ctx, slot)
+				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
+				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
+				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
+				tickCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+1))
 				defer cancel()
 
-				h.processExecution(tickCtx, period, epoch, slot)
+				h.processExecution(tickCtx, currentPeriod, currentEpoch, currentSlot)
 			}()
 
 		case <-h.reorg:
@@ -166,7 +172,14 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
 	}
 
-	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
+	// Attestation and aggregation submissions are rewarded as long as they are included within
+	// SLOTS_PER_EPOCH slots of their target slot (i.e., from target slot up to and including target + SLOTS_PER_EPOCH).
+	// See https://eth2book.info/latest/part2/incentives/rewards/#attestation-rewards
+	// Sync committee duties have to use the same deadline because they are part of the committee role.
+	// We set the deadline to target slot + SLOTS_PER_EPOCH + 1 (since the deadline slot itself is excluded).
+	slotsPerEpoch := phase0.Slot(h.netCfg.SlotsPerEpoch)
+	dutyDeadline := h.netCfg.SlotStartTime(slot + slotsPerEpoch + 1)
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap, dutyDeadline)
 
 	span.SetStatus(codes.Ok, "")
 }
