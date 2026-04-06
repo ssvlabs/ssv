@@ -22,7 +22,7 @@ ssv-signer is a lightweight remote signing service inspired by Web3Signer. It wi
 
     Be preconfigured with a Web3Signer endpoint and an operator private key keystore.
 
-    Provide 3 essential API endpoints:
+    Provide validator-management APIs plus operator-key APIs for identity, signing, and P2P network-key encryption:
 
 #### API Endpoints
 
@@ -43,6 +43,10 @@ ssv-signer is a lightweight remote signing service inspired by Web3Signer. It wi
 - `GET /v1/operator/identity` - returns RSA public key, used by the node on startup to determine its own public key and therefore operator ID
 
 - `POST /v1/operator/sign` - signs a payload using the operator rsa key
+
+- `POST /v1/operator/encrypt` - encrypts data using the same encrypted-at-rest format that local operator-key deployments produce.
+
+- `POST /v1/operator/decrypt` - decrypts data from that same encrypted-at-rest format.
 
 
 #### Packages
@@ -69,6 +73,7 @@ With the introduction of ssv-signer, a third option will be added with `SSVSigne
 - Check ConfigLock to make sure remote signing is enabled in existing database, if any.
 - Fail if remote signer is offline.
 - Get ssv-signer operator public key and persist it to database. Crash if it already exists and is different (changing operators with same DB is not allowed, like today).
+- Probe `/v1/operator/encrypt` and `/v1/operator/decrypt`. If they are available, use them to protect the persisted P2P network key with the same encrypted-at-rest format used by local operator-key deployments. If the signer explicitly reports that these endpoints are unsupported, preserve legacy plaintext-at-rest behavior for backwards compatibility. If the database already contains an encrypted P2P network key, startup must fail until an `ssv-signer` with data-protection support or the original local operator key is restored. Other fetch failures should be treated as startup errors rather than silently downgrading protection.
 - Check that all the keys its supposed to have are available. (ssv-signer checks in web3signer)
 
 #### Startup (with remote signing disabled)
