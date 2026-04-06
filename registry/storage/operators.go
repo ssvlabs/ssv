@@ -163,7 +163,14 @@ func (s *operatorsStorage) getOperatorDataByPubKey(
 	if !ok {
 		return nil, false, nil
 	}
-	return s.getOperatorData(r, id)
+	op, found, err := s.getOperatorData(r, id)
+	if err != nil {
+		return nil, false, err
+	}
+	if !found || op.PublicKey != operatorPubKey {
+		return nil, false, nil
+	}
+	return op, true, nil
 }
 
 func (s *operatorsStorage) getOperatorData(
@@ -258,17 +265,7 @@ func (s *operatorsStorage) DeleteOperatorData(rw basedb.ReadWriter, id spectypes
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	op, found, _ := s.getOperatorData(nil, id)
-
-	if err := s.db.Using(rw).Delete(s.prefix, buildOperatorKey(id)); err != nil {
-		return err
-	}
-
-	if found {
-		delete(s.pubkeyIdx, op.PublicKey)
-	}
-
-	return nil
+	return s.db.Using(rw).Delete(s.prefix, buildOperatorKey(id))
 }
 
 func (s *operatorsStorage) DropOperators() error {
