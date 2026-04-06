@@ -920,7 +920,7 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 }
 
 func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -1169,7 +1169,7 @@ func TestCollector_FlushPending_Timestamps(t *testing.T) {
 }
 
 func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

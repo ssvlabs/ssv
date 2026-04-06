@@ -23,7 +23,7 @@ func setupTestDB(t *testing.T) *DB {
 }
 
 func TestPebbleDB_NewTemporary_RemovesDirectoryOnClose(t *testing.T) {
-	db, err := NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := NewTempDB(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 
 	tempDir := db.cleanupPath

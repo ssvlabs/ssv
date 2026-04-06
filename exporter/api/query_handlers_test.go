@@ -199,7 +199,7 @@ func newParticipantsAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64
 }
 
 func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, func()) {
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, nil, func() {}
 	}

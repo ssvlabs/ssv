@@ -19,7 +19,7 @@ import (
 
 func TestSaveCommitteeDutyLinks(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -53,7 +53,7 @@ func TestSaveCommitteeDutyLinks(t *testing.T) {
 
 func TestSaveCommitteeDutyLink(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -79,7 +79,7 @@ func TestSaveCommitteeDutyLink(t *testing.T) {
 
 func TestSaveCommitteeDutyTrace(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -101,7 +101,7 @@ func TestSaveCommitteeDutyTrace(t *testing.T) {
 
 func TestSaveCommitteeDuties(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -127,7 +127,7 @@ func TestSaveCommitteeDuties(t *testing.T) {
 
 func TestSaveValidatorDutyTrace(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -162,7 +162,7 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 
 func TestSaveValidatorDuties(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -196,7 +196,7 @@ func TestSaveValidatorDuties(t *testing.T) {
 
 func TestSaveScheduledDuties(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -231,7 +231,7 @@ func TestSaveScheduledDuties(t *testing.T) {
 
 func TestAddScheduledRole_UnionsIndices(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -248,7 +248,7 @@ func TestAddScheduledRole_UnionsIndices(t *testing.T) {
 
 func TestSaveScheduledMergesExistingBitmaps(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -273,7 +273,7 @@ func TestSaveScheduledMergesExistingBitmaps(t *testing.T) {
 
 func TestDeleteScheduledRoleAndSlot(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -296,7 +296,7 @@ func TestDeleteScheduledRoleAndSlot(t *testing.T) {
 
 func TestGetScheduledRoleMissing(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 

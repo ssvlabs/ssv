@@ -38,7 +38,7 @@ func BenchmarkTracer(b *testing.B) {
 
 	_ = f.Close()
 
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -28,7 +28,7 @@ import (
 )
 
 func TestRemoveSlot(t *testing.T) {
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	t.Cleanup(func() { _ = db.Close() })
 	assert.NoError(t, err)
 
@@ -110,7 +110,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	// and then on next tick (5) slot 3 will be removed as well keeping back slot 4.
 
 	// setup
-	db, err := pebble.NewTemporary(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	assert.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

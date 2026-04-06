@@ -32,7 +32,7 @@ var (
 
 func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
 		_ = db.Close()
@@ -60,7 +60,7 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 
 func TestDropRegistryData(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
 		_ = db.Close()
@@ -153,7 +153,7 @@ func TestDropRegistryData(t *testing.T) {
 
 func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer func() {
 		_ = db.Close()
@@ -192,7 +192,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 
 func TestGetOperatorsPrefix(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
 	}()
@@ -206,7 +206,7 @@ func TestGetOperatorsPrefix(t *testing.T) {
 
 func Test_Config(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
 	}()
@@ -241,7 +241,7 @@ func Test_Config(t *testing.T) {
 
 func Test_LastProcessedBlock(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
 	}()
@@ -266,7 +266,7 @@ func Test_LastProcessedBlock(t *testing.T) {
 
 func Test_OperatorData(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
 	}()
@@ -312,7 +312,7 @@ func Test_OperatorData(t *testing.T) {
 
 func Test_NonceBumping(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	defer func() {
 		_ = db.Close()
 	}()

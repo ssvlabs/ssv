@@ -874,7 +874,7 @@ func setupTestValidator(t *testing.T, validatorPk spectypes.ValidatorPK, ownerAd
 }
 
 func getBaseStorage(t *testing.T, logger *zap.Logger) (basedb.Database, error) {
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +940,7 @@ func createPubKey(input byte) spectypes.ValidatorPK {
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, func()) {
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

@@ -16,7 +16,7 @@ import (
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
-	db, err := pebble.NewTemporary(log.TestLogger(t), basedb.Options{
+	db, err := pebble.NewTempDB(log.TestLogger(t), basedb.Options{
 		Ctx: ctx,
 	})
 	if err != nil {

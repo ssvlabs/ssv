@@ -2,9 +2,7 @@ package pebble
 
 import (
 	"context"
-	"errors"
 	"io"
-	"os"
 
 	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
@@ -16,8 +14,7 @@ var _ basedb.Database = &DB{}
 
 type DB struct {
 	*pebble.DB
-	logger      *zap.Logger
-	cleanupPath string
+	logger *zap.Logger
 }
 
 func New(logger *zap.Logger, path string, opts *pebble.Options) (*DB, error) {
@@ -36,9 +33,6 @@ func (pdb *DB) Close() error {
 	var err error
 	if pdb.DB != nil {
 		err = pdb.DB.Close()
-	}
-	if pdb.cleanupPath != "" {
-		err = errors.Join(err, os.RemoveAll(pdb.cleanupPath))
 	}
 	return err
 }

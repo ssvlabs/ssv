@@ -311,7 +311,7 @@ func TestSubmitProposal(t *testing.T) {
 
 func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
 	logger := log.TestLogger(t)
-	db, err := pebble.NewTemporary(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

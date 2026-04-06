@@ -153,7 +153,7 @@ func setupEventHandler(
 	ownerAddress *ethcommon.Address,
 	useMockCtrl bool,
 ) (*eventhandler.EventHandler, *mocks.MockTaskExecutor, *gomock.Controller, operatorstorage.Storage, error) {
-	db, err := pebble.NewTemporary(logger, basedb.Options{
+	db, err := pebble.NewTempDB(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	if err != nil {

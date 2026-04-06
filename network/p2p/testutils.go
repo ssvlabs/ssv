@@ -179,7 +179,7 @@ func (ln *LocalNet) NewTestP2pNetwork(t gotesting.TB, ctx context.Context, nodeI
 		return nil, err
 	}
 
-	db, err := storagepebble.NewTemporary(logger, basedb.Options{})
+	db, err := storagepebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, err
 	}
