@@ -171,6 +171,8 @@ func (ps *PartialSigContainer) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON decodes hex-string signing roots back to [32]byte keys.
+// No lock: only called during state recovery (Decode) before the container
+// is shared across goroutines.
 func (ps *PartialSigContainer) UnmarshalJSON(data []byte) error {
 	type jsonContainer struct {
 		Signatures map[phase0.ValidatorIndex]map[string]map[spectypes.OperatorID]spectypes.Signature
