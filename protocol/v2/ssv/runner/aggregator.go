@@ -96,7 +96,12 @@ func NewAggregatorRunner(
 }
 
 func (r *AggregatorRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.baseStartNewDuty(ctx, logger, r, duty, quorum)
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	return r.baseStartNewDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -132,7 +137,10 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
-	duty := r.State.CurrentDuty.(*spectypes.ValidatorDuty)
+	duty, err := validatorDutyFromState(r.State)
+	if err != nil {
+		return err
+	}
 	span.SetAttributes(
 		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 		observability.ValidatorIndexAttribute(duty.ValidatorIndex),
@@ -197,7 +205,10 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleAggregator)
 
-	decidedValue := encDecidedValue.(*spectypes.ValidatorConsensusData)
+	decidedValue, err := validatorConsensusDataFromEncoder(encDecidedValue)
+	if err != nil {
+		return err
+	}
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(decidedValue.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(decidedValue.Duty.PubKey),
@@ -208,13 +219,18 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
+	duty, err := validatorDutyFromState(r.State)
+	if err != nil {
+		return err
+	}
+
 	span.AddEvent("signing post consensus")
 	// specific duty sig
 	msg, err := signBeaconObject(
 		ctx,
 		r,
 		r.NetworkConfig,
-		r.State.CurrentDuty.(*spectypes.ValidatorDuty),
+		duty,
 		aggregateAndProofHashRoot,
 		decidedValue.Duty.Slot,
 		spectypes.DomainAggregateAndProof,
@@ -384,15 +400,20 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	r.measurements.StartDutyFlow()
 
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
 	// sign selection proof
 	span.AddEvent("signing beacon object")
 	msg, err := signBeaconObject(
 		ctx,
 		r,
 		r.NetworkConfig,
-		duty.(*spectypes.ValidatorDuty),
-		spectypes.SSZUint64(duty.DutySlot()),
-		duty.DutySlot(),
+		validatorDuty,
+		spectypes.SSZUint64(validatorDuty.DutySlot()),
+		validatorDuty.DutySlot(),
 		spectypes.DomainSelectionProof,
 	)
 	if err != nil {
@@ -401,7 +422,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.SelectionProofPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 

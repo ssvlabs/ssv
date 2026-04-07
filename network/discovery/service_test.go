@@ -2,11 +2,14 @@ package discovery
 
 import (
 	"context"
+	"crypto/rand"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -228,6 +231,20 @@ func TestDiscV5Service_Node(t *testing.T) {
 	node, err = dvs.Node(testLogger, *addrInfo)
 	assert.NoError(t, err)
 	assert.Equal(t, testingNode, node)
+}
+
+func TestDiscV5Service_NodeRejectsNonSecp256k1PeerKey(t *testing.T) {
+	dvs := &DiscV5Service{}
+
+	_, pubKey, err := crypto.GenerateEd25519Key(rand.Reader)
+	require.NoError(t, err)
+
+	peerID, err := peer.IDFromPublicKey(pubKey)
+	require.NoError(t, err)
+
+	node, err := dvs.Node(testLogger, peer.AddrInfo{ID: peerID})
+	require.Nil(t, node)
+	require.ErrorContains(t, err, "unsupported key type")
 }
 
 func TestDiscV5Service_checkPeer(t *testing.T) {

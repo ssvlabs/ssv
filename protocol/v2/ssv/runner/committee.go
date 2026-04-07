@@ -270,11 +270,16 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
 		dutiesCh     = make(chan *spectypes.ValidatorDuty)
 
-		beaconVote = decidedValue.(*spectypes.BeaconVote)
+		beaconVote *spectypes.BeaconVote
 		totalAttesterDuties,
 		totalSyncCommitteeDuties,
 		blockedAttesterDuties atomic.Uint32
 	)
+
+	beaconVote, err = beaconVoteFromEncoder(decidedValue)
+	if err != nil {
+		return err
+	}
 
 	// The worker pool will throttle the parallel processing of validator duties.
 	// This is mainly needed because the processing involves several outgoing HTTP calls to the Consensus Client.
@@ -899,6 +904,10 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]any)
 	duty := r.State.CurrentDuty
+	committeeDuty, err := committeeDutyFromState(r.State)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	beaconVoteData := r.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(beaconVoteData); err != nil {
@@ -909,7 +918,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	dataVersion, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 
-	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+	for _, validatorDuty := range committeeDuty.ValidatorDuties {
 		if validatorDuty == nil {
 			continue
 		}
