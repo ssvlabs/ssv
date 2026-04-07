@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -68,6 +69,7 @@ func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
 	currentSubnets := commons.AllSubnets
 	currentSubnets.Clear(5)
 	currentSubnets.Clear(42)
+	currentSubnets.Clear(77)
 
 	topicsCtrl := &subscribeRandomsTopicsController{}
 	n := &p2pNetwork{
@@ -80,7 +82,33 @@ func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, topicsCtrl.subscribed, 2)
-	require.ElementsMatch(t, []string{"5", "42"}, topicsCtrl.subscribed)
-	require.True(t, n.persistentSubnets.IsSet(5))
-	require.True(t, n.persistentSubnets.IsSet(42))
+
+	availableSubnets := map[string]struct{}{
+		"5":  {},
+		"42": {},
+		"77": {},
+	}
+	for _, subnet := range topicsCtrl.subscribed {
+		_, ok := availableSubnets[subnet]
+		require.Truef(t, ok, "subscribed subnet %s must be chosen from available subnets", subnet)
+		delete(availableSubnets, subnet)
+	}
+
+	require.Len(t, availableSubnets, 1)
+	for subnet := range availableSubnets {
+		require.False(t, n.persistentSubnets.IsSet(parseSubnet(t, subnet)))
+	}
+
+	for _, subnet := range topicsCtrl.subscribed {
+		require.True(t, n.persistentSubnets.IsSet(parseSubnet(t, subnet)))
+	}
+}
+
+func parseSubnet(t *testing.T, subnet string) uint64 {
+	t.Helper()
+
+	value, err := strconv.ParseUint(subnet, 10, 64)
+	require.NoError(t, err)
+
+	return value
 }
