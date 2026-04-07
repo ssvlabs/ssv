@@ -995,6 +995,50 @@ func TestCommitteeHandlerShouldExecuteSyncIgnoresMinParticipationEpoch(t *testin
 	require.True(t, shouldExecute)
 }
 
+func TestCommitteeHandlerBuildCommitteeDutiesIncludesSyncButNotAttesterDuringParticipationDelay(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	share := activeShare(1)
+	share.ValidatorPubKey = spectypes.ValidatorPK{1, 2, 3}
+	share.SetMinParticipationEpoch(1)
+
+	validatorProvider := NewMockValidatorProvider(ctrl)
+	validatorProvider.EXPECT().SelfParticipatingValidators(phase0.Epoch(0)).Return([]*ssvtypes.SSVShare{share})
+	validatorProvider.EXPECT().Validator(share.ValidatorPubKey[:]).Return(share, true).Times(2)
+
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.GenesisTime = time.Now()
+	beaconCfg.SlotDuration = time.Hour
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+
+	dutyStore := dutystore.New()
+	handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
+	handler.logger = zap.NewNop()
+	handler.beaconConfig = &beaconCfg
+	handler.validatorProvider = validatorProvider
+
+	committeeMap := handler.buildCommitteeDuties(
+		[]*eth2apiv1.AttesterDuty{{
+			PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+			Slot:           0,
+			ValidatorIndex: share.ValidatorIndex,
+		}},
+		[]*eth2apiv1.SyncCommitteeDuty{{
+			PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+			ValidatorIndex: share.ValidatorIndex,
+		}},
+		0,
+		0,
+	)
+
+	require.Len(t, committeeMap, 1)
+	committeeDuty := committeeMap[share.CommitteeID()]
+	require.NotNil(t, committeeDuty)
+	require.Len(t, committeeDuty.duty.ValidatorDuties, 1)
+	require.Equal(t, spectypes.BNRoleSyncCommittee, committeeDuty.duty.ValidatorDuties[0].Type)
+	require.Equal(t, share.ValidatorIndex, committeeDuty.duty.ValidatorDuties[0].ValidatorIndex)
+}
+
 // The purpose of the test is to ensure that the scheduler can handle the case where the indices change
 // at the last slot of the epoch, and it does not affect the execution of the duties for the next epoch first slot.
 func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
