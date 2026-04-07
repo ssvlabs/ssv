@@ -103,6 +103,9 @@ type BaseRunner struct {
 	highestDecidedSlot phase0.Slot
 }
 
+// HasRunningDuty returns whether this runner has a running (unfinished) duty assigned to it.
+// Deprecated: this func is preserved for compatibility reasons with legacy Validator-Runner code, avoid
+// using it since runner shouldn't expose its internal state to the outside world.
 func (b *BaseRunner) HasRunningDuty() bool {
 	return b.hasDutyRunning()
 }
