@@ -11,6 +11,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -964,6 +965,34 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 		require.NoError(t, scheduler.Wait())
 		ticker.WaitShutdown()
 	})
+}
+
+func TestCommitteeHandlerShouldExecuteSyncIgnoresMinParticipationEpoch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	share := activeShare(1)
+	share.ValidatorPubKey = spectypes.ValidatorPK{1, 2, 3}
+	share.SetMinParticipationEpoch(1)
+
+	validatorProvider := NewMockValidatorProvider(ctrl)
+	validatorProvider.EXPECT().Validator(share.ValidatorPubKey[:]).Return(share, true)
+
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.GenesisTime = time.Now()
+	beaconCfg.SlotDuration = time.Hour
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+
+	handler := NewCommitteeHandler(dutystore.New().Attester, dutystore.New().SyncCommittee)
+	handler.logger = zap.NewNop()
+	handler.beaconConfig = &beaconCfg
+	handler.validatorProvider = validatorProvider
+
+	shouldExecute := handler.shouldExecuteSync(&eth2apiv1.SyncCommitteeDuty{
+		PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+		ValidatorIndex: share.ValidatorIndex,
+	}, 0, 0)
+
+	require.True(t, shouldExecute)
 }
 
 // The purpose of the test is to ensure that the scheduler can handle the case where the indices change
