@@ -60,8 +60,8 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 		identifier,
 		specqbft.FirstHeight,
 		spectestingutils.TestingOperatorSigner(keySet),
+		roundtimer.NewTestingTimer(),
 	)
-	inst.SetTimer(roundtimer.NewTestingTimer())
 
 	// Initialize Controller
 	contr := &Controller{}

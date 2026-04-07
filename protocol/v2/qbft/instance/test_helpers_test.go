@@ -82,10 +82,10 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 		spectestingutils.TestingIdentifier,
 		specqbft.FirstHeight,
 		spectestingutils.NewOperatorSigner(keys, operatorID),
+		testTimer,
 	)
 	inst.StartValue = []byte("start-value")
 	inst.ValueChecker = testValueChecker{}
-	inst.SetTimer(testTimer)
 
 	timer, ok := testTimer.(*roundtimer.TestQBFTTimer)
 	require.True(t, ok)

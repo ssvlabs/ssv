@@ -48,6 +48,7 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
+	timer specqbft.Timer,
 ) *Instance {
 	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
 	if len(identifier) == 56 {
@@ -71,6 +72,7 @@ func NewInstance(
 		},
 		config:      config,
 		signer:      signer,
+		timer:       timer,
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(logger, runnerRole),
 	}
@@ -78,11 +80,6 @@ func NewInstance(
 
 func (i *Instance) ForceStop() {
 	i.forceStop = true
-}
-
-// SetTimer replaces the timer. Used in tests for instances not started via Start.
-func (i *Instance) SetTimer(timer specqbft.Timer) {
-	i.timer = timer
 }
 
 // Timer returns the instance timer.
@@ -94,16 +91,14 @@ func (i *Instance) Timer() specqbft.Timer {
 func (i *Instance) Start(
 	ctx context.Context,
 	value []byte,
-	height specqbft.Height,
-	timer specqbft.Timer,
 	valueChecker ssv.ValueChecker,
 ) {
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
-		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(i.State.Height))))
 	defer span.End()
 
-	logger := i.logger.With(fields.QBFTRound(specqbft.FirstRound), fields.QBFTHeight(height))
+	logger := i.logger.With(fields.QBFTRound(specqbft.FirstRound), fields.QBFTHeight(i.State.Height))
 
 	proposerID := i.ProposerForRound(specqbft.FirstRound)
 
@@ -116,10 +111,7 @@ func (i *Instance) Start(
 	span.AddEvent(startingQBFTInstanceEvent, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
 
 	i.StartValue = value
-	i.bumpToRound(specqbft.FirstRound)
-	i.State.Height = height
 	i.ValueChecker = valueChecker
-	i.timer = timer
 	i.timer.TimeoutForRound(specqbft.FirstRound)
 	i.metrics.StartStage(stageProposal)
 

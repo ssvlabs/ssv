@@ -89,7 +89,6 @@ type BaseRunner struct {
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
-	// implementation vars
 	TimeoutF    TimeoutF           `json:"-"`
 	timerCancel context.CancelFunc `json:"-"`
 

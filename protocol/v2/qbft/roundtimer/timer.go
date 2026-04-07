@@ -46,6 +46,7 @@ type RoundTimer struct {
 }
 
 // New creates a per-duty RoundTimer with the callback wired at construction.
+// callback must not be nil.
 func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, height specqbft.Height, callback OnRoundTimeoutF) *RoundTimer {
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
@@ -122,9 +123,15 @@ func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
 	return time.Until(dutyStartTime.Add(timeoutDuration))
 }
 
-// armLocked stops any running timer and schedules a new AfterFunc for the
-// given round. Caller must hold t.mtx.
-func (t *RoundTimer) armLocked(round specqbft.Round) {
+// TimeoutForRound implements specqbft.Timer.
+func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
+	if t.ctx.Err() != nil {
+		return
+	}
+
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
 	if t.timer != nil {
 		t.timer.Stop()
 	}
@@ -137,21 +144,10 @@ func (t *RoundTimer) armLocked(round specqbft.Round) {
 		}
 		t.mtx.RLock()
 		defer t.mtx.RUnlock()
-		if t.round != round || t.callback == nil {
+		// Stale-round guard: if the timer moved to a newer round, this callback is outdated.
+		if t.round != round {
 			return
 		}
 		t.callback(round)
 	})
-}
-
-// TimeoutForRound implements specqbft.Timer.
-func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
-	if t.ctx.Err() != nil {
-		return
-	}
-
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-
-	t.armLocked(round)
 }

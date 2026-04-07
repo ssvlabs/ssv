@@ -105,8 +105,8 @@ func TestQBFTMapping(t *testing.T) {
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
 				signer,
+				roundtimer.NewTestingTimer(),
 			)
-			pre.SetTimer(roundtimer.NewTestingTimer())
 			err = pre.Decode(preByts)
 			require.NoError(t, err)
 			typedTest.Pre = pre

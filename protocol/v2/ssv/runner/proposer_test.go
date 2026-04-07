@@ -461,6 +461,7 @@ func setupRunnerForPostConsensus(
 		msgID[:],
 		specqbft.Height(duty.Slot),
 		runner.operatorSigner,
+		nil,
 	)
 	runner.State.RunningInstance.State.Decided = true
 	runner.State.RunningInstance.State.DecidedValue = encodedDecidedValue

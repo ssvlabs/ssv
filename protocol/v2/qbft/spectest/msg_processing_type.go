@@ -39,9 +39,9 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 		test.Pre.State.ID,
 		test.Pre.State.Height,
 		signer,
+		roundtimer.NewTestingTimer(),
 	)
 	pre.ValueChecker = protocoltesting.TestingValueChecker{}
-	pre.SetTimer(roundtimer.NewTestingTimer())
 	require.NoError(t, pre.Decode(preByts))
 
 	preInstance := pre
