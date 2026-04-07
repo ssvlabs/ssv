@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"strings"
@@ -166,7 +167,7 @@ func newBackoffRandSource() rand.Source {
 func secureBackoffSeed() int64 {
 	var seedBytes [8]byte
 	if _, err := cryptorand.Read(seedBytes[:]); err == nil {
-		return int64(binary.LittleEndian.Uint64(seedBytes[:]))
+		return int64(binary.LittleEndian.Uint64(seedBytes[:]) & math.MaxInt64)
 	}
 
 	return time.Now().UnixNano()
