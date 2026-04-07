@@ -1,0 +1,86 @@
+package p2pv1
+
+import (
+	"testing"
+	"time"
+
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/topics"
+)
+
+type subscribeRandomsTopicsController struct {
+	subscribed []string
+}
+
+func (c *subscribeRandomsTopicsController) Subscribe(topic string) error {
+	c.subscribed = append(c.subscribed, topic)
+	return nil
+}
+
+func (c *subscribeRandomsTopicsController) Unsubscribe(string, bool) error {
+	return nil
+}
+
+func (c *subscribeRandomsTopicsController) Peers(string) ([]peer.ID, error) {
+	return nil, nil
+}
+
+func (c *subscribeRandomsTopicsController) Topics() []string {
+	return nil
+}
+
+func (c *subscribeRandomsTopicsController) Broadcast(string, []byte, time.Duration) error {
+	return nil
+}
+
+func (c *subscribeRandomsTopicsController) UpdateScoreParams() error {
+	return nil
+}
+
+func (c *subscribeRandomsTopicsController) Close() error {
+	return nil
+}
+
+var _ topics.Controller = (*subscribeRandomsTopicsController)(nil)
+
+func TestSubscribeRandomsReturnsErrorWhenNotEnoughAvailableSubnets(t *testing.T) {
+	currentSubnets := commons.AllSubnets
+	currentSubnets.Clear(17)
+
+	topicsCtrl := &subscribeRandomsTopicsController{}
+	n := &p2pNetwork{
+		state:          stateReady,
+		topicsCtrl:     topicsCtrl,
+		currentSubnets: currentSubnets,
+	}
+
+	err := n.SubscribeRandoms(2)
+
+	require.EqualError(t, err, "not enough available subnets: requested 2, available 1")
+	require.Empty(t, topicsCtrl.subscribed)
+	require.False(t, n.persistentSubnets.IsSet(17))
+}
+
+func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
+	currentSubnets := commons.AllSubnets
+	currentSubnets.Clear(5)
+	currentSubnets.Clear(42)
+
+	topicsCtrl := &subscribeRandomsTopicsController{}
+	n := &p2pNetwork{
+		state:          stateReady,
+		topicsCtrl:     topicsCtrl,
+		currentSubnets: currentSubnets,
+	}
+
+	err := n.SubscribeRandoms(2)
+
+	require.NoError(t, err)
+	require.Len(t, topicsCtrl.subscribed, 2)
+	require.ElementsMatch(t, []string{"5", "42"}, topicsCtrl.subscribed)
+	require.True(t, n.persistentSubnets.IsSet(5))
+	require.True(t, n.persistentSubnets.IsSet(42))
+}
