@@ -27,7 +27,7 @@ func TestFairMixIterator_Next(t *testing.T) {
 	require.ElementsMatch(t, expectedNodes, actualNodes)
 
 	// No more elements
-	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 50*time.Millisecond)
 }
 
 func TestFairMixIterator_Next_False(t *testing.T) {
@@ -65,7 +65,7 @@ func TestFairMixIterator_Next_False(t *testing.T) {
 	require.ElementsMatch(t, expectedNodes, actualNodes)
 
 	// No more elements
-	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 50*time.Millisecond)
 }
 
 func TestFairMixIterator_PostForkEmpty(t *testing.T) {
@@ -93,7 +93,7 @@ func TestFairMixIterator_PostForkEmpty(t *testing.T) {
 	require.Equal(t, node1, iterator.Node())
 
 	// No more elements
-	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 50*time.Millisecond)
 }
 
 func TestFairMixIterator_PreForkEmpty(t *testing.T) {
@@ -119,5 +119,5 @@ func TestFairMixIterator_PreForkEmpty(t *testing.T) {
 	require.Equal(t, node2, iterator.Node())
 
 	// No more elements even after switch
-	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 50*time.Millisecond)
 }
