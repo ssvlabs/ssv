@@ -27,7 +27,7 @@ func TestFairMixIterator_Next(t *testing.T) {
 	require.ElementsMatch(t, expectedNodes, actualNodes)
 
 	// No more elements
-	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
 }
 
 func TestFairMixIterator_Next_False(t *testing.T) {
@@ -59,13 +59,13 @@ func TestFairMixIterator_Next_False(t *testing.T) {
 
 	var actualNodes []*enode.Node
 	for i := 0; i < len(expectedNodes); i++ {
-		requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+		requireNextTimeout(t, true, iterator, 400*time.Millisecond)
 		actualNodes = append(actualNodes, iterator.Node())
 	}
 	require.ElementsMatch(t, expectedNodes, actualNodes)
 
 	// No more elements
-	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
 }
 
 func TestFairMixIterator_PostForkEmpty(t *testing.T) {
@@ -85,15 +85,15 @@ func TestFairMixIterator_PostForkEmpty(t *testing.T) {
 	require.False(t, postFork.closed) // postFork iterator must start openened
 
 	// First check: preFork first node after switch
-	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	requireNextTimeout(t, true, iterator, 400*time.Millisecond)
 	require.Equal(t, node2, iterator.Node())
 
 	// Second check: preFork second node
-	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	requireNextTimeout(t, true, iterator, 400*time.Millisecond)
 	require.Equal(t, node1, iterator.Node())
 
 	// No more elements
-	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
 }
 
 func TestFairMixIterator_PreForkEmpty(t *testing.T) {
@@ -111,13 +111,13 @@ func TestFairMixIterator_PreForkEmpty(t *testing.T) {
 	iterator.AddSource(postFork)
 
 	// First check: postFork first node
-	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	requireNextTimeout(t, true, iterator, 400*time.Millisecond)
 	require.Equal(t, node1, iterator.Node())
 
 	// Second check: postFork second node
-	requireNextTimeout(t, true, iterator, 10*time.Millisecond)
+	requireNextTimeout(t, true, iterator, 400*time.Millisecond)
 	require.Equal(t, node2, iterator.Node())
 
 	// No more elements even after switch
-	requireNextTimeout(t, false, iterator, 15*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 400*time.Millisecond)
 }

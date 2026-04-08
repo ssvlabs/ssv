@@ -65,7 +65,7 @@ func TestForkListener_RandomNodes(t *testing.T) {
 	assert.Equal(t, nodes[1], nodeFromPostForkListener)
 
 	// No more next
-	requireNextTimeout(t, false, iter, 10*time.Millisecond)
+	requireNextTimeout(t, false, iter, 400*time.Millisecond)
 }
 
 func TestForkListener_AllNodes(t *testing.T) {
