@@ -548,7 +548,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 		hasSubnetChanges := len(addedSubnets) > 0 || len(removedSubnets) > 0
 		hasAlanChanges := addedAlanSubnets.HasActive() || removedAlanSubnets.HasActive()
 		hasBooleChanges := addedBooleSubnets.HasActive() || removedBooleSubnets.HasActive()
-		if !hasSubnetChanges && !hasAlanChanges && !hasBooleChanges {
+		if hasSubnetChanges || hasAlanChanges || hasBooleChanges {
 			n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
 				self.Metadata.Subnets = n.currentSubnets.StringHex()
 				return self
