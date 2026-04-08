@@ -1,6 +1,7 @@
 package dutystore
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -86,29 +87,38 @@ func TestStoreDutyTypesUseIndependentLocks(t *testing.T) {
 	store.Attester.mu.Lock()
 	defer store.Attester.mu.Unlock()
 
-	assertCompletesWithin(t, "proposer read", func() {
-		assert.NotNil(t, store.Proposer.ValidatorDuty(epoch, slot, 1))
+	assertCompletesWithin(t, "proposer read", func() error {
+		if store.Proposer.ValidatorDuty(epoch, slot, 1) == nil {
+			return fmt.Errorf("expected proposer duty for epoch %d slot %d validator 1", epoch, slot)
+		}
+		return nil
 	})
-	assertCompletesWithin(t, "sync committee read", func() {
-		assert.NotNil(t, store.SyncCommittee.Duty(period, 2))
+	assertCompletesWithin(t, "sync committee read", func() error {
+		if store.SyncCommittee.Duty(period, 2) == nil {
+			return fmt.Errorf("expected sync committee duty for period %d validator 2", period)
+		}
+		return nil
 	})
-	assertCompletesWithin(t, "voluntary exit write", func() {
+	assertCompletesWithin(t, "voluntary exit write", func() error {
 		store.VoluntaryExit.AddDuty(slot, pk)
-		assert.Equal(t, uint64(1), store.VoluntaryExit.GetDutyCount(slot, pk))
+		if count := store.VoluntaryExit.GetDutyCount(slot, pk); count != 1 {
+			return fmt.Errorf("expected voluntary exit count 1, got %d", count)
+		}
+		return nil
 	})
 }
 
-func assertCompletesWithin(t *testing.T, name string, fn func()) {
+func assertCompletesWithin(t *testing.T, name string, fn func() error) {
 	t.Helper()
 
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		fn()
-		close(done)
+		done <- fn()
 	}()
 
 	select {
-	case <-done:
+	case err := <-done:
+		require.NoError(t, err, name)
 	case <-time.After(time.Second):
 		t.Fatalf("%s blocked while a different duty type lock was held", name)
 	}
