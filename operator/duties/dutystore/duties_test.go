@@ -2,6 +2,7 @@ package dutystore
 
 import (
 	"testing"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -55,4 +56,60 @@ func TestDutiesEraseEpochData(t *testing.T) {
 	assert.Nil(t, duties.CommitteeSlotDuties(epoch, 10))
 	assert.Nil(t, duties.ValidatorDuty(epoch, 10, 1))
 	assert.Nil(t, duties.SlotIndices(epoch, 10))
+}
+
+func TestStoreDutyTypesUseIndependentLocks(t *testing.T) {
+	store := New()
+
+	epoch := phase0.Epoch(8)
+	slot := phase0.Slot(64)
+	period := uint64(2)
+	pk := phase0.BLSPubKey{1}
+
+	store.Proposer.Set(epoch, []StoreDuty[eth2apiv1.ProposerDuty]{
+		{
+			Slot:           slot,
+			ValidatorIndex: 1,
+			Duty:           &eth2apiv1.ProposerDuty{Slot: slot, ValidatorIndex: 1},
+			InCommittee:    true,
+		},
+	})
+	store.SyncCommittee.Set(period, []StoreSyncCommitteeDuty{
+		{
+			ValidatorIndex: 2,
+			Duty:           &eth2apiv1.SyncCommitteeDuty{ValidatorIndex: 2},
+			InCommittee:    true,
+		},
+	})
+
+	// Hold the attester write lock and verify other duty types still make progress.
+	store.Attester.mu.Lock()
+	defer store.Attester.mu.Unlock()
+
+	assertCompletesWithin(t, "proposer read", func() {
+		assert.NotNil(t, store.Proposer.ValidatorDuty(epoch, slot, 1))
+	})
+	assertCompletesWithin(t, "sync committee read", func() {
+		assert.NotNil(t, store.SyncCommittee.Duty(period, 2))
+	})
+	assertCompletesWithin(t, "voluntary exit write", func() {
+		store.VoluntaryExit.AddDuty(slot, pk)
+		assert.Equal(t, uint64(1), store.VoluntaryExit.GetDutyCount(slot, pk))
+	})
+}
+
+func assertCompletesWithin(t *testing.T, name string, fn func()) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		fn()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("%s blocked while a different duty type lock was held", name)
+	}
 }
