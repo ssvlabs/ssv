@@ -52,7 +52,6 @@ type priorityQueue struct {
 	inbox    chan *SSVMessage
 	lastRead time.Time
 
-	telemetryCtx       context.Context
 	inboxSizeMetric    metric.Int64Gauge
 	inboxSizeRecordOps []metric.RecordOption
 }
@@ -75,9 +74,8 @@ func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueType string, qu
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
 func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 	q := &priorityQueue{
-		logger:       logger.Named(log.NameSSVMessageQueue),
-		inbox:        make(chan *SSVMessage, capacity),
-		telemetryCtx: context.Background(),
+		logger: logger.Named(log.NameSSVMessageQueue),
+		inbox:  make(chan *SSVMessage, capacity),
 	}
 
 	for _, opt := range opts {
@@ -236,7 +234,7 @@ func (q *priorityQueue) recordInboxSize(inboxSize int64) {
 		return
 	}
 	q.inboxSizeMetric.Record(
-		q.telemetryCtx,
+		context.Background(),
 		inboxSize,
 		q.inboxSizeRecordOps...,
 	)
