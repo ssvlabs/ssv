@@ -42,6 +42,8 @@ type messageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
+const topicValidatorTimeout = 5 * time.Second
+
 // topicsCtrl implements Controller
 type topicsCtrl struct {
 	ctx    context.Context
@@ -302,8 +304,7 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		}
 
 		var opts []pubsub.ValidatorOpt
-		// Optional: set a timeout for message validation
-		// opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
+		opts = append(opts, pubsub.WithValidatorTimeout(topicValidatorTimeout))
 
 		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
 		if err != nil {
