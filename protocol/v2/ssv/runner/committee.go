@@ -235,23 +235,23 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
-	duty := r.State.CurrentDuty
+	committeeDuty, err := committeeDutyFromState(r.State)
+	if err != nil {
+		return err
+	}
+	slot := committeeDuty.DutySlot()
+
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     slot,
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	version, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 
-	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
-	if !ok {
-		return fmt.Errorf("duty is not a CommitteeDuty: %T", duty)
-	}
-
 	span.SetAttributes(
-		observability.BeaconSlotAttribute(duty.DutySlot()),
+		observability.BeaconSlotAttribute(slot),
 		observability.BeaconEpochAttribute(epoch),
 		observability.BeaconVersionAttribute(version),
 		observability.DutyCountAttribute(len(committeeDuty.ValidatorDuties)),
