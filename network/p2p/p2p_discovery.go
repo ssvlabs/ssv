@@ -9,10 +9,19 @@ import (
 	"github.com/oleiade/lane/v2"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/async"
 )
+
+type peerSelectionPoolStats struct {
+	poolSize                  int
+	readyCandidates           int
+	cooldownBlockedCandidates int
+	zeroScoreCandidates       int
+	positiveScoreCandidates   int
+}
 
 func (n *p2pNetwork) startDiscovery() error {
 	startTime := time.Now()
@@ -72,9 +81,15 @@ func (n *p2pNetwork) startDiscovery() error {
 			}
 			currentSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
 		}
+		poolStats := n.peerSelectionPoolStats(ownSubnets, currentSubnetPeers)
 
 		n.logger.Debug("selecting discovered peers",
-			zap.Int("pool_size", n.discoveredPeersPool.SlowLen()),
+			zap.Int("pool_size", poolStats.poolSize),
+			zap.Int("ready_candidates", poolStats.readyCandidates),
+			zap.Int("cooldown_blocked_candidates", poolStats.cooldownBlockedCandidates),
+			zap.Int("zero_score_candidates", poolStats.zeroScoreCandidates),
+			zap.Int("positive_score_candidates", poolStats.positiveScoreCandidates),
+			zap.Int("trimmed_recently_size", n.trimmedRecently.SlowLen()),
 			zap.String("own_subnet_peers", currentSubnetPeers.String()))
 
 		// Limit new connections to the remaining outbound slots.
@@ -150,10 +165,60 @@ func (n *p2pNetwork) startDiscovery() error {
 			})
 			connector <- p.AddrInfo
 		}
+		if len(peersToConnect) == 0 {
+			n.logger.Debug("no discovered peers selected for connection",
+				zap.Int("pool_size", poolStats.poolSize),
+				zap.Int("ready_candidates", poolStats.readyCandidates),
+				zap.Int("cooldown_blocked_candidates", poolStats.cooldownBlockedCandidates),
+				zap.Int("zero_score_candidates", poolStats.zeroScoreCandidates),
+				zap.Int("positive_score_candidates", poolStats.positiveScoreCandidates),
+				zap.String("own_subnet_peers", currentSubnetPeers.String()),
+			)
+			return
+		}
 		n.logger.Info("proposed discovered peers",
 			zap.Int("count", len(peersToConnect)),
+			zap.Int("pool_size", poolStats.poolSize),
+			zap.Int("ready_candidates", poolStats.readyCandidates),
+			zap.Int("cooldown_blocked_candidates", poolStats.cooldownBlockedCandidates),
+			zap.Int("zero_score_candidates", poolStats.zeroScoreCandidates),
+			zap.Int("positive_score_candidates", poolStats.positiveScoreCandidates),
 		)
 	})
 
 	return nil
+}
+
+func (n *p2pNetwork) peerSelectionPoolStats(ownSubnets commons.Subnets, currentSubnetPeers SubnetPeers) peerSelectionPoolStats {
+	const retryCooldownMin = 30 * time.Second
+
+	var stats peerSelectionPoolStats
+	n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
+		stats.poolSize++
+
+		peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
+		peerScore := currentSubnetPeers.Score(ownSubnets, peerSubnets)
+		if discoveredPeer.Tries > 0 {
+			waited := time.Since(discoveredPeer.LastTry)
+			if waited < retryCooldownMin {
+				stats.cooldownBlockedCandidates++
+				return true
+			}
+			const retryCooldownMax = 300 * time.Second
+			cooldown := min(retryCooldownMax, retryCooldownMin*time.Duration(discoveredPeer.Tries))
+			peerRelevance := min(1, float64(waited)/float64(cooldown))
+			peerScore *= peerRelevance * peerRelevance
+		}
+
+		stats.readyCandidates++
+		if peerScore == 0 {
+			stats.zeroScoreCandidates++
+		} else {
+			stats.positiveScoreCandidates++
+		}
+
+		return true
+	})
+
+	return stats
 }

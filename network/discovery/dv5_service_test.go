@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -80,6 +81,34 @@ func TestCheckPeer(t *testing.T) {
 				subnets:       mockSubnets(0, 1, 2),
 				expectedError: nil,
 			},
+			{
+				name:              "already discovered",
+				domainType:        &myDomainType,
+				subnets:           mySubnets,
+				alreadyDiscovered: true,
+				expectedError:     errors.New("peer already discovered recently"),
+			},
+			{
+				name:            "recently trimmed",
+				domainType:      &myDomainType,
+				subnets:         mySubnets,
+				recentlyTrimmed: true,
+				expectedError:   errors.New("peer was trimmed recently"),
+			},
+			{
+				name:          "already connected",
+				domainType:    &myDomainType,
+				subnets:       mySubnets,
+				connectedness: network.Connected,
+				expectedError: errors.New("peer already connected"),
+			},
+			{
+				name:          "bad peer",
+				domainType:    &myDomainType,
+				subnets:       mySubnets,
+				isBad:         true,
+				expectedError: errors.New("peer is marked bad"),
+			},
 		}
 	)
 
@@ -128,9 +157,35 @@ func TestCheckPeer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name+":run", func(t *testing.T) {
-			err := dvs.checkPeer(context.TODO(), PeerEvent{
+			peerEvent := PeerEvent{
 				Node: test.localNode.Node(),
-			})
+			}
+			addrInfo, err := ToPeer(test.localNode.Node())
+			require.NoError(t, err)
+			peerEvent.AddrInfo = *addrInfo
+
+			connIndex := dvs.conns.(*mock.MockConnectionIndex)
+			connIndex.ConnectednessValue = test.connectedness
+			if test.isBad {
+				if connIndex.BadPeers == nil {
+					connIndex.BadPeers = map[peer.ID]bool{}
+				}
+				connIndex.BadPeers[peerEvent.AddrInfo.ID] = true
+			} else if connIndex.BadPeers != nil {
+				delete(connIndex.BadPeers, peerEvent.AddrInfo.ID)
+			}
+			if test.alreadyDiscovered {
+				dvs.discoveredPeersPool.Set(peerEvent.AddrInfo.ID, DiscoveredPeer{AddrInfo: peerEvent.AddrInfo})
+			} else {
+				dvs.discoveredPeersPool.Delete(peerEvent.AddrInfo.ID)
+			}
+			if test.recentlyTrimmed {
+				dvs.trimmedRecently.Set(peerEvent.AddrInfo.ID, struct{}{})
+			} else {
+				dvs.trimmedRecently.Delete(peerEvent.AddrInfo.ID)
+			}
+
+			err = dvs.checkPeer(context.TODO(), peerEvent)
 			if test.expectedError != nil {
 				require.ErrorContains(t, err, test.expectedError.Error(), test.name)
 			} else {
@@ -141,12 +196,16 @@ func TestCheckPeer(t *testing.T) {
 }
 
 type checkPeerTest struct {
-	name           string
-	domainType     *spectypes.DomainType
-	subnets        commons.Subnets
-	missingSubnets bool
-	localNode      *enode.LocalNode
-	expectedError  error
+	name              string
+	domainType        *spectypes.DomainType
+	subnets           commons.Subnets
+	missingSubnets    bool
+	localNode         *enode.LocalNode
+	expectedError     error
+	alreadyDiscovered bool
+	recentlyTrimmed   bool
+	connectedness     network.Connectedness
+	isBad             bool
 }
 
 func mockSubnets(active ...uint64) commons.Subnets {

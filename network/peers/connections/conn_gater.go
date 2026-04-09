@@ -87,6 +87,9 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		return true
 	}
 	if n.atInboundLimit() {
+		n.logger.Debug("connection rejected due to inbound limit",
+			zap.String("remote_addr", multiaddrs.RemoteMultiaddr().String()),
+		)
 		return false
 	}
 
@@ -98,7 +101,13 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		n.logger.Debug("connection rejected due to IP rate limit", zap.String("remote_addr", remoteAddr.String()))
 		return false
 	}
-	return !n.atMaxPeersLimit()
+	if n.atMaxPeersLimit() {
+		n.logger.Debug("connection rejected due to max peers limit",
+			zap.String("remote_addr", remoteAddr.String()),
+		)
+		return false
+	}
+	return true
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
@@ -107,6 +116,7 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 	if n.trimmedRecently.Has(id) {
 		n.logger.Debug(
 			"InterceptSecured: trying to connect a peer we've recently trimmed",
+			fields.PeerID(id),
 			zap.String("conn_direction", direction.String()),
 		)
 		return false

@@ -81,38 +81,3 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 		return slices.ContainsFunc(subnets, fromEntry.IsSet)
 	}
 }
-
-// sharedSubnetsFilter returns a function that
-// returns true if the peer has at least [n] subnets in common
-func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool {
-	return func(node *enode.Node) bool {
-		if n == 0 {
-			return true
-		}
-		nodeSubnets, err := records.GetSubnetsEntry(node.Record())
-		if err != nil {
-			return false
-		}
-		shared := dvs.subnets.SharedSubnetsN(nodeSubnets, n)
-		// logger.Debug("shared subnets", zap.Ints("shared", shared),
-		//	zap.String("node", node.String()))
-
-		return len(shared) >= n
-	}
-}
-
-// subnetFilter checks if the node has already been discovered recently and filters it out
-// if so
-func (dvs *DiscV5Service) alreadyDiscoveredFilter() func(node *enode.Node) bool {
-	return func(node *enode.Node) bool {
-		pID, err := PeerID(node)
-		if err != nil {
-			dvs.logger.Warn("could not get peer ID from node record", zap.Error(err))
-			return false
-		}
-		if dvs.discoveredPeersPool.Has(pID) {
-			return false // this peer is already being considered
-		}
-		return true
-	}
-}

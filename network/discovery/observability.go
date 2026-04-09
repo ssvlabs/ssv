@@ -23,6 +23,13 @@ const (
 	skipReasonNoSharedSubnets    skipReason = "noSharedSubnets"
 	skipReasonZeroSubnets        skipReason = "zeroSubnets"
 	skipReasonDomainTypeMismatch skipReason = "domainTypeMismatch"
+	skipReasonInvalidDomainType  skipReason = "invalidDomainType"
+	skipReasonInvalidSubnets     skipReason = "invalidSubnets"
+	skipReasonInvalidPeerID      skipReason = "invalidPeerID"
+	skipReasonAlreadyDiscovered  skipReason = "alreadyDiscovered"
+	skipReasonAlreadyConnected   skipReason = "alreadyConnected"
+	skipReasonBadPeer            skipReason = "badPeer"
+	skipReasonRecentlyTrimmed    skipReason = "recentlyTrimmed"
 )
 
 var (
