@@ -16,11 +16,21 @@ import (
 )
 
 type peerSelectionPoolStats struct {
-	poolSize                  int
-	readyCandidates           int
-	cooldownBlockedCandidates int
-	zeroScoreCandidates       int
-	positiveScoreCandidates   int
+	poolSize                     int
+	readyCandidates              int
+	cooldownBlockedCandidates    int
+	zeroScoreReadyCandidates     int
+	positiveScoreReadyCandidates int
+}
+
+func (s *peerSelectionPoolStats) AsLogFields() []zap.Field {
+	return []zap.Field{
+		zap.Int("pool_size", s.poolSize),
+		zap.Int("ready_candidates", s.readyCandidates),
+		zap.Int("cooldown_blocked_candidates", s.cooldownBlockedCandidates),
+		zap.Int("zero_score_ready_candidates", s.zeroScoreReadyCandidates),
+		zap.Int("positive_score_ready_candidates", s.positiveScoreReadyCandidates),
+	}
 }
 
 func (n *p2pNetwork) startDiscovery() error {
@@ -81,16 +91,13 @@ func (n *p2pNetwork) startDiscovery() error {
 			}
 			currentSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
 		}
+
 		poolStats := n.peerSelectionPoolStats(ownSubnets, currentSubnetPeers)
 
-		n.logger.Debug("selecting discovered peers",
-			zap.Int("pool_size", poolStats.poolSize),
-			zap.Int("ready_candidates", poolStats.readyCandidates),
-			zap.Int("cooldown_blocked_candidates", poolStats.cooldownBlockedCandidates),
-			zap.Int("zero_score_candidates", poolStats.zeroScoreCandidates),
-			zap.Int("positive_score_candidates", poolStats.positiveScoreCandidates),
+		n.logger.Debug("selecting discovered peers", append([]zap.Field{
 			zap.Int("trimmed_recently_size", n.trimmedRecently.SlowLen()),
-			zap.String("own_subnet_peers", currentSubnetPeers.String()))
+			zap.String("own_subnet_peers", currentSubnetPeers.String()),
+		}, poolStats.AsLogFields()...)...)
 
 		// Limit new connections to the remaining outbound slots.
 		maxPeersToConnect := max(vacantOutboundSlots, 1)
@@ -166,24 +173,14 @@ func (n *p2pNetwork) startDiscovery() error {
 			connector <- p.AddrInfo
 		}
 		if len(peersToConnect) == 0 {
-			n.logger.Debug("no discovered peers selected for connection",
-				zap.Int("pool_size", poolStats.poolSize),
-				zap.Int("ready_candidates", poolStats.readyCandidates),
-				zap.Int("cooldown_blocked_candidates", poolStats.cooldownBlockedCandidates),
-				zap.Int("zero_score_candidates", poolStats.zeroScoreCandidates),
-				zap.Int("positive_score_candidates", poolStats.positiveScoreCandidates),
+			n.logger.Debug("no discovered peers selected for connection", append([]zap.Field{
 				zap.String("own_subnet_peers", currentSubnetPeers.String()),
-			)
+			}, poolStats.AsLogFields()...)...)
 			return
 		}
-		n.logger.Info("proposed discovered peers",
+		n.logger.Info("proposed discovered peers", append([]zap.Field{
 			zap.Int("count", len(peersToConnect)),
-			zap.Int("pool_size", poolStats.poolSize),
-			zap.Int("ready_candidates", poolStats.readyCandidates),
-			zap.Int("cooldown_blocked_candidates", poolStats.cooldownBlockedCandidates),
-			zap.Int("zero_score_candidates", poolStats.zeroScoreCandidates),
-			zap.Int("positive_score_candidates", poolStats.positiveScoreCandidates),
-		)
+		}, poolStats.AsLogFields()...)...)
 	})
 
 	return nil
@@ -212,9 +209,9 @@ func (n *p2pNetwork) peerSelectionPoolStats(ownSubnets commons.Subnets, currentS
 
 		stats.readyCandidates++
 		if peerScore == 0 {
-			stats.zeroScoreCandidates++
+			stats.zeroScoreReadyCandidates++
 		} else {
-			stats.positiveScoreCandidates++
+			stats.positiveScoreReadyCandidates++
 		}
 
 		return true
