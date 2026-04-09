@@ -378,7 +378,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 		peersToTrim := n.choosePeersToTrim(maxPeersToDrop, trimInboundOnly)
 		if len(peersToTrim) == 0 {
 			n.logger.Debug(
-				"trimmed peers",
+				"no peers selected for trimming",
 				zap.Int("inbound_peers", inboundBefore),
 				zap.Int("outbound_peers", outboundBefore),
 				zap.Bool("trim_inbound_only", trimInboundOnly),
