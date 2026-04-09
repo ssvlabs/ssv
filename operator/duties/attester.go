@@ -115,7 +115,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				// Process intents (if any): fetch & prepare the duties for the next epoch.
 				h.prepareNextEpoch(tickCtx, logger, currentEpoch, currentSlot)
 
-				// Clean up the irrelevant data to prevent infinite memory growth at the 1st slot of the epoch.
+				// Clean up the irrelevant data to prevent infinite memory growth at the very 1st slot of the epoch.
 				if slotNumber == 1 && currentEpoch >= 1 {
 					h.duties.EraseEpochData(currentEpoch - 1)
 					delete(h.dutyFetchIntents, currentEpoch-1)
