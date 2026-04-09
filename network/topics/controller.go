@@ -303,8 +303,7 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 			ctrl.logger.Debug("failed to unregister topic validator", zap.String("topic", name), zap.Error(err))
 		}
 
-		var opts []pubsub.ValidatorOpt
-		opts = append(opts, pubsub.WithValidatorTimeout(topicValidatorTimeout))
+		opts := []pubsub.ValidatorOpt{pubsub.WithValidatorTimeout(topicValidatorTimeout)}
 
 		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
 		if err != nil {
