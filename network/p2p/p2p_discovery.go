@@ -142,7 +142,16 @@ func (n *p2pNetwork) startDiscovery() error {
 		}
 
 		// Forward the selected peers for connection, incrementing the retry counter.
+		// If a peer has been tried too many times without success, evict it from the pool
+		// so that discovery can re-add it with a fresh address (the peer may have restarted
+		// and gotten a new IP, but the pool entry keeps the stale address because Set()
+		// resets the TTL, preventing expiry and re-discovery).
+		const maxTriesBeforeEviction = 10
 		for _, p := range peersToConnect {
+			if p.Tries+1 >= maxTriesBeforeEviction {
+				n.discoveredPeersPool.Delete(p.ID)
+				continue
+			}
 			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
 				AddrInfo: p.AddrInfo,
 				Tries:    p.Tries + 1,
