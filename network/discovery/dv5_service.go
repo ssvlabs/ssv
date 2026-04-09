@@ -264,6 +264,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	// Get the peer's subnets, skipping if it has none.
 	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
+		recordPeerSkipped(ctx, skipReasonInvalidSubnets)
 		return newPeerSkipError(skipReasonInvalidSubnets, fmt.Errorf("could not read subnets: %w", err))
 	}
 	if commons.ZeroSubnets == peerSubnets {
