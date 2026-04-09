@@ -309,7 +309,9 @@ func (n *p2pNetwork) Start() (err error) {
 
 // Returns a function that trims currently connected peers if necessary, namely:
 //   - dropping peers with bad gossip score
-//   - dropping irrelevant peers that don't have any subnet in common with us
+//   - dropping irrelevant peers that don't have any subnet in common with us (by ENR)
+//   - dropping peers that are connected at libp2p but not participating in any of our
+//     GossipSub topics (e.g. due to topic format mismatch after a fork)
 //   - (when we are close to MaxPeers limit) dropping several peers with the worst score
 //     which is based on how many valuable (dead/solo/duo) subnets a peer contributes
 //   - (when Inbound peers are close to its limit) dropping several Inbound peers with
@@ -341,6 +343,36 @@ func (n *p2pNetwork) peersTrimming() func() {
 		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
+			return
+		}
+
+		// Disconnect from peers that are connected at the libp2p layer but do not participate
+		// in any of our GossipSub topics. This happens when a peer uses a different topic format
+		// (e.g. after a fork transition) — the peer appears relevant by ENR subnet metadata but
+		// cannot actually deliver or receive GossipSub messages on our topics.
+		const maxGossipIrrelevantToDisconnect = 3
+		gossipSubPeers := make(map[peer.ID]struct{})
+		for _, topicPeers := range n.PeersByTopic() {
+			for _, pid := range topicPeers {
+				gossipSubPeers[pid] = struct{}{}
+			}
+		}
+		connectedPeers = n.host.Network().Peers()
+		disconnectedCnt = 0
+		for _, pid := range connectedPeers {
+			if _, inGossip := gossipSubPeers[pid]; !inGossip {
+				if err := n.host.Network().ClosePeer(pid); err == nil {
+					n.logger.Debug("disconnecting from peer with no shared GossipSub topics",
+						fields.PeerID(pid))
+					n.trimmedRecently.Set(pid, struct{}{})
+					disconnectedCnt++
+					if disconnectedCnt >= maxGossipIrrelevantToDisconnect {
+						break
+					}
+				}
+			}
+		}
+		if disconnectedCnt > 0 {
 			return
 		}
 
