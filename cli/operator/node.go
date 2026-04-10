@@ -829,7 +829,7 @@ func setupPebbleDB(
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
-	plan, err := storagemigration.ResolvePebbleDBPlan(logger, cfg.DBOptions.Path)
+	plan, err := storagemigration.ResolvePebbleDBPlan(cfg.DBOptions.Path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve database layout: %w", err)
 	}
@@ -866,9 +866,6 @@ func setupPebbleDB(
 			plan.BadgerImportPath,
 			dbPath,
 			db,
-			plan.BadgerStateKnown,
-			plan.BadgerExists,
-			plan.BadgerNonEmpty,
 		)
 		if err != nil {
 			return nil, closeOnSetupError(fmt.Errorf("migrate badger to pebble: %w", err))
