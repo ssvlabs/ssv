@@ -113,6 +113,9 @@ func (gc *GoClient) GetBeaconBlock(
 		}
 	}
 
+	// Verify proposal parent root against cached HeadEvent (observability only).
+	gc.verifyProposalParent(ctx, logger, slot, beaconBlock)
+
 	// Check and log if fee recipient is missing (for both single and multi-client paths)
 	feeRecipient, err := beaconBlock.FeeRecipient()
 	if err != nil {
@@ -319,6 +322,45 @@ func (gc *GoClient) scoreProposal(
 ) float64 {
 	score, _ := new(big.Int).Add(proposal.ConsensusValue, proposal.ExecutionValue).Float64()
 	return score
+}
+
+// verifyProposalParent checks the proposal's parent root against cached HeadEvent.
+// This is observability only - no re-fetch, just metrics and logging.
+func (gc *GoClient) verifyProposalParent(
+	ctx context.Context,
+	logger *zap.Logger,
+	slot phase0.Slot,
+	proposal *api.VersionedProposal,
+) {
+	proposalParentVerifyCounter.Add(ctx, 1)
+
+	parentRoot, err := proposal.ParentRoot()
+	if err != nil {
+		logger.Warn("failed to get proposal parent root", fields.Slot(slot), zap.Error(err))
+		return
+	}
+
+	// Parent is from slot-1
+	parentSlot := slot - 1
+	item := gc.headCache.Get(parentSlot)
+	if item == nil {
+		proposalParentCacheMissCounter.Add(ctx, 1)
+		return
+	}
+	expectedRoot := item.Value()
+
+	if parentRoot == expectedRoot {
+		proposalParentMatchCounter.Add(ctx, 1)
+		return
+	}
+
+	proposalParentMismatchCounter.Add(ctx, 1)
+	logger.Warn("proposal parent root mismatch detected",
+		fields.Slot(slot),
+		zap.Uint64("parent_slot", uint64(parentSlot)),
+		zap.Stringer("expected_root", expectedRoot),
+		zap.Stringer("got_root", parentRoot),
+	)
 }
 
 // SubmitBeaconBlock submit the block to the node

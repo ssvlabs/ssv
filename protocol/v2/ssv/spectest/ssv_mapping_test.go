@@ -587,7 +587,7 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 
 	for slot := range c.Runners {
 		var shareInstance *spectypes.Share
-		for _, share := range c.Runners[slot].BaseRunner.Share {
+		for _, share := range c.Runners[slot].Share {
 			shareInstance = share
 			break
 		}

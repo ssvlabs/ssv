@@ -170,6 +170,12 @@ type GoClient struct {
 
 	// activatedClients tracks which clients have been activated before (for reconnection detection)
 	activatedClients *hashmap.Map[string, struct{}]
+
+	// headCache maps Slot → Root from HeadEvents to detect stale attestation data.
+	headCache *ttlcache.Cache[phase0.Slot, phase0.Root]
+
+	// fetchAttestationDataFunc allows overriding fetchAttestationData for testing.
+	fetchAttestationDataFunc func(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error)
 }
 
 type domainDataCacheKey struct {
@@ -252,6 +258,13 @@ func New(ctx context.Context, logger *zap.Logger, opt Options) (*GoClient, error
 
 	client.committeesCache = ttlcache.New(ttlcache.WithTTL[phase0.Epoch, []*eth2apiv1.BeaconCommittee](twoEpochTTL))
 	go client.committeesCache.Start()
+
+	// Initialize before startEventListener to capture HeadEvents.
+	client.headCache = ttlcache.New[phase0.Slot, phase0.Root](ttlcache.WithTTL[phase0.Slot, phase0.Root](2 * config.SlotDuration))
+	go client.headCache.Start()
+
+	// Set default fetch function (can be overridden in tests).
+	client.fetchAttestationDataFunc = client.fetchAttestationData
 
 	client.log.Debug("starting event listener")
 

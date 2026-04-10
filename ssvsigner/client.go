@@ -233,7 +233,7 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
-		recordClientRequest(ctx, opSignOperator, err, duration)
+		recordClientRequest(ctx, opOperatorSign, err, duration)
 		c.logger.Debug("requested to sign with operator key", zap.Duration("duration", duration), zap.Error(err))
 	}()
 	err = requests.
@@ -245,6 +245,58 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		ToBytesBuffer(&respBuf).
 		Fetch(ctx)
 	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	return respBuf.Bytes(), nil
+}
+
+func (c *Client) OperatorEncrypt(ctx context.Context, payload []byte) (encrypted []byte, err error) {
+	var respBuf bytes.Buffer
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opOperatorEncrypt, err, duration)
+		c.logger.Debug("requested operator encrypt", zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Path(PathOperatorEncrypt).
+		BodyBytes(payload).
+		Post().
+		ToBytesBuffer(&respBuf).
+		Fetch(ctx)
+	if err != nil {
+		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
+			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
+		}
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	return respBuf.Bytes(), nil
+}
+
+func (c *Client) OperatorDecrypt(ctx context.Context, payload []byte) (decrypted []byte, err error) {
+	var respBuf bytes.Buffer
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opOperatorDecrypt, err, duration)
+		c.logger.Debug("requested operator decrypt", zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Path(PathOperatorDecrypt).
+		BodyBytes(payload).
+		Post().
+		ToBytesBuffer(&respBuf).
+		Fetch(ctx)
+	if err != nil {
+		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
+			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
+		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 

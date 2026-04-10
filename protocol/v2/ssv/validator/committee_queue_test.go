@@ -780,7 +780,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			// Set runner state based on hasRunningDuty parameter
 			if !tc.hasRunningDuty {
-				committeeRunner.BaseRunner.State.Finished = true // This makes HasRunningDuty() return false
+				committeeRunner.State.Finished = true // This makes HasRunningDuty() return false
 			}
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
@@ -1766,7 +1766,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		ctx2, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
 
-		committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
+		committeeRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
 			&specqbft.ProcessingMessage{QBFTMessage: proposal}
 
 		// Restart consumption

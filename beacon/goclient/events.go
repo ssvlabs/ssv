@@ -191,6 +191,9 @@ func (gc *GoClient) newEventHandler() func(*apiv1.Event) {
 			lastProcessedEventSlot = eventData.Slot
 			lastProcessedEventSlotLock.Unlock()
 
+			// Must be after monotonicity gate to ensure we only cache the latest head.
+			gc.headCache.Set(eventData.Slot, eventData.Block, ttlcache.DefaultTTL)
+
 			gc.subscribersLock.RLock()
 			defer gc.subscribersLock.RUnlock()
 			for _, sub := range gc.headEventSubscribers {

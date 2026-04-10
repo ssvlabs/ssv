@@ -25,7 +25,9 @@ const (
 	opRemoveValidator  = "remove_validator"
 	opSignValidator    = "sign_validator"
 	opOperatorIdentity = "operator_identity"
-	opSignOperator     = "sign_operator"
+	opOperatorSign     = "operator_sign"
+	opOperatorEncrypt  = "operator_encrypt"
+	opOperatorDecrypt  = "operator_decrypt"
 
 	// Remote Signer operations called by server
 	opRemoteSignerListKeys       = "remote_signer_list_keys"

@@ -76,25 +76,25 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	valCheck := createValueChecker(test.Runner)
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		for _, inst := range test.Runner.(*runner.CommitteeRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.CommitteeRunner).QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.AggregatorRunner:
-		for _, inst := range test.Runner.(*runner.AggregatorRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.AggregatorRunner).QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.ProposerRunner:
-		for _, inst := range test.Runner.(*runner.ProposerRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.ProposerRunner).QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).QBFTController.StoredInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
@@ -116,8 +116,8 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			c.Runners[test.Duty.DutySlot()] = r
 
 			// Inform the duty guard of the running duty, if any, so that it won't reject it.
-			if r.BaseRunner.State != nil && r.BaseRunner.State.CurrentDuty != nil {
-				duty, ok := r.BaseRunner.State.CurrentDuty.(*spectypes.CommitteeDuty)
+			if r.State != nil && r.State.CurrentDuty != nil {
+				duty, ok := r.State.CurrentDuty.(*spectypes.CommitteeDuty)
 				if !ok {
 					panic("starting duty not found")
 				}
@@ -286,9 +286,9 @@ var baseCommitteeWithRunnerSample = func(
 			shareMap,
 			attestingValidators,
 			controller.NewController(
-				runnerSample.BaseRunner.QBFTController.Identifier,
-				runnerSample.BaseRunner.QBFTController.CommitteeMember,
-				runnerSample.BaseRunner.QBFTController.GetConfig(),
+				runnerSample.QBFTController.Identifier,
+				runnerSample.QBFTController.CommitteeMember,
+				runnerSample.QBFTController.GetConfig(),
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			),
@@ -304,7 +304,7 @@ var baseCommitteeWithRunnerSample = func(
 
 	c := validator.NewCommittee(
 		logger,
-		runnerSample.BaseRunner.NetworkConfig,
+		runnerSample.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

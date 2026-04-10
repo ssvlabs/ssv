@@ -3,6 +3,7 @@ package operator
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -446,7 +447,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-		p2pNetwork := setupP2P(logger, db)
+		p2pNetwork := setupP2P(cmd.Context(), logger, db, operatorPrivKey, ssvSignerClient)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -655,6 +656,7 @@ var StartNodeCmd = &cobra.Command{
 			if err := p2pNetwork.Start(); err != nil {
 				logger.Fatal("failed to start network", zap.Error(err))
 			}
+			nodeProber.AddNode(p2pNodeName, p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
 
 		if cfg.SSVAPIPort > 0 {
@@ -1071,9 +1073,46 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 	return ssvConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
-	istore := ssv_identity.NewIdentityStore(logger, db)
-	netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
+func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) network.P2PNetwork {
+	var protectFn func(context.Context, []byte) ([]byte, error)
+	var unprotectFn func(context.Context, []byte) ([]byte, error)
+
+	// The configured startup mode determines how the persisted P2P network key is protected.
+	if operatorPrivKey != nil {
+		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		if err != nil {
+			logger.Fatal("failed to derive operator-based network key protection secret", zap.Error(err))
+		}
+		protectFn = func(_ context.Context, plaintext []byte) ([]byte, error) {
+			return keys.EncryptPayload(encryptionKey, plaintext)
+		}
+		unprotectFn = func(_ context.Context, protectedValue []byte) ([]byte, error) {
+			return keys.DecryptPayload(encryptionKey, protectedValue)
+		}
+	} else if signerClient != nil {
+		err := probeRemoteNetworkKeyProtector(ctx, signerClient)
+		if err == nil {
+			protectFn = signerClient.OperatorEncrypt
+			unprotectFn = signerClient.OperatorDecrypt
+		} else if !errors.Is(err, ssvsigner.ErrOperatorDataProtectionUnsupported) {
+			logger.Fatal("failed to probe ssv-signer p2p network key protection", zap.Error(err))
+		} else {
+			hasEncryptedKey, hasEncryptedKeyErr := ssv_identity.HasEncryptedNetworkKey(db)
+			if hasEncryptedKeyErr != nil {
+				logger.Fatal("failed to inspect stored p2p network private key format", zap.Error(hasEncryptedKeyErr))
+			}
+			if hasEncryptedKey {
+				logger.Fatal("existing database contains an encrypted p2p network private key, but the configured ssv-signer cannot encrypt or decrypt it. Upgrade ssv-signer to a version that supports /v1/operator/encrypt and /v1/operator/decrypt, or restore the operator key and signing mode that originally encrypted this database", zap.Error(err))
+			}
+
+			logger.Warn("ssv-signer does not support remote p2p network key protection, falling back to local compatibility mode",
+				zap.Error(err),
+			)
+		}
+	}
+
+	istore := ssv_identity.NewIdentityStore(logger, db, protectFn, unprotectFn)
+	netPrivKey, err := istore.SetupNetworkKey(ctx, cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
@@ -1084,6 +1123,28 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 		logger.Fatal("failed to setup p2p network", zap.Error(err))
 	}
 	return n
+}
+
+func probeRemoteNetworkKeyProtector(
+	ctx context.Context,
+	client *ssvsigner.Client,
+) error {
+	probeKey := make([]byte, 32)
+	if _, err := crand.Read(probeKey); err != nil {
+		return fmt.Errorf("generate remote data protector probe: %w", err)
+	}
+	encrypted, err := client.OperatorEncrypt(ctx, probeKey)
+	if err != nil {
+		return fmt.Errorf("probe remote data protector encrypt: %w", err)
+	}
+	decrypted, err := client.OperatorDecrypt(ctx, encrypted)
+	if err != nil {
+		return fmt.Errorf("probe remote data protector decrypt: %w", err)
+	}
+	if !bytes.Equal(decrypted, probeKey) {
+		return errors.New("probe remote network key protector mismatch")
+	}
+	return nil
 }
 
 // syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
