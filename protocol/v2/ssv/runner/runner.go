@@ -39,7 +39,6 @@ type Getters interface {
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
-	GetNetworkConfig() *networkconfig.Network
 }
 
 type Setters interface {
@@ -99,7 +98,7 @@ type BaseRunner struct {
 
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
 	var runningInstance *instance.Instance
-	if b.hasRunningDuty() {
+	if b.HasRunningDuty() {
 		runningInstance = b.State.RunningInstance
 		if runningInstance != nil {
 			decided, _ := runningInstance.IsDecided()
@@ -111,7 +110,7 @@ func (b *BaseRunner) HasRunningQBFTInstance() bool {
 
 func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 	var runningInstance *instance.Instance
-	if b.hasRunningDuty() {
+	if b.HasRunningDuty() {
 		runningInstance = b.State.RunningInstance
 		if runningInstance != nil {
 			return runningInstance.State.ProposalAcceptedForCurrentRound != nil
@@ -122,6 +121,17 @@ func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 
 func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 	return b.Share
+}
+
+func (b *BaseRunner) HasRunningDuty() bool {
+	b.mtx.RLock() // reads b.State
+	defer b.mtx.RUnlock()
+
+	if b.State == nil {
+		return false
+	}
+
+	return !b.State.Finished
 }
 
 func (b *BaseRunner) GetRole() spectypes.RunnerRole {
@@ -136,7 +146,7 @@ func (b *BaseRunner) GetLastHeight() specqbft.Height {
 }
 
 func (b *BaseRunner) GetLastRound() specqbft.Round {
-	if b.hasRunningDuty() {
+	if b.HasRunningDuty() {
 		inst := b.State.RunningInstance
 		if inst != nil {
 			return inst.State.Round
@@ -157,8 +167,17 @@ func (b *BaseRunner) Encode() ([]byte, error) {
 	return json.Marshal(b)
 }
 
+// Decode unmarshals persisted runner state into the receiver.
+//
+// Note: decoded runners are intentionally partial; runtime dependencies (e.g. `NetworkConfig`, `TimeoutF`, and
+// runner-specific value checkers) must be rehydrated by the caller after decode.
 func (b *BaseRunner) Decode(data []byte) error {
-	return json.Unmarshal(data, &b)
+	if b == nil {
+		return fmt.Errorf("nil BaseRunner")
+	}
+	// Unmarshal into the receiver, not into a copy of the pointer.
+	// Unmarshalling into `&b` would only update the local pointer variable.
+	return json.Unmarshal(data, b)
 }
 
 func (b *BaseRunner) MarshalJSON() ([]byte, error) {
@@ -266,7 +285,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
+	if b.HasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 	if prevDecided {
@@ -281,7 +300,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, err
 	}
 
-	if !b.hasRunningDuty() {
+	if !b.HasRunningDuty() {
 		logger.Debug("no running duty, applied consensus message but cannot progress further")
 		return false, nil, nil
 	}
@@ -461,18 +480,6 @@ func (b *BaseRunner) decide(
 	b.registerTimeoutHandler(ctx, logger, newInstance, b.QBFTController.Height)
 
 	return nil
-}
-
-// hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
-func (b *BaseRunner) hasRunningDuty() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
-	if b.State == nil {
-		return false
-	}
-
-	return !b.State.Finished
 }
 
 func (b *BaseRunner) hasDutyAssigned() bool {

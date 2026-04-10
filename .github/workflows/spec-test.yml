@@ -16,11 +16,11 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
       - name: Setup Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: go.mod
           # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
@@ -28,7 +28,7 @@ jobs:
           cache: false
 
       - name: Restore Go cache (spec)
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.4
         with:
           path: |
             ~/go/pkg/mod
@@ -39,7 +39,7 @@ jobs:
             ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-
 
       - name: Cache generated spec artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.4
         with:
           path: .cache/spec-tests
           key: ${{ runner.os }}-spec-artifacts-${{ hashFiles('go.sum') }}

@@ -1,13 +1,9 @@
 package ekm
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -17,6 +13,7 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/encryptor"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"go.uber.org/zap"
 )
 
@@ -398,7 +395,7 @@ func (s *storage) decryptData(objectValue []byte) ([]byte, error) {
 		return objectValue, nil
 	}
 
-	decryptedData, err := s.decrypt(objectValue)
+	decryptedData, err := keys.DecryptPayload(s.encryptionKey, objectValue)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt wallet: %w", err)
 	}
@@ -411,45 +408,10 @@ func (s *storage) encryptData(objectValue []byte) ([]byte, error) {
 		return objectValue, nil
 	}
 
-	encryptedData, err := s.encrypt(objectValue)
+	encryptedData, err := keys.EncryptPayload(s.encryptionKey, objectValue)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt wallet: %w", err)
 	}
 
 	return encryptedData, nil
-}
-
-func (s *storage) encrypt(plaintext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(s.encryptionKey)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil
-}
-
-func (s *storage) decrypt(nonceCipherText []byte) ([]byte, error) {
-	block, err := aes.NewCipher(s.encryptionKey)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	nonceSize := gcm.NonceSize()
-	if len(nonceCipherText) < nonceSize {
-		return nil, errors.New("malformed ciphertext")
-	}
-
-	nonce, ciphertext := nonceCipherText[:nonceSize], nonceCipherText[nonceSize:]
-	// #nosec G407 false positive: https://github.com/securego/gosec/issues/1211
-	return gcm.Open(nil, nonce, ciphertext, nil)
 }
