@@ -13,8 +13,9 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/encryptor"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 // signer_storage.go provides a concrete implementation of Storage (backed by a
