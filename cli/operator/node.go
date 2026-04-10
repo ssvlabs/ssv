@@ -833,7 +833,15 @@ func setupPebbleDB(
 	if err != nil {
 		return nil, fmt.Errorf("resolve database layout: %w", err)
 	}
+	// dbPath may differ from the configured base path when startup resolves a
+	// legacy Badger/Pebble on-disk layout to the correct Pebble directory.
 	dbPath := plan.PebblePath
+	if dbPath != cfg.DBOptions.Path {
+		logger.Warn("using legacy pebble directory selected during db layout resolution",
+			zap.String("configured_path", cfg.DBOptions.Path),
+			zap.String("selected_path", dbPath),
+		)
+	}
 
 	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
 	if err != nil {
@@ -849,12 +857,6 @@ func setupPebbleDB(
 			zap.Error(closeErr),
 		)
 		return errors.Join(setupErr, fmt.Errorf("close db after setup error: %w", closeErr))
-	}
-	if dbPath != cfg.DBOptions.Path {
-		logger.Warn("using legacy pebble database path",
-			zap.String("configured_path", cfg.DBOptions.Path),
-			zap.String("legacy_path", dbPath),
-		)
 	}
 
 	if plan.BadgerImportPath != "" {

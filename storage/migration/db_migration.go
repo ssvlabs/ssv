@@ -28,9 +28,13 @@ const (
 type importBatchCommitHook func(committedBatches int, copiedKeys int) error
 
 type badgerImportMarker struct {
-	SourcePath  string `json:"source_path"`
-	Keys        int    `json:"keys,omitempty"`
-	StartedAt   string `json:"started_at,omitempty"`
+	// BadgerDirPath identifies the legacy Badger directory this marker belongs to.
+	BadgerDirPath string `json:"source_path"`
+	// KeyCount records how many keys were copied into Pebble when the import completed.
+	KeyCount int `json:"key_count,omitempty"`
+	// StartedAt is set only on the in-progress marker.
+	StartedAt string `json:"started_at,omitempty"`
+	// CompletedAt is set only on the done marker.
 	CompletedAt string `json:"completed_at,omitempty"`
 }
 
@@ -266,7 +270,7 @@ func migrateBadgerToPebbleIfNeeded(
 	badgerStateKnown bool,
 	knownBadgerExists bool,
 	knownBadgerNonEmpty bool,
-	hook importBatchCommitHook,
+	onBatchCommitHook importBatchCommitHook,
 ) (bool, int, error) {
 	if err := ctx.Err(); err != nil {
 		return false, 0, err
@@ -368,34 +372,31 @@ func migrateBadgerToPebbleIfNeeded(
 		return false, 0, nil
 	}
 
-	if err := ctx.Err(); err != nil {
-		return false, 0, err
-	}
 	if !inProgressMarkerExists {
 		if err := writeBadgerImportInProgressMarker(pebblePath, badgerPath); err != nil {
 			return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
 		}
 	}
 
-	copied, err := copyBadgerToPebble(ctx, logger, badgerPath, db, hook)
+	keysCopiedTotal, err := copyBadgerToPebble(ctx, logger, badgerPath, db, onBatchCommitHook)
 	if err != nil {
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
 	}
 	if err := ctx.Err(); err != nil {
 		return false, 0, err
 	}
-	if err := writeBadgerImportDoneMarker(pebblePath, badgerPath, copied); err != nil {
+	if err := writeBadgerImportDoneMarker(pebblePath, badgerPath, keysCopiedTotal); err != nil {
 		return false, 0, wrapNoSpaceImportError(err, badgerPath, pebblePath)
 	}
 	if err := removeBadgerImportInProgressMarker(pebblePath); err != nil {
-		logger.Warn("failed to remove in-progress badger import marker after successful migration; marker will be retried on next startup",
+		logger.Warn("failed to remove in-progress badger import marker after successful migration; marker will be removed on next startup",
 			zap.String("badger_path", badgerPath),
 			zap.String("pebble_path", pebblePath),
 			zap.Error(err),
 		)
 	}
 
-	return true, copied, nil
+	return true, keysCopiedTotal, nil
 }
 
 func isPebbleEmpty(db *pebble.DB) (bool, error) {
@@ -418,7 +419,7 @@ func badgerDirState(logger *zap.Logger, path string) (exists bool, nonEmpty bool
 		return exists, false, err
 	}
 
-	bdb, recovered, err := openBadgerForImport(path)
+	bdb, recovered, err := openBadgerReadOnly(path)
 	if err != nil {
 		return true, false, err
 	}
@@ -458,7 +459,7 @@ func hasBadgerFiles(path string) (bool, error) {
 
 	// Heuristic for "Badger files are present" used only to decide whether to attempt
 	// opening Badger. For Badger v4, require KEYREGISTRY and at least one value-log
-	// file (".vlog" or ".vlog.zstd"). openBadgerForImport remains the source of
+	// file (".vlog" or ".vlog.zstd"). openBadgerReadOnly remains the source of
 	// truth for validating the directory.
 	hasKeyRegistry := false
 	hasValueLog := false
@@ -477,11 +478,11 @@ func hasBadgerFiles(path string) (bool, error) {
 	return false, nil
 }
 
-func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath string, db *pebble.DB, hook importBatchCommitHook) (int, error) {
+func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath string, db *pebble.DB, onBatchCommitHook importBatchCommitHook) (int, error) {
 	// NOTE: resume always re-copies keys from the beginning of Badger when an in-progress
 	// marker exists. Duplicate puts are safe in Pebble (latest write wins), but resume
 	// currently has similar write amplification and temporary disk pressure as a full import.
-	bdb, recovered, err := openBadgerForImport(badgerPath)
+	bdb, recovered, err := openBadgerReadOnly(badgerPath)
 	if err != nil {
 		return 0, err
 	}
@@ -494,7 +495,7 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 	}
 
 	batchSize := defaultImportBatchSize
-	copied := 0
+	keysCopiedTotal := 0
 	pending := 0
 	committedBatches := 0
 	batch := db.NewBatch()
@@ -523,14 +524,14 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 		if committedBatches%importProgressLogEveryBatches == 0 {
 			logger.Info("badger import in progress",
 				zap.String("badger_path", badgerPath),
-				zap.Int("keys_copied", copied),
+				zap.Int("keys_copied", keysCopiedTotal),
 				zap.Int("committed_batches", committedBatches),
 			)
 		}
 		batch = db.NewBatch()
 		pending = 0
-		if hook != nil {
-			if err := hook(committedBatches, copied); err != nil {
+		if onBatchCommitHook != nil {
+			if err := onBatchCommitHook(committedBatches, keysCopiedTotal); err != nil {
 				return err
 			}
 		}
@@ -557,7 +558,7 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 				return err
 			}
 
-			copied++
+			keysCopiedTotal++
 			pending++
 
 			if pending >= batchSize {
@@ -576,10 +577,10 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 		return 0, err
 	}
 
-	return copied, nil
+	return keysCopiedTotal, nil
 }
 
-func openBadgerForImport(path string) (*badgerdb.DB, bool, error) {
+func openBadgerReadOnly(path string) (*badgerdb.DB, bool, error) {
 	opt := badgerdb.DefaultOptions(path)
 	opt.ReadOnly = true
 	opt.Logger = nil
@@ -637,8 +638,8 @@ func writeBadgerImportInProgressMarker(pebblePath string, badgerPath string) err
 	return writeMarker(
 		inProgressMarkerPath(pebblePath),
 		badgerImportMarker{
-			SourcePath: badgerPath,
-			StartedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+			BadgerDirPath: badgerPath,
+			StartedAt:     time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	)
 }
@@ -647,9 +648,9 @@ func writeBadgerImportDoneMarker(pebblePath string, badgerPath string, keys int)
 	return writeMarker(
 		doneMarkerPath(pebblePath),
 		badgerImportMarker{
-			SourcePath:  badgerPath,
-			Keys:        keys,
-			CompletedAt: time.Now().UTC().Format(time.RFC3339Nano),
+			BadgerDirPath: badgerPath,
+			KeyCount:      keys,
+			CompletedAt:   time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	)
 }
@@ -683,7 +684,9 @@ func markerExistsForSource(path string, badgerPath string) (bool, error) {
 	if !exists {
 		return false, nil
 	}
-	return marker.SourcePath == "" || samePath(marker.SourcePath, badgerPath), nil
+	// Empty BadgerDirPath is accepted for backward compatibility with early marker
+	// files that were written before the source path was persisted.
+	return marker.BadgerDirPath == "" || samePath(marker.BadgerDirPath, badgerPath), nil
 }
 
 func samePath(left string, right string) bool {

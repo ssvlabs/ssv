@@ -630,7 +630,7 @@ func TestMarkerExistsForSource_EquivalentPaths(t *testing.T) {
 
 	markerPath := filepath.Join(t.TempDir(), "marker.json")
 	sourcePath := "./data/../data/badger-db"
-	require.NoError(t, writeMarker(markerPath, badgerImportMarker{SourcePath: sourcePath}))
+	require.NoError(t, writeMarker(markerPath, badgerImportMarker{BadgerDirPath: sourcePath}))
 
 	exists, err := markerExistsForSource(markerPath, filepath.Clean(sourcePath))
 	require.NoError(t, err)
@@ -648,7 +648,7 @@ func TestMarkerExistsForSource_DifferentPaths(t *testing.T) {
 	t.Parallel()
 
 	markerPath := filepath.Join(t.TempDir(), "marker.json")
-	require.NoError(t, writeMarker(markerPath, badgerImportMarker{SourcePath: "path-a"}))
+	require.NoError(t, writeMarker(markerPath, badgerImportMarker{BadgerDirPath: "path-a"}))
 
 	exists, err := markerExistsForSource(markerPath, "path-b")
 	require.NoError(t, err)

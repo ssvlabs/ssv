@@ -43,13 +43,11 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 		env.operatorKey,
 	)
 	if err != nil {
+		err = fmt.Errorf("failed to create local key manager: %w", err)
 		if closeErr := localDB.Close(); closeErr != nil {
-			return errors.Join(
-				fmt.Errorf("failed to create local key manager: %w", err),
-				fmt.Errorf("close local database after key manager setup failure: %w", closeErr),
-			)
+			return errors.Join(err, fmt.Errorf("close local database after key manager setup failure: %w", closeErr))
 		}
-		return fmt.Errorf("failed to create local key manager: %w", err)
+		return err
 	}
 	env.localDB = localDB
 	env.localKeyManager = localKeyManager
@@ -80,15 +78,13 @@ func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
 		func() spectypes.OperatorID { return 1 }, // operator ID getter
 	)
 	if err != nil {
+		err = fmt.Errorf("failed to create remote key manager: %w", err)
 		if createdRemoteDB {
 			if closeErr := remoteDB.Close(); closeErr != nil {
-				return errors.Join(
-					fmt.Errorf("failed to create remote key manager: %w", err),
-					fmt.Errorf("close remote database after key manager setup failure: %w", closeErr),
-				)
+				return errors.Join(err, fmt.Errorf("close remote database after key manager setup failure: %w", closeErr))
 			}
 		}
-		return fmt.Errorf("failed to create remote key manager: %w", err)
+		return err
 	}
 	env.remoteDB = remoteDB
 	env.remoteKeyManager = remoteKeyManager

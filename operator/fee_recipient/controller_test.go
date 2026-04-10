@@ -95,7 +95,7 @@ func TestSubmitProposal(t *testing.T) {
 	operatorData := &registrystorage.OperatorData{ID: 123456789}
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	_, shareStorage := createStorage(t)
+	shareStorage := createStorage(t)
 
 	beaconConfig := networkconfig.TestNetwork.Beacon
 	populateStorage(t, shareStorage, operatorData)
@@ -267,7 +267,7 @@ func TestSubmitProposal(t *testing.T) {
 
 	t.Run("500 preparations created (no batching at controller level)", func(t *testing.T) {
 		// fresh storage with exactly 500 committee validators
-		_, shareStorage2 := createStorage(t)
+		shareStorage2 := createStorage(t)
 
 		for i := 0; i < 500; i++ {
 			owner := common.HexToAddress(fmt.Sprintf("0x%040x", i))
@@ -309,7 +309,7 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
+func createStorage(t *testing.T) registrystorage.Shares {
 	logger := log.TestLogger(t)
 	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
@@ -327,7 +327,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
 	)
 	require.NoError(t, err)
 
-	return db, shareStorage
+	return shareStorage
 }
 
 func populateStorage(t *testing.T, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
