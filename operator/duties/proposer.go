@@ -104,7 +104,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				h.fetchFirst = true
 			}
 
-		case reorgEvent := <-h.reorg:
+		case reorgEvent := <-h.reorgCh:
 			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
@@ -118,7 +118,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				h.fetchFirst = true
 			}
 
-		case <-h.indicesChange:
+		case <-h.indicesChangeCh:
 			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 

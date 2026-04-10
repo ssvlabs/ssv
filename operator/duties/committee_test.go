@@ -357,7 +357,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
 		// wait for attester duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -434,7 +434,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
 		// wait for attester duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -509,7 +509,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(2),
 			},
 		})
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
 		// wait for attester duties to be fetched in slot 0
 		waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -709,7 +709,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: trigger indices change
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		attDuties.Delete(phase0.Epoch(2))
 
@@ -1016,7 +1016,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: trigger a change in active indices at the last slot of the epoch
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: the first slot of the next epoch duties should be executed as expected

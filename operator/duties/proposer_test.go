@@ -179,7 +179,7 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -249,7 +249,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.ProposerDuty{
@@ -259,7 +259,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		}))
 
 		// STEP 3: trigger a change in active indices in the same slot
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		duties, _ = dutiesMap.Get(phase0.Epoch(0))
 		dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.ProposerDuty{
@@ -448,7 +448,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: trigger a change in active indices in the same slot
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		dutiesMap.Set(phase0.Epoch(1), append(duties, &eth2apiv1.ProposerDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},

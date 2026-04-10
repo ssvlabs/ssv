@@ -226,7 +226,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 				ValidatorIndex: phase0.ValidatorIndex(3),
 			},
 		})
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForDuties.Set(true)
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		// no other fetching or execution should happen on slot 0
@@ -273,7 +273,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.AttesterDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -283,7 +283,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: trigger a change in active indices in the same slot
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ = dutiesMap.Get(phase0.Epoch(0))
 		dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.AttesterDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
@@ -474,7 +474,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: trigger indices change
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(phase0.Epoch(2))
 		dutiesMap.Set(phase0.Epoch(2), append(duties, &eth2apiv1.AttesterDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
@@ -658,7 +658,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 5: trigger indices change
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		dutiesMap.Set(phase0.Epoch(1), append(duties, &eth2apiv1.AttesterDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
@@ -890,7 +890,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 			Slot:           phase0.Slot(testSlotsPerEpoch*2 + 1),
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		}))
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+testSlotsPerEpoch/2+3))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + testSlotsPerEpoch/2 + 3))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)

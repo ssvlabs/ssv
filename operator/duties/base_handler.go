@@ -24,8 +24,8 @@ type dutyHandler interface {
 		validatorController ValidatorController,
 		dutiesExecutor DutiesExecutor,
 		slotTickerProvider slotticker.Provider,
-		reorgEvents chan ReorgEvent,
-		indicesChange chan struct{},
+		reorgEventsCh chan ReorgEvent,
+		indicesChangeCh chan struct{},
 	)
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
@@ -47,8 +47,8 @@ type baseHandler struct {
 	dutiesExecutor      DutiesExecutor
 	ticker              slotticker.SlotTicker
 
-	reorg         chan ReorgEvent
-	indicesChange chan struct{}
+	reorgCh         chan ReorgEvent
+	indicesChangeCh chan struct{}
 
 	indicesChanged bool
 }
@@ -64,8 +64,8 @@ func (h *baseHandler) Setup(
 	validatorController ValidatorController,
 	dutiesExecutor DutiesExecutor,
 	slotTickerProvider slotticker.Provider,
-	reorgEvents chan ReorgEvent,
-	indicesChange chan struct{},
+	reorgEventsCh chan ReorgEvent,
+	indicesChangeCh chan struct{},
 ) {
 	h.logger = logger.With(zap.String("handler", name))
 	h.ctx = ctx
@@ -76,8 +76,8 @@ func (h *baseHandler) Setup(
 	h.validatorController = validatorController
 	h.dutiesExecutor = dutiesExecutor
 	h.ticker = slotTickerProvider()
-	h.reorg = reorgEvents
-	h.indicesChange = indicesChange
+	h.reorgCh = reorgEventsCh
+	h.indicesChangeCh = indicesChangeCh
 }
 
 func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {

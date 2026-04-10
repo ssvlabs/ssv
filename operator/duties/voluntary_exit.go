@@ -119,10 +119,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				fields.BlockNumber(exitDescriptor.BlockNumber),
 			)
 
-		case <-h.indicesChange:
+		case <-h.indicesChangeCh:
 			h.logger.Debug("🛠 indicesChange event")
 
-		case <-h.reorg:
+		case <-h.reorgCh:
 			h.logger.Debug("🛠 reorg event")
 		}
 	}
