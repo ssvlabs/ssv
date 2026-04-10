@@ -166,9 +166,7 @@ func newBackoffRandSource() rand.Source {
 func secureBackoffSeed() int64 {
 	var seedBytes [8]byte
 	if _, err := cryptorand.Read(seedBytes[:]); err == nil {
-		hi := int64(binary.LittleEndian.Uint32(seedBytes[:4]))
-		lo := int64(binary.LittleEndian.Uint32(seedBytes[4:]))
-		return (hi << 31) ^ lo
+		return int64(binary.LittleEndian.Uint64(seedBytes[:])) // #nosec G115 -- random seed intentionally uses the full int64 range
 	}
 
 	return time.Now().UnixNano()
