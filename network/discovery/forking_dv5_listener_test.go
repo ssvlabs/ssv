@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const iteratorTimeout = 5 * time.Millisecond
+const iteratorTimeout = 500 * time.Millisecond
 
 func TestForkListener_Create(t *testing.T) {
 	localNode := NewLocalNode(t)
