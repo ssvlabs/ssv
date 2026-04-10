@@ -733,8 +733,6 @@ github.com/ssvlabs/go-eth2-client v0.6.31-0.20250922150906-26179dd60c9c h1:iNQoR
 github.com/ssvlabs/go-eth2-client v0.6.31-0.20250922150906-26179dd60c9c/go.mod h1:fvULSL9WtNskkOB4i+Yyr6BKpNHXvmpGZj9969fCrfY=
 github.com/ssvlabs/ssv-spec v1.2.2 h1:as84CsvYAL4+czKBVeQSlxjDYVmU1wClwhc7YNcoBzY=
 github.com/ssvlabs/ssv-spec v1.2.2/go.mod h1:GedhFYGHVJRYYH3nEp05Gn14tyvg6VbTbaIxrMtI7Cg=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20260303172345-c5af9f661663 h1:oqXn3S43O4prq72MAy14DdrjDt9Vyh7Gp+nBp5b+34k=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20260303172345-c5af9f661663/go.mod h1:7Nmii3BJeoSlWa2tU5XbaXmVHxPHDqFA4zQYMy31cfE=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
