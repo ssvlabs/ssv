@@ -107,6 +107,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				h.prepareNextEpoch(tickCtx, logger, currentEpoch, currentSlot)
 
 				// Clean up the irrelevant data to prevent infinite memory growth at the very 1st slot of the epoch.
+				// Note, it doesn't have to be "the very 1st slot" exactly - it's just the most natural time to do it.
 				if slotNumber == 1 && currentEpoch >= 1 {
 					h.duties.EraseEpochData(currentEpoch - 1)
 					delete(h.dutyFetchIntents, currentEpoch-1)
