@@ -377,9 +377,12 @@ func (n *p2pNetwork) peersTrimming() func() {
 		inboundBefore, outboundBefore := n.connectionStats()
 		peersToTrim := n.choosePeersToTrim(maxPeersToDrop, trimInboundOnly)
 		if len(peersToTrim) == 0 {
-			n.logger.Debug("no peers selected for trimming",
+			n.logger.Debug(
+				"no peers selected for trimming",
+				zap.Int("inbound_peers", inboundBefore),
+				zap.Int("outbound_peers", outboundBefore),
 				zap.Bool("trim_inbound_only", trimInboundOnly),
-				zap.Int("connected_peers", len(n.host.Network().Peers())),
+				zap.Int("trimmed_recently_size", n.trimmedRecently.SlowLen()),
 			)
 			return
 		}
@@ -394,6 +397,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			zap.Int("outbound_peers_before_trim", outboundBefore),
 			zap.Int("inbound_peers_after_trim", inboundAfter),
 			zap.Int("outbound_peers_after_trim", outboundAfter),
+			zap.Bool("trim_inbound_only", trimInboundOnly),
 			zap.Int("trimmed_recently_size", n.trimmedRecently.SlowLen()),
 			zap.Any("trimmed_peers", maps.Keys(peersToTrim)),
 		)
@@ -454,7 +458,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 			sharedSubnets := ownSubnets.SharedSubnets(peerSubnets)
 			n.logger.Debug("selected peer for trimming",
 				fields.PeerID(p),
-				zap.Float64("peer_trim_score", peerScores[p]),
+				zap.Float64("peer_score", peerScores[p]),
 				zap.String("conn_direction", connDir.String()),
 				zap.String("peer_subnets", peerSubnets.StringHumanReadable()),
 				zap.Int("shared_subnets_count", len(sharedSubnets)),

@@ -157,12 +157,12 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	const logFrequency = 50
+	const logWindowSize = 50
 
 	var (
-		skippedPeersWindow uint64
-		skippedByReason    = map[skipReason]uint64{}
-		skippedUnknown     uint64
+		skippedPeersTotalPerWindow   uint64
+		skippedByReasonPerWindow     = map[skipReason]uint64{}
+		skippedPeersUnknownPerWindow uint64
 	)
 
 	dvs.discover(
@@ -170,15 +170,15 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 		func(e PeerEvent) {
 			err := dvs.checkPeer(dvs.ctx, e)
 			if err != nil {
-				skippedPeersWindow++
+				skippedPeersTotalPerWindow++
 				var skipErr *peerSkipError
 				if errors.As(err, &skipErr) {
-					skippedByReason[skipErr.reason]++
+					skippedByReasonPerWindow[skipErr.reason]++
 				} else {
-					skippedUnknown++
+					skippedPeersUnknownPerWindow++
 				}
-				if skippedPeersWindow >= logFrequency {
-					summaryFields := discoverySkipSummaryFields(skippedPeersWindow, skippedByReason, skippedUnknown)
+				if skippedPeersTotalPerWindow >= logWindowSize {
+					summaryFields := discoverySkipSummaryFields(skippedPeersTotalPerWindow, skippedByReasonPerWindow, skippedPeersUnknownPerWindow)
 					summaryFields = append(summaryFields,
 						zap.Error(err),
 						fields.PeerID(e.AddrInfo.ID),
@@ -186,9 +186,9 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 						zap.Int("trimmed_recently_size", dvs.trimmedRecently.SlowLen()),
 					)
 					dvs.logger.Debug("discovery skipped peers summary", summaryFields...)
-					skippedPeersWindow = 0
-					skippedByReason = map[skipReason]uint64{}
-					skippedUnknown = 0
+					skippedPeersTotalPerWindow = 0
+					skippedByReasonPerWindow = map[skipReason]uint64{}
+					skippedPeersUnknownPerWindow = 0
 				}
 				return
 			}
@@ -220,17 +220,14 @@ func newPeerSkipError(reason skipReason, err error) error {
 
 func discoverySkipSummaryFields(skippedPeers uint64, skippedByReason map[skipReason]uint64, skippedUnknown uint64) []zap.Field {
 	fieldsOut := []zap.Field{
-		zap.Uint64("skipped_peers", skippedPeers),
+		zap.Uint64("skipped_peers_total", skippedPeers),
 	}
 	if skippedUnknown > 0 {
 		fieldsOut = append(fieldsOut, zap.Uint64("skipped_unknown_reason", skippedUnknown))
 	}
 
 	reasons := make([]string, 0, len(skippedByReason))
-	for reason, count := range skippedByReason {
-		if count == 0 {
-			continue
-		}
+	for reason := range skippedByReason {
 		reasons = append(reasons, string(reason))
 	}
 	sort.Strings(reasons)
@@ -247,6 +244,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		var err error
 		pid, err = PeerID(e.Node)
 		if err != nil {
+			recordPeerSkipped(ctx, skipReasonInvalidPeerID)
 			return newPeerSkipError(skipReasonInvalidPeerID, errors.Wrap(err, "could not get peer ID from node record"))
 		}
 	}
@@ -255,6 +253,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	peerDiscoveriesCounter.Add(ctx, 1)
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {
+		recordPeerSkipped(ctx, skipReasonInvalidDomainType)
 		return newPeerSkipError(skipReasonInvalidDomainType, errors.Wrap(err, "could not read domain type"))
 	}
 	if dvs.ssvConfig.DomainType != nodeDomainType {
@@ -265,6 +264,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	// Get the peer's subnets, skipping if it has none.
 	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
+		recordPeerSkipped(ctx, skipReasonInvalidSubnets)
 		return newPeerSkipError(skipReasonInvalidSubnets, fmt.Errorf("could not read subnets: %w", err))
 	}
 	if commons.ZeroSubnets == peerSubnets {

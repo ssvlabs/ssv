@@ -86,14 +86,16 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 	if n.disable {
 		return true
 	}
+
+	remoteAddr := multiaddrs.RemoteMultiaddr()
+
 	if n.atInboundLimit() {
 		n.logger.Debug("connection rejected due to inbound limit",
-			zap.String("remote_addr", multiaddrs.RemoteMultiaddr().String()),
+			zap.String("remote_addr", remoteAddr.String()),
 		)
 		return false
 	}
 
-	remoteAddr := multiaddrs.RemoteMultiaddr()
 	if !n.validateDial(remoteAddr) {
 		// Yield this goroutine to allow others to run in-between connection attempts.
 		runtime.Gosched()
