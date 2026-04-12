@@ -2,7 +2,9 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -33,6 +35,37 @@ type messageProcessingState struct {
 
 type messageKey string
 
+func writeUint64(b *strings.Builder, v uint64) {
+	var buf [20]byte
+	out := strconv.AppendUint(buf[:0], v, 10)
+	_, _ = b.Write(out)
+}
+
+func writeInt64(b *strings.Builder, v int64) {
+	var buf [20]byte
+	out := strconv.AppendInt(buf[:0], v, 10)
+	_, _ = b.Write(out)
+}
+
+func writeMsgIDHex(b *strings.Builder, id spectypes.MessageID) {
+	// MessageID.String() allocates; encoding directly avoids that.
+	const msgIDHexLen = len(spectypes.MessageID{}) * 2
+	var buf [msgIDHexLen]byte
+	hex.Encode(buf[:], id[:])
+	_, _ = b.Write(buf[:])
+}
+
+func writeOperatorIDs(b *strings.Builder, operatorIDs []spectypes.OperatorID) {
+	b.WriteByte('[')
+	for i, operatorID := range operatorIDs {
+		if i > 0 {
+			b.WriteByte('-')
+		}
+		writeUint64(b, operatorID)
+	}
+	b.WriteByte(']')
+}
+
 // mKey returns an ID that represents a potentially retryable message (msg.ID is the same for messages
 // with different signers, slots, types, rounds, etc. - so we can't use just msg.ID as a unique identifier)
 func mKey(msg *queue.SSVMessage) (messageKey, error) {
@@ -55,23 +88,57 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 			}
 			round = uint64(timeoutData.Round)
 		}
-		return messageKey(fmt.Sprintf("%d-%d-%d-%d-%s", msgSlot, msg.MsgType, eventMsg.Type, round, msg.MsgID)), nil
+		var b strings.Builder
+		b.Grow(160)
+		writeUint64(&b, uint64(msgSlot))
+		b.WriteByte('-')
+		writeUint64(&b, uint64(msg.MsgType))
+		b.WriteByte('-')
+		writeInt64(&b, int64(eventMsg.Type))
+		b.WriteByte('-')
+		writeUint64(&b, round)
+		b.WriteByte('-')
+		writeMsgIDHex(&b, msg.MsgID)
+		return messageKey(b.String()), nil
 	}
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		sm, ok := msg.Body.(*specqbft.Message)
 		if !ok || sm == nil {
 			return "", fmt.Errorf("qbft message: invalid msg body, type: %T", msg.Body)
 		}
-		signers := strings.Join(strings.Fields(fmt.Sprint(msg.SignedSSVMessage.OperatorIDs)), "-")
-		return messageKey(fmt.Sprintf("%d-%d-%d-%d-%s-%s", msgSlot, msg.MsgType, sm.MsgType, sm.Round, msg.MsgID, signers)), nil
+		var b strings.Builder
+		b.Grow(224)
+		writeUint64(&b, uint64(msgSlot))
+		b.WriteByte('-')
+		writeUint64(&b, uint64(msg.MsgType))
+		b.WriteByte('-')
+		writeUint64(&b, uint64(sm.MsgType))
+		b.WriteByte('-')
+		writeUint64(&b, uint64(sm.Round))
+		b.WriteByte('-')
+		writeMsgIDHex(&b, msg.MsgID)
+		b.WriteByte('-')
+		writeOperatorIDs(&b, msg.SignedSSVMessage.OperatorIDs)
+		return messageKey(b.String()), nil
 	}
 	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok || psm == nil {
 			return "", fmt.Errorf("partial-sig message: invalid msg body, type: %T", msg.Body)
 		}
-		signer := fmt.Sprintf("%d", ssvtypes.PartialSigMsgSigner(psm)) // same signer for all messages
-		return messageKey(fmt.Sprintf("%d-%d-%d-%s-%s", msgSlot, msg.MsgType, psm.Type, msg.MsgID, signer)), nil
+		var b strings.Builder
+		b.Grow(200)
+		writeUint64(&b, uint64(msgSlot))
+		b.WriteByte('-')
+		writeUint64(&b, uint64(msg.MsgType))
+		b.WriteByte('-')
+		writeUint64(&b, uint64(psm.Type))
+		b.WriteByte('-')
+		writeMsgIDHex(&b, msg.MsgID)
+		b.WriteByte('-')
+		// same signer for all messages
+		writeUint64(&b, ssvtypes.PartialSigMsgSigner(psm))
+		return messageKey(b.String()), nil
 	}
 
 	return "", fmt.Errorf("unexpected message type (expected types: event, qbft, partial-sig): %d", msg.MsgType)
