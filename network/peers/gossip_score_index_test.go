@@ -56,17 +56,32 @@ func TestSetScores(t *testing.T) {
 	require.Equal(t, 0.0, score3)
 }
 
-func TestClear(t *testing.T) {
+func TestSetScoresClearsExisting(t *testing.T) {
 	index := NewGossipScoreIndex()
 	peerID := peer.ID("peer1")
 
 	index.SetScores(map[peer.ID]float64{
 		peerID: 10.0,
 	})
-	index.clear()
+	index.SetScores(map[peer.ID]float64{})
 	score, exists := index.GetGossipScore(peerID)
 	require.False(t, exists)
 	require.Equal(t, 0.0, score)
+}
+
+func TestSetScoresCopiesInputMap(t *testing.T) {
+	index := NewGossipScoreIndex()
+	peerID := peer.ID("peer1")
+
+	input := map[peer.ID]float64{peerID: 10.0}
+	index.SetScores(input)
+
+	// Mutate the caller map after SetScores; the index must remain unchanged.
+	input[peerID] = 20.0
+
+	score, exists := index.GetGossipScore(peerID)
+	require.True(t, exists)
+	require.Equal(t, 10.0, score)
 }
 
 func TestHasBadGossipScore(t *testing.T) {

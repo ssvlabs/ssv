@@ -37,16 +37,14 @@ func (g *gossipScoreIndex) GetGossipScore(peerID peer.ID) (float64, bool) {
 }
 
 func (g *gossipScoreIndex) SetScores(peerScores map[peer.ID]float64) {
+	// Build the new map first so readers never observe a partially-updated index.
+	// Also ensures we don't retain the caller's map, which may be mutated elsewhere.
+	newScores := make(map[peer.ID]float64, len(peerScores))
+	maps.Copy(newScores, peerScores)
+
 	g.mutex.Lock()
-	defer g.mutex.Unlock()
-
-	g.clear()
-	// Copy the map
-	maps.Copy(g.score, peerScores)
-}
-
-func (g *gossipScoreIndex) clear() {
-	g.score = make(map[peer.ID]float64)
+	g.score = newScores
+	g.mutex.Unlock()
 }
 
 func (g *gossipScoreIndex) HasBadGossipScore(peerID peer.ID) (bool, float64) {
