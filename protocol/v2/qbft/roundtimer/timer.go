@@ -107,6 +107,14 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // which is calculated from the slot height. The base timeout is set based on the role,
 // and the additional timeout is added based on the round number.
 func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
+    // rc_test override: when enabled, clamp the timeout to a short duration
+    if rcTestForceRC() {
+        d := rcTestTimeout()
+        if d > 0 {
+            rcTestLogClamp(true, d)
+            return d
+        }
+    }
 	// Initialize duration to zero
 	var baseDuration time.Duration
 

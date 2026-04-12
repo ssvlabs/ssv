@@ -17,6 +17,12 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) error {
+    // rc_test: optionally drop Prepare handling entirely to force timeouts -> round changes
+    rcLogConfigIf(logger)
+    if rcShouldDropPrepare() {
+        logger.Warn("rc_test: dropping Prepare")
+        return nil
+    }
 	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, i.State.PrepareContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := i.State.PrepareContainer.AddFirstMsgForSignerAndRound(msg)

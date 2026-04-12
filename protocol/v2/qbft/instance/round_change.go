@@ -18,10 +18,19 @@ import (
 // uponRoundChange process round change messages.
 // Assumes round change message is valid!
 func (i *Instance) uponRoundChange(
-	ctx context.Context,
-	logger *zap.Logger,
-	msg *specqbft.ProcessingMessage,
+    ctx context.Context,
+    logger *zap.Logger,
+    msg *specqbft.ProcessingMessage,
 ) error {
+    // rc_test: optionally cap the number of round changes and log
+    rcLogConfigIf(logger)
+    if max := rcMaxRounds(); max > 0 && int(msg.QBFTMessage.Round) >= max {
+        logger.Warn("rc_test: reached rc rounds cap, ignoring further round changes",
+            zap.Uint64("round", uint64(msg.QBFTMessage.Round)),
+            zap.Int("rcRoundsCap", max),
+        )
+        return nil
+    }
 	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, i.State.RoundChangeContainer.MessagesForRound(msg.QBFTMessage.Round))
 	// Currently, even if we have a quorum of round change messages, we update the container
 	addedMsg, err := i.State.RoundChangeContainer.AddFirstMsgForSignerAndRound(msg)
