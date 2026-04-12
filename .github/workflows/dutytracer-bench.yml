@@ -12,12 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
         with:
           lfs: true # Ensure Git LFS files are fetched
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: go.mod
           cache: true

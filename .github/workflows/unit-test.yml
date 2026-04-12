@@ -16,13 +16,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
         with:
           lfs: true
 
       - name: Setup Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: go.mod
           # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
@@ -30,7 +30,7 @@ jobs:
           cache: false
 
       - name: Restore Go cache (ssv)
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.4
         with:
           path: |
             ~/go/pkg/mod
@@ -44,7 +44,7 @@ jobs:
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v5.5.3
         with:
           files: ./coverage.out
           flags: core
@@ -55,11 +55,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
       - name: Setup Go
         id: setup-go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6.3.0
         with:
           go-version-file: ssvsigner/go.mod
           # Keep setup-go cache disabled and use explicit actions/cache below so keying/restore
@@ -67,7 +67,7 @@ jobs:
           cache: false
 
       - name: Restore Go cache (ssvsigner)
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.4
         with:
           path: |
             ~/go/pkg/mod
@@ -81,7 +81,7 @@ jobs:
         run: make ssvsigner-test
 
       - name: Upload ssvsigner coverage report to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v5.5.3
         with:
           files: ./ssvsigner/coverage.out
           flags: ssvsigner
