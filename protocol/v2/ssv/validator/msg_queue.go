@@ -89,7 +89,7 @@ func mKey(msg *queue.SSVMessage) (messageKey, error) {
 			round = uint64(timeoutData.Round)
 		}
 		var b strings.Builder
-		b.Grow(160)
+		b.Grow(200)
 		writeUint64(&b, uint64(msgSlot))
 		b.WriteByte('-')
 		writeUint64(&b, uint64(msg.MsgType))
