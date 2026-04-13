@@ -691,8 +691,14 @@ func TestChainReorganizationLogs(t *testing.T) {
 			Method string          `json:"method"`
 		}
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(body, &req))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		var result any
 		switch req.Method {
@@ -707,11 +713,13 @@ func TestChainReorganizationLogs(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(struct {
+		if err := json.NewEncoder(w).Encode(struct {
 			JSONRPC string          `json:"jsonrpc"`
 			ID      json.RawMessage `json:"id"`
 			Result  any             `json:"result"`
-		}{"2.0", req.ID, result}))
+		}{"2.0", req.ID, result}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}))
 	defer srv.Close()
 
