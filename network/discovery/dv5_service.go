@@ -156,6 +156,9 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // Bootstrap start looking for new nodes, note that this function blocks.
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
+//
+// All peer filtering is done inside checkPeer (not as discover() filters) so that
+// every skip reason is tracked with structured metrics and windowed summary logs.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	const logWindowSize = 50
 
@@ -506,7 +509,12 @@ func (dvs *DiscV5Service) PublishENR() {
 	pings, errs := 0, 0
 	peerIDs := map[peer.ID]struct{}{}
 
-	// Publish ENR.
+	// Publish ENR by pinging random SSV nodes so they learn our updated record.
+	// Minimal filtering: we only require valid SSV nodes that aren't marked bad.
+	// We intentionally omit connection-state filters (alreadyConnected, recentlyTrimmed)
+	// because wider propagation is more important — pings are cheap and already-connected
+	// peers should also learn about our ENR update. Subnet filters are also omitted
+	// because ENR publication is a global broadcast, not subnet-specific.
 	dvs.discover(ctx, func(e PeerEvent) {
 		_, err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
