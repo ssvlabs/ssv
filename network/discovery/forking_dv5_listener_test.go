@@ -167,5 +167,5 @@ func requireNextTimeout(t *testing.T, expected bool, iter enode.Iterator, timeou
 	case <-ctx.Done():
 	}
 
-	assert.Equalf(t, expected, got, "expected iter.Next to be %v", expected)
+	require.Equalf(t, expected, got, "expected iter.Next to be %v", expected)
 }
