@@ -35,14 +35,16 @@ type messageProcessingState struct {
 
 type messageKey string
 
+const maxInt64DecimalLen = 20 // enough for uint64 max or int64 min in base 10
+
 func writeUint64(b *strings.Builder, v uint64) {
-	var buf [20]byte
+	var buf [maxInt64DecimalLen]byte
 	out := strconv.AppendUint(buf[:0], v, 10)
 	_, _ = b.Write(out)
 }
 
 func writeInt64(b *strings.Builder, v int64) {
-	var buf [20]byte
+	var buf [maxInt64DecimalLen]byte
 	out := strconv.AppendInt(buf[:0], v, 10)
 	_, _ = b.Write(out)
 }
