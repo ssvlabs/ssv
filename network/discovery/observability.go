@@ -29,6 +29,7 @@ const (
 	skipReasonAlreadyDiscovered  skipReason = "alreadyDiscovered"
 	skipReasonAlreadyConnected   skipReason = "alreadyConnected"
 	skipReasonBadPeer            skipReason = "badPeer"
+	skipReasonNotSSV             skipReason = "notSSV"
 	skipReasonRecentlyTrimmed    skipReason = "recentlyTrimmed"
 )
 

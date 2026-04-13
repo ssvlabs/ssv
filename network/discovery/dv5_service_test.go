@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -109,6 +110,13 @@ func TestCheckPeer(t *testing.T) {
 				isBad:         true,
 				expectedError: errors.New("peer is marked bad"),
 			},
+			{
+				name:          "not ssv",
+				domainType:    &myDomainType,
+				subnets:       mySubnets,
+				isSSV:         boolPtr(false),
+				expectedError: errors.New("node is not an SSV node"),
+			},
 		}
 	)
 
@@ -129,6 +137,7 @@ func TestCheckPeer(t *testing.T) {
 
 			localNode, err := records.CreateLocalNode(priv, tempDir, net.ParseIP("127.0.0.1"), 12000, 13000)
 			require.NoError(t, err)
+			localNode.Set(enr.WithEntry("ssv", true))
 
 			if test.domainType != nil {
 				err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
@@ -137,6 +146,9 @@ func TestCheckPeer(t *testing.T) {
 			if !test.missingSubnets {
 				err := records.SetSubnetsEntry(localNode, test.subnets)
 				require.NoError(t, err)
+			}
+			if test.isSSV != nil {
+				localNode.Set(enr.WithEntry("ssv", *test.isSSV))
 			}
 
 			test.localNode = localNode
@@ -195,6 +207,49 @@ func TestCheckPeer(t *testing.T) {
 	}
 }
 
+func TestCheckPeer_UpdatesSubnetsIndexBeforeConnectionFilters(t *testing.T) {
+	ctx := t.Context()
+	logger := zap.NewNop()
+	myDomainType := spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
+	peerSubnets := mockSubnets(1, 2, 3)
+
+	priv, err := utils.ECDSAPrivateKey(logger, "")
+	require.NoError(t, err)
+
+	tempDir := t.TempDir()
+	localNode, err := records.CreateLocalNode(priv, tempDir, net.ParseIP("127.0.0.1"), 12000, 13000)
+	require.NoError(t, err)
+	localNode.Set(enr.WithEntry("ssv", true))
+	require.NoError(t, records.SetDomainTypeEntry(localNode, records.KeyDomainType, myDomainType))
+	require.NoError(t, records.SetSubnetsEntry(localNode, peerSubnets))
+
+	addrInfo, err := ToPeer(localNode.Node())
+	require.NoError(t, err)
+
+	subnetIndex := peers.NewSubnetsIndex()
+	dvs := &DiscV5Service{
+		ctx:        ctx,
+		conns:      &mock.MockConnectionIndex{ConnectednessValue: network.Connected},
+		subnetsIdx: subnetIndex,
+		ssvConfig: &networkconfig.SSV{
+			DomainType: myDomainType,
+		},
+		subnets:             peerSubnets,
+		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](ctx, time.Hour, time.Hour),
+		trimmedRecently:     ttl.New[peer.ID, struct{}](ctx, time.Hour, time.Hour),
+	}
+
+	err = dvs.checkPeer(context.TODO(), PeerEvent{
+		AddrInfo: *addrInfo,
+		Node:     localNode.Node(),
+	})
+	require.ErrorContains(t, err, "peer already connected")
+
+	indexedSubnets, ok := subnetIndex.GetPeerSubnets(addrInfo.ID)
+	require.True(t, ok)
+	require.Equal(t, peerSubnets, indexedSubnets)
+}
+
 type checkPeerTest struct {
 	name              string
 	domainType        *spectypes.DomainType
@@ -206,6 +261,7 @@ type checkPeerTest struct {
 	recentlyTrimmed   bool
 	connectedness     network.Connectedness
 	isBad             bool
+	isSSV             *bool
 }
 
 func mockSubnets(active ...uint64) commons.Subnets {
@@ -214,4 +270,8 @@ func mockSubnets(active ...uint64) commons.Subnets {
 		subnets.Set(subnet)
 	}
 	return subnets
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }

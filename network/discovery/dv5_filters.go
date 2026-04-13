@@ -11,6 +11,14 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 )
 
+func readSSVNodeFlag(node *enode.Node) (bool, error) {
+	var isSSV bool
+	if err := node.Record().Load(enr.WithEntry("ssv", &isSSV)); err != nil {
+		return false, err
+	}
+	return isSSV, nil
+}
+
 // limitNodeFilter returns true if the limit is exceeded
 func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 	return !dvs.conns.AtLimit(libp2pnetwork.DirOutbound)
@@ -41,13 +49,13 @@ func (dvs *DiscV5Service) badNodeFilter() func(node *enode.Node) bool {
 // ssvNodeFilter checks if the node is an SSV node
 func (dvs *DiscV5Service) ssvNodeFilter() func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
-		var isSSV = new(bool)
-		if err := node.Record().Load(enr.WithEntry("ssv", isSSV)); err != nil {
+		isSSV, err := readSSVNodeFlag(node)
+		if err != nil {
 			//TODO: metric
 			//logger.Warn("could not read ssv entry from node record", zap.String("enr", node.String()), zap.Error(err))
 			return false
 		}
-		return *isSSV
+		return isSSV
 	}
 }
 

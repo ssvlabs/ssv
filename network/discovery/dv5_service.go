@@ -180,8 +180,6 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 				if skippedPeersTotalPerWindow >= logWindowSize {
 					summaryFields := discoverySkipSummaryFields(skippedPeersTotalPerWindow, skippedByReasonPerWindow, skippedPeersUnknownPerWindow)
 					summaryFields = append(summaryFields,
-						zap.Error(err),
-						fields.PeerID(e.AddrInfo.ID),
 						zap.Int("discovered_peers_pool_size", dvs.discoveredPeersPool.SlowLen()),
 						zap.Int("trimmed_recently_size", dvs.trimmedRecently.SlowLen()),
 					)
@@ -195,7 +193,6 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 			handler(e)
 		},
 		defaultDiscoveryInterval,
-		dvs.ssvNodeFilter(),
 	)
 
 	return nil
@@ -249,6 +246,16 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		}
 	}
 
+	isSSV, err := readSSVNodeFlag(e.Node)
+	if err != nil {
+		recordPeerSkipped(ctx, skipReasonNotSSV)
+		return newPeerSkipError(skipReasonNotSSV, errors.Wrap(err, "could not read ssv entry"))
+	}
+	if !isSSV {
+		recordPeerSkipped(ctx, skipReasonNotSSV)
+		return newPeerSkipError(skipReasonNotSSV, errors.New("node is not an SSV node"))
+	}
+
 	// Get the peer's domain type, skipping if it mismatches ours.
 	peerDiscoveriesCounter.Add(ctx, 1)
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
@@ -271,6 +278,8 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		recordPeerSkipped(ctx, skipReasonZeroSubnets)
 		return newPeerSkipError(skipReasonZeroSubnets, errors.New("zero subnets"))
 	}
+
+	dvs.subnetsIdx.UpdatePeerSubnets(pid, peerSubnets)
 
 	if dvs.conns.IsBad(pid) {
 		recordPeerSkipped(ctx, skipReasonBadPeer)
@@ -297,8 +306,6 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		recordPeerSkipped(ctx, skipReasonAlreadyDiscovered)
 		return newPeerSkipError(skipReasonAlreadyDiscovered, errors.New("peer already discovered recently"))
 	}
-
-	dvs.subnetsIdx.UpdatePeerSubnets(pid, peerSubnets)
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {

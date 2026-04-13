@@ -23,6 +23,11 @@ type peerSelectionPoolStats struct {
 	positiveScoreReadyCandidates int
 }
 
+const (
+	peerSelectionRetryCooldownMin = 30 * time.Second
+	peerSelectionRetryCooldownMax = 300 * time.Second
+)
+
 func (s *peerSelectionPoolStats) AsLogFields() []zap.Field {
 	return []zap.Field{
 		zap.Int("pool_size", s.poolSize),
@@ -110,6 +115,7 @@ func (n *p2pNetwork) startDiscovery() error {
 			optimisticSubnetPeers := currentSubnetPeers.Add(pendingSubnetPeers)
 			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, float64]()
 			minScore, maxScore := math.MaxFloat64, float64(0)
+			now := time.Now()
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
 				if _, ok := peersToConnect[peerID]; ok {
 					// This peer was already selected.
@@ -121,16 +127,9 @@ func (n *p2pNetwork) startDiscovery() error {
 				// - the more a peer has been tried, the less relevant it is (cooldown grows)
 				// - the more time has passed since the last connect attempt the more relevant peer is (waited grows)
 				peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
-				if discoveredPeer.Tries > 0 {
-					const retryCooldownMin, retryCooldownMax = 30 * time.Second, 300 * time.Second
-					waited := time.Since(discoveredPeer.LastTry)
-					if waited < retryCooldownMin {
-						return true // skip this peer to wait out at least minimal cooldown
-					}
-					cooldown := min(retryCooldownMax, retryCooldownMin*time.Duration(discoveredPeer.Tries))
-					peerRelevance := min(1, float64(waited)/float64(cooldown))
-					peerScore *= peerRelevance * peerRelevance
+				peerScore, ready := peerSelectionScore(now, discoveredPeer, optimisticSubnetPeers, ownSubnets, peerSubnets)
+				if !ready {
+					return true
 				}
 
 				peersByPriority.Push(discoveredPeer, peerScore)
@@ -186,25 +185,39 @@ func (n *p2pNetwork) startDiscovery() error {
 	return nil
 }
 
-func (n *p2pNetwork) peerSelectionPoolStats(ownSubnets commons.Subnets, currentSubnetPeers SubnetPeers) peerSelectionPoolStats {
-	const retryCooldownMin = 30 * time.Second
+func peerSelectionScore(
+	now time.Time,
+	discoveredPeer discovery.DiscoveredPeer,
+	currentSubnetPeers SubnetPeers,
+	ownSubnets commons.Subnets,
+	peerSubnets commons.Subnets,
+) (float64, bool) {
+	peerScore := currentSubnetPeers.Score(ownSubnets, peerSubnets)
+	if discoveredPeer.Tries == 0 {
+		return peerScore, true
+	}
 
+	waited := now.Sub(discoveredPeer.LastTry)
+	if waited < peerSelectionRetryCooldownMin {
+		return 0, false
+	}
+
+	cooldown := min(peerSelectionRetryCooldownMax, peerSelectionRetryCooldownMin*time.Duration(discoveredPeer.Tries))
+	peerRelevance := min(1, float64(waited)/float64(cooldown))
+	return peerScore * peerRelevance * peerRelevance, true
+}
+
+func (n *p2pNetwork) peerSelectionPoolStats(ownSubnets commons.Subnets, currentSubnetPeers SubnetPeers) peerSelectionPoolStats {
 	var stats peerSelectionPoolStats
+	now := time.Now()
 	n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
 		stats.poolSize++
 
 		peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
-		peerScore := currentSubnetPeers.Score(ownSubnets, peerSubnets)
-		if discoveredPeer.Tries > 0 {
-			waited := time.Since(discoveredPeer.LastTry)
-			if waited < retryCooldownMin {
-				stats.cooldownBlockedCandidates++
-				return true
-			}
-			const retryCooldownMax = 300 * time.Second
-			cooldown := min(retryCooldownMax, retryCooldownMin*time.Duration(discoveredPeer.Tries))
-			peerRelevance := min(1, float64(waited)/float64(cooldown))
-			peerScore *= peerRelevance * peerRelevance
+		peerScore, ready := peerSelectionScore(now, discoveredPeer, currentSubnetPeers, ownSubnets, peerSubnets)
+		if !ready {
+			stats.cooldownBlockedCandidates++
+			return true
 		}
 
 		stats.readyCandidates++
