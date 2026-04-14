@@ -184,9 +184,6 @@ func (ln *LocalNet) NewTestP2pNetwork(t gotesting.TB, ctx context.Context, nodeI
 		return nil, err
 	}
 	dbCloser := newOnceCloser(db.Close)
-	t.Cleanup(func() {
-		_ = dbCloser.Close()
-	})
 	closeOnErr := func(err error) (network.P2PNetwork, error) {
 		_ = dbCloser.Close()
 		return nil, err
