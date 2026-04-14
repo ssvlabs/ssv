@@ -68,7 +68,7 @@ type AggregatorRunnerOptions struct {
 	HighestDecidedSlot phase0.Slot
 }
 
-func NewAggregatorRunner(opts AggregatorRunnerOptions) (*AggregatorRunner, error) {
+func NewAggregatorRunner(opts AggregatorRunnerOptions) (Runner, error) {
 	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}

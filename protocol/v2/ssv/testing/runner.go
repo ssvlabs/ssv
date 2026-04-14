@@ -154,7 +154,7 @@ var ConstructBaseRunner = func(
 		if err != nil {
 			return nil, err
 		}
-		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+		rnr.(*runner.AggregatorRunner).IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
 			return true
 		}
 		r = rnr
@@ -323,7 +323,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		if err != nil {
 			return nil, err
 		}
-		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+		rnr.(*runner.AggregatorRunner).IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
 			return true
 		}
 		r = rnr
