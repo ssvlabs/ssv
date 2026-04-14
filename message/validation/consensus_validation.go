@@ -534,7 +534,6 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 		estimatedRound = currentEstimatedRound
 	}
 
-	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
 	lowestAllowed := specqbft.FirstRound
 	highestAllowed := estimatedRound + allowedRoundsInFuture
 
