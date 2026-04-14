@@ -1,4 +1,4 @@
-// Package contract generates the contract bindings for v1 contract.
+// Package contract generates the contract bindings.
 package contract
 
 // contract.abi is taken from https://github.com/ssvlabs/ssv-network/blob/contract-abi/docs/mainnet/v2.0.0/abi/SSVNetwork.json
