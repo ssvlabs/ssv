@@ -42,18 +42,10 @@ type Database interface {
 
 // BeaconNetwork is the subset of beacon-network behavior required by ekm.
 type BeaconNetwork interface {
+	NetworkName() string
+	GenesisRoot() phase0.Root
 	EstimatedCurrentSlot() phase0.Slot
 	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
 	EstimatedSlotAtTime(time time.Time) phase0.Slot
 	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
-}
-
-// NetworkContext groups network parameters used by key managers.
-// Name must match the network identifier represented by Beacon (for example
-// networkconfig.Beacon.Name), because Name is used as the storage key prefix
-// for slashing-protection data.
-type NetworkContext struct {
-	Name                  string
-	Beacon                BeaconNetwork
-	GenesisValidatorsRoot phase0.Root
 }

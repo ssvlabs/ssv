@@ -18,6 +18,14 @@ type Config struct {
 	Forks                 map[spec.DataVersion]phase0.Fork
 }
 
+func (b *Config) NetworkName() string {
+	return b.Name
+}
+
+func (b *Config) GenesisRoot() phase0.Root {
+	return b.GenesisValidatorsRoot
+}
+
 func (b *Config) EstimatedCurrentSlot() phase0.Slot {
 	return b.EstimatedSlotAtTime(time.Now())
 }

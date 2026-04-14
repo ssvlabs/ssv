@@ -911,12 +911,7 @@ func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivat
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	networkCtx := ekm.NetworkContext{
-		Name:                  networkconfig.TestNetwork.Beacon.Name,
-		Beacon:                networkconfig.TestNetwork.Beacon,
-		GenesisValidatorsRoot: networkconfig.TestNetwork.GenesisValidatorsRoot,
-	}
-	km, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), networkCtx, operatorPrivKey)
+	km, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon, operatorPrivKey)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, p2pNet, km, bc
 }

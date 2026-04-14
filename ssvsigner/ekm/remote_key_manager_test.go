@@ -1789,11 +1789,7 @@ QwIDAQAB
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
-		NetworkContext{
-			Name:                  testNetCfg.Name,
-			Beacon:                testNetCfg,
-			GenesisValidatorsRoot: testNetCfg.GenesisValidatorsRoot,
-		},
+		testNetCfg,
 		s.client,
 		s.db,
 		getOperatorId,
@@ -1817,11 +1813,7 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
-		NetworkContext{
-			Name:                  testNetCfg.Name,
-			Beacon:                testNetCfg,
-			GenesisValidatorsRoot: testNetCfg.GenesisValidatorsRoot,
-		},
+		testNetCfg,
 		s.client,
 		s.db,
 		getOperatorId,
@@ -1844,11 +1836,7 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 	_, err := NewRemoteKeyManager(
 		s.T().Context(),
 		logger,
-		NetworkContext{
-			Name:                  testNetCfg.Name,
-			Beacon:                testNetCfg,
-			GenesisValidatorsRoot: testNetCfg.GenesisValidatorsRoot,
-		},
+		testNetCfg,
 		s.client,
 		s.db,
 		getOperatorId,

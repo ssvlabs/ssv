@@ -54,6 +54,16 @@ type MockBeaconNetwork struct {
 	mock.Mock
 }
 
+func (m *MockBeaconNetwork) NetworkName() string {
+	args := m.Called()
+	return args.String(0)
+}
+
+func (m *MockBeaconNetwork) GenesisRoot() phase0.Root {
+	args := m.Called()
+	return args.Get(0).(phase0.Root)
+}
+
 type MockDatabase struct {
 	mock.Mock
 }

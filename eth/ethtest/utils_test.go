@@ -167,12 +167,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	networkCtx := ekm.NetworkContext{
-		Name:                  testNetworkConfig.Beacon.Name,
-		Beacon:                testNetworkConfig.Beacon,
-		GenesisValidatorsRoot: testNetworkConfig.GenesisValidatorsRoot,
-	}
-	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), networkCtx, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), testNetworkConfig.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

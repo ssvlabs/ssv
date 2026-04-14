@@ -36,11 +36,7 @@ func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) Ke
 
 	network := testBeaconConfig()
 
-	km, err := NewLocalKeyManager(logger, db, NetworkContext{
-		Name:                  network.Name,
-		Beacon:                network,
-		GenesisValidatorsRoot: network.GenesisValidatorsRoot,
-	}, operatorPrivateKey)
+	km, err := NewLocalKeyManager(logger, db, network, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
