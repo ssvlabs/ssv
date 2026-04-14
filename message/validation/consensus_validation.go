@@ -535,7 +535,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	}
 
 	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
-	lowestAllowed := /*estimatedRound - allowedRoundsInPast*/ specqbft.FirstRound
+	lowestAllowed := specqbft.FirstRound
 	highestAllowed := estimatedRound + allowedRoundsInFuture
 
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
