@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -68,7 +67,6 @@ type EventHandler struct {
 	eventParser         eventparser.Parser
 	networkConfig       *networkconfig.Network
 	operatorDataStore   operatordatastore.OperatorDataStore
-	operatorDecrypter   keys.OperatorDecrypter
 	keyManager          ekm.KeyManager
 	doppelgangerHandler DoppelgangerProvider
 
@@ -82,7 +80,6 @@ func New(
 	taskExecutor taskExecutor,
 	networkConfig *networkconfig.Network,
 	operatorDataStore operatordatastore.OperatorDataStore,
-	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler DoppelgangerProvider,
 	opts ...Option,
@@ -93,7 +90,6 @@ func New(
 		eventParser:         eventParser,
 		networkConfig:       networkConfig,
 		operatorDataStore:   operatorDataStore,
-		operatorDecrypter:   operatorDecrypter,
 		keyManager:          keyManager,
 		doppelgangerHandler: doppelgangerHandler,
 		logger:              zap.NewNop(),

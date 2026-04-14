@@ -1015,6 +1015,17 @@ func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
 ) validator.CommitteeRunnerFunc {
+	if options.ExporterOptions.Enabled {
+		return func(
+			phase0.Slot,
+			map[phase0.ValidatorIndex]*spectypes.Share,
+			[]phase0.BLSPubKey,
+			runner.CommitteeDutyGuard,
+		) (*runner.CommitteeRunner, error) {
+			return nil, fmt.Errorf("cannot set up committee runners in exporter mode")
+		}
+	}
+
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
@@ -1068,6 +1079,10 @@ func SetupRunners(
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
+	if options.ExporterOptions.Enabled {
+		return nil, fmt.Errorf("cannot set up duty runners in exporter mode")
+	}
+
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
 		spectypes.RoleAggregator,
