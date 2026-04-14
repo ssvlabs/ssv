@@ -8,12 +8,10 @@ import (
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
-
-	// no direct use of bellatrix package here
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
-
-	// no direct use of electra package here; kept for type refs via api/v1
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	utilbellatrix "github.com/attestantio/go-eth2-client/util/bellatrix"
 	utilcapella "github.com/attestantio/go-eth2-client/util/capella"
 	ssz "github.com/ferranbt/fastssz"
@@ -60,30 +58,26 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 			return nil, nil, fmt.Errorf("capella block or payload is nil")
 		}
 
-		// Compute transactions/withdrawals roots from lists.
-		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: p.Capella.Body.ExecutionPayload.Transactions}).HashTreeRoot()
+		payload := p.Capella.Body.ExecutionPayload
+		txRoot, wRoot, err := computePayloadRoots(payload.Transactions, payload.Withdrawals)
 		if err != nil {
-			return nil, nil, fmt.Errorf("compute transactions root: %w", err)
-		}
-		wRoot, err := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: p.Capella.Body.ExecutionPayload.Withdrawals}).HashTreeRoot()
-		if err != nil {
-			return nil, nil, fmt.Errorf("compute withdrawals root: %w", err)
+			return nil, nil, err
 		}
 
 		eph := &capella.ExecutionPayloadHeader{
-			ParentHash:       p.Capella.Body.ExecutionPayload.ParentHash,
-			FeeRecipient:     p.Capella.Body.ExecutionPayload.FeeRecipient,
-			StateRoot:        p.Capella.Body.ExecutionPayload.StateRoot,
-			ReceiptsRoot:     p.Capella.Body.ExecutionPayload.ReceiptsRoot,
-			LogsBloom:        p.Capella.Body.ExecutionPayload.LogsBloom,
-			PrevRandao:       p.Capella.Body.ExecutionPayload.PrevRandao,
-			BlockNumber:      p.Capella.Body.ExecutionPayload.BlockNumber,
-			GasLimit:         p.Capella.Body.ExecutionPayload.GasLimit,
-			GasUsed:          p.Capella.Body.ExecutionPayload.GasUsed,
-			Timestamp:        p.Capella.Body.ExecutionPayload.Timestamp,
-			ExtraData:        p.Capella.Body.ExecutionPayload.ExtraData,
-			BaseFeePerGas:    p.Capella.Body.ExecutionPayload.BaseFeePerGas,
-			BlockHash:        p.Capella.Body.ExecutionPayload.BlockHash,
+			ParentHash:       payload.ParentHash,
+			FeeRecipient:     payload.FeeRecipient,
+			StateRoot:        payload.StateRoot,
+			ReceiptsRoot:     payload.ReceiptsRoot,
+			LogsBloom:        payload.LogsBloom,
+			PrevRandao:       payload.PrevRandao,
+			BlockNumber:      payload.BlockNumber,
+			GasLimit:         payload.GasLimit,
+			GasUsed:          payload.GasUsed,
+			Timestamp:        payload.Timestamp,
+			ExtraData:        payload.ExtraData,
+			BaseFeePerGas:    payload.BaseFeePerGas,
+			BlockHash:        payload.BlockHash,
 			TransactionsRoot: txRoot,
 			WithdrawalsRoot:  wRoot,
 		}
@@ -116,33 +110,9 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		}
 
 		payload := p.Deneb.Block.Body.ExecutionPayload
-		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: payload.Transactions}).HashTreeRoot()
+		eph, err := buildDenebPayloadHeader(payload)
 		if err != nil {
-			return nil, nil, fmt.Errorf("compute transactions root: %w", err)
-		}
-		wRoot, err := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: payload.Withdrawals}).HashTreeRoot()
-		if err != nil {
-			return nil, nil, fmt.Errorf("compute withdrawals root: %w", err)
-		}
-
-		eph := &deneb.ExecutionPayloadHeader{
-			ParentHash:       payload.ParentHash,
-			FeeRecipient:     payload.FeeRecipient,
-			StateRoot:        payload.StateRoot,
-			ReceiptsRoot:     payload.ReceiptsRoot,
-			LogsBloom:        payload.LogsBloom,
-			PrevRandao:       payload.PrevRandao,
-			BlockNumber:      payload.BlockNumber,
-			GasLimit:         payload.GasLimit,
-			GasUsed:          payload.GasUsed,
-			Timestamp:        payload.Timestamp,
-			ExtraData:        payload.ExtraData,
-			BaseFeePerGas:    payload.BaseFeePerGas,
-			BlockHash:        payload.BlockHash,
-			TransactionsRoot: txRoot,
-			WithdrawalsRoot:  wRoot,
-			BlobGasUsed:      payload.BlobGasUsed,
-			ExcessBlobGas:    payload.ExcessBlobGas,
+			return nil, nil, err
 		}
 
 		bb := &apiv1deneb.BlindedBeaconBlock{
@@ -173,34 +143,9 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 			return nil, nil, fmt.Errorf("electra block or payload is nil")
 		}
 
-		payload := p.Electra.Block.Body.ExecutionPayload
-		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: payload.Transactions}).HashTreeRoot()
+		eph, err := buildDenebPayloadHeader(p.Electra.Block.Body.ExecutionPayload)
 		if err != nil {
-			return nil, nil, fmt.Errorf("compute transactions root: %w", err)
-		}
-		wRoot, err := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: payload.Withdrawals}).HashTreeRoot()
-		if err != nil {
-			return nil, nil, fmt.Errorf("compute withdrawals root: %w", err)
-		}
-
-		eph := &deneb.ExecutionPayloadHeader{
-			ParentHash:       payload.ParentHash,
-			FeeRecipient:     payload.FeeRecipient,
-			StateRoot:        payload.StateRoot,
-			ReceiptsRoot:     payload.ReceiptsRoot,
-			LogsBloom:        payload.LogsBloom,
-			PrevRandao:       payload.PrevRandao,
-			BlockNumber:      payload.BlockNumber,
-			GasLimit:         payload.GasLimit,
-			GasUsed:          payload.GasUsed,
-			Timestamp:        payload.Timestamp,
-			ExtraData:        payload.ExtraData,
-			BaseFeePerGas:    payload.BaseFeePerGas,
-			BlockHash:        payload.BlockHash,
-			TransactionsRoot: txRoot,
-			WithdrawalsRoot:  wRoot,
-			BlobGasUsed:      payload.BlobGasUsed,
-			ExcessBlobGas:    payload.ExcessBlobGas,
+			return nil, nil, err
 		}
 
 		bb := &apiv1electra.BlindedBeaconBlock{
@@ -228,38 +173,14 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 		return &api.VersionedProposal{Version: p.Version, Blinded: true, ElectraBlinded: bb}, bb, nil
 
 	case spec.DataVersionFulu:
-		// Fulu reuses Electra block structures in this codebase.
+		// Fulu reuses Electra blinded block structures in this codebase.
 		if p.Fulu == nil || p.Fulu.Block == nil || p.Fulu.Block.Body == nil || p.Fulu.Block.Body.ExecutionPayload == nil {
 			return nil, nil, fmt.Errorf("fulu block or payload is nil")
 		}
 
-		payload := p.Fulu.Block.Body.ExecutionPayload
-		txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: payload.Transactions}).HashTreeRoot()
+		eph, err := buildDenebPayloadHeader(p.Fulu.Block.Body.ExecutionPayload)
 		if err != nil {
-			return nil, nil, fmt.Errorf("compute transactions root: %w", err)
-		}
-		wRoot, err := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: payload.Withdrawals}).HashTreeRoot()
-		if err != nil {
-			return nil, nil, fmt.Errorf("compute withdrawals root: %w", err)
-		}
-		eph := &deneb.ExecutionPayloadHeader{
-			ParentHash:       payload.ParentHash,
-			FeeRecipient:     payload.FeeRecipient,
-			StateRoot:        payload.StateRoot,
-			ReceiptsRoot:     payload.ReceiptsRoot,
-			LogsBloom:        payload.LogsBloom,
-			PrevRandao:       payload.PrevRandao,
-			BlockNumber:      payload.BlockNumber,
-			GasLimit:         payload.GasLimit,
-			GasUsed:          payload.GasUsed,
-			Timestamp:        payload.Timestamp,
-			ExtraData:        payload.ExtraData,
-			BaseFeePerGas:    payload.BaseFeePerGas,
-			BlockHash:        payload.BlockHash,
-			TransactionsRoot: txRoot,
-			WithdrawalsRoot:  wRoot,
-			BlobGasUsed:      payload.BlobGasUsed,
-			ExcessBlobGas:    payload.ExcessBlobGas,
+			return nil, nil, err
 		}
 
 		bb := &apiv1electra.BlindedBeaconBlock{
@@ -288,4 +209,48 @@ func EnsureBlinded(p *api.VersionedProposal) (*api.VersionedProposal, ssz.Marsha
 	default:
 		return nil, nil, fmt.Errorf("unsupported version %d", p.Version)
 	}
+}
+
+// computePayloadRoots returns the SSZ hash-tree-roots of the payload's transactions and
+// withdrawals lists. The transaction and withdrawal types are identical across Capella,
+// Deneb, Electra, and Fulu payloads, so the same helper serves every fork.
+func computePayloadRoots(txs []bellatrix.Transaction, withdrawals []*capella.Withdrawal) (phase0.Root, phase0.Root, error) {
+	txRoot, err := (&utilbellatrix.ExecutionPayloadTransactions{Transactions: txs}).HashTreeRoot()
+	if err != nil {
+		return phase0.Root{}, phase0.Root{}, fmt.Errorf("compute transactions root: %w", err)
+	}
+	wRoot, err := (&utilcapella.ExecutionPayloadWithdrawals{Withdrawals: withdrawals}).HashTreeRoot()
+	if err != nil {
+		return phase0.Root{}, phase0.Root{}, fmt.Errorf("compute withdrawals root: %w", err)
+	}
+	return txRoot, wRoot, nil
+}
+
+// buildDenebPayloadHeader converts a Deneb-shaped ExecutionPayload into its header form.
+// Deneb, Electra, and Fulu all use deneb.ExecutionPayload / deneb.ExecutionPayloadHeader,
+// so one builder serves all three forks.
+func buildDenebPayloadHeader(payload *deneb.ExecutionPayload) (*deneb.ExecutionPayloadHeader, error) {
+	txRoot, wRoot, err := computePayloadRoots(payload.Transactions, payload.Withdrawals)
+	if err != nil {
+		return nil, err
+	}
+	return &deneb.ExecutionPayloadHeader{
+		ParentHash:       payload.ParentHash,
+		FeeRecipient:     payload.FeeRecipient,
+		StateRoot:        payload.StateRoot,
+		ReceiptsRoot:     payload.ReceiptsRoot,
+		LogsBloom:        payload.LogsBloom,
+		PrevRandao:       payload.PrevRandao,
+		BlockNumber:      payload.BlockNumber,
+		GasLimit:         payload.GasLimit,
+		GasUsed:          payload.GasUsed,
+		Timestamp:        payload.Timestamp,
+		ExtraData:        payload.ExtraData,
+		BaseFeePerGas:    payload.BaseFeePerGas,
+		BlockHash:        payload.BlockHash,
+		TransactionsRoot: txRoot,
+		WithdrawalsRoot:  wRoot,
+		BlobGasUsed:      payload.BlobGasUsed,
+		ExcessBlobGas:    payload.ExcessBlobGas,
+	}, nil
 }
