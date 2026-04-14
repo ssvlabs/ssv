@@ -140,6 +140,20 @@ func TestResolveDBLayout_FailsWhenDoneMarkerExistsButLegacyPebbleEmpty(t *testin
 	require.Contains(t, err.Error(), "completion marker exists")
 }
 
+func TestResolveDBLayout_FailsWhenBothPebbleDirsEmptyAndLegacyDoneMarkerExists(t *testing.T) {
+	t.Parallel()
+
+	basePath := filepath.Join(t.TempDir(), "db")
+	legacyPath := basePath + "-pebble"
+	createPebbleDB(t, basePath, map[string][]byte{})
+	createPebbleDB(t, legacyPath, map[string][]byte{})
+	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
+
+	_, err := ResolveDBLayout(basePath)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "completion marker exists")
+}
+
 func TestResolveDBLayout_FailsWhenDoneMarkerExistsButCanonicalPebbleEmpty(t *testing.T) {
 	t.Parallel()
 

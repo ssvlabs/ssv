@@ -67,6 +67,9 @@ func ResolveDBLayout(basePath string) (DBLayout, error) {
 	if err != nil {
 		return DBLayout{}, err
 	}
+	if err := validateEmptyPebbleDoneMarkers(basePath, layout); err != nil {
+		return DBLayout{}, err
+	}
 	badgerFilesPresent, err := hasBadgerFiles(basePath)
 	if err != nil {
 		return DBLayout{}, fmt.Errorf("check badger path %q: %w", basePath, err)
@@ -94,20 +97,6 @@ func ResolveDBLayout(basePath string) (DBLayout, error) {
 	return resolveEmptyDBLayout(layout, badgerFilesPresent)
 }
 
-func ensureDoneMarkerNotOnEmptyPebble(pebblePath string, badgerPath string, pebbleNonEmpty bool) error {
-	if pebbleNonEmpty {
-		return nil
-	}
-	done, err := badgerImportDoneMarkerExists(pebblePath, badgerPath)
-	if err != nil {
-		return err
-	}
-	if done {
-		return fmt.Errorf("badger import completion marker exists at %q but pebble db at %q is empty; manual recovery required", doneMarkerPath(pebblePath), pebblePath)
-	}
-	return nil
-}
-
 func probePebbleLayout(basePath string) (pebbleLayoutState, error) {
 	legacyPebblePath := basePath + "-pebble"
 
@@ -121,9 +110,41 @@ func probePebbleLayout(basePath string) (pebbleLayoutState, error) {
 	}
 
 	return pebbleLayoutState{
-		canonical: pebbleDirState{path: basePath, exists: canonicalExists, nonEmpty: canonicalNonEmpty},
-		legacy:    pebbleDirState{path: legacyPebblePath, exists: legacyExists, nonEmpty: legacyNonEmpty},
+		canonical: pebbleDirState{
+			path:     basePath,
+			exists:   canonicalExists,
+			nonEmpty: canonicalNonEmpty,
+		},
+		legacy: pebbleDirState{
+			path:     legacyPebblePath,
+			exists:   legacyExists,
+			nonEmpty: legacyNonEmpty,
+		},
 	}, nil
+}
+
+func validateEmptyPebbleDoneMarkers(basePath string, layout pebbleLayoutState) error {
+	if err := validateEmptyPebbleDoneMarker(layout.canonical, basePath); err != nil {
+		return err
+	}
+	if err := validateEmptyPebbleDoneMarker(layout.legacy, basePath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateEmptyPebbleDoneMarker(dir pebbleDirState, badgerPath string) error {
+	if !dir.exists || dir.nonEmpty {
+		return nil
+	}
+	done, err := badgerImportDoneMarkerExists(dir.path, badgerPath)
+	if err != nil {
+		return err
+	}
+	if !done {
+		return nil
+	}
+	return fmt.Errorf("badger import completion marker exists at %q but pebble db at %q is empty; manual recovery required", doneMarkerPath(dir.path), dir.path)
 }
 
 func resolveSingleNonEmptyPebbleLayout(layout pebbleLayoutState, badgerFilesPresent bool) (DBLayout, bool, error) {
@@ -160,20 +181,11 @@ func resolveSingleNonEmptyPebblePathLayout(pebblePath string, badgerPath string,
 func resolveEmptyDBLayout(layout pebbleLayoutState, badgerFilesPresent bool) (DBLayout, error) {
 	switch {
 	case layout.canonical.exists:
-		if err := ensureDoneMarkerNotOnEmptyPebble(layout.canonical.path, layout.canonical.path, layout.canonical.nonEmpty); err != nil {
-			return DBLayout{}, err
-		}
 		return layoutForSelectedPebblePath(layout.canonical.path, layout.canonical.path, badgerFilesPresent), nil
 	case badgerFilesPresent:
 		// Keep using a separate Pebble path when the configured base path contains Badger files.
-		if err := ensureDoneMarkerNotOnEmptyPebble(layout.legacy.path, layout.canonical.path, layout.legacy.nonEmpty); err != nil {
-			return DBLayout{}, err
-		}
 		return layoutForSelectedPebblePath(layout.legacy.path, layout.canonical.path, true), nil
 	case layout.legacy.exists:
-		if err := ensureDoneMarkerNotOnEmptyPebble(layout.legacy.path, layout.canonical.path, layout.legacy.nonEmpty); err != nil {
-			return DBLayout{}, err
-		}
 		return layoutForSelectedPebblePath(layout.legacy.path, layout.canonical.path, false), nil
 	default:
 		return layoutForSelectedPebblePath(layout.canonical.path, layout.canonical.path, false), nil
