@@ -11,13 +11,43 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 	"github.com/ssvlabs/ssv/v2/operator/duties/dutystore"
 	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
+
+func TestSyncCommitteeHandlerShouldExecuteIgnoresMinParticipationEpoch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	share := activeShare(1)
+	share.ValidatorPubKey = spectypes.ValidatorPK{1, 2, 3}
+	share.SetMinParticipationEpoch(1)
+
+	validatorProvider := NewMockValidatorProvider(ctrl)
+	validatorProvider.EXPECT().Validator(share.ValidatorPubKey[:]).Return(share, true)
+
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.GenesisTime = time.Now()
+	beaconCfg.SlotDuration = time.Hour
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+
+	handler := NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties(), false)
+	handler.logger = zap.NewNop()
+	handler.beaconConfig = &beaconCfg
+	handler.validatorProvider = validatorProvider
+
+	shouldExecute := handler.shouldExecute(&v1.SyncCommitteeDuty{
+		PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+		ValidatorIndex: share.ValidatorIndex,
+	}, 0)
+
+	require.True(t, shouldExecute)
+}
 
 func setupSyncCommitteeDutiesMock(
 	s *Scheduler,

@@ -226,7 +226,6 @@ func setupEventHandler(
 		validatorCtrl,
 		testNetworkConfig,
 		operatorDataStore,
-		privateKey,
 		keyManager,
 		dgHandler,
 		eventhandler.WithFullNode(),

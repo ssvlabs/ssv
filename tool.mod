@@ -1,9 +1,7 @@
 // Tools require their own go.mod because dependency versions conflict with ssv's dependencies
 module github.com/ssvlabs/ssv/v2
 
-go 1.25
-
-toolchain go1.25.0
+go 1.26
 
 tool (
 	github.com/ethereum/go-ethereum/cmd/abigen

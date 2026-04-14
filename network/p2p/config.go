@@ -16,8 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/v2/message/validation"
 	"github.com/ssvlabs/ssv/v2/network"
 	"github.com/ssvlabs/ssv/v2/network/commons"
@@ -62,10 +60,6 @@ type Config struct {
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Enable discovery debug tracing in logs"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
-	// OperatorSigner is used for signing with operator private key, MUST be injected
-	OperatorSigner keys.OperatorSigner
-	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
-	OperatorPubKeyHash string
 	// OperatorDataStore contains own operator data including its ID
 	OperatorDataStore operatordatastore.OperatorDataStore
 	// Router propagate incoming network messages to the responsive components

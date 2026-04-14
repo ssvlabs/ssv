@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
@@ -267,6 +269,46 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 	// Ensure that the queue still contains the non-matching messages.
 	require.False(t, queue.Empty())
+}
+
+func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
+	reader := metric.NewManualReader()
+	provider := metric.NewMeterProvider(metric.WithReader(reader))
+	testMeter := provider.Meter("test")
+
+	gauge, err := testMeter.Int64Gauge("test_inbox_size")
+	require.NoError(t, err)
+
+	const (
+		queueType = ValidatorQueueMetricType
+		queueID   = "attester"
+	)
+
+	queue := New(log.TestLogger(t), 4, WithInboxSizeMetric(gauge, queueType, queueID))
+	decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+
+	var rm metricdata.ResourceMetrics
+	err = reader.Collect(t.Context(), &rm)
+	require.NoError(t, err)
+
+	require.Len(t, rm.ScopeMetrics, 1)
+	require.Len(t, rm.ScopeMetrics[0].Metrics, 1)
+	require.Equal(t, "test_inbox_size", rm.ScopeMetrics[0].Metrics[0].Name)
+
+	gaugeData, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Gauge[int64])
+	require.True(t, ok)
+	require.Len(t, gaugeData.DataPoints, 1)
+
+	dataPoint := gaugeData.DataPoints[0]
+	require.EqualValues(t, 1, dataPoint.Value)
+
+	queueTypeAttr, ok := dataPoint.Attributes.Value("ssv.queue.type")
+	require.True(t, ok)
+	require.Equal(t, queueType, queueTypeAttr.AsString())
+
+	queueIDAttr, ok := dataPoint.Attributes.Value("ssv.queue.id")
+	require.True(t, ok)
+	require.Equal(t, queueID, queueIDAttr.AsString())
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {

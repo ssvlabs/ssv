@@ -11,13 +11,44 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/v2/networkconfig"
 	"github.com/ssvlabs/ssv/v2/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 	"github.com/ssvlabs/ssv/v2/utils/hashmap"
 )
+
+func TestAttesterHandlerShouldExecuteRespectsMinParticipationEpoch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	share := activeShare(1)
+	share.ValidatorPubKey = spectypes.ValidatorPK{1, 2, 3}
+	share.SetMinParticipationEpoch(1)
+
+	validatorProvider := NewMockValidatorProvider(ctrl)
+	validatorProvider.EXPECT().Validator(share.ValidatorPubKey[:]).Return(share, true)
+
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.GenesisTime = time.Now()
+	beaconCfg.SlotDuration = time.Hour
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+
+	handler := NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+	handler.logger = zap.NewNop()
+	handler.beaconConfig = &beaconCfg
+	handler.validatorProvider = validatorProvider
+
+	shouldExecute := handler.shouldExecute(&eth2apiv1.AttesterDuty{
+		PubKey:         phase0.BLSPubKey(share.ValidatorPubKey),
+		Slot:           0,
+		ValidatorIndex: share.ValidatorIndex,
+	})
+
+	require.False(t, shouldExecute)
+}
 
 func setupAttesterDutiesMock(
 	s *Scheduler,
