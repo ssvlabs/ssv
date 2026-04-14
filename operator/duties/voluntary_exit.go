@@ -122,7 +122,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 		case <-h.indicesChangeCh:
 			h.logger.Debug("🛠 indicesChange event")
 
-		case <-h.reorgCh:
+		case <-h.reorgEventsCh:
 			h.logger.Debug("🛠 reorg event")
 		}
 	}

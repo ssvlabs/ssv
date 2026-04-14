@@ -159,7 +159,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				}
 			}()
 
-		case reorgEvent := <-h.reorgCh:
+		case reorgEvent := <-h.reorgEventsCh:
 			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
