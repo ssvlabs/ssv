@@ -12,21 +12,22 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
+type SetupOptions struct {
+	Name                string
+	Logger              *zap.Logger
+	BeaconNode          BeaconNode
+	ExecutionClient     ExecutionClient
+	BeaconConfig        *networkconfig.Beacon
+	ValidatorProvider   ValidatorProvider
+	ValidatorController ValidatorController
+	DutiesExecutor      DutiesExecutor
+	SlotTickerProvider  slotticker.Provider
+	ReorgEvents         chan ReorgEvent
+	IndicesChange       chan struct{}
+}
+
 type dutyHandler interface {
-	Setup(
-		ctx context.Context,
-		name string,
-		logger *zap.Logger,
-		beaconNode BeaconNode,
-		executionClient ExecutionClient,
-		beaconConfig *networkconfig.Beacon,
-		validatorProvider ValidatorProvider,
-		validatorController ValidatorController,
-		dutiesExecutor DutiesExecutor,
-		slotTickerProvider slotticker.Provider,
-		reorgEvents chan ReorgEvent,
-		indicesChange chan struct{},
-	)
+	Setup(ctx context.Context, opts SetupOptions)
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
@@ -53,31 +54,18 @@ type baseHandler struct {
 	indicesChanged bool
 }
 
-func (h *baseHandler) Setup(
-	ctx context.Context,
-	name string,
-	logger *zap.Logger,
-	beaconNode BeaconNode,
-	executionClient ExecutionClient,
-	beaconConfig *networkconfig.Beacon,
-	validatorProvider ValidatorProvider,
-	validatorController ValidatorController,
-	dutiesExecutor DutiesExecutor,
-	slotTickerProvider slotticker.Provider,
-	reorgEvents chan ReorgEvent,
-	indicesChange chan struct{},
-) {
-	h.logger = logger.With(zap.String("handler", name))
+func (h *baseHandler) Setup(ctx context.Context, opts SetupOptions) {
+	h.logger = opts.Logger.With(zap.String("handler", opts.Name))
 	h.ctx = ctx
-	h.beaconNode = beaconNode
-	h.executionClient = executionClient
-	h.beaconConfig = beaconConfig
-	h.validatorProvider = validatorProvider
-	h.validatorController = validatorController
-	h.dutiesExecutor = dutiesExecutor
-	h.ticker = slotTickerProvider()
-	h.reorg = reorgEvents
-	h.indicesChange = indicesChange
+	h.beaconNode = opts.BeaconNode
+	h.executionClient = opts.ExecutionClient
+	h.beaconConfig = opts.BeaconConfig
+	h.validatorProvider = opts.ValidatorProvider
+	h.validatorController = opts.ValidatorController
+	h.dutiesExecutor = opts.DutiesExecutor
+	h.ticker = opts.SlotTickerProvider()
+	h.reorg = opts.ReorgEvents
+	h.indicesChange = opts.IndicesChange
 }
 
 func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
