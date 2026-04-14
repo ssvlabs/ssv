@@ -245,10 +245,6 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 
 	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 
-	if participates := h.canParticipate(share, currentSlot); !participates {
-		return false
-	}
-
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == slot {
 		return true

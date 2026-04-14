@@ -30,7 +30,6 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	storagepebble "github.com/ssvlabs/ssv/storage/pebble"
-	"github.com/ssvlabs/ssv/utils/format"
 )
 
 // TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
@@ -223,7 +222,7 @@ func (ln *LocalNet) NewTestP2pNetwork(t gotesting.TB, ctx context.Context, nodeI
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	cfg := NewNetConfig(keys, format.OperatorPubKeyHash(operatorPubkey), ln.Bootnode, networktesting.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	cfg := NewNetConfig(keys, ln.Bootnode, networktesting.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
@@ -324,7 +323,7 @@ func NewLocalNet(t gotesting.TB, ctx context.Context, logger *zap.Logger, option
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys networktesting.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
+func NewNetConfig(keys networktesting.NodeKeys, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {
@@ -334,20 +333,18 @@ func NewNetConfig(keys networktesting.NodeKeys, operatorPubKeyHash string, bn *d
 	}
 	ua := ""
 	return &Config{
-		Bootnodes:          bns,
-		TCPPort:            tcpPort,
-		UDPPort:            udpPort,
-		HostAddress:        "",
-		HostDNS:            "",
-		RequestTimeout:     10 * time.Second,
-		MaxBatchResponse:   25,
-		MaxPeers:           maxPeers,
-		PubSubTrace:        false,
-		PubSubScoring:      true,
-		NetworkPrivateKey:  keys.NetKey,
-		OperatorSigner:     keys.OperatorKey,
-		OperatorPubKeyHash: operatorPubKeyHash,
-		UserAgent:          ua,
-		Discovery:          discT,
+		Bootnodes:         bns,
+		TCPPort:           tcpPort,
+		UDPPort:           udpPort,
+		HostAddress:       "",
+		HostDNS:           "",
+		RequestTimeout:    10 * time.Second,
+		MaxBatchResponse:  25,
+		MaxPeers:          maxPeers,
+		PubSubTrace:       false,
+		PubSubScoring:     true,
+		NetworkPrivateKey: keys.NetKey,
+		UserAgent:         ua,
+		Discovery:         discT,
 	}
 }
