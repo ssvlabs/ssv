@@ -196,8 +196,7 @@ func (n *Node) Start(ctx context.Context) error {
 		// For exporter, we want to connect to all subnets.
 		startValidators = func() error {
 			if err := n.net.SubscribeAll(); err != nil {
-				n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
-				return err
+				return fmt.Errorf("subscribe to all subnets: %w", err)
 			}
 			return nil
 		}
