@@ -27,24 +27,6 @@ type Broadcaster interface {
 	BroadcastAtSlot(message *spectypes.SignedSSVMessage, slot phase0.Slot) error
 }
 
-// SyncResult holds the result of a sync request, including the actual message and the sender
-type SyncResult struct {
-	Msg    *spectypes.SSVMessage
-	Sender string
-}
-
-type SyncResults []SyncResult
-
-// SyncProtocol represent the type of sync protocols
-type SyncProtocol int32
-
-const (
-	// LastDecidedProtocol is the last decided protocol type
-	LastDecidedProtocol SyncProtocol = iota
-	// DecidedHistoryProtocol is the decided history protocol type
-	DecidedHistoryProtocol
-)
-
 // MsgValidationResult helps other components to report message validation with a generic results scheme
 type MsgValidationResult int32
 

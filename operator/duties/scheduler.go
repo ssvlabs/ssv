@@ -204,20 +204,19 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		reorgCh := make(chan ReorgEvent)
 		reorgFeed.Subscribe(reorgCh)
 
-		handler.Setup(
-			ctx,
-			handler.Name(),
-			s.logger,
-			s.beaconNode,
-			s.executionClient,
-			s.netCfg,
-			s.validatorProvider,
-			s.validatorController,
-			s,
-			s.slotTickerProvider,
-			reorgCh,
-			indicesChangeCh,
-		)
+		handler.Setup(ctx, SetupOptions{
+			Name:                handler.Name(),
+			Logger:              s.logger,
+			BeaconNode:          s.beaconNode,
+			ExecutionClient:     s.executionClient,
+			NetworkConfig:       s.netCfg,
+			ValidatorProvider:   s.validatorProvider,
+			ValidatorController: s.validatorController,
+			DutiesExecutor:      s,
+			SlotTickerProvider:  s.slotTickerProvider,
+			ReorgEvents:         reorgCh,
+			IndicesChange:       indicesChangeCh,
+		})
 
 		// This call is blocking.
 		handler.HandleInitialDuties(s.ctx)

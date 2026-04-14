@@ -296,13 +296,12 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 	}
 
 	return &p2pNetwork{
-		logger:                  zap.NewNop(),
-		host:                    host,
-		topicsCtrl:              topicsCtrl,
-		idx:                     idx,
-		persistentSubnets:       ownSubnets,
-		subscribedCommittees:    hashmap.New[string, statusWithSubnet](),
-		operatorPKHashToPKCache: hashmap.New[string, []byte](),
+		logger:               zap.NewNop(),
+		host:                 host,
+		topicsCtrl:           topicsCtrl,
+		idx:                  idx,
+		persistentSubnets:    ownSubnets,
+		subscribedCommittees: hashmap.New[string, statusWithSubnet](),
 	}
 }
 
