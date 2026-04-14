@@ -19,7 +19,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -44,35 +43,34 @@ type SyncCommitteeAggregatorRunner struct {
 	rootToSyncCommitteeIdx map[phase0.Root]phase0.ValidatorIndex
 }
 
-func NewSyncCommitteeAggregatorRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	valCheck ssv.ValueChecker,
-	highestDecidedSlot phase0.Slot,
-) (Runner, error) {
-	if len(share) != 1 {
+// SyncCommitteeAggregatorRunnerOptions bundles all dependencies required by NewSyncCommitteeAggregatorRunner.
+type SyncCommitteeAggregatorRunnerOptions struct {
+	BaseRunnerOptions
+
+	QBFTController     *controller.Controller
+	ValCheck           ssv.ValueChecker
+	HighestDecidedSlot phase0.Slot
+}
+
+func NewSyncCommitteeAggregatorRunner(opts SyncCommitteeAggregatorRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleSyncCommitteeContribution,
-			NetworkConfig:      networkConfig,
-			Share:              share,
-			QBFTController:     qbftController,
-			highestDecidedSlot: highestDecidedSlot,
+			NetworkConfig:      opts.NetworkConfig,
+			Share:              opts.Share,
+			QBFTController:     opts.QBFTController,
+			highestDecidedSlot: opts.HighestDecidedSlot,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		ValCheck:       valCheck,
-		operatorSigner: operatorSigner,
+		beacon:         opts.Beacon,
+		network:        opts.Network,
+		signer:         opts.Signer,
+		ValCheck:       opts.ValCheck,
+		operatorSigner: opts.OperatorSigner,
 		measurements:   *newMeasurementsStore(),
 	}, nil
 }

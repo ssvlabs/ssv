@@ -401,21 +401,22 @@ func newProposerRunnerForTest(
 		share.ValidatorIndex: share,
 	}
 
-	runnerIface, err := NewProposerRunner(
-		logger,
-		cfg,
-		shareMap,
-		controller,
-		beacon,
-		network,
-		km,
-		operatorSigner,
-		dg,
-		valCheck,
-		0,
-		[]byte("graffiti"),
-		proposerDelay,
-	)
+	runnerIface, err := NewProposerRunner(ProposerRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          shareMap,
+			Beacon:         beacon,
+			Network:        network,
+			Signer:         km,
+			OperatorSigner: operatorSigner,
+		},
+		QBFTController:      controller,
+		DoppelgangerHandler: dg,
+		ValCheck:            valCheck,
+		HighestDecidedSlot:  0,
+		Graffiti:            []byte("graffiti"),
+		ProposerDelay:       proposerDelay,
+	})
 	require.NoError(t, err)
 
 	return runnerIface.(*ProposerRunner), keySet, network

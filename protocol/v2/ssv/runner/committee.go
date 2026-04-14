@@ -27,7 +27,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -61,39 +60,38 @@ type CommitteeRunner struct {
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 }
 
-func NewCommitteeRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	attestingValidators []phase0.BLSPubKey,
-	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	dutyGuard CommitteeDutyGuard,
-	doppelgangerHandler DoppelgangerProvider,
-) (Runner, error) {
-	if len(share) == 0 {
+// CommitteeRunnerOptions bundles all dependencies required by NewCommitteeRunner.
+type CommitteeRunnerOptions struct {
+	BaseRunnerOptions
+
+	AttestingValidators []phase0.BLSPubKey
+	QBFTController      *controller.Controller
+	DutyGuard           CommitteeDutyGuard
+	DoppelgangerHandler DoppelgangerProvider
+}
+
+func NewCommitteeRunner(opts CommitteeRunnerOptions) (Runner, error) {
+	if len(opts.Share) == 0 {
 		return nil, errors.New("no shares")
 	}
 
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
-			NetworkConfig:  networkConfig,
-			Share:          share,
-			QBFTController: qbftController,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
+			QBFTController: opts.QBFTController,
 		},
 
-		attestingValidators: attestingValidators,
+		attestingValidators: opts.AttestingValidators,
 
-		beacon:              beacon,
-		network:             network,
-		signer:              signer,
-		operatorSigner:      operatorSigner,
+		beacon:              opts.Beacon,
+		network:             opts.Network,
+		signer:              opts.Signer,
+		operatorSigner:      opts.OperatorSigner,
 		submittedDuties:     make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
-		DutyGuard:           dutyGuard,
-		doppelgangerHandler: doppelgangerHandler,
+		DutyGuard:           opts.DutyGuard,
+		doppelgangerHandler: opts.DoppelgangerHandler,
 		measurements:        newMeasurementsStore(),
 	}, nil
 }

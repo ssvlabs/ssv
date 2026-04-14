@@ -22,7 +22,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -60,35 +59,34 @@ type AggregatorRunner struct {
 
 var _ Runner = &AggregatorRunner{}
 
-func NewAggregatorRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	valCheck ssv.ValueChecker,
-	highestDecidedSlot phase0.Slot,
-) (*AggregatorRunner, error) {
-	if len(share) != 1 {
+// AggregatorRunnerOptions bundles all dependencies required by NewAggregatorRunner.
+type AggregatorRunnerOptions struct {
+	BaseRunnerOptions
+
+	QBFTController     *controller.Controller
+	ValCheck           ssv.ValueChecker
+	HighestDecidedSlot phase0.Slot
+}
+
+func NewAggregatorRunner(opts AggregatorRunnerOptions) (*AggregatorRunner, error) {
+	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleAggregator,
-			NetworkConfig:      networkConfig,
-			Share:              share,
-			QBFTController:     qbftController,
-			highestDecidedSlot: highestDecidedSlot,
+			NetworkConfig:      opts.NetworkConfig,
+			Share:              opts.Share,
+			QBFTController:     opts.QBFTController,
+			highestDecidedSlot: opts.HighestDecidedSlot,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		operatorSigner: operatorSigner,
-		ValCheck:       valCheck,
+		beacon:         opts.Beacon,
+		network:        opts.Network,
+		signer:         opts.Signer,
+		operatorSigner: opts.OperatorSigner,
+		ValCheck:       opts.ValCheck,
 		measurements:   newMeasurementsStore(),
 
 		IsAggregator: isAggregatorFn(),

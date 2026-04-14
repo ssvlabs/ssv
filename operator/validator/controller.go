@@ -740,7 +740,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, share, operator, c.validatorRegistrationSubmitter, c.validatorStore, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, true, fmt.Errorf("could not setup runners: %w", err)
@@ -1039,18 +1039,20 @@ func SetupCommitteeRunners(
 		attestingValidators []phase0.BLSPubKey,
 		dutyGuard runner.CommitteeDutyGuard,
 	) (*runner.CommitteeRunner, error) {
-		crunner, err := runner.NewCommitteeRunner(
-			options.NetworkConfig,
-			shares,
-			attestingValidators,
-			buildController(spectypes.RoleCommittee),
-			options.Beacon,
-			options.Network,
-			options.Signer,
-			options.OperatorSigner,
-			dutyGuard,
-			options.DoppelgangerHandler,
-		)
+		crunner, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions: runner.BaseRunnerOptions{
+				NetworkConfig:  options.NetworkConfig,
+				Share:          shares,
+				Beacon:         options.Beacon,
+				Network:        options.Network,
+				Signer:         options.Signer,
+				OperatorSigner: options.OperatorSigner,
+			},
+			AttestingValidators: attestingValidators,
+			QBFTController:      buildController(spectypes.RoleCommittee),
+			DutyGuard:           dutyGuard,
+			DoppelgangerHandler: options.DoppelgangerHandler,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -1061,7 +1063,6 @@ func SetupCommitteeRunners(
 // SetupRunners initializes duty runners for the given validator
 func SetupRunners(
 	ctx context.Context,
-	logger *zap.Logger,
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
 	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
@@ -1097,26 +1098,57 @@ func SetupRunners(
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[share.ValidatorIndex] = &share.Share
 
+	baseOpts := runner.BaseRunnerOptions{
+		NetworkConfig:  options.NetworkConfig,
+		Share:          shareMap,
+		Beacon:         options.Beacon,
+		Network:        options.Network,
+		Signer:         options.Signer,
+		OperatorSigner: options.OperatorSigner,
+	}
+
 	runners := runner.ValidatorDutyRunners{}
 	var err error
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
-			qbftCtrl := buildController(spectypes.RoleProposer)
-			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay)
+			runners[role], err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
+				BaseRunnerOptions:   baseOpts,
+				QBFTController:      buildController(spectypes.RoleProposer),
+				DoppelgangerHandler: options.DoppelgangerHandler,
+				ValCheck:            proposedValueCheck,
+				HighestDecidedSlot:  0,
+				Graffiti:            options.Graffiti,
+				ProposerDelay:       options.ProposerDelay,
+			})
 		case spectypes.RoleAggregator:
 			aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
-			qbftCtrl := buildController(spectypes.RoleAggregator)
-			runners[role], err = runner.NewAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueChecker, 0)
+			runners[role], err = runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
+				BaseRunnerOptions:  baseOpts,
+				QBFTController:     buildController(spectypes.RoleAggregator),
+				ValCheck:           aggregatorValueChecker,
+				HighestDecidedSlot: 0,
+			})
 		case spectypes.RoleSyncCommitteeContribution:
 			syncCommitteeContributionValueChecker := ssv.NewSyncCommitteeContributionChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
-			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution)
-			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueChecker, 0)
+			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
+				BaseRunnerOptions:  baseOpts,
+				QBFTController:     buildController(spectypes.RoleSyncCommitteeContribution),
+				ValCheck:           syncCommitteeContributionValueChecker,
+				HighestDecidedSlot: 0,
+			})
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, validatorRegistrationSubmitter, validatorStore, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(runner.ValidatorRegistrationRunnerOptions{
+				BaseRunnerOptions:              baseOpts,
+				ValidatorRegistrationSubmitter: validatorRegistrationSubmitter,
+				FeeRecipientProvider:           validatorStore,
+				GasLimit:                       options.GasLimit,
+			})
 		case spectypes.RoleVoluntaryExit:
-			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+			runners[role], err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
+				BaseRunnerOptions: baseOpts,
+			})
 		default:
 			return nil, fmt.Errorf("unexpected duty runner type: %s", role)
 		}

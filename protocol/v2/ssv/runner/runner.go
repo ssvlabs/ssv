@@ -80,6 +80,17 @@ type DoppelgangerProvider interface {
 
 var _ Runner = new(CommitteeRunner)
 
+// BaseRunnerOptions holds fields shared across all runner constructors.
+// Each role-specific options struct embeds it.
+type BaseRunnerOptions struct {
+	NetworkConfig  *networkconfig.Network
+	Share          map[phase0.ValidatorIndex]*spectypes.Share
+	Beacon         beacon.BeaconNode
+	Network        specqbft.Network
+	Signer         ekm.BeaconSigner
+	OperatorSigner ssvtypes.OperatorSigner
+}
+
 type BaseRunner struct {
 	mtx            sync.RWMutex
 	State          *State
