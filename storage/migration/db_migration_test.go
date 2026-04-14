@@ -17,55 +17,55 @@ import (
 	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
-func TestResolvePebbleDBPlan_NoExistingDatabases(t *testing.T) {
+func TestResolveDBLayout_NoExistingDatabases(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, basePath, plan.PebblePath)
-	require.Empty(t, plan.BadgerImportPath)
+	require.Equal(t, basePath, layout.PebblePath)
+	require.Empty(t, layout.BadgerImportPath)
 }
 
-func TestResolvePebbleDBPlan_UsesCanonicalPebble(t *testing.T) {
+func TestResolveDBLayout_UsesCanonicalPebble(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
 	createPebbleDB(t, basePath, map[string][]byte{"a": []byte("1")})
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, basePath, plan.PebblePath)
-	require.Empty(t, plan.BadgerImportPath)
+	require.Equal(t, basePath, layout.PebblePath)
+	require.Empty(t, layout.BadgerImportPath)
 }
 
-func TestResolvePebbleDBPlan_UsesLegacyPebble(t *testing.T) {
+func TestResolveDBLayout_UsesLegacyPebble(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
 	legacyPath := basePath + "-pebble"
 	createPebbleDB(t, legacyPath, map[string][]byte{"a": []byte("1")})
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, legacyPath, plan.PebblePath)
-	require.Empty(t, plan.BadgerImportPath)
+	require.Equal(t, legacyPath, layout.PebblePath)
+	require.Empty(t, layout.BadgerImportPath)
 }
 
-func TestResolvePebbleDBPlan_ImportsFromBadgerWhenOnlyBadgerHasData(t *testing.T) {
+func TestResolveDBLayout_ImportsFromBadgerWhenOnlyBadgerHasData(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
 	createBadgerDB(t, basePath, map[string][]byte{"a": []byte("1")})
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, basePath+"-pebble", plan.PebblePath)
-	require.Equal(t, basePath, plan.BadgerImportPath)
+	require.Equal(t, basePath+"-pebble", layout.PebblePath)
+	require.Equal(t, basePath, layout.BadgerImportPath)
 }
 
-func TestResolvePebbleDBPlan_FailsOnMultipleNonEmptySources(t *testing.T) {
+func TestResolveDBLayout_FailsOnMultipleNonEmptySources(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
@@ -73,12 +73,12 @@ func TestResolvePebbleDBPlan_FailsOnMultipleNonEmptySources(t *testing.T) {
 	createPebbleDB(t, basePath, map[string][]byte{"a": []byte("1")})
 	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
 
-	_, err := ResolvePebbleDBPlan(basePath)
+	_, err := ResolveDBLayout(basePath)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "multiple non-empty databases detected")
 }
 
-func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportDoneMarkerExists(t *testing.T) {
+func TestResolveDBLayout_AllowsBadgerAndLegacyPebbleWhenImportDoneMarkerExists(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
@@ -87,13 +87,13 @@ func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportDoneMarkerExis
 	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
 	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, legacyPath, plan.PebblePath)
-	require.Empty(t, plan.BadgerImportPath)
+	require.Equal(t, legacyPath, layout.PebblePath)
+	require.Empty(t, layout.BadgerImportPath)
 }
 
-func TestResolvePebbleDBPlan_DoneAndInProgressMarkersTriggersCleanupRun(t *testing.T) {
+func TestResolveDBLayout_DoneAndInProgressMarkersTriggersCleanupRun(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
@@ -103,13 +103,13 @@ func TestResolvePebbleDBPlan_DoneAndInProgressMarkersTriggersCleanupRun(t *testi
 	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
 	require.NoError(t, writeBadgerImportInProgressMarker(legacyPath, basePath))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, legacyPath, plan.PebblePath)
-	require.Equal(t, basePath, plan.BadgerImportPath)
+	require.Equal(t, legacyPath, layout.PebblePath)
+	require.Equal(t, basePath, layout.BadgerImportPath)
 }
 
-func TestResolvePebbleDBPlan_FastPathSkipsBadgerOpenAfterDoneMarker(t *testing.T) {
+func TestResolveDBLayout_FastPathSkipsBadgerOpenAfterDoneMarker(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
@@ -121,13 +121,13 @@ func TestResolvePebbleDBPlan_FastPathSkipsBadgerOpenAfterDoneMarker(t *testing.T
 	require.NoError(t, os.WriteFile(filepath.Join(basePath, "KEYREGISTRY"), []byte("not-a-badger-db"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(basePath, "000001.vlog"), []byte("garbage"), 0o600))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, legacyPath, plan.PebblePath)
-	require.Empty(t, plan.BadgerImportPath)
+	require.Equal(t, legacyPath, layout.PebblePath)
+	require.Empty(t, layout.BadgerImportPath)
 }
 
-func TestResolvePebbleDBPlan_FailsWhenDoneMarkerExistsButLegacyPebbleEmpty(t *testing.T) {
+func TestResolveDBLayout_FailsWhenDoneMarkerExistsButLegacyPebbleEmpty(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
@@ -135,24 +135,24 @@ func TestResolvePebbleDBPlan_FailsWhenDoneMarkerExistsButLegacyPebbleEmpty(t *te
 	createPebbleDB(t, legacyPath, map[string][]byte{})
 	require.NoError(t, writeBadgerImportDoneMarker(legacyPath, basePath, 1))
 
-	_, err := ResolvePebbleDBPlan(basePath)
+	_, err := ResolveDBLayout(basePath)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "completion marker exists")
 }
 
-func TestResolvePebbleDBPlan_FailsWhenDoneMarkerExistsButCanonicalPebbleEmpty(t *testing.T) {
+func TestResolveDBLayout_FailsWhenDoneMarkerExistsButCanonicalPebbleEmpty(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
 	createPebbleDB(t, basePath, map[string][]byte{})
 	require.NoError(t, writeBadgerImportDoneMarker(basePath, basePath, 1))
 
-	_, err := ResolvePebbleDBPlan(basePath)
+	_, err := ResolveDBLayout(basePath)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "completion marker exists")
 }
 
-func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportInProgressMarkerExists(t *testing.T) {
+func TestResolveDBLayout_AllowsBadgerAndLegacyPebbleWhenImportInProgressMarkerExists(t *testing.T) {
 	t.Parallel()
 
 	basePath := filepath.Join(t.TempDir(), "db")
@@ -161,10 +161,10 @@ func TestResolvePebbleDBPlan_AllowsBadgerAndLegacyPebbleWhenImportInProgressMark
 	createPebbleDB(t, legacyPath, map[string][]byte{"b": []byte("2")})
 	require.NoError(t, writeBadgerImportInProgressMarker(legacyPath, basePath))
 
-	plan, err := ResolvePebbleDBPlan(basePath)
+	layout, err := ResolveDBLayout(basePath)
 	require.NoError(t, err)
-	require.Equal(t, legacyPath, plan.PebblePath)
-	require.Equal(t, basePath, plan.BadgerImportPath)
+	require.Equal(t, legacyPath, layout.PebblePath)
+	require.Equal(t, basePath, layout.BadgerImportPath)
 }
 
 func TestMigrateBadgerToPebbleIfNeeded_MigratesWhenPebbleEmpty(t *testing.T) {

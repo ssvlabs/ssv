@@ -849,13 +849,13 @@ func setupPebbleDB(
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
-	plan, err := storagemigration.ResolvePebbleDBPlan(cfg.DBOptions.Path)
+	layout, err := storagemigration.ResolveDBLayout(cfg.DBOptions.Path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve database layout: %w", err)
 	}
 	// dbPath may differ from the configured base path when startup resolves a
 	// legacy Badger/Pebble on-disk layout to the correct Pebble directory.
-	dbPath := plan.PebblePath
+	dbPath := layout.PebblePath
 	if dbPath != cfg.DBOptions.Path {
 		logger.Warn("using legacy pebble directory selected during db layout resolution",
 			zap.String("configured_path", cfg.DBOptions.Path),
@@ -879,11 +879,11 @@ func setupPebbleDB(
 		return errors.Join(setupErr, fmt.Errorf("close db after setup error: %w", closeErr))
 	}
 
-	if plan.BadgerImportPath != "" {
+	if layout.BadgerImportPath != "" {
 		migrated, migratedKeys, err := storagemigration.MigrateBadgerToPebbleIfNeeded(
 			cfg.DBOptions.Ctx,
 			logger,
-			plan.BadgerImportPath,
+			layout.BadgerImportPath,
 			dbPath,
 			db,
 		)
@@ -892,7 +892,7 @@ func setupPebbleDB(
 		}
 		if migrated {
 			logger.Info("migrated legacy badger db to pebble",
-				zap.String("from_path", plan.BadgerImportPath),
+				zap.String("from_path", layout.BadgerImportPath),
 				zap.String("to_path", dbPath),
 				zap.Int("keys", migratedKeys),
 			)

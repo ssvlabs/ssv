@@ -54,34 +54,34 @@ type badgerImportMarker struct {
 	CompletedAt string `json:"completed_at,omitempty"`
 }
 
-// PebbleDBPlan describes which Pebble path to open and whether legacy Badger
-// data should be imported into it on startup.
-type PebbleDBPlan struct {
+// DBLayout describes the resolved startup DB selection: which Pebble path to
+// open and, when present, which legacy Badger path should be imported into it.
+type DBLayout struct {
 	PebblePath       string
 	BadgerImportPath string
 }
 
-// ResolvePebbleDBPlan selects the Pebble path and optional Badger import path.
-func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
+// ResolveDBLayout selects the Pebble path and optional Badger import path.
+func ResolveDBLayout(basePath string) (DBLayout, error) {
 	layout, err := probePebbleLayout(basePath)
 	if err != nil {
-		return PebbleDBPlan{}, err
+		return DBLayout{}, err
 	}
 	badgerFilesPresent, err := hasBadgerFiles(basePath)
 	if err != nil {
-		return PebbleDBPlan{}, fmt.Errorf("check badger path %q: %w", basePath, err)
+		return DBLayout{}, fmt.Errorf("check badger path %q: %w", basePath, err)
 	}
 
 	// Scenario 1: exactly one non-empty Pebble DB exists. It stays selected unless
 	// startup also needs to inspect or continue a Badger import for that path.
-	if plan, handled, err := resolveSingleNonEmptyPebblePlan(layout, badgerFilesPresent); handled || err != nil {
-		return plan, err
+	if resolvedLayout, handled, err := resolveSingleNonEmptyPebbleLayout(layout, badgerFilesPresent); handled || err != nil {
+		return resolvedLayout, err
 	}
 
 	// Scenario 2: multiple non-empty sources are immediately ambiguous when both Pebble
 	// paths contain data. Badger-vs-Pebble ambiguity is handled later by migration logic.
 	if layout.canonical.nonEmpty && layout.legacy.nonEmpty {
-		return PebbleDBPlan{}, fmt.Errorf(
+		return DBLayout{}, fmt.Errorf(
 			"multiple non-empty databases detected (pebble:%s, pebble:%s); keep only one source of truth before starting",
 			layout.canonical.path,
 			layout.legacy.path,
@@ -91,7 +91,7 @@ func ResolvePebbleDBPlan(basePath string) (PebbleDBPlan, error) {
 	// Scenario 3: no non-empty Pebble DB exists yet. Select the Pebble directory that
 	// startup should use and, when Badger files are present, let migration logic decide
 	// whether it needs to import, resume, or simply clean up stale markers.
-	return resolveEmptyLayoutPlan(layout, badgerFilesPresent)
+	return resolveEmptyDBLayout(layout, badgerFilesPresent)
 }
 
 func ensureDoneMarkerNotOnEmptyPebble(pebblePath string, badgerPath string, pebbleNonEmpty bool) error {
@@ -126,65 +126,65 @@ func probePebbleLayout(basePath string) (pebbleLayoutState, error) {
 	}, nil
 }
 
-func resolveSingleNonEmptyPebblePlan(layout pebbleLayoutState, badgerFilesPresent bool) (PebbleDBPlan, bool, error) {
+func resolveSingleNonEmptyPebbleLayout(layout pebbleLayoutState, badgerFilesPresent bool) (DBLayout, bool, error) {
 	switch {
 	case layout.canonical.nonEmpty && !layout.legacy.nonEmpty:
-		return resolveSingleNonEmptyPebblePathPlan(layout.canonical.path, layout.canonical.path, badgerFilesPresent)
+		return resolveSingleNonEmptyPebblePathLayout(layout.canonical.path, layout.canonical.path, badgerFilesPresent)
 	case layout.legacy.nonEmpty && !layout.canonical.nonEmpty:
-		return resolveSingleNonEmptyPebblePathPlan(layout.legacy.path, layout.canonical.path, badgerFilesPresent)
+		return resolveSingleNonEmptyPebblePathLayout(layout.legacy.path, layout.canonical.path, badgerFilesPresent)
 	default:
-		return PebbleDBPlan{}, false, nil
+		return DBLayout{}, false, nil
 	}
 }
 
-func resolveSingleNonEmptyPebblePathPlan(pebblePath string, badgerPath string, badgerFilesPresent bool) (PebbleDBPlan, bool, error) {
+func resolveSingleNonEmptyPebblePathLayout(pebblePath string, badgerPath string, badgerFilesPresent bool) (DBLayout, bool, error) {
 	done, inProgress, err := badgerImportMarkerState(pebblePath, badgerPath)
 	if err != nil {
-		return PebbleDBPlan{}, true, err
+		return DBLayout{}, true, err
 	}
 	if done {
 		if inProgress {
-			return PebbleDBPlan{PebblePath: pebblePath, BadgerImportPath: badgerPath}, true, nil
+			return DBLayout{PebblePath: pebblePath, BadgerImportPath: badgerPath}, true, nil
 		}
-		return PebbleDBPlan{PebblePath: pebblePath}, true, nil
+		return DBLayout{PebblePath: pebblePath}, true, nil
 	}
 	if inProgress {
-		return PebbleDBPlan{PebblePath: pebblePath, BadgerImportPath: badgerPath}, true, nil
+		return DBLayout{PebblePath: pebblePath, BadgerImportPath: badgerPath}, true, nil
 	}
 	if badgerFilesPresent {
-		return PebbleDBPlan{PebblePath: pebblePath, BadgerImportPath: badgerPath}, true, nil
+		return DBLayout{PebblePath: pebblePath, BadgerImportPath: badgerPath}, true, nil
 	}
-	return PebbleDBPlan{PebblePath: pebblePath}, true, nil
+	return DBLayout{PebblePath: pebblePath}, true, nil
 }
 
-func resolveEmptyLayoutPlan(layout pebbleLayoutState, badgerFilesPresent bool) (PebbleDBPlan, error) {
+func resolveEmptyDBLayout(layout pebbleLayoutState, badgerFilesPresent bool) (DBLayout, error) {
 	switch {
 	case layout.canonical.exists:
 		if err := ensureDoneMarkerNotOnEmptyPebble(layout.canonical.path, layout.canonical.path, layout.canonical.nonEmpty); err != nil {
-			return PebbleDBPlan{}, err
+			return DBLayout{}, err
 		}
-		return planForSelectedPebblePath(layout.canonical.path, layout.canonical.path, badgerFilesPresent), nil
+		return layoutForSelectedPebblePath(layout.canonical.path, layout.canonical.path, badgerFilesPresent), nil
 	case badgerFilesPresent:
 		// Keep using a separate Pebble path when the configured base path contains Badger files.
 		if err := ensureDoneMarkerNotOnEmptyPebble(layout.legacy.path, layout.canonical.path, layout.legacy.nonEmpty); err != nil {
-			return PebbleDBPlan{}, err
+			return DBLayout{}, err
 		}
-		return planForSelectedPebblePath(layout.legacy.path, layout.canonical.path, true), nil
+		return layoutForSelectedPebblePath(layout.legacy.path, layout.canonical.path, true), nil
 	case layout.legacy.exists:
 		if err := ensureDoneMarkerNotOnEmptyPebble(layout.legacy.path, layout.canonical.path, layout.legacy.nonEmpty); err != nil {
-			return PebbleDBPlan{}, err
+			return DBLayout{}, err
 		}
-		return planForSelectedPebblePath(layout.legacy.path, layout.canonical.path, false), nil
+		return layoutForSelectedPebblePath(layout.legacy.path, layout.canonical.path, false), nil
 	default:
-		return planForSelectedPebblePath(layout.canonical.path, layout.canonical.path, false), nil
+		return layoutForSelectedPebblePath(layout.canonical.path, layout.canonical.path, false), nil
 	}
 }
 
-func planForSelectedPebblePath(pebblePath string, badgerPath string, badgerFilesPresent bool) PebbleDBPlan {
+func layoutForSelectedPebblePath(pebblePath string, badgerPath string, badgerFilesPresent bool) DBLayout {
 	if badgerFilesPresent {
-		return PebbleDBPlan{PebblePath: pebblePath, BadgerImportPath: badgerPath}
+		return DBLayout{PebblePath: pebblePath, BadgerImportPath: badgerPath}
 	}
-	return PebbleDBPlan{PebblePath: pebblePath}
+	return DBLayout{PebblePath: pebblePath}
 }
 
 // MigrateBadgerToPebbleIfNeeded imports legacy Badger keys into Pebble.
@@ -430,6 +430,58 @@ func hasBadgerFiles(path string) (bool, error) {
 	return false, nil
 }
 
+type pebbleImportBatch struct {
+	db      *pebble.DB
+	batch   *cockroachdb.Batch
+	pending int
+}
+
+func newPebbleImportBatch(db *pebble.DB) *pebbleImportBatch {
+	return &pebbleImportBatch{
+		db:    db,
+		batch: db.NewBatch(),
+	}
+}
+
+func (b *pebbleImportBatch) Set(key []byte, value []byte) error {
+	if err := b.batch.Set(key, value, nil); err != nil {
+		return err
+	}
+	b.pending++
+	return nil
+}
+
+func (b *pebbleImportBatch) Pending() int {
+	return b.pending
+}
+
+func (b *pebbleImportBatch) Flush(ctx context.Context) error {
+	if b.pending == 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := b.batch.Commit(cockroachdb.Sync); err != nil {
+		return err
+	}
+	if err := b.Close(); err != nil {
+		return err
+	}
+	b.batch = b.db.NewBatch()
+	b.pending = 0
+	return nil
+}
+
+func (b *pebbleImportBatch) Close() error {
+	if b.batch == nil {
+		return nil
+	}
+	err := b.batch.Close()
+	b.batch = nil
+	return err
+}
+
 func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath string, db *pebble.DB, onBatchCommitHook importBatchCommitHook) (int, error) {
 	// NOTE: resume always re-copies keys from the beginning of Badger when an in-progress
 	// marker exists. Duplicate puts are safe in Pebble (latest write wins), but resume
@@ -448,30 +500,17 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 
 	batchSize := defaultImportBatchSize
 	keysCopiedTotal := 0
-	pending := 0
 	committedBatches := 0
-	batch := db.NewBatch()
-	defer func() {
-		if batch != nil {
-			_ = batch.Close()
-		}
-	}()
+	batch := newPebbleImportBatch(db)
+	defer func() { _ = batch.Close() }()
 
 	flushBatch := func() error {
-		if pending == 0 {
+		if batch.Pending() == 0 {
 			return nil
 		}
-		if err := ctx.Err(); err != nil {
+		if err := batch.Flush(ctx); err != nil {
 			return err
 		}
-		if err := batch.Commit(cockroachdb.Sync); err != nil {
-			return err
-		}
-		if err := batch.Close(); err != nil {
-			batch = nil
-			return err
-		}
-		batch = nil
 		committedBatches++
 		if committedBatches%importProgressLogEveryBatches == 0 {
 			logger.Info("badger import in progress",
@@ -480,8 +519,6 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 				zap.Int("committed_batches", committedBatches),
 			)
 		}
-		batch = db.NewBatch()
-		pending = 0
 		if onBatchCommitHook != nil {
 			if err := onBatchCommitHook(committedBatches, keysCopiedTotal); err != nil {
 				return err
@@ -506,14 +543,13 @@ func copyBadgerToPebble(ctx context.Context, logger *zap.Logger, badgerPath stri
 			if err != nil {
 				return err
 			}
-			if err := batch.Set(key, val, nil); err != nil {
+			if err := batch.Set(key, val); err != nil {
 				return err
 			}
 
 			keysCopiedTotal++
-			pending++
 
-			if pending >= batchSize {
+			if batch.Pending() >= batchSize {
 				if err := flushBatch(); err != nil {
 					return err
 				}
