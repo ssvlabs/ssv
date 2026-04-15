@@ -137,6 +137,186 @@ func TestEstimatedRoundAt(t *testing.T) {
 	}
 }
 
+// TestRoundTimeoutOffset covers the pure helper directly, which is the single source of truth
+// both RoundTimeout and EstimatedRoundAt derive from. Uses custom timeout options (not the
+// package constants) so the arithmetic is obvious at a glance, and picks a slot duration
+// that lands the role-derived head starts on round numbers:
+//
+//	proposer   → head start = 0
+//	committee  → head start = 12s / 3        = 4s
+//	aggregator → head start = 12s / 3 * 2    = 8s
+func TestRoundTimeoutOffset(t *testing.T) {
+	opts := TimeoutOptions{
+		quickThreshold: 3, // small threshold makes the quick/slow split easy to reason about
+		quick:          10 * time.Second,
+		slow:           60 * time.Second,
+	}
+	const testSlotDuration = 12 * time.Second
+
+	tt := []struct {
+		name  string
+		role  spectypes.RunnerRole
+		round specqbft.Round
+		want  time.Duration
+	}{
+		// Proposer (head start = 0): offset is r*quick for quick rounds.
+		{name: "proposer, round 1 (first quick)", role: spectypes.RoleProposer, round: 1, want: 10 * time.Second},
+		{name: "proposer, round 2", role: spectypes.RoleProposer, round: 2, want: 20 * time.Second},
+		{name: "proposer, round 3 (= quickThreshold)", role: spectypes.RoleProposer, round: 3, want: 30 * time.Second},
+		// First slow round: quickThreshold * quick + 1 * slow.
+		{name: "proposer, round 4 (first slow)", role: spectypes.RoleProposer, round: 4, want: 30*time.Second + 60*time.Second},
+		{name: "proposer, round 5", role: spectypes.RoleProposer, round: 5, want: 30*time.Second + 2*60*time.Second},
+
+		// Committee (head start = 4s): offset starts with head start added.
+		{name: "committee, round 1", role: spectypes.RoleCommittee, round: 1, want: 14 * time.Second},
+		{name: "committee, round 2", role: spectypes.RoleCommittee, round: 2, want: 24 * time.Second},
+		{name: "committee, round 3", role: spectypes.RoleCommittee, round: 3, want: 34 * time.Second},
+		{name: "committee, round 4 (first slow)", role: spectypes.RoleCommittee, round: 4, want: 4*time.Second + 30*time.Second + 60*time.Second},
+
+		// Aggregator (head start = 8s): covers the 2/3-slot branch.
+		{name: "aggregator, round 1", role: spectypes.RoleAggregator, round: 1, want: 18 * time.Second},
+		{name: "aggregator, round 3", role: spectypes.RoleAggregator, round: 3, want: 38 * time.Second},
+		{name: "aggregator, round 4 (first slow)", role: spectypes.RoleAggregator, round: 4, want: 8*time.Second + 30*time.Second + 60*time.Second},
+
+		// Sync committee contribution uses the same 2/3-slot branch as aggregator.
+		{name: "sync_committee_contribution, round 1", role: spectypes.RoleSyncCommitteeContribution, round: 1, want: 18 * time.Second},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			got := opts.roundTimeoutOffset(tc.role, testSlotDuration, tc.round)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestEstimatedRoundAtBoundaries exercises each round's transition boundary for every role.
+// For every round r, it checks EstimatedRoundAt at:
+//   - offset - 1ns → still in round r
+//   - offset exactly → just advanced to round r+1
+//   - offset + 1ns → still in round r+1
+//
+// This is the test that would have caught an off-by-one `<` vs `<=` in EstimatedRoundAt's loop,
+// or a wrong starting `r` — none of which the pre-existing tests directly exercised.
+func TestEstimatedRoundAtBoundaries(t *testing.T) {
+	// Use a realistic slot duration (12s) rather than the timer_test package's 600ms so the
+	// numbers line up with the real QuickTimeout (2s) and SlowTimeout (2m) that
+	// EstimatedRoundAt uses via defaultTimeoutOptions.
+	const realSlotDuration = 12 * time.Second
+
+	roles := []struct {
+		name string
+		role spectypes.RunnerRole
+	}{
+		{"proposer", spectypes.RoleProposer},
+		{"committee", spectypes.RoleCommittee},
+		{"aggregator", spectypes.RoleAggregator},
+		{"sync_committee_contribution", spectypes.RoleSyncCommitteeContribution},
+	}
+
+	for _, rc := range roles {
+		t.Run(rc.name, func(t *testing.T) {
+			// Walk rounds 1..CutOffRound+2; beyond CutOffRound we've already crossed into
+			// "late message" territory but EstimatedRoundAt is still defined and should
+			// keep incrementing with the same rules.
+			for round := specqbft.Round(1); round <= CutOffRound+2; round++ {
+				offset := defaultTimeoutOptions.roundTimeoutOffset(rc.role, realSlotDuration, round)
+
+				// 1 ns before the boundary: round r has not yet timed out.
+				got, err := EstimatedRoundAt(rc.role, realSlotDuration, offset-time.Nanosecond)
+				require.NoError(t, err)
+				require.Equal(t, round, got, "round %d: 1ns before boundary", round)
+
+				// Exactly at the boundary: round r has timed out, we are now in round r+1.
+				got, err = EstimatedRoundAt(rc.role, realSlotDuration, offset)
+				require.NoError(t, err)
+				require.Equal(t, round+1, got, "round %d: exactly at boundary", round)
+
+				// 1 ns after the boundary: still in round r+1 (until next boundary).
+				got, err = EstimatedRoundAt(rc.role, realSlotDuration, offset+time.Nanosecond)
+				require.NoError(t, err)
+				require.Equal(t, round+1, got, "round %d: 1ns after boundary", round)
+			}
+		})
+	}
+}
+
+// TestEstimatedRoundAtEdgeCases covers inputs at and before slot start — the cases that the
+// removed early return (`if sinceFirstRoundChange <= 0 { return FirstRound, nil }`) used to
+// special-case. After the refactor the loop itself handles them; this test regression-guards
+// that behavior.
+func TestEstimatedRoundAtEdgeCases(t *testing.T) {
+	const realSlotDuration = 12 * time.Second
+
+	tt := []struct {
+		name         string
+		role         spectypes.RunnerRole
+		timeIntoSlot time.Duration
+	}{
+		// timeIntoSlot = 0: all roles should report FirstRound.
+		{name: "proposer at slot start", role: spectypes.RoleProposer, timeIntoSlot: 0},
+		{name: "committee at slot start", role: spectypes.RoleCommittee, timeIntoSlot: 0},
+		{name: "aggregator at slot start", role: spectypes.RoleAggregator, timeIntoSlot: 0},
+		{name: "sync_contribution at slot start", role: spectypes.RoleSyncCommitteeContribution, timeIntoSlot: 0},
+
+		// Negative timeIntoSlot (unreachable in practice — validateSlotTime catches early
+		// messages — but the pure function must still be well-defined).
+		{name: "proposer 1s early", role: spectypes.RoleProposer, timeIntoSlot: -time.Second},
+		{name: "committee 1s early", role: spectypes.RoleCommittee, timeIntoSlot: -time.Second},
+		{name: "committee 100s early", role: spectypes.RoleCommittee, timeIntoSlot: -100 * time.Second},
+
+		// Inside the committee head start (2s into a 4s head start) — still Round 1.
+		{name: "committee mid-head-start", role: spectypes.RoleCommittee, timeIntoSlot: 2 * time.Second},
+		{name: "committee end of head start", role: spectypes.RoleCommittee, timeIntoSlot: realSlotDuration / 3},
+		// Aggregator head start is 8s; at 7s we're still in Round 1.
+		{name: "aggregator mid-head-start", role: spectypes.RoleAggregator, timeIntoSlot: 7 * time.Second},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := EstimatedRoundAt(tc.role, realSlotDuration, tc.timeIntoSlot)
+			require.NoError(t, err)
+			require.Equal(t, specqbft.FirstRound, got)
+		})
+	}
+}
+
+// TestRoundTimeoutMatchesRoundTimeoutOffset is a regression guard for RoundTimeout vs the
+// shared roundTimeoutOffset helper. Non-proposer RoundTimeout is defined as
+//
+//	time.Until(slotStart + roundTimeoutOffset(headStart, round))
+//
+// so with GenesisTime pinned to `time.Now()` under synctest (frozen clock), slot 0 starts
+// "now" and the returned duration must exactly equal roundTimeoutOffset. If anyone changes
+// RoundTimeout's math without updating roundTimeoutOffset (or vice versa), this test fails.
+func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
+	// Proposer uses a relative timeout, not slot-start-based, so it's exempt from the
+	// "equals roundTimeoutOffset" property. We cover non-proposer roles only.
+	roles := []struct {
+		name string
+		role spectypes.RunnerRole
+	}{
+		{"committee", spectypes.RoleCommittee},
+		{"aggregator", spectypes.RoleAggregator},
+		{"sync_committee_contribution", spectypes.RoleSyncCommitteeContribution},
+	}
+
+	// Nest synctest inside t.Run (not the other way around) — synctest.Test disallows
+	// t.Run calls inside its bubble.
+	for _, rc := range roles {
+		t.Run(rc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				beaconConfig := setupTestBeaconConfig()
+				timer := New(t.Context(), beaconConfig, rc.role)
+
+				for round := specqbft.Round(1); round <= CutOffRound; round++ {
+					expected := defaultTimeoutOptions.roundTimeoutOffset(rc.role, beaconConfig.SlotDuration, round)
+					got := timer.RoundTimeout(specqbft.FirstHeight, round)
+					require.Equal(t, expected, got, "round %d", round)
+				}
+			})
+		})
+	}
+}
+
 func setupTestBeaconConfig() *networkconfig.Beacon {
 	config := *networkconfig.TestNetwork.Beacon
 	config.SlotDuration = slotDuration

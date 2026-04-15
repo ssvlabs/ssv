@@ -139,7 +139,7 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			mv := &messageValidator{netCfg: netCfg}
-			got, err := mv.currentEstimatedRound(tc.role, tc.timeIntoSlot)
+			got, err := mv.estimatedRoundAt(tc.role, tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -163,11 +163,32 @@ func TestMessageValidator_roundBelongsToAllowedSpread(t *testing.T) {
 		round        specqbft.Round
 		wantErr      error
 	}{
+		// Clamp boundary: at estimated round 2 (= allowedRoundsInPast), the
+		// `estimatedRound > allowedRoundsInPast` guard is false, so the subtraction branch is
+		// skipped and lowestAllowedRound stays at FirstRound.
 		{
-			name:         "first round is still allowed at the lower bound clamp",
+			name:         "clamp engaged at estimated round 2 still allows first round",
 			role:         spectypes.RoleCommittee,
-			timeIntoSlot: roundtimer.QuickTimeout * allowedRoundsInPast,
+			timeIntoSlot: netCfg.SlotDuration/3 + roundtimer.QuickTimeout, // estimated round = 2
 			round:        specqbft.FirstRound,
+		},
+		// Clamp boundary: at estimated round 3 the subtraction branch IS entered, and
+		// 3 - allowedRoundsInPast == FirstRound, so round 1 is still the lower bound.
+		// This is the first estimated round where the subtraction path matters.
+		{
+			name:         "subtraction at estimated round 3 still allows first round",
+			role:         spectypes.RoleCommittee,
+			timeIntoSlot: netCfg.SlotDuration/3 + roundtimer.QuickTimeout*2, // estimated round = 3
+			round:        specqbft.FirstRound,
+		},
+		// Clamp boundary: at estimated round 4 the subtraction yields lowestAllowed = 2,
+		// so round 1 is now below the allowed spread and must be rejected.
+		{
+			name:         "subtraction at estimated round 4 rejects first round",
+			role:         spectypes.RoleCommittee,
+			timeIntoSlot: netCfg.SlotDuration/3 + roundtimer.QuickTimeout*3, // estimated round = 4
+			round:        specqbft.FirstRound,
+			wantErr:      ErrEstimatedRoundNotInAllowedSpread,
 		},
 		{
 			name:         "rounds older than the allowed past spread are rejected",

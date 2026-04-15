@@ -412,7 +412,7 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(role spectypes.RunnerRole, timeIntoSlot time.Duration) (specqbft.Round, error) {
+func (mv *messageValidator) estimatedRoundAt(role spectypes.RunnerRole, timeIntoSlot time.Duration) (specqbft.Round, error) {
 	return roundtimer.EstimatedRoundAt(role, mv.netCfg.SlotDuration, timeIntoSlot)
 }
 
@@ -514,13 +514,13 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	timeIntoSlot := receivedAt.Sub(slotStartTime)
-	estimatedRoundMsgReceivedAt, err := mv.currentEstimatedRound(role, timeIntoSlot)
+	estimatedRoundMsgReceivedAt, err := mv.estimatedRoundAt(role, timeIntoSlot)
 	if err != nil {
 		return err
 	}
 
 	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot
-	// values, so we keep the lower bound relaxed until that changes in `roundtimer` package.
+	// values, so we keep the lower bound relaxed until that changes - https://github.com/ssvlabs/ssv/issues/2429.
 	lowestAllowedRound := specqbft.FirstRound
 	if estimatedRoundMsgReceivedAt > allowedRoundsInPast && role != spectypes.RoleProposer {
 		lowestAllowedRound = estimatedRoundMsgReceivedAt - allowedRoundsInPast
