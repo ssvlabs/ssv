@@ -1,4 +1,4 @@
-package nodeprobe
+package hprobe
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"sync/atomic"
 )
 
-type nodeMock struct {
+type componentMock struct {
 	healthy atomic.Pointer[error]
 }
 
-func (m *nodeMock) Healthy(context.Context) error {
+func (m *componentMock) Healthy(context.Context) error {
 	err := m.healthy.Load()
 	if err != nil {
 		return *err
@@ -18,25 +18,25 @@ func (m *nodeMock) Healthy(context.Context) error {
 	return nil
 }
 
-type stuckNodeMock struct{}
+type stuckComponentMock struct{}
 
-func (m *stuckNodeMock) Healthy(ctx context.Context) error {
+func (m *stuckComponentMock) Healthy(ctx context.Context) error {
 	<-ctx.Done() // stuck until the call is canceled
 	return ctx.Err()
 }
 
-type glitchyNodeMock struct {
+type glitchyComponentMock struct {
 	calledCnt        atomic.Uint64
 	glitchedCallsCnt uint64
 }
 
-func newGlitchyNodeMock(glitchedCallsCnt uint64) *glitchyNodeMock {
-	return &glitchyNodeMock{
+func newGlitchyComponentMock(glitchedCallsCnt uint64) *glitchyComponentMock {
+	return &glitchyComponentMock{
 		glitchedCallsCnt: glitchedCallsCnt,
 	}
 }
 
-func (m *glitchyNodeMock) Healthy(ctx context.Context) error {
+func (m *glitchyComponentMock) Healthy(ctx context.Context) error {
 	m.calledCnt.Add(1)
 	if m.calledCnt.Load() > m.glitchedCallsCnt {
 		return nil
