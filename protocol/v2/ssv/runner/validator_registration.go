@@ -108,10 +108,10 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	root := roots[0]
 
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetFirstShare().ValidatorPubKey[:], r.GetFirstShare().ValidatorIndex)
+	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetFirstShare().Committee, r.GetFirstShare().ValidatorIndex)
+		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
@@ -204,7 +204,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetFirstShare().ValidatorPubKey[:], r.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode validator registration partial sig message: %w", err)
@@ -238,7 +238,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 }
 
 func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slot) (*v1.ValidatorRegistration, error) {
-	validatorPubKey := r.GetFirstShare().ValidatorPubKey
+	validatorPubKey := r.GetShare().ValidatorPubKey
 
 	feeRecipient, err := r.feeRecipientProvider.GetFeeRecipient(validatorPubKey)
 	if err != nil {

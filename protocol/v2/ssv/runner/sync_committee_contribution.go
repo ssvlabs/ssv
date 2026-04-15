@@ -112,11 +112,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	for _, root := range roots {
 		// reconstruct selection proof sig
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-		sig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetFirstShare().ValidatorPubKey[:], r.GetFirstShare().ValidatorIndex)
+		sig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
-				r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetFirstShare().Committee, r.GetFirstShare().ValidatorIndex)
+				r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
 			return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 		}
@@ -242,7 +242,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		Messages: msgs,
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetFirstShare().ValidatorPubKey[:], r.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -319,11 +319,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	start := time.Now()
 	for _, root := range roots {
 		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-		sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetFirstShare().ValidatorPubKey[:], r.GetFirstShare().ValidatorIndex)
+		sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
-				r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetFirstShare().Committee, r.GetFirstShare().ValidatorIndex)
+				r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
 			return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
 		}
@@ -341,7 +341,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 				continue // not the correct root
 			}
 
-			signedContrib, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetFirstShare().ValidatorPubKey[:], r.GetFirstShare().ValidatorIndex)
+			signedContrib, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 			if err != nil {
 				return fmt.Errorf("could not reconstruct contribution and proof sig: %w", err)
 			}
@@ -508,7 +508,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		r.rootToSyncCommitteeIdx[msg.SigningRoot] = phase0.ValidatorIndex(vIdx)
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetFirstShare().ValidatorPubKey[:], r.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode partial signature messages: %w", err)

@@ -31,7 +31,7 @@ type Getters interface {
 	HasRunningQBFTInstance() bool
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
-	GetFirstShare() *spectypes.Share
+	GetShare() *spectypes.Share
 	GetRole() spectypes.RunnerRole
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
@@ -124,11 +124,12 @@ func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 	return b.Share
 }
 
-// GetFirstShare returns an arbitrary share from the runner's share map.
-// Single-share runners (all roles except Committee) rely on the constructor
-// invariant that len(Share) == 1, so "first" is unambiguous for them.
-// CommitteeRunner owns multiple shares and should iterate b.Share instead.
-func (b *BaseRunner) GetFirstShare() *spectypes.Share {
+// GetShare returns the runner's share. Intended for single-share runners
+// (all roles except Committee), whose constructors enforce len(Share) == 1.
+// CommitteeRunner owns multiple shares and must iterate b.Share directly —
+// calling GetShare on it returns an arbitrary entry (Go map iteration order
+// is randomized) and is almost certainly a bug.
+func (b *BaseRunner) GetShare() *spectypes.Share {
 	for _, share := range b.Share {
 		return share
 	}
