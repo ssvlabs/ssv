@@ -193,30 +193,41 @@ func TestMessageValidator_roundBelongsToAllowedSpread(t *testing.T) {
 
 	tt := []struct {
 		name           string
+		role           spectypes.RunnerRole
 		sinceSlotStart time.Duration
 		round          specqbft.Round
 		wantErr        error
 	}{
 		{
 			name:           "first round is still allowed at the lower bound clamp",
+			role:           spectypes.RoleCommittee,
 			sinceSlotStart: roundtimer.QuickTimeout * allowedRoundsInPast,
 			round:          specqbft.FirstRound,
 		},
 		{
 			name:           "rounds older than the allowed past spread are rejected",
-			sinceSlotStart: roundtimer.QuickTimeout * 5,
+			role:           spectypes.RoleCommittee,
+			sinceSlotStart: netCfg.SlotDuration/3 + roundtimer.QuickTimeout*5,
 			round:          specqbft.FirstRound + 2,
 			wantErr:        ErrEstimatedRoundNotInAllowedSpread,
 		},
 		{
 			name:           "lowest round in the allowed past spread is accepted",
-			sinceSlotStart: roundtimer.QuickTimeout * 5,
+			role:           spectypes.RoleCommittee,
+			sinceSlotStart: netCfg.SlotDuration/3 + roundtimer.QuickTimeout*5,
 			round:          specqbft.FirstRound + 3,
+		},
+		{
+			name:           "proposer still allows first round when slot-start estimate advanced",
+			role:           spectypes.RoleProposer,
+			sinceSlotStart: roundtimer.QuickTimeout * 5,
+			round:          specqbft.FirstRound,
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			signedSSVMessage.SSVMessage.MsgID = spectypes.NewMsgID(netCfg.DomainType, make([]byte, 48), tc.role)
 			err := mv.roundBelongsToAllowedSpread(
 				signedSSVMessage,
 				&specqbft.Message{

@@ -531,7 +531,12 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 		estimatedRoundMsgReceivedAt = currentEstimatedRound
 	}
 
-	lowestAllowed := lowestAllowedRound(estimatedRoundMsgReceivedAt)
+	lowestAllowed := specqbft.FirstRound
+	if role != spectypes.RoleProposer {
+		// Proposer round timeouts are still relative rather than slot-start-based,
+		// so we keep the lower bound relaxed until those calculations are aligned.
+		lowestAllowed = lowestAllowedRound(estimatedRoundMsgReceivedAt)
+	}
 	// No overflow bug here: estimatedRound comes from elapsed slot time,
 	// so adding allowedRoundsInFuture cannot get close to uint64 overflow.
 	highestAllowed := estimatedRoundMsgReceivedAt + allowedRoundsInFuture
