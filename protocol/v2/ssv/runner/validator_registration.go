@@ -188,7 +188,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		return err
 	}
 
-	vr, err := r.buildValidatorRegistration(duty.DutySlot())
+	vr, err := r.buildValidatorRegistration(validatorDuty.DutySlot())
 	if err != nil {
 		return fmt.Errorf("could not calculate validator registration: %w", err)
 	}

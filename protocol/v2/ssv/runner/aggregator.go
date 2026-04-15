@@ -137,7 +137,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return err
 	}

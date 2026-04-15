@@ -22,15 +22,18 @@ func validatorDutyFromDuty(duty spectypes.Duty) (*spectypes.ValidatorDuty, error
 	return validatorDuty, nil
 }
 
-func validatorDutyFromState(state *State) (*spectypes.ValidatorDuty, error) {
-	if state == nil {
+func (b *BaseRunner) currentValidatorDuty() (*spectypes.ValidatorDuty, error) {
+	if b == nil {
+		return nil, fmt.Errorf("runner is nil")
+	}
+	if b.State == nil {
 		return nil, fmt.Errorf("runner state is nil")
 	}
-	if state.CurrentDuty == nil {
+	if b.State.CurrentDuty == nil {
 		return nil, fmt.Errorf("current duty is nil")
 	}
 
-	validatorDuty, err := validatorDutyFromDuty(state.CurrentDuty)
+	validatorDuty, err := validatorDutyFromDuty(b.State.CurrentDuty)
 	if err != nil {
 		return nil, fmt.Errorf("current duty: %w", err)
 	}
@@ -54,15 +57,18 @@ func committeeDutyFromDuty(duty spectypes.Duty) (*spectypes.CommitteeDuty, error
 	return committeeDuty, nil
 }
 
-func committeeDutyFromState(state *State) (*spectypes.CommitteeDuty, error) {
-	if state == nil {
+func (b *BaseRunner) currentCommitteeDuty() (*spectypes.CommitteeDuty, error) {
+	if b == nil {
+		return nil, fmt.Errorf("runner is nil")
+	}
+	if b.State == nil {
 		return nil, fmt.Errorf("runner state is nil")
 	}
-	if state.CurrentDuty == nil {
+	if b.State.CurrentDuty == nil {
 		return nil, fmt.Errorf("current duty is nil")
 	}
 
-	committeeDuty, err := committeeDutyFromDuty(state.CurrentDuty)
+	committeeDuty, err := committeeDutyFromDuty(b.State.CurrentDuty)
 	if err != nil {
 		return nil, fmt.Errorf("current duty: %w", err)
 	}

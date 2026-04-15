@@ -232,11 +232,11 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("current validator duty: %w", err)
 	}
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 
 	validatorIndex := duty.ValidatorIndex
 	return &phase0.VoluntaryExit{

@@ -160,7 +160,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		return nil
 	}
 
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
 	)
 
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return err
 	}
@@ -422,7 +422,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 	contrib altair.SyncCommitteeContribution,
 	proof phase0.BLSSignature,
 ) (*altair.ContributionAndProof, phase0.Root, error) {
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return nil, phase0.Root{}, err
 	}
@@ -446,7 +446,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 }
 
 func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return nil, phase0.DomainType{}, err
 	}

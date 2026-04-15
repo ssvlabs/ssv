@@ -235,23 +235,23 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
-	committeeDuty, err := committeeDutyFromState(r.State)
+	committeeDuty, err := r.currentCommitteeDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current committee duty: %w", err)
 	}
-	slot := committeeDuty.DutySlot()
+	committeeDutySlot := committeeDuty.DutySlot()
 
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     slot,
+		Slot:     committeeDutySlot,
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(committeeDutySlot)
 	version, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 
 	span.SetAttributes(
-		observability.BeaconSlotAttribute(slot),
+		observability.BeaconSlotAttribute(committeeDutySlot),
 		observability.BeaconEpochAttribute(epoch),
 		observability.BeaconVersionAttribute(version),
 		observability.DutyCountAttribute(len(committeeDuty.ValidatorDuties)),
@@ -278,7 +278,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 
 	beaconVote, err = beaconVoteFromEncoder(decidedValue)
 	if err != nil {
-		return err
+		return fmt.Errorf("beacon vote: %w", err)
 	}
 
 	// The worker pool will throttle the parallel processing of validator duties.
@@ -903,10 +903,9 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]any)
-	duty := r.State.CurrentDuty
-	committeeDuty, err := committeeDutyFromState(r.State)
+	committeeDuty, err := r.currentCommitteeDuty()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("current committee duty: %w", err)
 	}
 	beaconVoteData := r.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
@@ -914,7 +913,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
 	}
 
-	slot := duty.DutySlot()
+	slot := committeeDuty.DutySlot()
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	dataVersion, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 

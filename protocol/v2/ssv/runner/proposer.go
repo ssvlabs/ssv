@@ -142,7 +142,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	logger.Debug(waitedOutProposerDelayEvent)
 	span.AddEvent(waitedOutProposerDelayEvent)
 
-	duty, err = validatorDutyFromState(r.State)
+	duty, err = r.currentValidatorDuty()
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		span.AddEvent("decided has a vanilla block")
 	}
 
-	duty, err := validatorDutyFromState(r.State)
+	duty, err := r.currentValidatorDuty()
 	if err != nil {
 		return err
 	}
