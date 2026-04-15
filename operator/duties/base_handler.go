@@ -50,8 +50,6 @@ type baseHandler struct {
 
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
-
-	indicesChanged bool
 }
 
 func (h *baseHandler) Setup(ctx context.Context, opts SetupOptions) {
