@@ -138,7 +138,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
-			if reorgEvent.Current && h.shouldFetchNextPeriod(currentSlot) {
+			if reorgEvent.CurrentDutyDependentRootChanged && h.shouldFetchNextPeriod(currentSlot) {
 				h.duties.Reset(currentPeriod + 1)
 				h.fetchNextPeriod = true
 			}
