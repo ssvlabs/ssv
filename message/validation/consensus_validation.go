@@ -248,13 +248,6 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 	}
 
-	if len(signedSSVMessage.OperatorIDs) == 1 {
-		// Rule: Round must not be smaller than current peer's round -1 or +1. Only for non-decided messages
-		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -291,6 +284,15 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - duty's starting slot + 3 (other types)
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return err
+	}
+
+	if len(signedSSVMessage.OperatorIDs) == 1 {
+		// Rule: Round must be between estimated round - allowedRoundsInPast and
+		// estimated round + allowedRoundsInFuture. Only for non-decided messages.
+		// Keep this after slot-time and slot-advance validation so late/old-slot messages preserve their original errors.
+		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
+			return err
+		}
 	}
 
 	// Rule: valid number of duties per epoch:
@@ -428,6 +430,14 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 	return estimatedRound, nil
 }
 
+func lowestAllowedRound(estimatedRound specqbft.Round) specqbft.Round {
+	if estimatedRound <= specqbft.FirstRound+allowedRoundsInPast {
+		return specqbft.FirstRound
+	}
+
+	return estimatedRound - allowedRoundsInPast
+}
+
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
 	switch msgType {
 	case specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType:
@@ -534,8 +544,9 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 		estimatedRound = currentEstimatedRound
 	}
 
-	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
-	lowestAllowed := /*estimatedRound - allowedRoundsInPast*/ specqbft.FirstRound
+	lowestAllowed := lowestAllowedRound(estimatedRound)
+	// No overflow bug here: estimatedRound comes from elapsed slot time,
+	// so adding allowedRoundsInFuture cannot get close to uint64 overflow.
 	highestAllowed := estimatedRound + allowedRoundsInFuture
 
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()

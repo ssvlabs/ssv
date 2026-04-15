@@ -1628,7 +1628,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		signedSSVMessage := generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
-			message.Height = 8
+			message.Height = specqbft.Height(slot)
 		})
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1637,7 +1637,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		signedSSVMessage = generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
-			message.Height = 4
+			message.Height = specqbft.Height(slot - 4)
 		})
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
