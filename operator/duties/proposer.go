@@ -181,7 +181,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				// slot-ticker from executing duties even if some of them might not be up to date). Since the
 				// reorg can happen closer to the end of the current slot we wouldn't want to set the deadline
 				// to currentSlot+1 as that might be too short (hence setting it to currentSlot+2).
-				reorgCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+2))
+				reorgCtx, cancel := context.WithDeadline(ctx, h.netCfg.SlotStartTime(currentSlot+2))
 				defer cancel()
 
 				// 1) Declare intents.
@@ -210,7 +210,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 // HandleInitialDuties fetches & prepares the duties for the current and next epochs.
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
 	// initCtx ensures we don't block indefinitely in case we can't fetch the duties on startup.
-	initCtx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration)
+	initCtx, cancel := context.WithTimeout(ctx, h.netCfg.SlotDuration)
 	defer cancel()
 
 	currentSlot := h.netCfg.EstimatedCurrentSlot()

@@ -376,11 +376,11 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
 
-		if event.Slot < s.beaconConfig.EstimatedCurrentSlot() {
+		if event.Slot < s.netCfg.EstimatedCurrentSlot() {
 			// No need to process outdated events here.
 			return
 		}
-		if event.Slot > s.beaconConfig.EstimatedCurrentSlot() {
+		if event.Slot > s.netCfg.EstimatedCurrentSlot() {
 			// We don't handle future events to keep things simple.
 			logger.Warn("got future head event from EL, most likely cause is clock-skew between SSV node and EL")
 			return

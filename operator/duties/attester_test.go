@@ -1127,7 +1127,7 @@ func TestScheduler_Attester_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 			},
 		})
 		go func() {
-			time.Sleep(scheduler.beaconConfig.IntervalDuration() + 1*time.Millisecond)
+			time.Sleep(scheduler.netCfg.IntervalDuration() + 1*time.Millisecond)
 			scheduler.indicesChg <- struct{}{}
 		}()
 
@@ -1135,13 +1135,13 @@ func TestScheduler_Attester_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: on slot 1 the deferred indices change is processed and duties are fetched.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: on slot 2 the fetched duty executes.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedAttesterDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1184,7 +1184,7 @@ func TestScheduler_Attester_Reorg_Current_Epoch_Transition(t *testing.T) {
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch*2-1)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
 			scheduler,
@@ -1215,7 +1215,7 @@ func TestScheduler_Attester_Reorg_Current_Epoch_Transition(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: enter the new epoch with no extra action.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch * 2))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
@@ -1247,7 +1247,7 @@ func TestScheduler_Attester_Reorg_Current_Epoch_Transition(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: the already-fetched current-epoch duty still executes on slot 25, proving no current-epoch refetch.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+1))
 		expectedCurrent := expectedExecutedAttesterDuties(handler, initialEpoch2Duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expectedCurrent))
 
@@ -1256,11 +1256,11 @@ func TestScheduler_Attester_Reorg_Current_Epoch_Transition(t *testing.T) {
 
 		// STEP 6: next-epoch refetch still happens later at the normal prefetch point.
 		for slot := phase0.Slot(testSlotsPerEpoch*2 + 2); slot < phase0.Slot(testSlotsPerEpoch*2+5); slot++ {
-			waitForSlotN(scheduler.beaconConfig, slot)
+			waitForSlotN(scheduler.netCfg.Beacon, slot)
 			ticker.Send(slot)
 			waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 		}
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+5))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch*2+5))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 5))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(3))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -1316,13 +1316,13 @@ func TestScheduler_Attester_Retry_Current_Epoch_Fetch_On_Next_Tick(t *testing.T)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: fail the retry on slot 1.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(1))
 		ticker.Send(phase0.Slot(1))
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry again on slot 2, succeed, and execute the duty in the same slot.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(0))
 		expected := expectedExecutedAttesterDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1396,7 +1396,7 @@ func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Mid_Epoch(t *tes
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch/2)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch/2)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch/2)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
 			scheduler,
@@ -1423,19 +1423,19 @@ func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Mid_Epoch(t *tes
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 1))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2+2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 2))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: retry on the next tick and succeed.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+3))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch/2+3))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 3))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -1474,7 +1474,7 @@ func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-3)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-3)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch-3)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
 			scheduler,
@@ -1501,19 +1501,19 @@ func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch-2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch-2))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch - 2))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch-1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch-1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch - 1))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 5: on the next tick, the previously next epoch becomes current, fetch succeeds, and the duty executes.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedAttesterDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
@@ -1549,7 +1549,7 @@ func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
 		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-1)
-		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-1)
+		waitForSlotN(scheduler.netCfg.Beacon, testSlotsPerEpoch-1)
 		fetchedEpochs := make(chan phase0.Epoch, 100)
 		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
 			scheduler,
@@ -1571,19 +1571,19 @@ func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 
 		// STEP 2: on the epoch transition tick, retry the previously next epoch as the now current epoch and fail.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: retry on the next tick and fail again.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+1))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+1))
 		ticker.Send(phase0.Slot(testSlotsPerEpoch + 1))
 		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 4: retry on the next tick, succeed, and execute the duty in the same slot.
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
+		waitForSlotN(scheduler.netCfg.Beacon, phase0.Slot(testSlotsPerEpoch+2))
 		duties, _ := dutiesMap.Get(phase0.Epoch(1))
 		expected := expectedExecutedAttesterDuties(handler, duties)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
