@@ -35,6 +35,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
+
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
 	hvalidators "github.com/ssvlabs/ssv/api/handlers/validators"
@@ -406,13 +408,14 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var keyManager ekm.KeyManager
+		ekmDB := ekmadapter.NewDatabaseAdapter(db)
 		if !cfg.ExporterOptions.Enabled && usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
 				logger,
 				networkConfig.Beacon,
 				ssvSignerClient,
-				db,
+				ekmDB,
 				operatorDataStore.GetOperatorID,
 			)
 			if err != nil {
@@ -422,7 +425,7 @@ var StartNodeCmd = &cobra.Command{
 			keyManager = remoteKeyManager
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
 		} else if !cfg.ExporterOptions.Enabled {
-			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig.Beacon, operatorPrivKey)
+			localKeyManager, err := ekm.NewLocalKeyManager(logger, ekmDB, networkConfig.Beacon, operatorPrivKey)
 			if err != nil {
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
