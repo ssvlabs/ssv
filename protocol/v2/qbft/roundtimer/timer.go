@@ -39,7 +39,9 @@ type TimeoutOptions struct {
 	slow           time.Duration
 }
 
-func baseRoundStartDelay(role spectypes.RunnerRole, slotDuration time.Duration) time.Duration {
+// firstRoundChangeDelay returns the time since slot start when Round 1 -> Round 2 change is supposed to happen,
+// based on the runner role.
+func firstRoundChangeDelay(role spectypes.RunnerRole, slotDuration time.Duration) time.Duration {
 	switch role {
 	case spectypes.RoleCommittee:
 		return slotDuration / 3
@@ -50,8 +52,22 @@ func baseRoundStartDelay(role spectypes.RunnerRole, slotDuration time.Duration) 
 	}
 }
 
-func estimatedRoundAtSince(sinceRoundStart time.Duration) (specqbft.Round, error) {
-	delta, err := casts.DurationToUint64(sinceRoundStart / QuickTimeout)
+// EstimatedRoundAt returns the round that should be current for the given role (duty-type) at the provided
+// elapsed time since slot start.
+// Round 1, Round 2, ... Round QuickTimeoutThreshold are considered "quick" (aka short rounds).
+// Round QuickTimeoutThreshold+1, Round QuickTimeoutThreshold+2, ... are considered "slow" (aka long rounds).
+//
+// IMPORTANT: keep this aligned with RoundTimeout.
+func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time.Duration) (specqbft.Round, error) {
+	// sinceFirstRoundChange is time-into-slot since 1st round-change (Round 1 -> Round 2). This value is different
+	// for every duty type.
+	sinceFirstRoundChange := timeIntoSlot - firstRoundChangeDelay(role, slotDuration)
+	if sinceFirstRoundChange <= 0 {
+		return specqbft.FirstRound, nil
+	}
+
+	// See if we are within "quick" rounds area.
+	delta, err := casts.DurationToUint64(sinceFirstRoundChange / QuickTimeout)
 	if err != nil {
 		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
 	}
@@ -59,24 +75,13 @@ func estimatedRoundAtSince(sinceRoundStart time.Duration) (specqbft.Round, error
 		return currentQuickRound, nil
 	}
 
-	sinceFirstSlowRound := sinceRoundStart - (time.Duration(QuickTimeoutThreshold) * QuickTimeout)
-	delta, err = casts.DurationToUint64(sinceFirstSlowRound / SlowTimeout)
+	// We are in "slow" rounds area.
+	sinceFirstSlowRoundChange := sinceFirstRoundChange - (time.Duration(QuickTimeoutThreshold) * QuickTimeout)
+	delta, err = casts.DurationToUint64(sinceFirstSlowRoundChange / SlowTimeout)
 	if err != nil {
 		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
 	}
-
-	return QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(delta), nil
-}
-
-// EstimatedRoundAt returns the round that should be current for the given role
-// at the provided elapsed time since slot start. Keep this aligned with RoundTimeout.
-func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, sinceSlotStart time.Duration) (specqbft.Round, error) {
-	sinceRoundStart := sinceSlotStart - baseRoundStartDelay(role, slotDuration)
-	if sinceRoundStart <= 0 {
-		return specqbft.FirstRound, nil
-	}
-
-	return estimatedRoundAtSince(sinceRoundStart)
+	return specqbft.FirstRound + QuickTimeoutThreshold + specqbft.Round(delta), nil
 }
 
 // deferredTimeout stores a TimeoutForRound request that arrived before the
@@ -149,7 +154,7 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // and the additional timeout is added based on the round number.
 func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
 	// Initialize duration to zero
-	baseDuration := baseRoundStartDelay(t.role, t.beaconConfig.SlotDuration)
+	baseDuration := firstRoundChangeDelay(t.role, t.beaconConfig.SlotDuration)
 	if baseDuration == 0 {
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick

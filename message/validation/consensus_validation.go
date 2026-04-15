@@ -286,9 +286,10 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	if len(signedSSVMessage.OperatorIDs) == 1 {
-		// Rule: Round must be between estimated round - allowedRoundsInPast and
-		// estimated round + allowedRoundsInFuture. Only for non-decided messages.
-		// Keep this after slot-time and slot-advance validation so late/old-slot messages preserve their original errors.
+		// Rule: Round must be between `estimated round msg received at` - allowedRoundsInPast and
+		// `estimated round msg received at` + allowedRoundsInFuture. Only for non-decided messages.
+		// Keep this after slot-time and slot-advance validation so late/old-slot messages preserve
+		// their original errors.
 		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
 			return err
 		}
@@ -411,16 +412,8 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(role spectypes.RunnerRole, sinceSlotStart time.Duration) (specqbft.Round, error) {
-	return roundtimer.EstimatedRoundAt(role, mv.netCfg.SlotDuration, sinceSlotStart)
-}
-
-func lowestAllowedRound(estimatedRound specqbft.Round) specqbft.Round {
-	if estimatedRound < specqbft.FirstRound+allowedRoundsInPast {
-		return specqbft.FirstRound
-	}
-
-	return estimatedRound - allowedRoundsInPast
+func (mv *messageValidator) currentEstimatedRound(role spectypes.RunnerRole, timeIntoSlot time.Duration) (specqbft.Round, error) {
+	return roundtimer.EstimatedRoundAt(role, mv.netCfg.SlotDuration, timeIntoSlot)
 }
 
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
@@ -520,31 +513,26 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	sinceSlotStart := time.Duration(0)
-	estimatedRoundMsgReceivedAt := specqbft.FirstRound
-	if receivedAt.After(slotStartTime) {
-		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		currentEstimatedRound, err := mv.currentEstimatedRound(role, sinceSlotStart)
-		if err != nil {
-			return err
-		}
-		estimatedRoundMsgReceivedAt = currentEstimatedRound
+	timeIntoSlot := receivedAt.Sub(slotStartTime)
+	estimatedRoundMsgReceivedAt, err := mv.currentEstimatedRound(role, timeIntoSlot)
+	if err != nil {
+		return err
 	}
 
-	lowestAllowed := specqbft.FirstRound
-	if role != spectypes.RoleProposer {
-		// Proposer round timeouts are still relative rather than slot-start-based,
-		// so we keep the lower bound relaxed until those calculations are aligned.
-		lowestAllowed = lowestAllowedRound(estimatedRoundMsgReceivedAt)
+	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot
+	// values, so we keep the lower bound relaxed until that changes in `rountimer` package.
+	lowestAllowedRound := specqbft.FirstRound
+	if estimatedRoundMsgReceivedAt > allowedRoundsInPast && role != spectypes.RoleProposer {
+		lowestAllowedRound = estimatedRoundMsgReceivedAt - allowedRoundsInPast
 	}
-	// No overflow bug here: estimatedRound comes from elapsed slot time,
+	// No overflow bug here: estimatedRoundMsgReceivedAt comes from elapsed slot time,
 	// so adding allowedRoundsInFuture cannot get close to uint64 overflow.
-	highestAllowed := estimatedRoundMsgReceivedAt + allowedRoundsInFuture
+	highestAllowedRound := estimatedRoundMsgReceivedAt + allowedRoundsInFuture
 
-	if consensusMessage.Round < lowestAllowed || consensusMessage.Round > highestAllowed {
+	if consensusMessage.Round < lowestAllowedRound || consensusMessage.Round > highestAllowedRound {
 		e := ErrEstimatedRoundNotInAllowedSpread
 		e.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
-		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, message.RunnerRoleToString(role), sinceSlotStart)
+		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowedRound, highestAllowedRound, message.RunnerRoleToString(role), timeIntoSlot)
 		return e
 	}
 
