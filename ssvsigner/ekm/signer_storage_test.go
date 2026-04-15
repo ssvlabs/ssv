@@ -16,12 +16,6 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
-	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/pebble"
-	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 func _byteArray(input string) []byte {
@@ -29,35 +23,32 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getBaseStorage(t *testing.T, logger *zap.Logger) (basedb.Database, error) {
-	t.Helper()
+func getBaseStorage(_ *zap.Logger) (*testDB, error) {
+	return newTestMemoryDB(), nil
+}
 
-	db, err := pebble.NewTempDB(logger, basedb.Options{})
+func newStorageForTest(t *testing.T) (Storage, func()) {
+	logger := testLogger(t)
+	db, err := getBaseStorage(logger)
 	if err != nil {
-		return nil, err
+		return nil, func() {}
 	}
-	t.Cleanup(func() { _ = db.Close() })
-	return db, nil
+
+	s := NewSignerStorage(db, testBeaconConfig().Name, logger)
+	return s, func() {
+		db.Close()
+	}
 }
 
-func newStorageForTest(t *testing.T) Storage {
-	logger := log.TestLogger(t)
-	db, err := getBaseStorage(t, logger)
-	require.NoError(t, err)
-
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
-	return s
-}
-
-func testWallet(t *testing.T) (core.Wallet, Storage) {
-	threshold.Init()
+func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
+	initBLSTest()
 
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
 
 	index := 1
 
-	signerStorage := newStorageForTest(t)
+	signerStorage, done := newStorageForTest(t)
 
 	wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 	require.NoError(t, signerStorage.SaveWallet(wallet))
@@ -65,13 +56,14 @@ func testWallet(t *testing.T) (core.Wallet, Storage) {
 	_, err := wallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
 	require.NoError(t, err)
 
-	return wallet, signerStorage
+	return wallet, signerStorage, done
 }
 
 // TestWalletAndAccountManagement tests wallet and account operations.
 func TestWalletAndAccountManagement(t *testing.T) {
 	t.Run("OpeningAccounts", func(t *testing.T) {
-		wallet, _ := testWallet(t)
+		wallet, _, done := testWallet(t)
+		defer done()
 
 		seed := _byteArray("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1fff")
 
@@ -102,7 +94,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 	t.Run("OpenWallet", func(t *testing.T) {
 		t.Run("SuccessfulOpen", func(t *testing.T) {
-			wallet, signerStorage := testWallet(t)
+			wallet, signerStorage, done := testWallet(t)
+			defer done()
 
 			// Verify original wallet
 			require.NotNil(t, wallet)
@@ -116,7 +109,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 		})
 
 		t.Run("NonExistentWallet", func(t *testing.T) {
-			signerStorage := newStorageForTest(t)
+			signerStorage, done := newStorageForTest(t)
+			defer done()
 
 			w, err := signerStorage.OpenWallet()
 			require.Error(t, err)
@@ -125,11 +119,12 @@ func TestWalletAndAccountManagement(t *testing.T) {
 		})
 
 		t.Run("EmptyWalletValue", func(t *testing.T) {
-			signerStorage := newStorageForTest(t)
+			signerStorage, done := newStorageForTest(t)
+			defer done()
 
 			// Use unexported field to set up test condition - store empty value
 			s := signerStorage.(*storage)
-			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte{})
+			err := s.db.Set(nil, s.objPrefix(walletPrefix), []byte(walletPath), []byte{})
 			require.NoError(t, err)
 
 			// Attempt to open wallet
@@ -140,11 +135,12 @@ func TestWalletAndAccountManagement(t *testing.T) {
 		})
 
 		t.Run("InvalidWalletJSON", func(t *testing.T) {
-			signerStorage := newStorageForTest(t)
+			signerStorage, done := newStorageForTest(t)
+			defer done()
 
 			// Use unexported field to set up test condition - store invalid JSON
 			s := signerStorage.(*storage)
-			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte("{invalid-json}"))
+			err := s.db.Set(nil, s.objPrefix(walletPrefix), []byte(walletPath), []byte("{invalid-json}"))
 			require.NoError(t, err)
 
 			// Attempt to open wallet
@@ -157,7 +153,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 	t.Run("OpenAccount", func(t *testing.T) {
 		t.Run("ExistingAccount", func(t *testing.T) {
-			_, signerStorage := testWallet(t)
+			_, signerStorage, done := testWallet(t)
+			defer done()
 
 			accounts, err := signerStorage.ListAccounts()
 			require.NoError(t, err)
@@ -170,7 +167,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 		})
 
 		t.Run("NonExistentAccount", func(t *testing.T) {
-			wallet, _ := testWallet(t)
+			wallet, _, done := testWallet(t)
+			defer done()
 
 			account, err := wallet.AccountByID(uuid.New())
 			require.EqualError(t, err, "account not found")
@@ -180,7 +178,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 	t.Run("AccountSerialization", func(t *testing.T) {
 		t.Run("ValidAccountRoundtrip", func(t *testing.T) {
-			_, signerStorage := testWallet(t)
+			_, signerStorage, done := testWallet(t)
+			defer done()
 
 			// Get an existing account
 			accounts, err := signerStorage.ListAccounts()
@@ -208,7 +207,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 	})
 
 	t.Run("InvalidAccountJSON", func(t *testing.T) {
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		s := signerStorage.(*storage)
 		result, err := s.decodeAccount([]byte("{invalid-json}"))
@@ -218,7 +218,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 	})
 
 	t.Run("ValidAccountJSON", func(t *testing.T) {
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		// Get an existing account and marshal it
 		accounts, err := signerStorage.ListAccounts()
@@ -259,7 +260,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
-				wallet, signerStorage := testWallet(t)
+				wallet, signerStorage, done := testWallet(t)
+				defer done()
 
 				// set encryptor
 				if test.encryptor != nil {
@@ -299,7 +301,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 	})
 
 	t.Run("ListAccounts", func(t *testing.T) {
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		accounts, err := signerStorage.ListAccounts()
 		require.NoError(t, err)
@@ -307,7 +310,8 @@ func TestWalletAndAccountManagement(t *testing.T) {
 	})
 
 	t.Run("DeleteAccount", func(t *testing.T) {
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		accts, err := signerStorage.ListAccounts()
 		require.NoError(t, err)
@@ -327,14 +331,16 @@ func TestStorageUtilityFunctions(t *testing.T) {
 	t.Run("Name", func(t *testing.T) {
 		t.Parallel()
 
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		name := signerStorage.Name()
 		require.Equal(t, "SSV Storage", name)
 	})
 
 	t.Run("DropRegistryData", func(t *testing.T) {
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		err := signerStorage.DropRegistryData()
 		require.NoError(t, err)
@@ -343,23 +349,25 @@ func TestStorageUtilityFunctions(t *testing.T) {
 	t.Run("SetEncryptionKey", func(t *testing.T) {
 		t.Parallel()
 
-		logger := log.TestLogger(t)
+		logger := testLogger(t)
 
-		db, err := getBaseStorage(t, logger)
+		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
+		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := NewSignerStorage(db, testBeaconConfig().Name, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
 	t.Run("DataEncryption", func(t *testing.T) {
 		t.Parallel()
 
-		logger := log.TestLogger(t)
-		db, err := getBaseStorage(t, logger)
+		logger := testLogger(t)
+		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
+		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := NewSignerStorage(db, testBeaconConfig().Name, logger)
 
 		// create a test account
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -420,7 +428,8 @@ func TestStorageUtilityFunctions(t *testing.T) {
 // TestSlashingProtection tests slashing protection data storage and retrieval.
 func TestSlashingProtection(t *testing.T) {
 	t.Run("AttestationData", func(t *testing.T) {
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		testCases := []struct {
 			name    string
@@ -513,7 +522,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
+			err := s.db.Set(nil, s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
 			require.NoError(t, err)
 
 			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
@@ -527,7 +536,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte{})
+			err := s.db.Set(nil, s.objPrefix(highestAttPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
 			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
@@ -576,7 +585,8 @@ func TestSlashingProtection(t *testing.T) {
 	})
 
 	t.Run("ProposalData", func(t *testing.T) {
-		_, signerStorage := testWallet(t)
+		_, signerStorage, done := testWallet(t)
+		defer done()
 
 		testCases := []struct {
 			name     string
@@ -638,7 +648,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, []byte{})
+			err := s.db.Set(nil, s.objPrefix(highestProposalPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
 			slot, found, err := signerStorage.RetrieveHighestProposal(pubKey)

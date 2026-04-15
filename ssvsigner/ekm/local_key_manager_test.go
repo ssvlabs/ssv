@@ -18,10 +18,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 const (
@@ -30,16 +27,16 @@ const (
 )
 
 func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) KeyManager {
-	threshold.Init()
+	initBLSTest()
 
-	logger := log.TestLogger(t)
+	logger := testLogger(t)
 
-	db, err := getBaseStorage(t, logger)
+	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	network := networkconfig.TestNetwork
+	network := testBeaconConfig()
 
-	km, err := NewLocalKeyManager(logger, db, network.Beacon, operatorPrivateKey)
+	km, err := NewLocalKeyManager(logger, db, network, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -69,18 +66,25 @@ func TestEncryptedKeyManager(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create account with key 1.
-	threshold.Init()
+	initBLSTest()
 
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
 
 	index := 0
-	logger := log.TestLogger(t)
-	db, err := getBaseStorage(t, logger)
+	logger := testLogger(t)
+	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	signerStorage := NewSignerStorage(db, testBeaconConfig().Name, logger)
 	signerStorage.SetEncryptionKey(encryptionKey)
+
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 	require.NoError(t, signerStorage.SaveWallet(hdwallet))
@@ -137,7 +141,7 @@ func TestSignBeaconObject(t *testing.T) {
 
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {

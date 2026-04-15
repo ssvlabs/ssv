@@ -118,10 +118,6 @@ func Addresses(vals []string) zapcore.Field {
 	return zap.Strings(FieldAddresses, vals)
 }
 
-func ENR(val *enode.Node) zapcore.Field {
-	return zap.Stringer(FieldENR, val)
-}
-
 func TargetNodeENR(val *enode.Node) zapcore.Field {
 	return zap.Stringer(FieldTargetNodeENR, val)
 }

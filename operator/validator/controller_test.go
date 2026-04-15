@@ -20,6 +20,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -947,7 +948,7 @@ func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivat
 
 	db, err := getBaseStorage(t, logger)
 	require.NoError(t, err)
-	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.TestNetwork.Beacon, operatorPrivKey)
+	km, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon, operatorPrivKey)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, p2pNet, km, bc
 }

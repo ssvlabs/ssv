@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -35,7 +36,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
-		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())
 
 		wallet, accounts := createTestAccounts(t, signerStorage, 3)
@@ -102,7 +103,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
-		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 		require.NoError(t, signerStorage.SaveWallet(wallet))
 
@@ -134,7 +135,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
-		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon.Name, logger)
 		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())
 
 		wallet, _ := createTestAccounts(t, signerStorage, 1)

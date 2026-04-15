@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
@@ -200,7 +201,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig.Beacon, privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), testNetworkConfig.Beacon, privateKey)
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
