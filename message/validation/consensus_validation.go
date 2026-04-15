@@ -520,7 +520,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	}
 
 	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot
-	// values, so we keep the lower bound relaxed until that changes in `rountimer` package.
+	// values, so we keep the lower bound relaxed until that changes in `roundtimer` package.
 	lowestAllowedRound := specqbft.FirstRound
 	if estimatedRoundMsgReceivedAt > allowedRoundsInPast && role != spectypes.RoleProposer {
 		lowestAllowedRound = estimatedRoundMsgReceivedAt - allowedRoundsInPast
