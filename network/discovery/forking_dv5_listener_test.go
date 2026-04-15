@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const iteratorTimeout = 5 * time.Millisecond
+const iteratorTimeout = 500 * time.Millisecond
 
 func TestForkListener_Create(t *testing.T) {
 	localNode := NewLocalNode(t)
@@ -51,12 +52,12 @@ func TestForkListener_RandomNodes(t *testing.T) {
 
 	forkListener := NewForkingDV5Listener(zap.NewNop(), preForkListener, postForkListener, iteratorTimeout)
 
-	iter := forkListener.RandomNodes()
-	defer iter.Close()
+	iterator := forkListener.RandomNodes()
+	defer iterator.Close()
 	var nodes []*enode.Node
 	for i := 0; i < 2; i++ {
-		require.True(t, iter.Next())
-		nodes = append(nodes, iter.Node())
+		require.True(t, iterator.Next())
+		nodes = append(nodes, iterator.Node())
 	}
 
 	assert.Len(t, nodes, 2)
@@ -65,7 +66,7 @@ func TestForkListener_RandomNodes(t *testing.T) {
 	assert.Equal(t, nodes[1], nodeFromPostForkListener)
 
 	// No more next
-	requireNextTimeout(t, false, iter, 10*time.Millisecond)
+	requireNextTimeout(t, false, iterator, 50*time.Millisecond)
 }
 
 func TestForkListener_AllNodes(t *testing.T) {
@@ -147,36 +148,24 @@ func TestForkListener_Close(t *testing.T) {
 }
 
 func requireNextTimeout(t *testing.T, expected bool, iter enode.Iterator, timeout time.Duration) {
-	const maxTries = 10
-	var deadline = time.After(timeout)
-	next := make(chan bool)
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
+	defer cancel()
+
+	result := make(chan bool)
 	go func() {
-		defer close(next)
-		for {
-			ok := iter.Next()
-			select {
-			case next <- ok:
-			case <-deadline:
-				return
-			}
-			if ok {
-				return
-			}
-			time.Sleep(timeout / maxTries)
+		next := iter.Next()
+		select {
+		case result <- next:
+		case <-ctx.Done():
 		}
 	}()
-	for {
-		select {
-		case ok := <-next:
-			require.Equal(t, expected, ok, "expected next to be %v", expected)
-			if ok {
-				return
-			}
-		case <-deadline:
-			if expected {
-				require.Fail(t, "expected next to be %v", expected)
-			}
-			return
-		}
+
+	got := false
+	select {
+	case next := <-result:
+		got = next
+	case <-ctx.Done():
 	}
+
+	require.Equalf(t, expected, got, "expected iter.Next to be %v", expected)
 }

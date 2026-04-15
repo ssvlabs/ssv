@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -72,7 +73,7 @@ func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.BeaconConfig, logger)
+	return ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(o.Db), o.BeaconConfig.Name, logger)
 }
 
 // Run executes the migrations.

@@ -20,8 +20,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -156,13 +154,13 @@ func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.ListKeys(ctx)
 	recordRemoteSignerOperation(ctx, opRemoteSignerListKeys, err, time.Since(start))
-	logger = logger.With(fields.Took(time.Since(start)))
+	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}
 
-	logger.Info("request finished successfully", fields.Count(len(resp)))
+	logger.Info("request finished successfully", zap.Int("count", len(resp)))
 	s.writeJSON(ctx, logger, resp)
 }
 
@@ -227,7 +225,7 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
 	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
-	logger = logger.With(fields.Took(time.Since(start)))
+	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -321,7 +319,7 @@ func (s *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.DeleteKeystore(ctx, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerDeleteKeystore, err, time.Since(start))
-	logger = logger.With(fields.Took(time.Since(start)))
+	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -358,7 +356,7 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	logger = logger.With(fields.PubKey(blsPubKey[:]))
+	logger = logger.With(zap.Stringer("share_pubkey", blsPubKey))
 
 	var req web3signer.SignRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
@@ -372,7 +370,7 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	start := time.Now()
 	resp, err := s.remoteSigner.Sign(ctx, blsPubKey, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
-	logger = logger.With(fields.Took(time.Since(start)))
+	logger = logger.With(zap.Duration("took", time.Since(start)))
 	if err != nil {
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return

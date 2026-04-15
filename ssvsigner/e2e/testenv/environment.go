@@ -12,13 +12,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // TestEnvironment manages the complete E2E test infrastructure
@@ -34,9 +32,9 @@ type TestEnvironment struct {
 	web3SignerClient *web3signer.Web3Signer
 	localKeyManager  *ekm.LocalKeyManager
 	remoteKeyManager *ekm.RemoteKeyManager
-	localDB          basedb.Database
-	remoteDB         basedb.Database
-	beaconConfig     *networkconfig.Beacon
+	localDB          *testDB
+	remoteDB         *testDB
+	beaconConfig     *common.BeaconConfig
 
 	// Network
 	networkName string
@@ -234,7 +232,7 @@ func (env *TestEnvironment) GetRemoteKeyManager() *ekm.RemoteKeyManager {
 }
 
 // GetBeaconConfig returns the beacon config for test control
-func (env *TestEnvironment) GetBeaconConfig() *networkconfig.Beacon {
+func (env *TestEnvironment) GetBeaconConfig() *common.BeaconConfig {
 	return env.beaconConfig
 }
 
@@ -293,7 +291,7 @@ func (env *TestEnvironment) setupPostgreSQLVolume() error {
 	return nil
 }
 
-// setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager BadgerDB data
+// setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager test DB data
 func (env *TestEnvironment) setupKeyManagerVolumes() error {
 	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%s", randomSuffix())
 	if err := os.MkdirAll(env.localKeyManagerPath, dirMode); err != nil {

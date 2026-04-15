@@ -2,10 +2,12 @@ package p2pv1
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
 )
 
 // createSubnets creates a commons.Subnets with the specified subnets active.
@@ -320,4 +322,29 @@ func TestSubnetPeers_String(t *testing.T) {
 			require.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestPeerSelectionScore(t *testing.T) {
+	ownSubnets := createSubnets(1)
+	currentSubnetPeers := createSubnetPeers(map[int]uint16{1: 0})
+	peerSubnets := createSubnets(1)
+	now := time.Now()
+
+	t.Run("blocks peers still in cooldown", func(t *testing.T) {
+		score, ready := peerSelectionScore(now, discovery.DiscoveredPeer{
+			Tries:   1,
+			LastTry: now.Add(-peerSelectionRetryCooldownMin / 2),
+		}, currentSubnetPeers, ownSubnets, peerSubnets)
+		require.False(t, ready)
+		require.Zero(t, score)
+	})
+
+	t.Run("applies retry penalty after cooldown", func(t *testing.T) {
+		score, ready := peerSelectionScore(now, discovery.DiscoveredPeer{
+			Tries:   2,
+			LastTry: now.Add(-45 * time.Second),
+		}, currentSubnetPeers, ownSubnets, peerSubnets)
+		require.True(t, ready)
+		require.Equal(t, 9.0, score)
+	})
 }

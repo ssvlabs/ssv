@@ -36,6 +36,14 @@ func (b *Beacon) String() string {
 	return string(marshaled)
 }
 
+func (b *Beacon) NetworkName() string {
+	return b.Name
+}
+
+func (b *Beacon) GenesisRoot() phase0.Root {
+	return b.GenesisValidatorsRoot
+}
+
 // SlotStartTime returns the start time for the given slot
 func (b *Beacon) SlotStartTime(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {

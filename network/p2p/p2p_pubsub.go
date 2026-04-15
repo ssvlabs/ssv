@@ -111,34 +111,35 @@ func (n *p2pNetwork) SubscribeAll() error {
 }
 
 // SubscribeRandoms subscribes to random subnets. This method isn't thread-safe.
-// #nosec G115 -- Perm slice is [0, n)
 func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
+	}
+	if numSubnets <= 0 {
+		return nil
 	}
 	if numSubnets > commons.SubnetsCount {
 		numSubnets = commons.SubnetsCount
 	}
 
-	var randomSubnets []int
-	for {
-		// pick random subnets
-		randomSubnets = rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.SubnetsCount) // #nosec G404
-		randomSubnets = randomSubnets[:numSubnets]
-		// check if any of subnets we've generated in this random set is already being used by us
-		randSubnetAlreadyInUse := false
-		for _, subnet := range randomSubnets {
-			subnetID := commons.Subnet(subnet)
-			if n.currentSubnets.IsSet(subnetID) {
-				randSubnetAlreadyInUse = true
-				break
-			}
-		}
-		if !randSubnetAlreadyInUse {
-			// found a set of random subnets that we aren't yet using
-			break
+	availableSubnetsCount := commons.SubnetsCount - n.currentSubnets.ActiveCount()
+	if numSubnets > availableSubnetsCount {
+		return fmt.Errorf("not enough available subnets: requested %d, available %d", numSubnets, availableSubnetsCount)
+	}
+
+	availableSubnets := make([]uint64, 0, availableSubnetsCount)
+	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
+		if !n.currentSubnets.IsSet(commons.Subnet(subnet)) {
+			availableSubnets = append(availableSubnets, subnet)
 		}
 	}
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) // #nosec G404
+	rng.Shuffle(len(availableSubnets), func(i, j int) {
+		availableSubnets[i], availableSubnets[j] = availableSubnets[j], availableSubnets[i]
+	})
+
+	randomSubnets := availableSubnets[:numSubnets]
 
 	for _, subnet := range randomSubnets {
 		if err := n.subscribeSubnetForCurrentEpoch(commons.Subnet(subnet)); err != nil {
