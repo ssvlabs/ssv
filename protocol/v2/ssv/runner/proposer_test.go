@@ -111,8 +111,8 @@ func TestProposerRunnerProcessPreConsensusCachesFullBlockAndFetchesWithReconstru
 	expectedRandao, err := runner.State.ReconstructBeaconSig(
 		runner.State.PreConsensusContainer,
 		expectedRoot,
-		runner.GetShare().ValidatorPubKey[:],
-		runner.GetShare().ValidatorIndex,
+		runner.GetFirstShare().ValidatorPubKey[:],
+		runner.GetFirstShare().ValidatorIndex,
 	)
 	require.NoError(t, err)
 
@@ -306,7 +306,7 @@ func TestProposerRunnerProcessPostConsensusLeaderUsesCachedFullBlockWhenDecision
 	require.Same(t, fullBlock, beacon.submittedBlocks[0])
 	require.False(t, beacon.submittedBlocks[0].Blinded)
 	require.NotEqual(t, phase0.BLSSignature{}, beacon.submittedSig[0])
-	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
+	require.Equal(t, []phase0.ValidatorIndex{runner.GetFirstShare().ValidatorIndex}, dg.reportQuorum)
 	require.True(t, runner.State.Finished)
 }
 
@@ -327,7 +327,7 @@ func TestProposerRunnerProcessPostConsensusLeaderFallsBackToDecidedBlindedBlockO
 
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
-	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
+	require.Equal(t, []phase0.ValidatorIndex{runner.GetFirstShare().ValidatorIndex}, dg.reportQuorum)
 	require.True(t, runner.State.Finished)
 }
 
@@ -349,7 +349,7 @@ func TestProposerRunnerProcessPostConsensusNonLeaderKeepsDecidedBlindedBlock(t *
 
 	require.Len(t, beacon.submittedBlocks, 1)
 	require.True(t, beacon.submittedBlocks[0].Blinded)
-	require.Equal(t, []phase0.ValidatorIndex{runner.GetShare().ValidatorIndex}, dg.reportQuorum)
+	require.Equal(t, []phase0.ValidatorIndex{runner.GetFirstShare().ValidatorIndex}, dg.reportQuorum)
 	require.True(t, runner.State.Finished)
 }
 
@@ -441,7 +441,7 @@ func setupRunnerForPostConsensus(
 	require.NoError(t, err)
 	runner.State.DecidedValue = encodedDecidedValue
 
-	msgID := spectypes.NewMsgID(runner.NetworkConfig.DomainType, runner.GetShare().ValidatorPubKey[:], runner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(runner.NetworkConfig.DomainType, runner.GetFirstShare().ValidatorPubKey[:], runner.RunnerRoleType)
 	qbftConfig := protocoltesting.TestingConfig(zap.NewNop(), keySet)
 	qbftConfig.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 		return leaderID

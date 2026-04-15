@@ -123,6 +123,17 @@ func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 	return b.Share
 }
 
+// GetFirstShare returns an arbitrary share from the runner's share map.
+// Single-share runners (all roles except Committee) rely on the constructor
+// invariant that len(Share) == 1, so "first" is unambiguous for them.
+// CommitteeRunner owns multiple shares and should iterate b.Share instead.
+func (b *BaseRunner) GetFirstShare() *spectypes.Share {
+	for _, share := range b.Share {
+		return share
+	}
+	return nil
+}
+
 func (b *BaseRunner) HasRunningDuty() bool {
 	b.mtx.RLock() // reads b.State
 	defer b.mtx.RUnlock()
