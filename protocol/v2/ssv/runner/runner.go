@@ -31,6 +31,7 @@ type Getters interface {
 	HasRunningQBFTInstance() bool
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
+	GetFirstShare() *spectypes.Share
 	GetRole() spectypes.RunnerRole
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
