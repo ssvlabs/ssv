@@ -239,8 +239,11 @@ func TestCheckPeer_UpdatesSubnetsIndexBeforeConnectionFilters(t *testing.T) {
 		ctx:        ctx,
 		conns:      &mock.MockConnectionIndex{ConnectednessValue: network.Connected},
 		subnetsIdx: subnetIndex,
-		ssvConfig: &networkconfig.SSV{
-			DomainType: myDomainType,
+		netCfg: &networkconfig.Network{
+			Beacon: networkconfig.TestNetwork.Beacon,
+			SSV: &networkconfig.SSV{
+				DomainType: myDomainType,
+			},
 		},
 		subnets:             peerSubnets,
 		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](ctx, time.Hour, time.Hour),

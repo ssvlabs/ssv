@@ -47,5 +47,5 @@ type BeaconNetwork interface {
 	EstimatedCurrentSlot() phase0.Slot
 	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
 	EstimatedSlotAtTime(time time.Time) phase0.Slot
-	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
+	BeaconForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
 }

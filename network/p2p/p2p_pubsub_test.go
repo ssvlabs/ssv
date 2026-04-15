@@ -104,11 +104,11 @@ func TestSubscribeRandomsSubscribesOnlyAvailableSubnets(t *testing.T) {
 	}
 }
 
-func parseSubnet(t *testing.T, subnet string) uint64 {
+func parseSubnet(t *testing.T, subnet string) commons.Subnet {
 	t.Helper()
 
 	value, err := strconv.ParseUint(subnet, 10, 64)
 	require.NoError(t, err)
 
-	return value
+	return commons.Subnet(value)
 }
