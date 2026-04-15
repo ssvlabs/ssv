@@ -164,7 +164,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.SlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
-		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
+		_, err = validator.handleSignedSSVMessage(t.Context(), signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 	})
 
@@ -182,11 +182,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.SlotStartTime(slot)
 
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 		defer cancel()
 
 		_, err = validator.validateConsensusMessage(ctx, signedSSVMessage, committeeInfo, peerID, receivedAt)
-		require.Error(t, err)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
@@ -206,11 +205,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.SlotStartTime(slot)
 
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 		defer cancel()
 
 		_, err = validator.validatePartialSignatureMessage(ctx, signedSSVMessage, committeeInfo, peerID, receivedAt)
-		require.Error(t, err)
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 
@@ -240,7 +238,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}, true)
 
 		localOperators := mocks.NewMockOperators(localCtrl)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		localOperators.EXPECT().
 			OperatorsExist(gomock.Any(), []spectypes.OperatorID{1}).
 			DoAndReturn(func(_ basedb.Reader, _ []spectypes.OperatorID) (bool, error) {
@@ -270,7 +268,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		select {
 		case err := <-errCh:
-			require.Error(t, err)
 			require.ErrorIs(t, err, context.Canceled)
 		case <-time.After(250 * time.Millisecond):
 			t.Fatal("timed out waiting for validation to return before acquiring the lock")

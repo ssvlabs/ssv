@@ -42,6 +42,9 @@ type messageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
+// topicValidatorTimeout bounds how long a single message validation may occupy a pubsub
+// validation worker. It should leave enough budget for committee checks, lock waiting,
+// and signature verification without leaving the DoS window effectively unbounded.
 const topicValidatorTimeout = 5 * time.Second
 
 // topicsCtrl implements Controller
