@@ -78,8 +78,8 @@ func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topic
 		subnetsSubscribed := ctrl.Topics()
 
 		var (
-			subnetPeerCounts              []int
-			deadSubnets, unhealthySubnets int
+			subnetPeerCounts                     []int
+			deadSubnets, soloSubnets, duoSubnets int
 		)
 
 		for _, topicName := range subnetsSubscribed {
@@ -93,8 +93,10 @@ func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topic
 			subnetPeerCounts = append(subnetPeerCounts, len(peers))
 			if len(peers) == 0 {
 				deadSubnets++
-			} else if len(peers) <= 2 {
-				unhealthySubnets++
+			} else if len(peers) == 1 {
+				soloSubnets++
+			} else if len(peers) == 2 {
+				duoSubnets++
 			}
 			logger.Debug("topic peers status", fields.Topic(topicName), fields.Count(len(peers)), zap.Any("peers", peers))
 		}
@@ -115,7 +117,8 @@ func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topic
 			zap.Int("median", medianCount),
 			zap.Int("max", maxCount),
 			zap.Int("dead_subnets", deadSubnets),
-			zap.Int("unhealthy_subnets", unhealthySubnets),
+			zap.Int("solo_subnets", soloSubnets),
+			zap.Int("duo_subnets", duoSubnets),
 		)
 	}
 }
