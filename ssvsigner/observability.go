@@ -9,8 +9,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
-
-	"github.com/ssvlabs/ssv/observability/metrics"
 )
 
 const (
@@ -37,73 +35,74 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	meter                   = otel.Meter(observabilityName)
+	secondsHistogramBuckets = []float64{0, 0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}
 
 	// ssv-signer HTTP server metrics
-	httpRequestsCounter = metrics.New(
+	httpRequestsCounter = metricOrReport(
 		meter.Int64Counter(
 			metricNameServer("http.requests"),
 			metric.WithUnit("{request}"),
 			metric.WithDescription("Total number of HTTP requests received by the signer server"),
 		))
 
-	httpErrorsCounter = metrics.New(
+	httpErrorsCounter = metricOrReport(
 		meter.Int64Counter(
 			metricNameServer("http.errors"),
 			metric.WithUnit("{error}"),
 			metric.WithDescription("Total number of HTTP errors returned by the signer server"),
 		))
 
-	httpDurationHistogram = metrics.New(
+	httpDurationHistogram = metricOrReport(
 		meter.Float64Histogram(
 			metricNameServer("http.request.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("Duration of HTTP requests handled by the signer server in seconds"),
-			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(secondsHistogramBuckets...)))
 
 	// ssv-signer remote signer client metrics
-	remoteSignerOpCounter = metrics.New(
+	remoteSignerOpCounter = metricOrReport(
 		meter.Int64Counter(
 			metricNameServer("remote_signer.operations"),
 			metric.WithUnit("{operation}"),
 			metric.WithDescription("Total number of operations sent to the remote signer by the server"),
 		))
 
-	remoteSignerOpErrorsCounter = metrics.New(
+	remoteSignerOpErrorsCounter = metricOrReport(
 		meter.Int64Counter(
 			metricNameServer("remote_signer.errors"),
 			metric.WithUnit("{error}"),
 			metric.WithDescription("Total number of errors received from the remote signer by the server"),
 		))
 
-	remoteSignerOpDurationHistogram = metrics.New(
+	remoteSignerOpDurationHistogram = metricOrReport(
 		meter.Float64Histogram(
 			metricNameServer("remote_signer.operation.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("Duration of operations sent to the remote signer by the server in seconds"),
-			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(secondsHistogramBuckets...)))
 
 	// ssv-signer client metrics
-	clientRequestsCounter = metrics.New(
+	clientRequestsCounter = metricOrReport(
 		meter.Int64Counter(
 			metricNameClient("client.http.requests"),
 			metric.WithUnit("{request}"),
 			metric.WithDescription("Total number of HTTP requests sent by the signer client"),
 		))
 
-	clientErrorsCounter = metrics.New(
+	clientErrorsCounter = metricOrReport(
 		meter.Int64Counter(
 			metricNameClient("client.http.errors"),
 			metric.WithUnit("{error}"),
 			metric.WithDescription("Total number of HTTP errors encountered by the signer client"),
 		))
 
-	clientDurationHistogram = metrics.New(
+	clientDurationHistogram = metricOrReport(
 		meter.Float64Histogram(
 			metricNameClient("client.http.request.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("Duration of HTTP requests sent by the signer client in seconds"),
-			metric.WithExplicitBucketBoundaries(metrics.SecondsHistogramBuckets...)))
+			metric.WithExplicitBucketBoundaries(secondsHistogramBuckets...)))
 )
 
 // --- Helper Functions ---
@@ -114,6 +113,13 @@ func metricNameServer(name string) string {
 
 func metricNameClient(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespaceClient, name)
+}
+
+func metricOrReport[T any](m T, err error) T {
+	if err != nil {
+		otel.Handle(err)
+	}
+	return m
 }
 
 func httpRouteAttribute(route string) attribute.KeyValue {

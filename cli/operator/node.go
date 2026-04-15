@@ -35,6 +35,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
+
 	hexporter "github.com/ssvlabs/ssv/api/handlers/exporter"
 	hmev "github.com/ssvlabs/ssv/api/handlers/mev"
 	hnode "github.com/ssvlabs/ssv/api/handlers/node"
@@ -86,7 +88,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
-	"github.com/ssvlabs/ssv/utils/format"
 )
 
 type KeyStore struct {
@@ -227,7 +228,12 @@ var StartNodeCmd = &cobra.Command{
 			Beacon: consensusClient.BeaconConfig(),
 		}
 
-		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
+		usingSSVSigner, usingKeystore, usingPrivKey := false, false, false
+		if cfg.ExporterOptions.Enabled {
+			warnIfExporterSigningConfigProvided(logger)
+		} else {
+			usingSSVSigner, usingKeystore, usingPrivKey = assertSigningConfig(logger)
+		}
 
 		if err := validateProposerDelayConfig(logger); err != nil {
 			logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
@@ -238,7 +244,9 @@ var StartNodeCmd = &cobra.Command{
 		var ssvSignerClient *ssvsigner.Client
 		var operatorPubKeyBase64 string
 
-		if usingSSVSigner {
+		if cfg.ExporterOptions.Enabled {
+			logger.Info("exporter mode: running without operator signing key and key manager")
+		} else if usingSSVSigner {
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
 			logger.Info("using ssv-signer for signing")
 
@@ -339,29 +347,34 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
 
-		if usingSSVSigner {
-			// Ensure the pubkey is saved on first run and never changes afterwards
-			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
-				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
+		if !cfg.ExporterOptions.Enabled {
+			if usingSSVSigner {
+				// Ensure the pubkey is saved on first run and never changes afterwards
+				if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
+					logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
+				}
+			} else {
+				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
+					logger.Fatal("could not save operator private key", zap.Error(err))
+				}
 			}
-		} else {
-			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
-				logger.Fatal("could not save operator private key", zap.Error(err))
-			}
-		}
 
-		logger.Info("successfully loaded operator keys", zap.String(fields.FieldPubKey, operatorPubKeyBase64))
+			logger.Info("successfully loaded operator keys", zap.String(fields.FieldPubKey, operatorPubKeyBase64))
+		}
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, networkConfig.StorageName(), usingLocalEvents, usingSSVSigner); err != nil {
+		if err := validateConfig(nodeStorage, networkConfig.StorageName(), usingLocalEvents, usingSSVSigner, cfg.ExporterOptions.Enabled); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
 		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
-		validatorRegistrationSubmitter := runner.NewVRSubmitter(cmd.Context(), logger, networkConfig.Beacon, consensusClient, validatorProvider)
+		var validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+		if !cfg.ExporterOptions.Enabled {
+			validatorRegistrationSubmitter = runner.NewVRSubmitter(cmd.Context(), logger, networkConfig.Beacon, consensusClient, validatorProvider)
+		}
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";")
 		if len(executionAddrList) == 0 {
@@ -406,13 +419,14 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var keyManager ekm.KeyManager
-		if usingSSVSigner {
+		ekmDB := ekmadapter.NewDatabaseAdapter(db)
+		if !cfg.ExporterOptions.Enabled && usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
 				logger,
 				networkConfig.Beacon,
 				ssvSignerClient,
-				db,
+				ekmDB,
 				operatorDataStore.GetOperatorID,
 			)
 			if err != nil {
@@ -420,21 +434,18 @@ var StartNodeCmd = &cobra.Command{
 			}
 
 			keyManager = remoteKeyManager
-			cfg.P2pNetworkConfig.OperatorSigner = remoteKeyManager
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
-		} else {
-			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig.Beacon, operatorPrivKey)
+		} else if !cfg.ExporterOptions.Enabled {
+			localKeyManager, err := ekm.NewLocalKeyManager(logger, ekmDB, networkConfig.Beacon, operatorPrivKey)
 			if err != nil {
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
 
 			keyManager = localKeyManager
-			cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		}
 
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorPubKeyHash(operatorDataStore.GetOperatorData().PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.NetworkConfig = networkConfig
@@ -568,7 +579,9 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var doppelgangerHandler doppelganger.Provider
-		if cfg.EnableDoppelgangerProtection {
+		if cfg.ExporterOptions.Enabled {
+			doppelgangerHandler = doppelganger.NoOpHandler{}
+		} else if cfg.EnableDoppelgangerProtection {
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
 				BeaconConfig:       networkConfig.Beacon,
 				BeaconNode:         consensusClient,
@@ -638,7 +651,6 @@ var StartNodeCmd = &cobra.Command{
 			networkConfig,
 			nodeStorage,
 			operatorDataStore,
-			operatorPrivKey,
 			keyManager,
 			doppelgangerHandler,
 		)
@@ -861,6 +873,29 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 	return usingSSVSigner, usingKeystore, usingPrivKey
 }
 
+func warnIfExporterSigningConfigProvided(logger *zap.Logger) {
+	if cfg.SSVSigner.Endpoint == "" &&
+		cfg.SSVSigner.KeystoreFile == "" &&
+		cfg.SSVSigner.KeystorePasswordFile == "" &&
+		cfg.SSVSigner.ServerCertFile == "" &&
+		cfg.KeyStore.PrivateKeyFile == "" &&
+		cfg.KeyStore.PasswordFile == "" &&
+		cfg.OperatorPrivateKey == "" {
+		return
+	}
+
+	logger.Warn(
+		"exporter mode ignores operator signing configuration",
+		zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint),
+		zap.String("ssv_signer_keystore_file", cfg.SSVSigner.KeystoreFile),
+		zap.String("ssv_signer_keystore_password_file", cfg.SSVSigner.KeystorePasswordFile),
+		zap.String("ssv_signer_server_cert_file", cfg.SSVSigner.ServerCertFile),
+		zap.String("operator_private_key_file", cfg.KeyStore.PrivateKeyFile),
+		zap.String("operator_private_key_password_file", cfg.KeyStore.PasswordFile),
+		zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
+	)
+}
+
 func validateProposerDelayConfig(logger *zap.Logger) error {
 	const maxSafeProposerDelay = 1000 * time.Millisecond
 
@@ -879,7 +914,11 @@ func validateProposerDelayConfig(logger *zap.Logger) error {
 	return nil
 }
 
-func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents, usingRemoteSigner bool) error {
+func validateConfig(
+	nodeStorage operatorstorage.Storage,
+	networkName string,
+	usingLocalEvents, usingSSVSigner, exporterMode bool,
+) error {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
 		return fmt.Errorf("failed to get stored config: %w", err)
@@ -888,11 +927,11 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 	currentConfig := &operatorstorage.ConfigLock{
 		NetworkName:      networkName,
 		UsingLocalEvents: usingLocalEvents,
-		UsingSSVSigner:   usingRemoteSigner,
+		UsingSSVSigner:   usingSSVSigner,
 	}
 
 	if foundConfig {
-		if err := storedConfig.ValidateCompatibility(currentConfig); err != nil {
+		if err := storedConfig.ValidateCompatibility(currentConfig, exporterMode); err != nil {
 			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
@@ -991,6 +1030,12 @@ func setupOperatorDataStore(
 	nodeStorage operatorstorage.Storage,
 	base64PubKey string,
 ) operatordatastore.OperatorDataStore {
+	if base64PubKey == "" {
+		// Exporter runs without operator identity, so initialize an empty datastore
+		// instead of looking up operator data by pubkey.
+		return operatordatastore.New(&registrystorage.OperatorData{})
+	}
+
 	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, base64PubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
@@ -1215,7 +1260,6 @@ func syncContractEvents(
 	networkConfig *networkconfig.Network,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
-	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler eventhandler.DoppelgangerProvider,
 ) *eventsyncer.EventSyncer {
@@ -1235,7 +1279,6 @@ func syncContractEvents(
 		validatorCtrl,
 		networkConfig,
 		operatorDataStore,
-		operatorDecrypter,
 		keyManager,
 		doppelgangerHandler,
 		eventhandler.WithFullNode(),
