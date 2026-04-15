@@ -35,10 +35,12 @@ func TestAttesterHandlerShouldExecuteRespectsMinParticipationEpoch(t *testing.T)
 	beaconCfg.GenesisTime = time.Now()
 	beaconCfg.SlotDuration = time.Hour
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.Beacon = &beaconCfg
 
 	handler := NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
 	handler.logger = zap.NewNop()
-	handler.beaconConfig = &beaconCfg
+	handler.netCfg = &netCfg
 	handler.validatorProvider = validatorProvider
 
 	shouldExecute := handler.shouldExecute(&eth2apiv1.AttesterDuty{

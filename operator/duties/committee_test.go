@@ -981,10 +981,12 @@ func TestCommitteeHandlerShouldExecuteSyncIgnoresMinParticipationEpoch(t *testin
 	beaconCfg.GenesisTime = time.Now()
 	beaconCfg.SlotDuration = time.Hour
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.Beacon = &beaconCfg
 
 	handler := NewCommitteeHandler(dutystore.New().Attester, dutystore.New().SyncCommittee)
 	handler.logger = zap.NewNop()
-	handler.beaconConfig = &beaconCfg
+	handler.netCfg = &netCfg
 	handler.validatorProvider = validatorProvider
 
 	shouldExecute := handler.shouldExecuteSync(&eth2apiv1.SyncCommitteeDuty{
@@ -1010,11 +1012,13 @@ func TestCommitteeHandlerBuildCommitteeDutiesIncludesSyncButNotAttesterDuringPar
 	beaconCfg.GenesisTime = time.Now()
 	beaconCfg.SlotDuration = time.Hour
 	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+	netCfg := *networkconfig.TestNetwork
+	netCfg.Beacon = &beaconCfg
 
 	dutyStore := dutystore.New()
 	handler := NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
 	handler.logger = zap.NewNop()
-	handler.beaconConfig = &beaconCfg
+	handler.netCfg = &netCfg
 	handler.validatorProvider = validatorProvider
 
 	committeeMap := handler.buildCommitteeDuties(
@@ -1034,9 +1038,10 @@ func TestCommitteeHandlerBuildCommitteeDutiesIncludesSyncButNotAttesterDuringPar
 	require.Len(t, committeeMap, 1)
 	committeeDuty := committeeMap[share.CommitteeID()]
 	require.NotNil(t, committeeDuty)
-	require.Len(t, committeeDuty.duty.ValidatorDuties, 1)
-	require.Equal(t, spectypes.BNRoleSyncCommittee, committeeDuty.duty.ValidatorDuties[0].Type)
-	require.Equal(t, share.ValidatorIndex, committeeDuty.duty.ValidatorDuties[0].ValidatorIndex)
+	validatorDuties := committeeDuty.validatorDuties()
+	require.Len(t, validatorDuties, 1)
+	require.Equal(t, spectypes.BNRoleSyncCommittee, validatorDuties[0].Type)
+	require.Equal(t, share.ValidatorIndex, validatorDuties[0].ValidatorIndex)
 }
 
 // The purpose of the test is to ensure that the scheduler can handle the case where the indices change

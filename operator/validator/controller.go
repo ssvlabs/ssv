@@ -1043,11 +1043,11 @@ func SetupCommitteeRunners(
 ) validator.CommitteeRunnerFunc {
 	if options.ExporterOptions.Enabled {
 		return func(
-			phase0.Slot,
+			spectypes.Duty,
 			map[phase0.ValidatorIndex]*spectypes.Share,
 			[]phase0.BLSPubKey,
 			runner.CommitteeDutyGuard,
-		) (*runner.CommitteeRunner, error) {
+		) (runner.Runner, error) {
 			return nil, fmt.Errorf("cannot set up committee runners in exporter mode")
 		}
 	}
