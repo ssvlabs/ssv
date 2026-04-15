@@ -174,12 +174,12 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	receivedFrom peer.ID,
 	receivedAt time.Time,
 ) (*queue.SSVMessage, error) {
-	if err := ctx.Err(); err != nil {
-		return &queue.SSVMessage{SignedSSVMessage: signedSSVMessage}, err
-	}
-
 	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
+	}
+
+	if err := ctx.Err(); err != nil {
+		return decodedMessage, err
 	}
 
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
