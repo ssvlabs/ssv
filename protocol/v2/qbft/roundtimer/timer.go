@@ -2,6 +2,7 @@ package roundtimer
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -36,6 +37,46 @@ type TimeoutOptions struct {
 	quickThreshold specqbft.Round
 	quick          time.Duration
 	slow           time.Duration
+}
+
+func baseRoundStartDelay(role spectypes.RunnerRole, slotDuration time.Duration) time.Duration {
+	switch role {
+	case spectypes.RoleCommittee:
+		return slotDuration / 3
+	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
+		return slotDuration / 3 * 2
+	default:
+		return 0
+	}
+}
+
+func estimatedRoundAtSince(sinceRoundStart time.Duration) (specqbft.Round, error) {
+	delta, err := casts.DurationToUint64(sinceRoundStart / QuickTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+	if currentQuickRound := specqbft.FirstRound + specqbft.Round(delta); currentQuickRound <= QuickTimeoutThreshold {
+		return currentQuickRound, nil
+	}
+
+	sinceFirstSlowRound := sinceRoundStart - (time.Duration(QuickTimeoutThreshold) * QuickTimeout)
+	delta, err = casts.DurationToUint64(sinceFirstSlowRound / SlowTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
+	}
+
+	return QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(delta), nil
+}
+
+// EstimatedRoundAt returns the round that should be current for the given role
+// at the provided elapsed time since slot start. Keep this aligned with RoundTimeout.
+func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, sinceSlotStart time.Duration) (specqbft.Round, error) {
+	sinceRoundStart := sinceSlotStart - baseRoundStartDelay(role, slotDuration)
+	if sinceRoundStart <= 0 {
+		return specqbft.FirstRound, nil
+	}
+
+	return estimatedRoundAtSince(sinceRoundStart)
 }
 
 // deferredTimeout stores a TimeoutForRound request that arrived before the
@@ -108,17 +149,8 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // and the additional timeout is added based on the round number.
 func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
 	// Initialize duration to zero
-	var baseDuration time.Duration
-
-	// Set base duration based on role
-	switch t.role {
-	case spectypes.RoleCommittee:
-		// third of the slot time
-		baseDuration = t.beaconConfig.SlotDuration / 3
-	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
-		// two-third of the slot time
-		baseDuration = t.beaconConfig.SlotDuration / 3 * 2
-	default:
+	baseDuration := baseRoundStartDelay(t.role, t.beaconConfig.SlotDuration)
+	if baseDuration == 0 {
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
 		}

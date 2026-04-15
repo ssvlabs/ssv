@@ -87,6 +87,56 @@ func TestTimeoutForRound(t *testing.T) {
 	}
 }
 
+func TestEstimatedRoundAt(t *testing.T) {
+	testBeaconConfig := setupTestBeaconConfig()
+
+	tt := []struct {
+		name           string
+		role           spectypes.RunnerRole
+		sinceSlotStart time.Duration
+		want           specqbft.Round
+	}{
+		{
+			name:           "proposer starts quick round timing at slot start",
+			role:           spectypes.RoleProposer,
+			sinceSlotStart: QuickTimeout,
+			want:           specqbft.FirstRound + 1,
+		},
+		{
+			name:           "committee keeps first round until one-third slot delay passes",
+			role:           spectypes.RoleCommittee,
+			sinceSlotStart: slotDuration / 3,
+			want:           specqbft.FirstRound,
+		},
+		{
+			name:           "committee advances after one-third slot delay plus quick timeout",
+			role:           spectypes.RoleCommittee,
+			sinceSlotStart: slotDuration/3 + QuickTimeout,
+			want:           specqbft.FirstRound + 1,
+		},
+		{
+			name:           "aggregator keeps first round until two-third slot delay passes",
+			role:           spectypes.RoleAggregator,
+			sinceSlotStart: slotDuration / 3 * 2,
+			want:           specqbft.FirstRound,
+		},
+		{
+			name:           "sync committee contribution advances after two-third slot delay plus quick timeout",
+			role:           spectypes.RoleSyncCommitteeContribution,
+			sinceSlotStart: slotDuration/3*2 + QuickTimeout,
+			want:           specqbft.FirstRound + 1,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := EstimatedRoundAt(tc.role, testBeaconConfig.SlotDuration, tc.sinceSlotStart)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func setupTestBeaconConfig() *networkconfig.Beacon {
 	config := *networkconfig.TestNetwork.Beacon
 	config.SlotDuration = slotDuration

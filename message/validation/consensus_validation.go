@@ -18,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -412,26 +411,12 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (specqbft.Round, error) {
-	delta, err := casts.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
-	if err != nil {
-		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
-	}
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(delta); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
-		return currentQuickRound, nil
-	}
-
-	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	delta, err = casts.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
-	if err != nil {
-		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
-	}
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(delta)
-	return estimatedRound, nil
+func (mv *messageValidator) currentEstimatedRound(role spectypes.RunnerRole, sinceSlotStart time.Duration) (specqbft.Round, error) {
+	return roundtimer.EstimatedRoundAt(role, mv.netCfg.SlotDuration, sinceSlotStart)
 }
 
 func lowestAllowedRound(estimatedRound specqbft.Round) specqbft.Round {
-	if estimatedRound <= specqbft.FirstRound+allowedRoundsInPast {
+	if estimatedRound < specqbft.FirstRound+allowedRoundsInPast {
 		return specqbft.FirstRound
 	}
 
@@ -533,23 +518,23 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	slotStartTime := mv.netCfg.SlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
 	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
 
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+
 	sinceSlotStart := time.Duration(0)
-	estimatedRound := specqbft.FirstRound
+	estimatedRoundMsgReceivedAt := specqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		currentEstimatedRound, err := mv.currentEstimatedRound(sinceSlotStart)
+		currentEstimatedRound, err := mv.currentEstimatedRound(role, sinceSlotStart)
 		if err != nil {
 			return err
 		}
-		estimatedRound = currentEstimatedRound
+		estimatedRoundMsgReceivedAt = currentEstimatedRound
 	}
 
-	lowestAllowed := lowestAllowedRound(estimatedRound)
+	lowestAllowed := lowestAllowedRound(estimatedRoundMsgReceivedAt)
 	// No overflow bug here: estimatedRound comes from elapsed slot time,
 	// so adding allowedRoundsInFuture cannot get close to uint64 overflow.
-	highestAllowed := estimatedRound + allowedRoundsInFuture
-
-	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+	highestAllowed := estimatedRoundMsgReceivedAt + allowedRoundsInFuture
 
 	if consensusMessage.Round < lowestAllowed || consensusMessage.Round > highestAllowed {
 		e := ErrEstimatedRoundNotInAllowedSpread
