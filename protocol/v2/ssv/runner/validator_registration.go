@@ -204,7 +204,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
+	logger.Debug("signing and broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
 		return fmt.Errorf("could not broadcast validator registration partial sig: %w", err)

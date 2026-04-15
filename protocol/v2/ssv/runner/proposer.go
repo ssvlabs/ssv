@@ -480,12 +480,12 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
+	logger.Debug("signing and broadcasting randao partial sig", fields.Slot(duty.DutySlot()))
+
 	r.measurements.StartPreConsensus()
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
 		return fmt.Errorf("could not broadcast randao partial sig: %w", err)
 	}
-
-	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
 
 	return nil
 }
