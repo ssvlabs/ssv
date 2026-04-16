@@ -18,8 +18,6 @@ import (
 const (
 	// MsgIDEmptyMessage is the msg_id for empty messages
 	MsgIDEmptyMessage = "invalid:empty"
-	// MsgIDBadEncodedMessage is the msg_id for messages with invalid encoding
-	MsgIDBadEncodedMessage = "invalid:encoding"
 	// MsgIDError is the msg_id for messages that we can't create their msg_id
 	MsgIDError = "invalid:msg_id_error"
 	// MsgIDBadPeerID is the msg_id for messages w/o a valid sender
