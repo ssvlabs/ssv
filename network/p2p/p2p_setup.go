@@ -145,7 +145,12 @@ func (n *p2pNetwork) SetupHost() error {
 	n.host = host
 	n.libConnManager = host.ConnManager()
 
-	backoffFactory := libp2pdiscbackoff.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
+	backoffFactory := libp2pdiscbackoff.NewExponentialDecorrelatedJitter(
+		backoffLow,
+		backoffHigh,
+		backoffExponentBase,
+		rand.NewSource(time.Now().UnixNano()),
+	)
 	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
 		return errors.Wrap(err, "could not create backoff connector")
@@ -331,7 +336,7 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 		MsgValidator:  n.msgValidator,
 		MsgHandler:    n.handlePubsubMessages(),
 		ScoreIndex:    n.idx,
-		//Discovery: n.disc,
+		// Discovery: n.disc,
 		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,

@@ -206,11 +206,6 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	return byts, err
 }
 
-// SetHighestDecidedSlot set highestDecidedSlot for base runner
-func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
-	b.highestDecidedSlot = slot
-}
-
 // baseSetupForNewDuty is sets the runner for a new duty
 func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
 	// start new state
