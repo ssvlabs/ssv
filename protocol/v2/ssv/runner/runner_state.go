@@ -84,6 +84,7 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 		Finished:               pcs.Finished,
 	}
 
+	// Note: pcs.CurrentDuty is not nil by construction.
 	if ValidatorDuty, ok := pcs.CurrentDuty.(*spectypes.ValidatorDuty); ok {
 		alias.ValidatorDuty = ValidatorDuty
 	} else if committeeDuty, ok := pcs.CurrentDuty.(*spectypes.CommitteeDuty); ok {

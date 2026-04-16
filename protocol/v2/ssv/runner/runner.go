@@ -116,7 +116,7 @@ func (b *BaseRunner) HasStartedQBFTInstance() bool {
 
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
 	// Note: RunningInstance.State cannot be nil for existing RunningInstance by construction.
-	return b.hasDutyRunning() && b.HasStartedQBFTInstance() && !b.State.RunningInstance.State.Decided
+	return b.hasDutyRunning() && b.State.RunningInstance != nil && !b.State.RunningInstance.State.Decided
 }
 
 func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
