@@ -39,9 +39,7 @@ type TimeoutOptions struct {
 }
 
 // roundTimeoutOffset returns the time-into-slot at which the given round will time out
-// (i.e. transition to round+1) for the given role. The result includes the role-specific
-// head start that Round 1 is allowed to run for, so it's the absolute offset from slot
-// start, not relative to when Round 1's quick timer begins:
+// (i.e. transition to round+1) for the given role:
 //
 //	Round 1     ends at  headStart + 1 * quick
 //	Round 2     ends at  headStart + 2 * quick
@@ -50,13 +48,7 @@ type TimeoutOptions struct {
 //	Round T+1   ends at  headStart + T * quick + 1 * slow
 //	Round T+2   ends at  headStart + T * quick + 2 * slow
 //
-// For roles with no head start (proposer, and anything not in round1HeadStart's switch)
-// the head start is zero, so Round 1 ends at `1 * quick` — which is the right answer for
-// EstimatedRoundAt but NOT for RoundTimeout, which uses a relative timeout for proposer
-// and handles that case separately.
-//
-// This is the single source of truth for round boundaries — both RoundTimeout and
-// EstimatedRoundAt derive from it, so they cannot drift apart when round timing rules change.
+// Every role has its own dedicated headStart duration.
 func (o TimeoutOptions) roundTimeoutOffset(role spectypes.RunnerRole, slotDuration time.Duration, round specqbft.Round) time.Duration {
 	headStart := round1HeadStart(role, slotDuration)
 	if round <= o.quickThreshold {
@@ -72,9 +64,8 @@ func (o TimeoutOptions) roundTimeoutOffset(role spectypes.RunnerRole, slotDurati
 // (time for the block to become available); aggregator and sync-committee-contribution get
 // 2/3 of the slot (time for attestations to arrive); proposer gets zero.
 //
-// Note: despite the legacy naming precedent ("firstRoundChangeDelay"), this is NOT the
-// time at which Round 1 -> Round 2 transitions — that transition actually happens at
-// `slotStart + round1HeadStart + QuickTimeout`, because Round 1 still needs to run its
+// Note: this is NOT the time at which Round 1 -> Round 2 transitions — that transition actually
+// happens at `slotStart + round1HeadStart + QuickTimeout`, because Round 1 still needs to run its
 // own quick timer on top of the head start.
 func round1HeadStart(role spectypes.RunnerRole, slotDuration time.Duration) time.Duration {
 	switch role {
@@ -97,17 +88,10 @@ var defaultTimeoutOptions = TimeoutOptions{
 	slow:           SlowTimeout,
 }
 
-// EstimatedRoundAt returns the round that should be current for the given role (duty-type) at the provided
-// elapsed time since slot start.
+// EstimatedRoundAt returns the round that should be current for the given runner role (duty-type) at the provided
+// elapsed time since slot start (timeIntoSlot).
 // Round 1, Round 2, ... Round QuickTimeoutThreshold are considered "quick" (aka short rounds).
 // Round QuickTimeoutThreshold+1, Round QuickTimeoutThreshold+2, ... are considered "slow" (aka long rounds).
-//
-// The function does not cap its return value: callers in the message validator want the
-// unbounded estimate so that extremely-late messages produce an allowed-round spread that
-// excludes every real round (1..maxRound), rather than one that coincidentally overlaps it.
-// In practice the iteration is tightly bounded because roundBelongsToAllowedSpread runs
-// after validateSlotTime, which rejects anything past the lateness window (~408s for
-// committee, ~36s for others), so timeIntoSlot never exceeds a few quick+slow rounds.
 func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time.Duration) (specqbft.Round, error) {
 	// Walk rounds until we find the first one whose end is still in the future — that's the
 	// currently-active round. roundTimeoutOffset is the same helper RoundTimeout uses, so the
@@ -186,10 +170,9 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // which is calculated from the slot height. The base timeout is set based on the role,
 // and the additional timeout is added based on the round number.
 func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
-	// Roles without a head start (in practice only proposer; see round1HeadStart) use a
-	// relative timeout — the bare per-round duration, measured from arm time — because the
-	// proposer instance is not slot-synchronized.
-	if round1HeadStart(t.role, t.beaconConfig.SlotDuration) == 0 {
+	// Proposer runner round timeouts are currently relative to QBFT instance start time, not slot start time:
+	// https://github.com/ssvlabs/ssv/issues/2429
+	if t.role == spectypes.RoleProposer {
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
 		}
@@ -197,8 +180,6 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	}
 
 	// Slot-synchronized roles: timeout happens at slot start + roundTimeoutOffset(...).
-	// EstimatedRoundAt uses the same roundTimeoutOffset helper (via defaultTimeoutOptions),
-	// so it cannot disagree with us on which round is current at any given time-into-slot.
 	dutyStartTime := t.beaconConfig.SlotStartTime(phase0.Slot(height))
 	return time.Until(dutyStartTime.Add(t.timeoutOptions.roundTimeoutOffset(t.role, t.beaconConfig.SlotDuration, round)))
 }
