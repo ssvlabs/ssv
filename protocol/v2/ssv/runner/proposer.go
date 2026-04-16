@@ -144,7 +144,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 
 	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
@@ -162,7 +162,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	duty, err = r.currentValidatorDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
@@ -247,7 +247,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	cd, err := validatorConsensusDataFromEncoder(decidedValue)
 	if err != nil {
-		return err
+		return fmt.Errorf("decided value: %w", err)
 	}
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
@@ -267,7 +267,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
@@ -407,10 +407,14 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		return fmt.Errorf("submit beacon block: %w", err)
 	}
-	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot()), spectypes.BNRoleProposer)
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return fmt.Errorf("current duty slot: %w", err)
+	}
+	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleProposer)
 	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"
 	submittedAttrs := append([]attribute.KeyValue{
-		observability.BeaconSlotAttribute(r.State.CurrentDuty.DutySlot()),
+		observability.BeaconSlotAttribute(currentDutySlot),
 		observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
 	}, proposalTraceAttrs...)
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
@@ -434,7 +438,11 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
+	}
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 

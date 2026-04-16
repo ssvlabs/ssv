@@ -148,7 +148,12 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 }
 
 func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	vr, err := r.calculateVoluntaryExit()
+	validatorDuty, err := r.currentValidatorDuty()
+	if err != nil {
+		return nil, spectypes.DomainError, errors.Wrap(err, "current validator duty")
+	}
+
+	vr, err := r.calculateVoluntaryExit(validatorDuty)
 	if err != nil {
 		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate voluntary exit")
 	}
@@ -169,7 +174,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		return err
 	}
 
-	voluntaryExit, err := r.calculateVoluntaryExit()
+	voluntaryExit, err := r.calculateVoluntaryExit(validatorDuty)
 	if err != nil {
 		return fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
@@ -231,10 +236,9 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 }
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
-func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	duty, err := r.currentValidatorDuty()
-	if err != nil {
-		return nil, fmt.Errorf("current validator duty: %w", err)
+func (r *VoluntaryExitRunner) calculateVoluntaryExit(duty *spectypes.ValidatorDuty) (*phase0.VoluntaryExit, error) {
+	if duty == nil {
+		return nil, fmt.Errorf("validator duty is nil")
 	}
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 

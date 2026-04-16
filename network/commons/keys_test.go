@@ -59,3 +59,21 @@ func TestECDSAFromInterfaceRejectsNonSecp256k1Keys(t *testing.T) {
 	_, err = ECDSAPubFromInterface(pubKey)
 	require.ErrorContains(t, err, "unsupported key type")
 }
+
+func TestECDSAFromInterfaceRejectsNilKeys(t *testing.T) {
+	_, err := ECDSAPrivFromInterface(nil)
+	require.ErrorContains(t, err, "private key is nil")
+
+	_, err = ECDSAPubFromInterface(nil)
+	require.ErrorContains(t, err, "public key is nil")
+}
+
+func TestECDSAFromInterfaceRejectsTypedNilKeys(t *testing.T) {
+	var privKey *crypto.Secp256k1PrivateKey
+	_, err := ECDSAPrivFromInterface(privKey)
+	require.ErrorContains(t, err, "unsupported key type")
+
+	var pubKey *crypto.Secp256k1PublicKey
+	_, err = ECDSAPubFromInterface(pubKey)
+	require.ErrorContains(t, err, "unsupported key type")
+}

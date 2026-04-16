@@ -162,7 +162,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 
 	span.AddEvent("fetching sync committee contributions")
@@ -211,7 +211,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 
 	cd, err := validatorConsensusDataFromEncoder(decidedValue)
 	if err != nil {
-		return err
+		return fmt.Errorf("decided value: %w", err)
 	}
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
@@ -220,7 +220,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 
 	contributions, err := cd.GetSyncCommitteeContributions()
@@ -392,7 +392,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			break
 		}
 	}
-	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot()), spectypes.BNRoleSyncCommitteeContribution)
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return fmt.Errorf("current duty slot: %w", err)
+	}
+	recordSuccessfulSubmission(ctx, successfullySubmittedContributions, r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleSyncCommitteeContribution)
 	const submittedSyncCommitteeEvent = "✅ successfully submitted sync committee contributions"
 	span.AddEvent(submittedSyncCommitteeEvent)
 	logger.Debug(submittedSyncCommitteeEvent,
@@ -424,7 +428,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 ) (*altair.ContributionAndProof, phase0.Root, error) {
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return nil, phase0.Root{}, err
+		return nil, phase0.Root{}, fmt.Errorf("current validator duty: %w", err)
 	}
 
 	contribAndProof := &altair.ContributionAndProof{
@@ -433,7 +437,11 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 		SelectionProof:  proof,
 	}
 
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return nil, phase0.Root{}, fmt.Errorf("current duty slot: %w", err)
+	}
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
 	dContribAndProof, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
 		return nil, phase0.Root{}, errors.Wrap(err, "could not get domain data")
@@ -448,7 +456,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return nil, phase0.DomainType{}, err
+		return nil, phase0.DomainType{}, fmt.Errorf("current validator duty: %w", err)
 	}
 
 	indices := duty.ValidatorSyncCommitteeIndices

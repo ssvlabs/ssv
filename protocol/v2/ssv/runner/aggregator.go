@@ -139,7 +139,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 	span.SetAttributes(
 		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
@@ -207,7 +207,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	decidedValue, err := validatorConsensusDataFromEncoder(encDecidedValue)
 	if err != nil {
-		return err
+		return fmt.Errorf("decided value: %w", err)
 	}
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(decidedValue.Duty.Slot),
@@ -221,7 +221,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	duty, err := r.currentValidatorDuty()
 	if err != nil {
-		return err
+		return fmt.Errorf("current validator duty: %w", err)
 	}
 
 	span.AddEvent("signing post consensus")
@@ -347,7 +347,11 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		logger.Error(errMsg, fields.Took(time.Since(start)), zap.Error(err))
 		return fmt.Errorf("%s: %w", errMsg, err)
 	}
-	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot()), spectypes.BNRoleAggregator)
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return fmt.Errorf("current duty slot: %w", err)
+	}
+	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleAggregator)
 	const submittedSignedAggregateProofEvent = "✅ successfully submitted signed aggregate and proof"
 	span.AddEvent(submittedSignedAggregateProofEvent)
 	logger.Debug(submittedSignedAggregateProofEvent, fields.Took(time.Since(start)))
@@ -370,7 +374,12 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 }
 
 func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{spectypes.SSZUint64(r.State.CurrentDuty.DutySlot())}, spectypes.DomainSelectionProof, nil
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
+	}
+
+	return []ssz.HashRoot{spectypes.SSZUint64(currentDutySlot)}, spectypes.DomainSelectionProof, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
