@@ -28,6 +28,11 @@ func (r *messageRouter) Route(ctx context.Context, message network.DecodedSSVMes
 	case <-ctx.Done():
 		recordRouterMessageDrop(context.Background(), queue.DropReasonContextCanceled)
 		r.logger.Warn("context canceled, dropping message")
+		return
+	default:
+	}
+
+	select {
 	case r.ch <- message:
 	default:
 		recordRouterMessageDrop(context.Background(), queue.DropReasonBufferFull)
