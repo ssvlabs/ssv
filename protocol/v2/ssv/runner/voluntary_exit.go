@@ -240,12 +240,10 @@ func (r *VoluntaryExitRunner) calculateVoluntaryExit(duty *spectypes.ValidatorDu
 	if duty == nil {
 		return nil, fmt.Errorf("validator duty is nil")
 	}
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 
-	validatorIndex := duty.ValidatorIndex
 	return &phase0.VoluntaryExit{
-		Epoch:          epoch,
-		ValidatorIndex: validatorIndex,
+		Epoch:          r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot()),
+		ValidatorIndex: duty.ValidatorIndex,
 	}, nil
 }
 
