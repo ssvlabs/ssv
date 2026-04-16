@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -436,5 +437,57 @@ func Test_probeRemoteNetworkKeyProtector(t *testing.T) {
 		err := probeRemoteNetworkKeyProtector(context.Background(), client)
 		require.ErrorContains(t, err, "probe remote data protector encrypt")
 		require.ErrorContains(t, err, "unexpected status: 500")
+	})
+}
+
+func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
+	originalCfg := cfg
+	t.Cleanup(func() { cfg = originalCfg })
+
+	t.Run("returns nil when exporter has no protection config", func(t *testing.T) {
+		cfg = config{}
+
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		require.NoError(t, err)
+		require.Nil(t, operatorPrivKey)
+		require.Nil(t, signerClient)
+	})
+
+	t.Run("loads local operator key for exporter p2p protection", func(t *testing.T) {
+		privateKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
+		cfg = config{
+			OperatorPrivateKey: privateKey.Base64(),
+		}
+
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		require.NoError(t, err)
+		require.NotNil(t, operatorPrivKey)
+		require.Nil(t, signerClient)
+
+		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		require.NoError(t, err)
+		require.Len(t, encryptionKey, 32)
+	})
+
+	t.Run("loads ssv-signer client for exporter p2p protection", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, ssvsigner.PathOperatorIdentity, r.URL.Path)
+			_, err := w.Write([]byte("exporter-identity"))
+			require.NoError(t, err)
+		}))
+		t.Cleanup(server.Close)
+
+		cfg = config{
+			SSVSigner: SSVSignerConfig{
+				Endpoint: server.URL,
+			},
+		}
+
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		require.NoError(t, err)
+		require.Nil(t, operatorPrivKey)
+		require.NotNil(t, signerClient)
 	})
 }
