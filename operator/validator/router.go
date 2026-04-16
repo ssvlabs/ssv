@@ -26,7 +26,7 @@ type messageRouter struct {
 func (r *messageRouter) Route(ctx context.Context, message network.DecodedSSVMessage) {
 	select {
 	case <-ctx.Done():
-		recordRouterMessageDrop(context.Background(), queue.DropReasonContextCancelled)
+		recordRouterMessageDrop(context.Background(), queue.DropReasonContextCanceled)
 		r.logger.Warn("context canceled, dropping message")
 	case r.ch <- message:
 	default:

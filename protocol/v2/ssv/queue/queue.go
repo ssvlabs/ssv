@@ -96,18 +96,15 @@ func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 }
 
 func (q *priorityQueue) Push(msg *SSVMessage) {
-	q.recordInboxSize(int64(len(q.inbox)) + 1)
-
-	q.warnIfInboxIsTooBig()
-
 	q.inbox <- msg
+	q.recordInboxSize(int64(len(q.inbox)))
+	q.warnIfInboxIsTooBig()
 }
 
 func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
-	q.recordInboxSize(int64(len(q.inbox)) + 1)
-
 	select {
 	case q.inbox <- msg:
+		q.recordInboxSize(int64(len(q.inbox)))
 		q.warnIfInboxIsTooBig()
 		return true
 	default:

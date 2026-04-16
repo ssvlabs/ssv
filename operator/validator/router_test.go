@@ -60,3 +60,48 @@ func TestRouter(t *testing.T) {
 
 	require.Equal(t, count, expectedCount)
 }
+
+func TestRouter_DropsWhenContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	logger := log.TestLogger(t)
+	router := newMessageRouter(logger)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	msg := &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+			Data:    []byte("data"),
+		},
+	}
+
+	router.Route(ctx, msg)
+
+	require.Len(t, router.GetMessageChan(), 0)
+}
+
+func TestRouter_DropsWhenBufferFull(t *testing.T) {
+	t.Parallel()
+
+	logger := log.TestLogger(t)
+	router := newMessageRouter(logger)
+
+	msg := &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+			Data:    []byte("data"),
+		},
+	}
+
+	for range bufSize {
+		router.ch <- msg
+	}
+
+	router.Route(context.Background(), msg)
+
+	require.Len(t, router.GetMessageChan(), bufSize)
+}

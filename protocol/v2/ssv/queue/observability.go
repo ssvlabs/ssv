@@ -47,12 +47,12 @@ const (
 	ValidatorQueueMetricType = "validator"
 	CommitteeQueueMetricType = "committee"
 
-	DropReasonBufferFull       = "buffer_full"
-	DropReasonMalformed        = "malformed"
-	DropReasonStaleHeight      = "stale_height"
-	DropReasonStaleRound       = "stale_round"
-	DropReasonStaleSlot        = "stale_slot"
-	DropReasonContextCancelled = "context_canceled"
+	DropReasonBufferFull      = "buffer_full"
+	DropReasonMalformed       = "malformed"
+	DropReasonStaleHeight     = "stale_height"
+	DropReasonStaleRound      = "stale_round"
+	DropReasonStaleSlot       = "stale_slot"
+	DropReasonContextCanceled = "context_canceled"
 )
 
 // ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).
