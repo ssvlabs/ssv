@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -28,17 +27,19 @@ import (
 )
 
 type Getters interface {
+	HasRunningDuty() bool
 	HasRunningQBFTInstance() bool
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
 	GetRole() spectypes.RunnerRole
+	GetCurrentDutySlot() phase0.Slot
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
 	GetStateRoot() ([32]byte, error)
-	GetBeaconNode() beacon.BeaconNode
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
+	GetBeaconNode() beacon.BeaconNode
 }
 
 type Setters interface {
@@ -54,8 +55,6 @@ type Runner interface {
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
 	StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error
-	// HasRunningDuty returns true if it has a running duty
-	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
 	ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error
 	// ProcessConsensus processes all consensus msgs, returns error if can't process
@@ -81,8 +80,17 @@ type DoppelgangerProvider interface {
 var _ Runner = new(CommitteeRunner)
 
 type BaseRunner struct {
-	mtx            sync.RWMutex
-	State          *State
+	// State stores the current runner state, this state corresponds to 1 particular duty the runner is
+	// currently busy with at the moment. The BaseRunner is not responsible for synchronizing any updates
+	// State might need to record - the caller is responsible to ensure the updates/reads (these can happen
+	// whenever runner's method is called to process a p2p message, or an event) are applied sequentially,
+	// plus the caller is also responsible for ensuring there is no race with moving on to the next duty
+	// (the baseSetupForNewDuty call).
+	// Note, the current implementation achieves concurrent safety by making sure every State read/update
+	// is done by the same go-routine, handling all the messages in queue.SSVMessage (p2p messages and events)
+	// sequentially.
+	State *State
+
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	NetworkConfig  *networkconfig.Network
@@ -96,21 +104,22 @@ type BaseRunner struct {
 	highestDecidedSlot phase0.Slot
 }
 
+func (b *BaseRunner) HasRunningDuty() bool {
+	return b.hasDutyRunning()
+}
+
+func (b *BaseRunner) HasStartedQBFTInstance() bool {
+	return b.hasDutyAssigned() && b.State.RunningInstance != nil
+}
+
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
-	var runningInstance *instance.Instance
-	if b.HasRunningDuty() {
-		runningInstance = b.State.RunningInstance
-		if runningInstance != nil {
-			decided, _ := runningInstance.IsDecided()
-			return !decided
-		}
-	}
-	return false
+	// Note: RunningInstance.State cannot be nil for existing RunningInstance by construction.
+	return b.hasDutyRunning() && b.HasStartedQBFTInstance() && !b.State.RunningInstance.State.Decided
 }
 
 func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 	var runningInstance *instance.Instance
-	if b.HasRunningDuty() {
+	if b.hasDutyRunning() {
 		runningInstance = b.State.RunningInstance
 		if runningInstance != nil {
 			return runningInstance.State.ProposalAcceptedForCurrentRound != nil
@@ -123,19 +132,16 @@ func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 	return b.Share
 }
 
-func (b *BaseRunner) HasRunningDuty() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
-	if b.State == nil {
-		return false
-	}
-
-	return !b.State.Finished
-}
-
 func (b *BaseRunner) GetRole() spectypes.RunnerRole {
 	return b.RunnerRoleType
+}
+
+func (b *BaseRunner) GetCurrentDutySlot() phase0.Slot {
+	if !b.hasDutyAssigned() {
+		return 0
+	}
+	// State.CurrentDuty cannot be nil for non-nil State by construction.
+	return b.State.CurrentDuty.DutySlot()
 }
 
 func (b *BaseRunner) GetLastHeight() specqbft.Height {
@@ -146,7 +152,7 @@ func (b *BaseRunner) GetLastHeight() specqbft.Height {
 }
 
 func (b *BaseRunner) GetLastRound() specqbft.Round {
-	if b.HasRunningDuty() {
+	if b.hasDutyRunning() {
 		inst := b.State.RunningInstance
 		if inst != nil {
 			return inst.State.Round
@@ -205,32 +211,13 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	return byts, err
 }
 
-// SetHighestDecidedSlot set highestDecidedSlot for base runner
-func (b *BaseRunner) SetHighestDecidedSlot(slot phase0.Slot) {
-	b.highestDecidedSlot = slot
-}
-
-// baseSetupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty, quorum uint64) {
-	// start new state
-	// start new state
-	// TODO nicer way to get quorum
-	state := NewRunnerState(quorum, duty)
-
-	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
-	// b.State but currently does not write to it
-	b.mtx.Lock() // writes to b.State
-	b.State = state
-	b.mtx.Unlock()
-}
-
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
 		return fmt.Errorf("can't start duty: %w", err)
 	}
 
-	b.baseSetupForNewDuty(duty, quorum)
+	b.State = NewRunnerState(quorum, duty)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
 		return fmt.Errorf("failed to execute duty: %w", err)
@@ -243,7 +230,7 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return fmt.Errorf("can't start non-beacon duty: %w", err)
 	}
-	b.baseSetupForNewDuty(duty, quorum)
+	b.State = NewRunnerState(quorum, duty)
 	return runner.executeDuty(ctx, logger, duty)
 }
 
@@ -285,7 +272,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.HasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
+	if b.hasDutyRunning() && b.HasStartedQBFTInstance() {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 	if prevDecided {
@@ -300,7 +287,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return false, nil, err
 	}
 
-	if !b.HasRunningDuty() {
+	if !b.hasDutyRunning() {
 		logger.Debug("no running duty, applied consensus message but cannot progress further")
 		return false, nil, nil
 	}
@@ -421,7 +408,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 		return false, nil
 	}
 
-	if b.State.RunningInstance == nil {
+	if !b.HasStartedQBFTInstance() {
 		return false, spectypes.NewError(spectypes.DecidedWrongInstanceErrorCode, "decided wrong instance (running instance is nil)")
 	}
 
@@ -483,21 +470,15 @@ func (b *BaseRunner) decide(
 }
 
 func (b *BaseRunner) hasDutyAssigned() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
 	return b.State != nil
 }
 
+func (b *BaseRunner) hasDutyRunning() bool {
+	return b.hasDutyAssigned() && !b.State.Finished
+}
+
 func (b *BaseRunner) hasDutyFinished() bool {
-	b.mtx.RLock() // reads b.State
-	defer b.mtx.RUnlock()
-
-	if b.State == nil {
-		return false
-	}
-
-	return b.State.Finished
+	return b.hasDutyAssigned() && b.State.Finished
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
@@ -511,8 +492,8 @@ func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 }
 
 func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
-	// assume CurrentDuty is not nil if state is not nil
-	if b.State != nil && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
+	// CurrentDuty is not nil if State is not nil by construction.
+	if b.hasDutyAssigned() && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
 		return spectypes.NewError(
 			spectypes.DutyAlreadyPassedErrorCode,
 			fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), b.State.CurrentDuty.DutySlot()),
@@ -522,5 +503,19 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 }
 
 func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+	if !b.hasDutyRunning() {
+		// Duties terminate eventually, timeout-event issuer is unaware of that - that's why we can end up here.
+		return nil
+	}
+
+	if timeoutData.Height != specqbft.Height(b.GetCurrentDutySlot()) {
+		// Validator-Runners are re-used to process duties targeting different slots (unlike Committee-Runners that
+		// are working with exactly one slot), thus for Validator-Runners timeout events can be delayed in the queue
+		// until the runner has already moved on to a new duty/slot - this is why timeout-event height(== slot)
+		// might be different from the actual current slot the runner is working with, and we just skip these delayed
+		// events as no longer relevant (the duty those are targeting has already expired).
+		return nil
+	}
+
 	return b.QBFTController.OnTimeout(ctx, logger, timeoutData)
 }

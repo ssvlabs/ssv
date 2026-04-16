@@ -159,7 +159,7 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	if r.State == nil || r.State.CurrentDuty == nil {
+	if !r.hasDutyAssigned() {
 		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
 	}
 	vr, err := r.buildValidatorRegistration(r.State.CurrentDuty.DutySlot())
@@ -279,6 +279,7 @@ func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }

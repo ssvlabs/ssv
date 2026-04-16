@@ -74,9 +74,9 @@ func TestAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleAggregator, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
+	require.False(t, decoded.hasDutyRunning())
 }
 
 func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
@@ -119,9 +119,9 @@ func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleProposer, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
+	require.False(t, decoded.hasDutyRunning())
 }
 
 func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
@@ -160,7 +160,7 @@ func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleSyncCommitteeContribution, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
+	require.False(t, decoded.hasDutyRunning())
 }

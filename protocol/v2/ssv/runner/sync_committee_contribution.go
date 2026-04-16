@@ -560,6 +560,7 @@ func (r *SyncCommitteeAggregatorRunner) GetShare() *spectypes.Share {
 func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }

@@ -5,8 +5,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
-// State represents a portion of the current state
-// that is relevant to the prioritization of messages.
+// State represents Runner state that is useful for comparing the priority of various messages (message priority
+// depends on what the current runner state is).
 type State struct {
 	HasRunningInstance bool
 	Height             specqbft.Height

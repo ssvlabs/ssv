@@ -110,17 +110,23 @@ func (v *Validator) StartQueueConsumer(
 		go msgStates.Start()
 		defer msgStates.Stop()
 
+		// rState defines current runner state that will be used for deciding which messages we want to process
+		// sooner (vs which ones can wait till later).
+		rState := queue.State{
+			Quorum: v.Operator.GetQuorum(), // never changes for duty runner
+		}
+
 		for ctx.Err() == nil {
-			// Construct a representation of the current state.
-			state := queue.State{}
 			r := v.DutyRunners.DutyRunnerForMsgID(msgID)
 			if r == nil {
 				return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
 			}
-			state.HasRunningInstance = r.HasRunningQBFTInstance()
-			state.Height = r.GetLastHeight()
-			state.Round = r.GetLastRound()
-			state.Quorum = v.Operator.GetQuorum()
+
+			// Update rState to incorporate the effects previously handled message might have had on the runner state.
+			rState.HasRunningInstance = r.HasRunningQBFTInstance()
+			rState.Height = r.GetLastHeight()
+			rState.Round = r.GetLastRound()
+			rState.Slot = r.GetCurrentDutySlot()
 
 			filter := queue.FilterAny
 			if !r.HasRunningDuty() {
@@ -132,7 +138,7 @@ func (v *Validator) StartQueueConsumer(
 					}
 					return e.Type == types.ExecuteDuty
 				}
-			} else if state.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
+			} else if rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
 				// If no proposal was accepted for the current round, skip prepare & commit messages
 				// for the current height and round.
 				filter = func(m *queue.SSVMessage) bool {
@@ -141,7 +147,7 @@ func (v *Validator) StartQueueConsumer(
 						return true
 					}
 
-					if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
+					if qbftMsg.Height != rState.Height || qbftMsg.Round != rState.Round {
 						return true
 					}
 					return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
@@ -149,7 +155,7 @@ func (v *Validator) StartQueueConsumer(
 			}
 
 			// Pop the highest priority message for the current state.
-			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+			msg := q.Pop(ctx, queue.NewMessagePrioritizer(&rState), filter)
 			if ctx.Err() != nil {
 				// Optimization: terminate fast if we can.
 				return nil

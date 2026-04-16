@@ -90,7 +90,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		return err
 	}
 
-	if b.State.RunningInstance == nil {
+	if !b.HasStartedQBFTInstance() {
 		return NewRetryableError(spectypes.WrapError(spectypes.NoRunningConsensusInstanceErrorCode, ErrInstanceNotFound))
 	}
 
