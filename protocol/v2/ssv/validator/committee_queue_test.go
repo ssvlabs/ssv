@@ -1197,6 +1197,94 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny))
 }
 
+func TestHandleMessageDropsStaleRoundUnderPressure(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	slot := phase0.Slot(123)
+	currentRound := specqbft.Round(2)
+	queueCapacity := 4
+
+	committee := &Committee{
+		logger:        logger,
+		networkConfig: networkconfig.TestNetwork,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners: map[phase0.Slot]*runner.CommitteeRunner{
+			slot: {
+				BaseRunner: &runner.BaseRunner{
+					State: &runner.State{
+						RunningInstance: &instance.Instance{
+							State: &specqbft.State{
+								Round: currentRound,
+							},
+						},
+					},
+				},
+			},
+		},
+		CommitteeMember: &spectypes.CommitteeMember{},
+	}
+
+	qContainer := queueContainer{
+		Q: queue.New(logger, queueCapacity),
+		queueState: &queue.State{
+			HasRunningInstance: true,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+			Round:              currentRound,
+		},
+	}
+	committee.Queues[slot] = qContainer
+
+	for i := 0; i < 3; i++ {
+		msg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{byte(i + 1)}, &specqbft.Message{
+			Height:  specqbft.Height(slot),
+			Round:   currentRound,
+			MsgType: specqbft.CommitMsgType,
+		})
+		committee.EnqueueMessage(ctx, msg)
+	}
+	require.Equal(t, 3, qContainer.Q.Len())
+
+	staleMsgID := spectypes.MessageID{0xAA}
+	staleMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, staleMsgID, &specqbft.Message{
+		Height:  specqbft.Height(slot),
+		Round:   currentRound - 1,
+		MsgType: specqbft.PrepareMsgType,
+	})
+	committee.EnqueueMessage(ctx, staleMsg)
+	require.Equal(t, 3, qContainer.Q.Len())
+
+	currentMsgID := spectypes.MessageID{0xBB}
+	currentMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, currentMsgID, &specqbft.Message{
+		Height:  specqbft.Height(slot),
+		Round:   currentRound,
+		MsgType: specqbft.ProposalMsgType,
+	})
+	committee.EnqueueMessage(ctx, currentMsg)
+	require.Equal(t, queueCapacity, qContainer.Q.Len())
+
+	foundStale := false
+	foundCurrent := false
+	for i := 0; i < queueCapacity; i++ {
+		popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+		popCancel()
+		require.NotNil(t, msg)
+
+		if msg.MsgID == staleMsgID {
+			foundStale = true
+		}
+		if msg.MsgID == currentMsgID {
+			foundCurrent = true
+		}
+	}
+
+	assert.False(t, foundStale)
+	assert.True(t, foundCurrent)
+}
+
 // TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
 // processing further messages if the handler returns runner.ErrNoValidDutiesToExecute.
 //

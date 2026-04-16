@@ -43,6 +43,12 @@ type Queue interface {
 
 	// Len returns the number of messages in the queue.
 	Len() int
+
+	// InboxLen returns the number of messages waiting in the inbox channel.
+	InboxLen() int
+
+	// InboxCap returns the inbox channel capacity.
+	InboxCap() int
 }
 
 type priorityQueue struct {
@@ -54,6 +60,8 @@ type priorityQueue struct {
 
 	inboxSizeMetric    metric.Int64Gauge
 	inboxSizeRecordOps []metric.RecordOption
+	queueType          string
+	queueID            string
 }
 
 type Option func(*priorityQueue)
@@ -67,6 +75,8 @@ func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueType string, qu
 	return func(q *priorityQueue) {
 		q.inboxSizeMetric = inboxSizeMetric
 		q.inboxSizeRecordOps = []metric.RecordOption{metric.WithAttributeSet(attrSet)}
+		q.queueType = queueType
+		q.queueID = queueId
 	}
 }
 
@@ -101,6 +111,7 @@ func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 		q.warnIfInboxIsTooBig()
 		return true
 	default:
+		q.recordDrop(DropReasonBufferFull)
 		return false
 	}
 }
@@ -229,6 +240,14 @@ func (q *priorityQueue) Len() int {
 	return n
 }
 
+func (q *priorityQueue) InboxLen() int {
+	return len(q.inbox)
+}
+
+func (q *priorityQueue) InboxCap() int {
+	return cap(q.inbox)
+}
+
 func (q *priorityQueue) recordInboxSize(inboxSize int64) {
 	if q.inboxSizeMetric == nil {
 		return
@@ -238,6 +257,13 @@ func (q *priorityQueue) recordInboxSize(inboxSize int64) {
 		inboxSize,
 		q.inboxSizeRecordOps...,
 	)
+}
+
+func (q *priorityQueue) recordDrop(reason string) {
+	if q.queueType == "" || q.queueID == "" {
+		return
+	}
+	RecordDroppedMessage(q.queueType, q.queueID, reason)
 }
 
 // warnIfInboxIsTooBig logs a warning that we'd ideally never want to hit, if we do - we'd want to do

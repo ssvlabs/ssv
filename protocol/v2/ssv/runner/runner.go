@@ -32,6 +32,7 @@ type Getters interface {
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
 	GetRole() spectypes.RunnerRole
+	GetCurrentDutySlot() (phase0.Slot, bool)
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
 	GetStateRoot() ([32]byte, error)
@@ -136,6 +137,17 @@ func (b *BaseRunner) HasRunningDuty() bool {
 
 func (b *BaseRunner) GetRole() spectypes.RunnerRole {
 	return b.RunnerRoleType
+}
+
+func (b *BaseRunner) GetCurrentDutySlot() (phase0.Slot, bool) {
+	b.mtx.RLock()
+	defer b.mtx.RUnlock()
+
+	if b.State == nil || b.State.CurrentDuty == nil {
+		return 0, false
+	}
+
+	return b.State.CurrentDuty.DutySlot(), true
 }
 
 func (b *BaseRunner) GetLastHeight() specqbft.Height {

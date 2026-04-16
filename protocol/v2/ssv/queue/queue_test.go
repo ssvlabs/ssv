@@ -311,6 +311,79 @@ func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
 	require.Equal(t, queueID, queueIDAttr.AsString())
 }
 
+func TestShouldAcceptUnderPressure(t *testing.T) {
+	state := &State{
+		HasRunningInstance: true,
+		Height:             100,
+		Slot:               100,
+		Round:              2,
+	}
+
+	t.Run("rejects stale round consensus", func(t *testing.T) {
+		msg := &SSVMessage{
+			Body: &specqbft.Message{
+				Height:  100,
+				Round:   1,
+				MsgType: specqbft.PrepareMsgType,
+			},
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(state, msg, 3, 4)
+		require.False(t, accepted)
+		require.Equal(t, DropReasonStaleRound, reason)
+	})
+
+	t.Run("rejects stale slot partial signatures", func(t *testing.T) {
+		msg := &SSVMessage{
+			Body: &spectypes.PartialSignatureMessages{
+				Slot: 99,
+			},
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(state, msg, 3, 4)
+		require.False(t, accepted)
+		require.Equal(t, DropReasonStaleSlot, reason)
+	})
+
+	t.Run("accepts current round under pressure", func(t *testing.T) {
+		msg := &SSVMessage{
+			Body: &specqbft.Message{
+				Height:  100,
+				Round:   2,
+				MsgType: specqbft.ProposalMsgType,
+			},
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(state, msg, 3, 4)
+		require.True(t, accepted)
+		require.Empty(t, reason)
+	})
+
+	t.Run("rejects malformed messages under pressure", func(t *testing.T) {
+		msg := &SSVMessage{
+			Body: (*specqbft.Message)(nil),
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(state, msg, 3, 4)
+		require.False(t, accepted)
+		require.Equal(t, DropReasonMalformed, reason)
+	})
+
+	t.Run("skips admission checks when not under pressure", func(t *testing.T) {
+		msg := &SSVMessage{
+			Body: &specqbft.Message{
+				Height:  100,
+				Round:   1,
+				MsgType: specqbft.PrepareMsgType,
+			},
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(state, msg, 2, 4)
+		require.True(t, accepted)
+		require.Empty(t, reason)
+	})
+}
+
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
 		return New(log.BenchLogger(b), 32)

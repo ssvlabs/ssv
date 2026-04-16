@@ -52,6 +52,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "errors"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
+
+	routerDroppedMessagesCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "router.messages.dropped"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of router-dropped messages by reason")))
 )
 
 func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
@@ -62,5 +68,11 @@ func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
 func recordValidatorStatus(ctx context.Context, count uint32, status validatorStatus) {
 	validatorStatusGauge.Record(ctx, int64(count),
 		metric.WithAttributes(validatorStatusAttribute(status)),
+	)
+}
+
+func recordRouterMessageDrop(ctx context.Context, reason string) {
+	routerDroppedMessagesCounter.Add(ctx, 1,
+		metric.WithAttributes(attribute.String("ssv.validator.router.drop_reason", reason)),
 	)
 }
