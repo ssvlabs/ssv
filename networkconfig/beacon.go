@@ -36,6 +36,14 @@ func (b *Beacon) String() string {
 	return string(marshaled)
 }
 
+func (b *Beacon) NetworkName() string {
+	return b.Name
+}
+
+func (b *Beacon) GenesisRoot() phase0.Root {
+	return b.GenesisValidatorsRoot
+}
+
 // SlotStartTime returns the start time for the given slot
 func (b *Beacon) SlotStartTime(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
@@ -44,11 +52,6 @@ func (b *Beacon) SlotStartTime(slot phase0.Slot) time.Time {
 	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
 	start := b.GenesisTime.Add(durationSinceGenesisStart)
 	return start
-}
-
-// SlotEndTime returns the end time for the given slot
-func (b *Beacon) SlotEndTime(slot phase0.Slot) time.Time {
-	return b.SlotStartTime(slot + 1)
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot

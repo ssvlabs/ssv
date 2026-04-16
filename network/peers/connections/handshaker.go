@@ -13,8 +13,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
@@ -71,7 +69,6 @@ type HandshakerCfg struct {
 	ConnIdx         peers.ConnectionIndex
 	SubnetsIdx      peers.SubnetsIndex
 	IDService       identify.IDService
-	OperatorSigner  keys.OperatorSigner
 	DomainType      spectypes.DomainType
 	SubnetsProvider SubnetsProvider
 }

@@ -14,8 +14,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
 
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/validation"
@@ -94,7 +92,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("list keys: %w", err)
 	}
 
-	logger.Info("fetched key list", fields.Count(len(keys)), fields.Took(time.Since(fetchStart)))
+	logger.Info("fetched key list", zap.Int("count", len(keys)), zap.Duration("took", time.Since(fetchStart)))
 
 	if len(keys) == 0 {
 		logger.Warn("no keys found, exiting")
@@ -102,7 +100,7 @@ func run(logger *zap.Logger, cli CLI) error {
 	}
 
 	deletingStart := time.Now()
-	logger.Info("deleting keys in batches", fields.Count(len(keys)))
+	logger.Info("deleting keys in batches", zap.Int("count", len(keys)))
 
 	statusCount := map[web3signer.Status]int{}
 
@@ -126,7 +124,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		if err != nil {
 			logger.Error("failed to delete keystore batch",
 				zap.Int("batch_index", i/cli.BatchSize),
-				fields.Took(time.Since(batchStart)),
+				zap.Duration("took", time.Since(batchStart)),
 				zap.Error(err))
 			continue
 		}
@@ -138,12 +136,12 @@ func run(logger *zap.Logger, cli CLI) error {
 		logger.Info("batch processed",
 			zap.Int("batch_index", i/cli.BatchSize),
 			zap.Int("batch_size", len(batch)),
-			fields.Took(time.Since(batchStart)))
+			zap.Duration("took", time.Since(batchStart)))
 	}
 
 	logger.Info("all batches completed",
 		zap.Any("status_count", statusCount),
-		fields.Took(time.Since(deletingStart)))
+		zap.Duration("took", time.Since(deletingStart)))
 
 	return nil
 }

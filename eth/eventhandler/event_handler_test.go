@@ -26,6 +26,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -1399,7 +1400,7 @@ func setupEventHandler(
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, network.Beacon, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), network.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1424,7 +1425,6 @@ func setupEventHandler(
 			tExecutor,
 			network,
 			operatorDataStore,
-			operator.privateKey,
 			keyManager,
 			dgHandler,
 			WithFullNode(),
@@ -1460,7 +1460,6 @@ func setupEventHandler(
 		validatorCtrl,
 		network,
 		operatorDataStore,
-		operator.privateKey,
 		keyManager,
 		dgHandler,
 		WithFullNode(),

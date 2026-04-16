@@ -20,8 +20,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -113,10 +111,8 @@ type p2pNetwork struct {
 
 	libConnManager connmgrcore.ConnManager
 
-	nodeStorage             operatorstorage.Storage
-	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
-	operatorSigner          keys.OperatorSigner
-	operatorDataStore       operatordatastore.OperatorDataStore
+	nodeStorage       operatorstorage.Storage
+	operatorDataStore operatordatastore.OperatorDataStore
 
 	// discoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
 	// the best candidates to connect to.
@@ -137,21 +133,19 @@ func New(
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	n := &p2pNetwork{
-		parentCtx:               cfg.Ctx,
-		ctx:                     ctx,
-		cancel:                  cancel,
-		logger:                  logger.Named(log.NameP2PNetwork),
-		cfg:                     cfg,
-		msgRouter:               cfg.Router,
-		msgValidator:            cfg.MessageValidator,
-		state:                   stateClosed,
-		subscribedCommittees:    hashmap.New[string, committeeSubscriptionStatus](),
-		nodeStorage:             cfg.NodeStorage,
-		operatorPKHashToPKCache: hashmap.New[string, []byte](),
-		operatorSigner:          cfg.OperatorSigner,
-		operatorDataStore:       cfg.OperatorDataStore,
-		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](ctx, 30*time.Minute, 3*time.Minute),
-		trimmedRecently:         ttl.New[peer.ID, struct{}](ctx, 30*time.Minute, 3*time.Minute),
+		parentCtx:            cfg.Ctx,
+		ctx:                  ctx,
+		cancel:               cancel,
+		logger:               logger.Named(log.NameP2PNetwork),
+		cfg:                  cfg,
+		msgRouter:            cfg.Router,
+		msgValidator:         cfg.MessageValidator,
+		state:                stateClosed,
+		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
+		nodeStorage:          cfg.NodeStorage,
+		operatorDataStore:    cfg.OperatorDataStore,
+		discoveredPeersPool:  ttl.New[peer.ID, discovery.DiscoveredPeer](ctx, 30*time.Minute, 3*time.Minute),
+		trimmedRecently:      ttl.New[peer.ID, struct{}](ctx, 30*time.Minute, 3*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err
@@ -376,6 +370,16 @@ func (n *p2pNetwork) peersTrimming() func() {
 
 		inboundBefore, outboundBefore := n.connectionStats()
 		peersToTrim := n.choosePeersToTrim(maxPeersToDrop, trimInboundOnly)
+		if len(peersToTrim) == 0 {
+			n.logger.Debug(
+				"no peers selected for trimming",
+				zap.Int("inbound_peers", inboundBefore),
+				zap.Int("outbound_peers", outboundBefore),
+				zap.Bool("trim_inbound_only", trimInboundOnly),
+				zap.Int("trimmed_recently_size", n.trimmedRecently.SlowLen()),
+			)
+			return
+		}
 		connMgr.TrimPeers(ctx, n.host.Network(), peersToTrim)
 		for pid := range peersToTrim {
 			n.trimmedRecently.Set(pid, struct{}{})
@@ -387,6 +391,8 @@ func (n *p2pNetwork) peersTrimming() func() {
 			zap.Int("outbound_peers_before_trim", outboundBefore),
 			zap.Int("inbound_peers_after_trim", inboundAfter),
 			zap.Int("outbound_peers_after_trim", outboundAfter),
+			zap.Bool("trim_inbound_only", trimInboundOnly),
+			zap.Int("trimmed_recently_size", n.trimmedRecently.SlowLen()),
 			zap.Any("trimmed_peers", maps.Keys(peersToTrim)),
 		)
 	}
@@ -416,6 +422,7 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 	})
 
 	result := make(map[peer.ID]struct{}, trimCnt)
+	ownSubnets := n.SubscribedSubnets()
 	for _, p := range myPeers {
 		if trimCnt <= 0 {
 			break
@@ -441,6 +448,15 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 			if connDir == p2pnet.DirOutbound && trimInboundOnly {
 				continue
 			}
+			peerSubnets, _ := n.idx.GetPeerSubnets(p)
+			sharedSubnets := ownSubnets.SharedSubnets(peerSubnets)
+			n.logger.Debug("selected peer for trimming",
+				fields.PeerID(p),
+				zap.Float64("peer_score", peerScores[p]),
+				zap.String("conn_direction", connDir.String()),
+				zap.String("peer_subnets", peerSubnets.StringHumanReadable()),
+				zap.Int("shared_subnets_count", len(sharedSubnets)),
+			)
 			result[p] = struct{}{}
 			trimCnt--
 		}
@@ -478,7 +494,7 @@ func (n *p2pNetwork) isReady() bool {
 }
 
 // Healthy reports whether the p2p network is operating normally.
-// It satisfies the nodeprobe health-check interface.
+// It satisfies the health-check interface from hprobe package.
 func (n *p2pNetwork) Healthy(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err

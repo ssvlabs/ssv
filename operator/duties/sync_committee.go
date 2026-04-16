@@ -132,7 +132,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
-			if reorgEvent.Current && h.shouldFetchNextPeriod(currentSlot) {
+			if reorgEvent.CurrentDutyDependentRootChanged && h.shouldFetchNextPeriod(currentSlot) {
 				h.duties.Reset(currentPeriod + 1)
 				h.fetchNextPeriod = true
 			}
@@ -389,20 +389,10 @@ func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 
 func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
 	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
-	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
-	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
+	_, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {
 		h.logger.Warn("validator not found", fields.Validator(duty.PubKey[:]))
-		return false
-	}
-
-	if v.MinParticipationEpoch() > currentEpoch {
-		h.logger.Debug("validator not yet participating",
-			fields.Validator(duty.PubKey[:]),
-			zap.Uint64("min_participation_epoch", uint64(v.MinParticipationEpoch())),
-			zap.Uint64("current_epoch", uint64(currentEpoch)),
-		)
 		return false
 	}
 

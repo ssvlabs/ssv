@@ -56,9 +56,6 @@ const (
 	networkRouterConcurrency = 2048
 )
 
-// ShareEventHandlerFunc is a function that handles event in an extended mode
-type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
-
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                        context.Context
@@ -93,8 +90,6 @@ type ControllerOptions struct {
 	QueueBufferSize int    `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
 	GasLimit        uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
 }
-
-type Nonce uint16
 
 type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) (*ssvtypes.SSVShare, bool)
@@ -1015,6 +1010,17 @@ func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
 ) validator.CommitteeRunnerFunc {
+	if options.ExporterOptions.Enabled {
+		return func(
+			phase0.Slot,
+			map[phase0.ValidatorIndex]*spectypes.Share,
+			[]phase0.BLSPubKey,
+			runner.CommitteeDutyGuard,
+		) (*runner.CommitteeRunner, error) {
+			return nil, fmt.Errorf("cannot set up committee runners in exporter mode")
+		}
+	}
+
 	buildController := func(role spectypes.RunnerRole) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
@@ -1068,6 +1074,10 @@ func SetupRunners(
 	validatorStore registrystorage.ValidatorStore,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
+	if options.ExporterOptions.Enabled {
+		return nil, fmt.Errorf("cannot set up duty runners in exporter mode")
+	}
+
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleProposer,
 		spectypes.RoleAggregator,
