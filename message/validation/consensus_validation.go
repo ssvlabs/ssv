@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -22,6 +23,7 @@ import (
 )
 
 func (mv *messageValidator) validateConsensusMessage(
+	ctx context.Context,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
 	receivedFrom peer.ID,
@@ -57,9 +59,17 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return consensusMessage, err
+	}
+
 	for i := range signedSSVMessage.Signatures {
 		operatorID := signedSSVMessage.OperatorIDs[i]
 		signature := signedSSVMessage.Signatures[i]
+
+		if err := ctx.Err(); err != nil {
+			return consensusMessage, err
+		}
 
 		if err := mv.signatureVerifier.VerifySignature(operatorID, ssvMessage, signature); err != nil {
 			e := ErrSignatureVerification

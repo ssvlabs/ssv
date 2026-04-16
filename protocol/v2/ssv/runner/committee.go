@@ -102,23 +102,23 @@ func (r *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, 
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	d, ok := duty.(*spectypes.CommitteeDuty)
-	if !ok {
-		return fmt.Errorf("duty is not a CommitteeDuty: %T", duty)
+	committeeDuty, err := committeeDutyFromDuty(duty)
+	if err != nil {
+		return fmt.Errorf("committee duty: %w", err)
 	}
 
-	span.SetAttributes(observability.DutyCountAttribute(len(d.ValidatorDuties)))
+	span.SetAttributes(observability.DutyCountAttribute(len(committeeDuty.ValidatorDuties)))
 
-	for _, validatorDuty := range d.ValidatorDuties {
-		err := r.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), d.DutySlot())
+	for _, validatorDuty := range committeeDuty.ValidatorDuties {
+		err := r.DutyGuard.StartDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), committeeDuty.DutySlot())
 		if err != nil {
 			return fmt.Errorf(
 				"could not start %s duty at slot %d for validator %x: %w",
-				validatorDuty.Type, d.DutySlot(), validatorDuty.PubKey, err,
+				validatorDuty.Type, committeeDuty.DutySlot(), validatorDuty.PubKey, err,
 			)
 		}
 	}
-	err := r.baseStartNewDuty(ctx, logger, r, duty, quorum)
+	err = r.baseStartNewDuty(ctx, logger, r, committeeDuty, quorum)
 	if err != nil {
 		return err
 	}
@@ -235,23 +235,23 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
-	duty := r.State.CurrentDuty
+	committeeDuty, err := r.currentCommitteeDuty()
+	if err != nil {
+		return fmt.Errorf("current committee duty: %w", err)
+	}
+	committeeDutySlot := committeeDuty.DutySlot()
+
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     committeeDutySlot,
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(committeeDutySlot)
 	version, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 
-	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
-	if !ok {
-		return fmt.Errorf("duty is not a CommitteeDuty: %T", duty)
-	}
-
 	span.SetAttributes(
-		observability.BeaconSlotAttribute(duty.DutySlot()),
+		observability.BeaconSlotAttribute(committeeDutySlot),
 		observability.BeaconEpochAttribute(epoch),
 		observability.BeaconVersionAttribute(version),
 		observability.DutyCountAttribute(len(committeeDuty.ValidatorDuties)),
@@ -270,11 +270,15 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
 		dutiesCh     = make(chan *spectypes.ValidatorDuty)
 
-		beaconVote = decidedValue.(*spectypes.BeaconVote)
 		totalAttesterDuties,
 		totalSyncCommitteeDuties,
 		blockedAttesterDuties atomic.Uint32
 	)
+
+	beaconVote, err := beaconVoteFromEncoder(decidedValue)
+	if err != nil {
+		return fmt.Errorf("beacon vote: %w", err)
+	}
 
 	// The worker pool will throttle the parallel processing of validator duties.
 	// This is mainly needed because the processing involves several outgoing HTTP calls to the Consensus Client.
@@ -702,7 +706,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			return fmt.Errorf("%s: %w", errMsg, err)
 		}
 
-		recordSuccessfulSubmission(ctx, int64(len(attestations)), r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot()), spectypes.BNRoleAttester)
+		currentDutySlot, err := r.currentDutySlot()
+		if err != nil {
+			return fmt.Errorf("current duty slot: %w", err)
+		}
+		recordSuccessfulSubmission(ctx, int64(len(attestations)), r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleAttester)
 		attData, err := attestations[0].Data()
 		if err != nil {
 			return fmt.Errorf("could not get attestation data: %w", err)
@@ -751,17 +759,25 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
+			currentDutySlot, err := r.currentDutySlot()
+			if err != nil {
+				return fmt.Errorf("current duty slot: %w", err)
+			}
 			recordSuccessfulSubmission(
 				ctx,
 				int64(syncMsgsCount),
-				r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot()),
+				r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot),
 				spectypes.BNRoleSyncCommittee,
 			)
 		}
 
+		currentDutySlot, err := r.currentDutySlot()
+		if err != nil {
+			return fmt.Errorf("current duty slot: %w", err)
+		}
 		const eventMsg = "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.BeaconSlotAttribute(r.State.CurrentDuty.DutySlot()),
+			observability.BeaconSlotAttribute(currentDutySlot),
 			observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
 			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
 			observability.ValidatorCountAttribute(len(syncCommitteeMessages)),
@@ -898,18 +914,21 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
 	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]any)
-	duty := r.State.CurrentDuty
+	committeeDuty, err := r.currentCommitteeDuty()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("current committee duty: %w", err)
+	}
 	beaconVoteData := r.State.DecidedValue
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(beaconVoteData); err != nil {
 		return nil, nil, nil, fmt.Errorf("could not decode beacon vote: %w", err)
 	}
 
-	slot := duty.DutySlot()
+	slot := committeeDuty.DutySlot()
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(slot)
 	dataVersion, _ := r.NetworkConfig.ForkAtEpoch(epoch)
 
-	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+	for _, validatorDuty := range committeeDuty.ValidatorDuties {
 		if validatorDuty == nil {
 			continue
 		}

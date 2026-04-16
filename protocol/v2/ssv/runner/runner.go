@@ -322,7 +322,11 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 
 	// update the decided and the highest decided slot
 	b.State.DecidedValue = decidedValueEncoded
-	b.highestDecidedSlot = b.State.CurrentDuty.DutySlot()
+	currentDutySlot, err := b.currentDutySlot()
+	if err != nil {
+		return true, nil, fmt.Errorf("current duty slot: %w", err)
+	}
+	b.highestDecidedSlot = currentDutySlot
 
 	return true, decidedValue, nil
 }

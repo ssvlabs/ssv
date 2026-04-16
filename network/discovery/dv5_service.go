@@ -26,7 +26,8 @@ import (
 )
 
 const (
-	defaultDiscoveryInterval = time.Millisecond * 2
+	defaultDiscoveryInterval = 100 * time.Millisecond
+	publishENRInterval       = 500 * time.Millisecond
 	publishENRTimeout        = time.Minute
 )
 
@@ -138,7 +139,10 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 	if err != nil {
 		return nil, err
 	}
-	pk := commons.ECDSAPubFromInterface(pki)
+	pk, err := commons.ECDSAPubFromInterface(pki)
+	if err != nil {
+		return nil, fmt.Errorf("convert peer public key: %w", err)
+	}
 	id := enode.PubkeyToIDV4(pk)
 	logger = logger.With(zap.String("info", info.String()),
 		zap.String("enode.ID", id.String()))
@@ -528,7 +532,7 @@ func (dvs *DiscV5Service) PublishENR() {
 		}
 		pings++
 		peerIDs[e.AddrInfo.ID] = struct{}{}
-	}, time.Millisecond*100, dvs.ssvNodeFilter(), dvs.badNodeFilter())
+	}, publishENRInterval, dvs.ssvNodeFilter(), dvs.badNodeFilter())
 
 	// Log metrics.
 	dvs.logger.Debug("done publishing ENR",
