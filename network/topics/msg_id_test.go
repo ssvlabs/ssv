@@ -13,11 +13,8 @@ import (
 func TestMsgIDHandlerStartProcessesQueuedEvents(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
 	handler := &msgIDHandler{
-		ctx:    ctx,
+		ctx:    t.Context(),
 		added:  make(chan addedEvent, 1),
 		ids:    make(map[string]*msgIDEntry),
 		locker: &sync.Mutex{},
