@@ -317,6 +317,57 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 	}
 }
 
+// TestEstimatedRoundAtMatchesRoundTimeout directly cross-validates EstimatedRoundAt against
+// RoundTimeout for all roles (including proposer). If someone changes the formula in either
+// function without updating the other, this test fails.
+//
+// For non-proposer (slot-synchronized) roles, RoundTimeout at frozen time == slot start returns
+// the cumulative offset directly. For proposer, RoundTimeout returns individual per-round
+// durations, so we accumulate them to get the boundary at which EstimatedRoundAt should advance.
+func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
+	roles := []struct {
+		name string
+		role spectypes.RunnerRole
+	}{
+		{"proposer", spectypes.RoleProposer},
+		{"committee", spectypes.RoleCommittee},
+		{"aggregator", spectypes.RoleAggregator},
+		{"sync_committee_contribution", spectypes.RoleSyncCommitteeContribution},
+	}
+
+	for _, rc := range roles {
+		t.Run(rc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				beaconConfig := setupTestBeaconConfig()
+				timer := New(t.Context(), beaconConfig, rc.role)
+
+				// For proposer, RoundTimeout returns per-round durations; accumulate them.
+				// For other roles, RoundTimeout (at frozen time = slot start) returns
+				// the cumulative offset directly.
+				var cumulative time.Duration
+				for round := specqbft.FirstRound; round <= CutOffRound; round++ {
+					rt := timer.RoundTimeout(specqbft.FirstHeight, round)
+					if rc.role == spectypes.RoleProposer {
+						cumulative += rt
+					} else {
+						cumulative = rt
+					}
+
+					// 1 ns before the boundary: still in current round.
+					got, err := EstimatedRoundAt(rc.role, beaconConfig.SlotDuration, cumulative-time.Nanosecond)
+					require.NoError(t, err)
+					require.Equal(t, round, got, "round %d: 1ns before boundary", round)
+
+					// Exactly at the boundary: advanced to next round.
+					got, err = EstimatedRoundAt(rc.role, beaconConfig.SlotDuration, cumulative)
+					require.NoError(t, err)
+					require.Equal(t, round+1, got, "round %d: at boundary", round)
+				}
+			})
+		})
+	}
+}
+
 func setupTestBeaconConfig() *networkconfig.Beacon {
 	config := *networkconfig.TestNetwork.Beacon
 	config.SlotDuration = slotDuration
