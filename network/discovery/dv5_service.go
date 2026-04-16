@@ -139,7 +139,10 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 	if err != nil {
 		return nil, err
 	}
-	pk := commons.ECDSAPubFromInterface(pki)
+	pk, err := commons.ECDSAPubFromInterface(pki)
+	if err != nil {
+		return nil, fmt.Errorf("convert peer public key: %w", err)
+	}
 	id := enode.PubkeyToIDV4(pk)
 	logger = logger.With(zap.String("info", info.String()),
 		zap.String("enode.ID", id.String()))

@@ -82,7 +82,12 @@ func NewValidatorRegistrationRunner(
 }
 
 func (r *ValidatorRegistrationRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.baseStartNewNonBeaconDuty(ctx, logger, r, duty.(*spectypes.ValidatorDuty), quorum)
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -117,7 +122,12 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	registration, err := r.buildValidatorRegistration(r.State.CurrentDuty.DutySlot())
+	validatorDuty, err := r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
+	}
+
+	registration, err := r.buildValidatorRegistration(validatorDuty.DutySlot())
 	if err != nil {
 		return fmt.Errorf("could not calculate validator registration: %w", err)
 	}
@@ -159,10 +169,11 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 }
 
 func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	if r.State == nil || r.State.CurrentDuty == nil {
-		return nil, spectypes.DomainError, fmt.Errorf("no running duty to compute preconsensus roots and domain")
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return nil, spectypes.DomainError, fmt.Errorf("current duty slot: %w", err)
 	}
-	vr, err := r.buildValidatorRegistration(r.State.CurrentDuty.DutySlot())
+	vr, err := r.buildValidatorRegistration(currentDutySlot)
 	if err != nil {
 		return nil, spectypes.DomainError, fmt.Errorf("could not calculate validator registration: %w", err)
 	}
@@ -178,7 +189,12 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	vr, err := r.buildValidatorRegistration(duty.DutySlot())
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	vr, err := r.buildValidatorRegistration(validatorDuty.DutySlot())
 	if err != nil {
 		return fmt.Errorf("could not calculate validator registration: %w", err)
 	}
@@ -189,9 +205,9 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		ctx,
 		r,
 		r.NetworkConfig,
-		duty.(*spectypes.ValidatorDuty),
+		validatorDuty,
 		vr,
-		duty.DutySlot(),
+		validatorDuty.DutySlot(),
 		spectypes.DomainApplicationBuilder,
 	)
 	if err != nil {
@@ -200,7 +216,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.ValidatorRegistrationPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 

@@ -328,7 +328,11 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 
 	// update the decided and the highest decided slot
 	b.State.DecidedValue = decidedValueEncoded
-	b.highestDecidedSlot = b.State.CurrentDuty.DutySlot()
+	currentDutySlot, err := b.currentDutySlot()
+	if err != nil {
+		return true, nil, fmt.Errorf("current duty slot: %w", err)
+	}
+	b.highestDecidedSlot = currentDutySlot
 
 	return true, decidedValue, nil
 }
@@ -506,12 +510,17 @@ func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 }
 
 func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
-	// assume CurrentDuty is not nil if state is not nil
-	if b.State != nil && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
-		return spectypes.NewError(
-			spectypes.DutyAlreadyPassedErrorCode,
-			fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), b.State.CurrentDuty.DutySlot()),
-		)
+	if b.State != nil {
+		currentDutySlot, err := b.currentDutySlot()
+		if err != nil {
+			return fmt.Errorf("current duty slot: %w", err)
+		}
+		if currentDutySlot >= duty.DutySlot() {
+			return spectypes.NewError(
+				spectypes.DutyAlreadyPassedErrorCode,
+				fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), currentDutySlot),
+			)
+		}
 	}
 	return nil
 }
