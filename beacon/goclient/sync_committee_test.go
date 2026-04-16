@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -240,8 +239,11 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 	subnetIDs := []uint64{11, 22, 33}
 
 	var (
-		mu        sync.Mutex
-		requested []uint64
+		mu          sync.Mutex
+		requested   []uint64
+		started     atomic.Int32
+		allStarted  = make(chan struct{})
+		allReleased = make(chan struct{})
 	)
 	client := &syncCommitteeClientMock{
 		beaconBlockRootFunc: func(_ context.Context, opts *api.BeaconBlockRootOpts) (*api.Response[*phase0.Root], error) {
@@ -253,12 +255,11 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 			requested = append(requested, opts.SubcommitteeIndex)
 			mu.Unlock()
 
-			switch opts.SubcommitteeIndex {
-			case subnetIDs[0]:
-				time.Sleep(25 * time.Millisecond)
-			case subnetIDs[1]:
-				time.Sleep(5 * time.Millisecond)
+			if started.Add(1) == int32(len(subnetIDs)) {
+				close(allStarted)
 			}
+			<-allStarted
+			<-allReleased
 
 			return &api.Response[*altair.SyncCommitteeContribution]{
 				Data: &altair.SyncCommitteeContribution{
@@ -275,6 +276,11 @@ func TestGetSyncCommitteeContributionPreservesInputOrdering(t *testing.T) {
 		beaconConfig: &cfg,
 		multiClient:  client,
 	}
+
+	go func() {
+		<-allStarted
+		close(allReleased)
+	}()
 
 	got, version, err := goClient.GetSyncCommitteeContribution(t.Context(), slot, selectionProofs, subnetIDs)
 	require.NoError(t, err)
