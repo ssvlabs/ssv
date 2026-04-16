@@ -107,11 +107,11 @@ func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time
 
 	quickEnd := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * QuickTimeout
 	if elapsed < quickEnd {
-		return specqbft.FirstRound + specqbft.Round(elapsed/QuickTimeout), nil
+		return specqbft.FirstRound + specqbft.Round(elapsed/QuickTimeout), nil // #nosec G115 -- elapsed is non-negative (guarded above)
 	}
 
 	slowElapsed := elapsed - quickEnd
-	return specqbft.FirstRound + QuickTimeoutThreshold + specqbft.Round(slowElapsed/SlowTimeout), nil
+	return specqbft.FirstRound + QuickTimeoutThreshold + specqbft.Round(slowElapsed/SlowTimeout), nil // #nosec G115 -- slowElapsed is non-negative (elapsed >= quickEnd)
 }
 
 // deferredTimeout stores a TimeoutForRound request that arrived before the
