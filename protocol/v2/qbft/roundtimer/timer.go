@@ -100,19 +100,18 @@ func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time
 	// Compute the round directly by inverting the piecewise-linear roundTimeoutOffset formula:
 	//   Quick phase (r <= T): offset(r) = headStart + r * quick
 	//   Slow phase  (r >  T): offset(r) = headStart + T * quick + (r - T) * slow
-	o := defaultTimeoutOptions
 	elapsed := timeIntoSlot - round1HeadStart(role, slotDuration)
 	if elapsed < 0 {
 		return specqbft.FirstRound, nil
 	}
 
-	quickEnd := casts.DurationFromUint64(uint64(o.quickThreshold)) * o.quick
+	quickEnd := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * QuickTimeout
 	if elapsed < quickEnd {
-		return specqbft.FirstRound + specqbft.Round(elapsed/o.quick), nil
+		return specqbft.FirstRound + specqbft.Round(elapsed/QuickTimeout), nil
 	}
 
 	slowElapsed := elapsed - quickEnd
-	return specqbft.FirstRound + o.quickThreshold + specqbft.Round(slowElapsed/o.slow), nil
+	return specqbft.FirstRound + QuickTimeoutThreshold + specqbft.Round(slowElapsed/SlowTimeout), nil
 }
 
 // deferredTimeout stores a TimeoutForRound request that arrived before the
