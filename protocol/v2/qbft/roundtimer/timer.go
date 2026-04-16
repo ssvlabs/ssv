@@ -92,17 +92,27 @@ var defaultTimeoutOptions = TimeoutOptions{
 // elapsed time since slot start (timeIntoSlot).
 // Round 1, Round 2, ... Round QuickTimeoutThreshold are considered "quick" (aka short rounds).
 // Round QuickTimeoutThreshold+1, Round QuickTimeoutThreshold+2, ... are considered "slow" (aka long rounds).
+//
+// IMPORTANT: the calculations in this func must be aligned with those in RoundTimeout, those funcs should re-use
+// the same code/algo - they currently don't since that would make one of them quite slow, instead the alignment
+// is enforced by unit-tests.
 func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time.Duration) (specqbft.Round, error) {
-	// Walk rounds until we find the first one whose end is still in the future — that's the
-	// currently-active round. roundTimeoutOffset is the same helper RoundTimeout uses, so the
-	// two cannot drift out of sync. Starting at FirstRound is correct: Round 1 ends at
-	// `headStart + quick`, so for small or negative timeIntoSlot the loop exits immediately
-	// and returns 1 (no need for an explicit early return).
-	r := specqbft.FirstRound
-	for defaultTimeoutOptions.roundTimeoutOffset(role, slotDuration, r) <= timeIntoSlot {
-		r++
+	// Compute the round directly by inverting the piecewise-linear roundTimeoutOffset formula:
+	//   Quick phase (r <= T): offset(r) = headStart + r * quick
+	//   Slow phase  (r >  T): offset(r) = headStart + T * quick + (r - T) * slow
+	o := defaultTimeoutOptions
+	elapsed := timeIntoSlot - round1HeadStart(role, slotDuration)
+	if elapsed < 0 {
+		return specqbft.FirstRound, nil
 	}
-	return r, nil
+
+	quickEnd := casts.DurationFromUint64(uint64(o.quickThreshold)) * o.quick
+	if elapsed < quickEnd {
+		return specqbft.FirstRound + specqbft.Round(elapsed/o.quick), nil
+	}
+
+	slowElapsed := elapsed - quickEnd
+	return specqbft.FirstRound + o.quickThreshold + specqbft.Round(slowElapsed/o.slow), nil
 }
 
 // deferredTimeout stores a TimeoutForRound request that arrived before the
