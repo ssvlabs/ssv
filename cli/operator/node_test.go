@@ -16,9 +16,11 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -63,55 +65,115 @@ func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
 	})
 }
 
-func Test_warnIfExporterSigningConfigProvided(t *testing.T) {
+func TestExporterNetworkKeyStorage(t *testing.T) {
 	originalCfg := cfg
 	t.Cleanup(func() { cfg = originalCfg })
 
-	t.Run("does not warn when exporter has no signing config", func(t *testing.T) {
+	t.Run("fresh exporter db stays plaintext", func(t *testing.T) {
+		logger := zap.NewNop()
+		ctx := context.Background()
+
 		cfg = config{}
+		cfg.DBOptions.Path = t.TempDir() + "/db"
+		cfg.DBOptions.Ctx = ctx
 
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
+		db, err := setupPebbleDB(logger, networkconfig.TestNetwork.Beacon, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-		warnIfExporterSigningConfigProvided(logger)
+		store := ssv_identity.NewIdentityStore(logger, db, nil, nil)
+		_, err = store.SetupNetworkKey(ctx, "")
+		require.NoError(t, err)
 
-		require.Len(t, recorded.All(), 0)
+		encrypted, err := ssv_identity.HasEncryptedNetworkKey(db)
+		require.NoError(t, err)
+		require.False(t, encrypted)
 	})
 
-	t.Run("warns when exporter is given operator key", func(t *testing.T) {
+	t.Run("exporter ignores operator key and still stores plaintext", func(t *testing.T) {
+		logger := zap.NewNop()
+		ctx := context.Background()
+
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
 		cfg = config{
-			OperatorPrivateKey: "operator-key",
+			OperatorPrivateKey: operatorPrivKey.Base64(),
 		}
+		cfg.DBOptions.Path = t.TempDir() + "/db"
+		cfg.DBOptions.Ctx = ctx
 
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
+		db, err := setupPebbleDB(logger, networkconfig.TestNetwork.Beacon, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-		warnIfExporterSigningConfigProvided(logger)
+		store := ssv_identity.NewIdentityStore(logger, db, nil, nil)
+		_, err = store.SetupNetworkKey(ctx, "")
+		require.NoError(t, err)
 
-		logs := recorded.All()
-		require.Len(t, logs, 1)
-		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
-		require.Equal(t, "exporter mode ignores operator signing configuration", logs[0].Message)
-		require.EqualValues(t, len(cfg.OperatorPrivateKey), logs[0].ContextMap()["operator_private_key_len"])
+		encrypted, err := ssv_identity.HasEncryptedNetworkKey(db)
+		require.NoError(t, err)
+		require.False(t, encrypted)
 	})
 
-	t.Run("warns when exporter is given ssv-signer config", func(t *testing.T) {
+	t.Run("exporter ignores ssv-signer config and still stores plaintext", func(t *testing.T) {
+		logger := zap.NewNop()
+		ctx := context.Background()
+
 		cfg = config{
 			SSVSigner: SSVSignerConfig{
 				Endpoint: "https://signer.example",
 			},
 		}
+		cfg.DBOptions.Path = t.TempDir() + "/db"
+		cfg.DBOptions.Ctx = ctx
 
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
+		db, err := setupPebbleDB(logger, networkconfig.TestNetwork.Beacon, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-		warnIfExporterSigningConfigProvided(logger)
+		store := ssv_identity.NewIdentityStore(logger, db, nil, nil)
+		_, err = store.SetupNetworkKey(ctx, "")
+		require.NoError(t, err)
 
-		logs := recorded.All()
-		require.Len(t, logs, 1)
-		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
-		require.Equal(t, "exporter mode ignores operator signing configuration", logs[0].Message)
-		require.Equal(t, cfg.SSVSigner.Endpoint, logs[0].ContextMap()["ssv_signer_endpoint"])
+		encrypted, err := ssv_identity.HasEncryptedNetworkKey(db)
+		require.NoError(t, err)
+		require.False(t, encrypted)
+	})
+
+	t.Run("exporter fails clearly on encrypted db key", func(t *testing.T) {
+		logger := zap.NewNop()
+		ctx := context.Background()
+
+		cfg = config{}
+		cfg.DBOptions.Path = t.TempDir() + "/db"
+		cfg.DBOptions.Ctx = ctx
+
+		db, err := setupPebbleDB(logger, networkconfig.TestNetwork.Beacon, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		require.NoError(t, err)
+
+		encryptingStore := ssv_identity.NewIdentityStore(
+			logger,
+			db,
+			func(_ context.Context, plaintext []byte) ([]byte, error) {
+				return keys.EncryptPayload(encryptionKey, plaintext)
+			},
+			func(_ context.Context, protectedValue []byte) ([]byte, error) {
+				return keys.DecryptPayload(encryptionKey, protectedValue)
+			},
+		)
+		_, err = encryptingStore.SetupNetworkKey(ctx, "")
+		require.NoError(t, err)
+
+		exporterStore := ssv_identity.NewIdentityStore(logger, db, nil, nil)
+		_, err = exporterStore.SetupNetworkKey(ctx, "")
+		require.ErrorContains(t, err, "network key is encrypted but no compatible network key protector is configured")
 	})
 }
 
