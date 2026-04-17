@@ -513,14 +513,6 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot
-	// values - https://github.com/ssvlabs/ssv/issues/2429 - hence currently we can't validate whether a
-	// proposer-related consensus message has the correct/expected round in it since messageValidator
-	// doesn't have any visibility into the actual QBFT instance.
-	if role == spectypes.RoleProposer {
-		return nil
-	}
-
 	estimatedRoundMsgReceivedAt, err := mv.estimatedRoundAt(role, timeIntoSlot)
 	if err != nil {
 		return err
@@ -533,6 +525,12 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	// No overflow bug here: estimatedRoundMsgReceivedAt comes from elapsed slot time,
 	// so adding allowedRoundsInFuture cannot get close to uint64 overflow.
 	highestAllowedRound := estimatedRoundMsgReceivedAt + allowedRoundsInFuture
+	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot
+	// values - https://github.com/ssvlabs/ssv/issues/2429 -
+	if role == spectypes.RoleProposer {
+		lowestAllowedRound = specqbft.FirstRound
+		highestAllowedRound = specqbft.FirstRound + 1
+	}
 
 	if consensusMessage.Round < lowestAllowedRound || consensusMessage.Round > highestAllowedRound {
 		e := ErrEstimatedRoundNotInAllowedSpread
