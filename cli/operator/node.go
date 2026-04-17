@@ -235,11 +235,6 @@ var StartNodeCmd = &cobra.Command{
 
 		if cfg.ExporterOptions.Enabled {
 			logger.Info("exporter mode: skipping operator signing and key manager services")
-
-			operatorPrivKey, ssvSignerClient, err = resolveExporterP2PNetworkKeyProtector(logger)
-			if err != nil {
-				logger.Fatal("failed to initialize exporter p2p network key protector", zap.Error(err))
-			}
 		} else if usingSSVSigner {
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
 			logger.Info("using ssv-signer for signing")
@@ -804,37 +799,6 @@ func newSSVSignerClient(logger *zap.Logger) (*ssvsigner.Client, error) {
 	return ssvsigner.NewClient(cfg.SSVSigner.Endpoint, ssvSignerOptions...), nil
 }
 
-func resolveExporterP2PNetworkKeyProtector(logger *zap.Logger) (keys.OperatorPrivateKey, *ssvsigner.Client, error) {
-	usingSSVSigner := cfg.SSVSigner.Endpoint != ""
-	usingKeystore := cfg.KeyStore.PrivateKeyFile != "" && cfg.KeyStore.PasswordFile != ""
-	usingPrivKey := cfg.OperatorPrivateKey != ""
-
-	if usingSSVSigner {
-		logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
-		logger.Info("exporter mode: using ssv-signer only for p2p network-key protection")
-
-		ssvSignerClient, err := newSSVSignerClient(logger)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return nil, ssvSignerClient, nil
-	}
-
-	if usingKeystore || usingPrivKey {
-		logger.Info("exporter mode: using local operator key only for p2p network-key protection")
-
-		operatorPrivKey, _, err := resolveLocalOperatorPrivateKey(logger, usingKeystore, usingPrivKey)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return operatorPrivKey, nil, nil
-	}
-
-	return nil, nil, nil
-}
-
 func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usingPrivKey bool) {
 	if cfg.SSVSigner.Endpoint != "" {
 		usingSSVSigner = true
@@ -877,7 +841,7 @@ func warnIfExporterSigningConfigProvided(logger *zap.Logger) {
 	}
 
 	logger.Warn(
-		"exporter mode skips operator signing services; configured signer or operator key will only be used for persisted p2p network-key protection",
+		"exporter mode ignores operator signing configuration",
 		zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint),
 		zap.String("ssv_signer_keystore_file", cfg.SSVSigner.KeystoreFile),
 		zap.String("ssv_signer_keystore_password_file", cfg.SSVSigner.KeystorePasswordFile),
