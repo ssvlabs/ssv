@@ -239,10 +239,34 @@ var StartNodeCmd = &cobra.Command{
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
 			logger.Info("using ssv-signer for signing")
 
-			ssvSignerClient, err = newSSVSignerClient(logger)
-			if err != nil {
-				logger.Fatal("failed to initialize ssv-signer client", zap.Error(err))
+			if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
+				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
+
+			ssvSignerOptions := []ssvsigner.ClientOption{
+				ssvsigner.WithLogger(logger),
+				ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout),
+			}
+
+			if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
+				tlsConfig := &ssvsignertls.Config{
+					ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
+					ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
+					ClientServerCertFile:       cfg.SSVSigner.ServerCertFile,
+				}
+
+				clientConfig, err := tlsConfig.LoadClientTLSConfig()
+				if err != nil {
+					logger.Fatal("failed to load ssv-signer TLS config", zap.Error(err))
+				}
+
+				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
+			}
+
+			ssvSignerClient = ssvsigner.NewClient(
+				cfg.SSVSigner.Endpoint,
+				ssvSignerOptions...,
+			)
 
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
@@ -262,9 +286,25 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
 			}
 		} else {
-			operatorPrivKey, operatorPrivKeyPEM, err = resolveLocalOperatorPrivateKey(logger, usingKeystore, usingPrivKey)
-			if err != nil {
-				logger.Fatal("could not resolve operator private key", zap.Error(err))
+			if usingKeystore {
+				logger.Info("getting operator private key from keystore")
+
+				var decryptedKeystore []byte
+				operatorPrivKey, decryptedKeystore, err = privateKeyFromKeystore(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
+				if err != nil {
+					logger.Fatal("could not extract private key from keystore", zap.Error(err))
+				}
+
+				operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
+			} else if usingPrivKey {
+				logger.Info("getting operator private key from args")
+
+				operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
+				if err != nil {
+					logger.Fatal("could not decode operator private key", zap.Error(err))
+				}
+
+				operatorPrivKeyPEM = cfg.OperatorPrivateKey
 			}
 
 			operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
@@ -743,60 +783,6 @@ func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPriv
 	}
 
 	return operatorPrivKey, operatorPrivKeyBytes, nil
-}
-
-func resolveLocalOperatorPrivateKey(logger *zap.Logger, usingKeystore, usingPrivKey bool) (keys.OperatorPrivateKey, string, error) {
-	if usingKeystore {
-		logger.Info("getting operator private key from keystore")
-
-		operatorPrivKey, decryptedKeystore, err := privateKeyFromKeystore(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
-		if err != nil {
-			return nil, "", err
-		}
-
-		return operatorPrivKey, base64.StdEncoding.EncodeToString(decryptedKeystore), nil
-	}
-
-	if usingPrivKey {
-		logger.Info("getting operator private key from args")
-
-		operatorPrivKey, err := keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
-		if err != nil {
-			return nil, "", fmt.Errorf("could not decode operator private key: %w", err)
-		}
-
-		return operatorPrivKey, cfg.OperatorPrivateKey, nil
-	}
-
-	return nil, "", nil
-}
-
-func newSSVSignerClient(logger *zap.Logger) (*ssvsigner.Client, error) {
-	if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
-		return nil, fmt.Errorf("invalid ssv signer endpoint format: %w", err)
-	}
-
-	ssvSignerOptions := []ssvsigner.ClientOption{
-		ssvsigner.WithLogger(logger),
-		ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout),
-	}
-
-	if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
-		tlsConfig := &ssvsignertls.Config{
-			ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
-			ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
-			ClientServerCertFile:       cfg.SSVSigner.ServerCertFile,
-		}
-
-		clientConfig, err := tlsConfig.LoadClientTLSConfig()
-		if err != nil {
-			return nil, fmt.Errorf("failed to load ssv-signer TLS config: %w", err)
-		}
-
-		ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
-	}
-
-	return ssvsigner.NewClient(cfg.SSVSigner.Endpoint, ssvSignerOptions...), nil
 }
 
 func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usingPrivKey bool) {
