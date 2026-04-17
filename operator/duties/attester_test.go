@@ -3,6 +3,8 @@ package duties
 import (
 	"bytes"
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -55,6 +57,15 @@ func setupAttesterDutiesMock(
 	dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty],
 	waitForDuties *SafeValue[bool],
 ) (chan struct{}, chan []*spectypes.ValidatorDuty) {
+	return setupAttesterDutiesMockWithFetcher(s, dutiesMap, waitForDuties, nil)
+}
+
+func setupAttesterDutiesMockWithFetcher(
+	s *Scheduler,
+	dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty],
+	waitForDuties *SafeValue[bool],
+	fetcher func(context.Context, phase0.Epoch, []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error),
+) (chan struct{}, chan []*spectypes.ValidatorDuty) {
 	// fetchDutiesCall relays/signals duty-fetch calls, it is buffered so that our test code can run in a single
 	// go-routine (so that we don't need to worry about draining this channel to let the execution proceed). The
 	// buffer size should be large enough for the test to not block.
@@ -62,13 +73,19 @@ func setupAttesterDutiesMock(
 	// executeDutiesCall is similar to fetchDutiesCall but signals the duty-executions.
 	executeDutiesCall := make(chan []*spectypes.ValidatorDuty, 100)
 
+	if fetcher == nil {
+		fetcher = func(_ context.Context, epoch phase0.Epoch, _ []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+			duties, _ := dutiesMap.Get(epoch)
+			return duties, nil
+		}
+	}
+
 	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
 			if waitForDuties.Get() {
 				fetchDutiesCall <- struct{}{}
 			}
-			duties, _ := dutiesMap.Get(epoch)
-			return duties, nil
+			return fetcher(ctx, epoch, indices)
 		}).AnyTimes()
 
 	getShares := func() []*types.SSVShare {
@@ -140,6 +157,23 @@ func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv
 		expectedDuties = append(expectedDuties, handler.toSpecDuty(d, spectypes.BNRoleAggregator))
 	}
 	return expectedDuties
+}
+
+func waitForFetchedAttesterEpoch(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	fetchedEpochs chan phase0.Epoch,
+	timeout time.Duration,
+	expectedEpoch phase0.Epoch,
+) {
+	waitForDutiesFetch(t, fetchDutiesCall, timeout)
+
+	select {
+	case epoch := <-fetchedEpochs:
+		require.Equal(t, expectedEpoch, epoch)
+	case <-time.After(timeout):
+		require.FailNow(t, "timed out waiting for fetched attester epoch")
+	}
 }
 
 func TestScheduler_Attester_Same_Slot(t *testing.T) {
@@ -1054,6 +1088,506 @@ func TestScheduler_Attester_Start_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
 		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 		ticker.Send(phase0.Slot(testSlotsPerEpoch))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+func TestScheduler_Attester_Indices_Changed_Too_Late_In_Slot(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+			waitForDuties = &SafeValue[bool]{}
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+		require.NoError(t, scheduler.Start(ctx))
+
+		// STEP 1: slot 0 has no duties and no action.
+		ticker.Send(phase0.Slot(0))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 2: arrange for indices change to arrive too late for slot 0 processing.
+		waitForDuties.Set(true)
+		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(2),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+		go func() {
+			time.Sleep(scheduler.beaconConfig.IntervalDuration() + 1*time.Millisecond)
+			scheduler.indicesChg <- struct{}{}
+		}()
+
+		// No fetching should happen on slot 0 because the indices change arrived too late in the slot.
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: on slot 1 the deferred indices change is processed and duties are fetched.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		ticker.Send(phase0.Slot(1))
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: on slot 2 the fetched duty executes.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		duties, _ := dutiesMap.Get(phase0.Epoch(0))
+		expected := expectedExecutedAttesterDuties(handler, duties)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(2))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+func TestScheduler_Attester_Reorg_Current_Epoch_Transition(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+			waitForDuties = &SafeValue[bool]{}
+		)
+
+		initialEpoch2Duties := []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(testSlotsPerEpoch*2 + 1),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		}
+		dutiesMap.Set(phase0.Epoch(2), initialEpoch2Duties)
+		dutiesMap.Set(phase0.Epoch(3), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{4, 5, 6},
+				Slot:           phase0.Slot(testSlotsPerEpoch * 3),
+				ValidatorIndex: phase0.ValidatorIndex(2),
+			},
+		})
+
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch*2-1)
+		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch*2-1)
+		fetchedEpochs := make(chan phase0.Epoch, 100)
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
+			scheduler,
+			dutiesMap,
+			waitForDuties,
+			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+				fetchedEpochs <- epoch
+				duties, _ := dutiesMap.Get(epoch)
+				return duties, nil
+			},
+		)
+
+		// STEP 1: startup at the last slot fetches duties for epoch 2.
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(2))
+
+		// STEP 2: establish the baseline head state for the previous epoch.
+		e := &eth2apiv1.Event{
+			Data: &eth2apiv1.HeadEvent{
+				Slot:                      testSlotsPerEpoch*2 - 1,
+				Block:                     phase0.Root{0x03},
+				CurrentDutyDependentRoot:  phase0.Root{0x02},
+				PreviousDutyDependentRoot: phase0.Root{0x01},
+			},
+		}
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: enter the new epoch with no extra action.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch * 2))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: current-duty-dependent-root changes during epoch transition.
+		// For attester this should not refetch the current epoch, only schedule the next epoch for refetch.
+		dutiesMap.Set(phase0.Epoch(2), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(testSlotsPerEpoch*2 + 2),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+		dutiesMap.Set(phase0.Epoch(3), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{4, 5, 6},
+				Slot:           phase0.Slot(testSlotsPerEpoch*3 + 1),
+				ValidatorIndex: phase0.ValidatorIndex(2),
+			},
+		})
+		e = &eth2apiv1.Event{
+			Data: &eth2apiv1.HeadEvent{
+				Slot:                      testSlotsPerEpoch * 2,
+				Block:                     phase0.Root{0x05},
+				CurrentDutyDependentRoot:  phase0.Root{0x04},
+				PreviousDutyDependentRoot: phase0.Root{0x02},
+			},
+		}
+		scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 5: the already-fetched current-epoch duty still executes on slot 25, proving no current-epoch refetch.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+1))
+		expectedCurrent := expectedExecutedAttesterDuties(handler, initialEpoch2Duties)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expectedCurrent))
+
+		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 1))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expectedCurrent)
+
+		// STEP 6: next-epoch refetch still happens later at the normal prefetch point.
+		for slot := phase0.Slot(testSlotsPerEpoch*2 + 2); slot < phase0.Slot(testSlotsPerEpoch*2+5); slot++ {
+			waitForSlotN(scheduler.beaconConfig, slot)
+			ticker.Send(slot)
+			waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+		}
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch*2+5))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch*2 + 5))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(3))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+func TestScheduler_Attester_Retry_Current_Epoch_Fetch_On_Next_Tick(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler             = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+			dutiesMap           = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+			waitForDuties       = &SafeValue[bool]{}
+			currentEpochFetches atomic.Int32
+		)
+		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(2),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
+			scheduler,
+			dutiesMap,
+			waitForDuties,
+			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+				duties, _ := dutiesMap.Get(epoch)
+				if epoch == phase0.Epoch(0) && currentEpochFetches.Add(1) <= 3 {
+					return nil, errors.New("failed to fetch attester duties")
+				}
+				return duties, nil
+			},
+		)
+
+		// STEP 1: fail the initial current epoch fetch.
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+
+		// STEP 2: fail the retry on slot 0.
+		ticker.Send(phase0.Slot(0))
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: fail the retry on slot 1.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+		ticker.Send(phase0.Slot(1))
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: retry again on slot 2, succeed, and execute the duty in the same slot.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+		duties, _ := dutiesMap.Get(phase0.Epoch(0))
+		expected := expectedExecutedAttesterDuties(handler, duties)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(2))
+		waitForDutiesFetch(t, fetchDutiesCall, timeout)
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+func TestScheduler_Attester_No_Eligible_Validators_Does_Not_Retry_Current_Epoch_Fetch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+			dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+			waitForDuties = &SafeValue[bool]{}
+		)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
+
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+
+		// Startup fetch completes as a successful no-op because there are no eligible validators.
+		require.True(t, handler.dutyFetchIntents[phase0.Epoch(0)])
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// The next tick must not retry the current-epoch fetch.
+		ticker.Send(phase0.Slot(0))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Mid_Epoch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler          = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+			dutiesMap        = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+			waitForDuties    = &SafeValue[bool]{}
+			nextEpochFetches atomic.Int32
+		)
+		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{9, 9, 9},
+				Slot:           phase0.Slot(0),
+				ValidatorIndex: phase0.ValidatorIndex(9),
+			},
+		})
+		dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(testSlotsPerEpoch),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch/2)
+		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch/2)
+		fetchedEpochs := make(chan phase0.Epoch, 100)
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
+			scheduler,
+			dutiesMap,
+			waitForDuties,
+			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+				fetchedEpochs <- epoch
+				duties, _ := dutiesMap.Get(epoch)
+				if epoch == phase0.Epoch(1) && nextEpochFetches.Add(1) <= 3 {
+					return nil, errors.New("failed to fetch attester duties")
+				}
+				return duties, nil
+			},
+		)
+
+		// STEP 1: on startup, fetch duties for the current epoch successfully.
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(0))
+
+		// STEP 2: on the first tick, fail to fetch duties for the next epoch.
+		ticker.Send(phase0.Slot(testSlotsPerEpoch / 2))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: retry on the next tick and fail again.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+1))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 1))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: retry on the next tick and fail again.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+2))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 2))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 5: retry on the next tick and succeed.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch/2+3))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch/2 + 3))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler          = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+			dutiesMap        = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+			waitForDuties    = &SafeValue[bool]{}
+			nextEpochFetches atomic.Int32
+		)
+		dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{9, 9, 9},
+				Slot:           phase0.Slot(0),
+				ValidatorIndex: phase0.ValidatorIndex(9),
+			},
+		})
+		dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(testSlotsPerEpoch),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-3)
+		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-3)
+		fetchedEpochs := make(chan phase0.Epoch, 100)
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
+			scheduler,
+			dutiesMap,
+			waitForDuties,
+			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+				fetchedEpochs <- epoch
+				duties, _ := dutiesMap.Get(epoch)
+				if epoch == phase0.Epoch(1) && nextEpochFetches.Add(1) <= 3 {
+					return nil, errors.New("failed to fetch attester duties")
+				}
+				return duties, nil
+			},
+		)
+
+		// STEP 1: on startup, fetch duties for the current epoch successfully.
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(0))
+
+		// STEP 2: on the first tick, fail to fetch duties for the next epoch.
+		ticker.Send(phase0.Slot(testSlotsPerEpoch - 3))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: retry on the next tick and fail again.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch-2))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch - 2))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: retry on the next tick and fail again.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch-1))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch - 1))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 5: on the next tick, the previously next epoch becomes current, fetch succeeds, and the duty executes.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		duties, _ := dutiesMap.Get(phase0.Epoch(1))
+		expected := expectedExecutedAttesterDuties(handler, duties)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(testSlotsPerEpoch))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
+
+		// Stop scheduler & wait for graceful exit.
+		cancel()
+		require.NoError(t, scheduler.Wait())
+		ticker.WaitShutdown()
+	})
+}
+
+func TestScheduler_Attester_Retry_Next_Epoch_Fetch_On_Next_Tick_Epoch_Transition_Start_At_Last_Slot_Of_Current_Epoch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var (
+			handler          = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty](), false)
+			dutiesMap        = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
+			waitForDuties    = &SafeValue[bool]{}
+			nextEpochFetches atomic.Int32
+		)
+		dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
+			{
+				PubKey:         phase0.BLSPubKey{1, 2, 3},
+				Slot:           phase0.Slot(testSlotsPerEpoch + 2),
+				ValidatorIndex: phase0.ValidatorIndex(1),
+			},
+		})
+
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		scheduler, ticker := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, testSlotsPerEpoch-1)
+		waitForSlotN(scheduler.beaconConfig, testSlotsPerEpoch-1)
+		fetchedEpochs := make(chan phase0.Epoch, 100)
+		fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMockWithFetcher(
+			scheduler,
+			dutiesMap,
+			waitForDuties,
+			func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+				fetchedEpochs <- epoch
+				duties, _ := dutiesMap.Get(epoch)
+				if epoch == phase0.Epoch(1) && nextEpochFetches.Add(1) <= 3 {
+					return nil, errors.New("failed to fetch attester duties")
+				}
+				return duties, nil
+			},
+		)
+
+		// STEP 1: starting at the last slot of the current epoch fetches the next epoch immediately, and it fails.
+		waitForDuties.Set(true)
+		require.NoError(t, scheduler.Start(ctx))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+
+		// STEP 2: on the epoch transition tick, retry the previously next epoch as the now current epoch and fail.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 3: retry on the next tick and fail again.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+1))
+		ticker.Send(phase0.Slot(testSlotsPerEpoch + 1))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
+		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
+
+		// STEP 4: retry on the next tick, succeed, and execute the duty in the same slot.
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(testSlotsPerEpoch+2))
+		duties, _ := dutiesMap.Get(phase0.Epoch(1))
+		expected := expectedExecutedAttesterDuties(handler, duties)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+		ticker.Send(phase0.Slot(testSlotsPerEpoch + 2))
+		waitForFetchedAttesterEpoch(t, fetchDutiesCall, fetchedEpochs, timeout, phase0.Epoch(1))
 		waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 		// Stop scheduler & wait for graceful exit.

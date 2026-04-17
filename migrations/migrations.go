@@ -10,6 +10,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/v2/ekmadapter"
 
 	"github.com/ssvlabs/ssv/v2/networkconfig"
 	"github.com/ssvlabs/ssv/v2/observability/log"
@@ -71,7 +72,7 @@ func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.BeaconConfig, logger)
+	return ekm.NewSignerStorage(ekmadapter.NewDatabaseAdapter(o.Db), o.BeaconConfig.Name, logger)
 }
 
 // Run executes the migrations.

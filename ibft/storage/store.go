@@ -19,9 +19,7 @@ import (
 )
 
 const (
-	highestInstanceKey = "highest_instance"
-	instanceKey        = "instance"
-	participantsKey    = "pt"
+	participantsKey = "pt"
 )
 
 // ParticipantStorage struct

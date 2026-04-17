@@ -28,6 +28,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/v2/ekmadapter"
 
 	"github.com/ssvlabs/ssv/v2/beacon/goclient"
 	"github.com/ssvlabs/ssv/v2/doppelganger"
@@ -1399,7 +1400,7 @@ func setupEventHandler(
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, network.Beacon, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), network.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}

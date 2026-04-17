@@ -25,28 +25,22 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/v2/networkconfig"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-var testNetCfg = networkconfig.TestNetwork.Beacon
+var testNetCfg = testBeaconConfig()
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite
-	client  *MockRemoteSigner
-	db      *MockDatabase
-	txn     *MockTxn
-	readTxn *MockReadTxn
-	logger  *zap.Logger
+	client *MockRemoteSigner
+	db     *MockDatabase
+	logger *zap.Logger
 }
 
 func (s *RemoteKeyManagerTestSuite) SetupTest() {
 	s.client = &MockRemoteSigner{}
 	s.db = &MockDatabase{}
-	s.txn = &MockTxn{}
-	s.readTxn = &MockReadTxn{}
 
 	logger, _ := zap.NewDevelopment()
 	s.logger = logger.Named("test")
@@ -58,6 +52,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      s.client,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -88,6 +83,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      s.client,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -138,6 +134,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      mockRemoteSigner,
 		slashingProtector: mockSlashingProtector,
 		operatorPubKey:    mockOperatorPublicKey,
@@ -166,6 +163,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      s.client,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -592,6 +590,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -633,6 +632,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -674,6 +674,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -715,6 +716,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -777,6 +779,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -839,6 +842,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -903,6 +907,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -967,6 +972,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1056,6 +1062,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1147,6 +1154,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1177,6 +1185,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1203,6 +1212,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1233,6 +1243,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      s.client,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -1257,6 +1268,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1284,6 +1296,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1311,6 +1324,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			beaconConfig:      testNetCfg,
+			genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1357,6 +1371,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
 	rm := &RemoteKeyManager{
 		logger:        zap.NewNop(),
 		beaconConfig:  testNetCfg,
+		genesisRoot:   testNetCfg.GenesisValidatorsRoot,
 		signerClient:  mockRemoteSigner,
 		getOperatorId: func() spectypes.OperatorID { return 1 },
 		signLocks:     map[signKey]*sync.RWMutex{},
@@ -1415,6 +1430,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      s.client,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -1505,6 +1521,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      s.client,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -1655,6 +1672,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		beaconConfig:      testNetCfg,
+		genesisRoot:       testNetCfg.GenesisValidatorsRoot,
 		signerClient:      s.client,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -1747,10 +1765,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 }
 
 func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
-	s.db.On("Begin").Return(s.txn, nil).Maybe()
-	s.txn.On("Commit").Return(nil).Maybe()
-	s.txn.On("Rollback").Return(nil).Maybe()
-
 	const sampleRSAPublicKey = `
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArVzXJ1Xm3YIY8QYs2MFL
@@ -1787,10 +1801,6 @@ QwIDAQAB
 }
 
 func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_WrongFormat() {
-	s.db.On("Begin").Return(s.txn, nil).Maybe()
-	s.txn.On("Commit").Return(nil).Maybe()
-	s.txn.On("Rollback").Return(nil).Maybe()
-
 	invalidPubKey := "invalid-public-key-format"
 	s.client.On("OperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
 
@@ -1815,10 +1825,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 }
 
 func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Error() {
-	s.db.On("Begin").Return(s.txn, nil).Maybe()
-	s.txn.On("Commit").Return(nil).Maybe()
-	s.txn.On("Rollback").Return(nil).Maybe()
-
 	s.client.On("OperatorIdentity", mock.Anything).Return("", errors.New("err"))
 
 	logger, _ := zap.NewDevelopment()

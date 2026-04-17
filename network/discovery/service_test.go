@@ -2,11 +2,15 @@ package discovery
 
 import (
 	"context"
+	"crypto/rand"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -230,6 +234,20 @@ func TestDiscV5Service_Node(t *testing.T) {
 	assert.Equal(t, testingNode, node)
 }
 
+func TestDiscV5Service_NodeRejectsNonSecp256k1PeerKey(t *testing.T) {
+	dvs := &DiscV5Service{}
+
+	_, pubKey, err := crypto.GenerateEd25519Key(rand.Reader)
+	require.NoError(t, err)
+
+	peerID, err := peer.IDFromPublicKey(pubKey)
+	require.NoError(t, err)
+
+	node, err := dvs.Node(testLogger, peer.AddrInfo{ID: peerID})
+	require.Nil(t, node)
+	require.ErrorContains(t, err, "unsupported key type")
+}
+
 func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs := testingDiscovery(t)
 
@@ -281,6 +299,32 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	subnets.Set(10)
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
+
+	peerEvent := ToPeerEvent(NewTestingNode(t))
+
+	// Valid peer but already discovered recently
+	dvs.discoveredPeersPool.Set(peerEvent.AddrInfo.ID, DiscoveredPeer{AddrInfo: peerEvent.AddrInfo})
+	err = dvs.checkPeer(context.TODO(), peerEvent)
+	require.ErrorContains(t, err, "peer already discovered recently")
+	dvs.discoveredPeersPool.Delete(peerEvent.AddrInfo.ID)
+
+	// Valid peer but recently trimmed
+	dvs.trimmedRecently.Set(peerEvent.AddrInfo.ID, struct{}{})
+	err = dvs.checkPeer(context.TODO(), peerEvent)
+	require.ErrorContains(t, err, "peer was trimmed recently")
+	dvs.trimmedRecently.Delete(peerEvent.AddrInfo.ID)
+
+	// Valid peer but already connected
+	dvs.conns.(*MockConnection).SetConnectedness(peerEvent.AddrInfo.ID, network.Connected)
+	err = dvs.checkPeer(context.TODO(), peerEvent)
+	require.ErrorContains(t, err, "peer already connected")
+	dvs.conns.(*MockConnection).SetConnectedness(peerEvent.AddrInfo.ID, network.NotConnected)
+
+	// Valid peer but marked bad
+	dvs.conns.(*MockConnection).SetIsBad(peerEvent.AddrInfo.ID, true)
+	err = dvs.checkPeer(context.TODO(), peerEvent)
+	require.ErrorContains(t, err, "peer is marked bad")
+	dvs.conns.(*MockConnection).SetIsBad(peerEvent.AddrInfo.ID, false)
 }
 
 func TestDiscV5ServiceListenerType(t *testing.T) {

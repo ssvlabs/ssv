@@ -7,9 +7,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/v2/storage/badger"
-	"github.com/ssvlabs/ssv/v2/storage/basedb"
-
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -30,9 +27,7 @@ func (env *TestEnvironment) initializeKeyManagers() error {
 
 // createLocalKeyManager creates and configures the LocalKeyManager
 func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
-	localDB, err := badger.New(logger, basedb.Options{
-		Path: env.localKeyManagerPath,
-	})
+	localDB, err := newTestPersistentDB(env.localKeyManagerPath)
 	if err != nil {
 		return fmt.Errorf("failed to create local database: %w", err)
 	}
@@ -56,9 +51,7 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
 	// Only create database on first initialization
 	if env.remoteDB == nil {
-		remoteDB, err := badger.New(logger, basedb.Options{
-			Path: env.remoteKeyManagerPath,
-		})
+		remoteDB, err := newTestPersistentDB(env.remoteKeyManagerPath)
 		if err != nil {
 			return fmt.Errorf("failed to create remote database: %w", err)
 		}

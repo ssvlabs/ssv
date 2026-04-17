@@ -42,6 +42,7 @@ import (
 	"github.com/ssvlabs/ssv/v2/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/v2/cli/config"
 	"github.com/ssvlabs/ssv/v2/doppelganger"
+	"github.com/ssvlabs/ssv/v2/ekmadapter"
 	"github.com/ssvlabs/ssv/v2/eth/eventhandler"
 	"github.com/ssvlabs/ssv/v2/eth/eventparser"
 	"github.com/ssvlabs/ssv/v2/eth/eventsyncer"
@@ -52,6 +53,7 @@ import (
 	"github.com/ssvlabs/ssv/v2/exporter/api/decided"
 	dutytracestore "github.com/ssvlabs/ssv/v2/exporter/store"
 	"github.com/ssvlabs/ssv/v2/exporter2"
+	"github.com/ssvlabs/ssv/v2/hprobe"
 	ibftstorage "github.com/ssvlabs/ssv/v2/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/v2/identity"
 	"github.com/ssvlabs/ssv/v2/message/signatureverifier"
@@ -61,7 +63,6 @@ import (
 	networkcommons "github.com/ssvlabs/ssv/v2/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/v2/network/p2p"
 	"github.com/ssvlabs/ssv/v2/networkconfig"
-	"github.com/ssvlabs/ssv/v2/nodeprobe"
 	"github.com/ssvlabs/ssv/v2/observability"
 	ssvlog "github.com/ssvlabs/ssv/v2/observability/log"
 	"github.com/ssvlabs/ssv/v2/observability/log/fields"
@@ -406,13 +407,14 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var keyManager ekm.KeyManager
+		ekmDB := ekmadapter.NewDatabaseAdapter(db)
 		if !cfg.ExporterOptions.Enabled && usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
 				logger,
 				networkConfig.Beacon,
 				ssvSignerClient,
-				db,
+				ekmDB,
 				operatorDataStore.GetOperatorID,
 			)
 			if err != nil {
@@ -422,7 +424,7 @@ var StartNodeCmd = &cobra.Command{
 			keyManager = remoteKeyManager
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
 		} else if !cfg.ExporterOptions.Enabled {
-			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig.Beacon, operatorPrivKey)
+			localKeyManager, err := ekm.NewLocalKeyManager(logger, ekmDB, networkConfig.Beacon, operatorPrivKey)
 			if err != nil {
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
@@ -597,10 +599,10 @@ var StartNodeCmd = &cobra.Command{
 			}()
 		}
 
-		nodeProber := nodeprobe.New(logger)
-		nodeProber.AddNode(clNodeName, consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-		nodeProber.AddNode(elNodeName, executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
-		ensureEthereumNodesHealthy(cmd.Context(), logger, nodeProber)
+		healthProber := hprobe.NewHealthProber(logger)
+		healthProber.AddComponent(clComponentName, consensusClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+		healthProber.AddComponent(elComponentName, executionClient, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+		ensureComponentsHealthy(cmd.Context(), logger, healthProber)
 
 		eventSyncer := syncContractEvents(
 			cmd.Context(),
@@ -614,9 +616,9 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
-			nodeProber.AddNode(eventSyncerNodeName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+			healthProber.AddComponent(eventSyncerComponentName, eventSyncer, proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
-		go startNodeProber(cmd.Context(), logger, nodeProber)
+		go startHealthProber(cmd.Context(), logger, healthProber)
 
 		if _, err := metadataSyncer.SyncAll(cmd.Context()); err != nil {
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
@@ -665,7 +667,7 @@ var StartNodeCmd = &cobra.Command{
 			if err := p2pNetwork.Start(); err != nil {
 				logger.Fatal("failed to start network", zap.Error(err))
 			}
-			nodeProber.AddNode(p2pNodeName, p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
+			healthProber.AddComponent(p2pComponentName, p2pNetwork.(p2pv1.HealthChecker), proberHealthcheckTimeout, proberRetriesMax, proberRetryDelay)
 		}
 
 		if cfg.SSVAPIPort > 0 {
@@ -679,10 +681,10 @@ var StartNodeCmd = &cobra.Command{
 					p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					p2pNetwork.(p2pv1.HostProvider).Host().Network(),
 					p2pNetwork,
-					nodeProber,
-					clNodeName,
-					elNodeName,
-					eventSyncerNodeName,
+					healthProber,
+					clComponentName,
+					elComponentName,
+					eventSyncerComponentName,
 				),
 				&hvalidators.Validators{
 					Shares: nodeStorage.Shares(),

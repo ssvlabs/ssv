@@ -16,12 +16,6 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/v2/networkconfig"
-	"github.com/ssvlabs/ssv/v2/observability/log"
-	kv "github.com/ssvlabs/ssv/v2/storage/badger"
-	"github.com/ssvlabs/ssv/v2/storage/basedb"
-	"github.com/ssvlabs/ssv/v2/utils/threshold"
 )
 
 func _byteArray(input string) []byte {
@@ -29,25 +23,25 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
-	return kv.NewInMemory(logger, basedb.Options{})
+func getBaseStorage(_ *zap.Logger) (*testDB, error) {
+	return newTestMemoryDB(), nil
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
-	logger := log.TestLogger(t)
+	logger := testLogger(t)
 	db, err := getBaseStorage(logger)
 	if err != nil {
 		return nil, func() {}
 	}
 
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	s := NewSignerStorage(db, testBeaconConfig().Name, logger)
 	return s, func() {
 		db.Close()
 	}
 }
 
 func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
-	threshold.Init()
+	initBLSTest()
 
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -130,7 +124,7 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 			// Use unexported field to set up test condition - store empty value
 			s := signerStorage.(*storage)
-			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte{})
+			err := s.db.Set(nil, s.objPrefix(walletPrefix), []byte(walletPath), []byte{})
 			require.NoError(t, err)
 
 			// Attempt to open wallet
@@ -146,7 +140,7 @@ func TestWalletAndAccountManagement(t *testing.T) {
 
 			// Use unexported field to set up test condition - store invalid JSON
 			s := signerStorage.(*storage)
-			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte("{invalid-json}"))
+			err := s.db.Set(nil, s.objPrefix(walletPrefix), []byte(walletPath), []byte("{invalid-json}"))
 			require.NoError(t, err)
 
 			// Attempt to open wallet
@@ -355,25 +349,25 @@ func TestStorageUtilityFunctions(t *testing.T) {
 	t.Run("SetEncryptionKey", func(t *testing.T) {
 		t.Parallel()
 
-		logger := log.TestLogger(t)
+		logger := testLogger(t)
 
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := NewSignerStorage(db, testBeaconConfig().Name, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
 	t.Run("DataEncryption", func(t *testing.T) {
 		t.Parallel()
 
-		logger := log.TestLogger(t)
+		logger := testLogger(t)
 		db, err := getBaseStorage(logger)
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+		signerStorage := NewSignerStorage(db, testBeaconConfig().Name, logger)
 
 		// create a test account
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -528,7 +522,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
+			err := s.db.Set(nil, s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
 			require.NoError(t, err)
 
 			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
@@ -542,7 +536,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte{})
+			err := s.db.Set(nil, s.objPrefix(highestAttPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
 			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
@@ -654,7 +648,7 @@ func TestSlashingProtection(t *testing.T) {
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
-			err := s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, []byte{})
+			err := s.db.Set(nil, s.objPrefix(highestProposalPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
 			slot, found, err := signerStorage.RetrieveHighestProposal(pubKey)

@@ -14,8 +14,6 @@ import (
 	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/v2/observability/log/fields"
-
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -97,7 +95,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 	defer func() {
 		duration := time.Since(start)
 		recordClientRequest(ctx, opAddValidator, err, duration)
-		c.logger.Debug("requested to add keys to remote signer", fields.Count(len(shares)), zap.Duration("duration", duration), zap.Error(err))
+		c.logger.Debug("requested to add keys to remote signer", zap.Int("count", len(shares)), zap.Duration("duration", duration), zap.Error(err))
 	}()
 
 	if len(shares) > addShareLimit {
@@ -153,7 +151,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	defer func() {
 		duration := time.Since(start)
 		recordClientRequest(ctx, opRemoveValidator, err, duration)
-		c.logger.Debug("requested to remove keys from remote signer", fields.Count(len(pubKeys)), zap.Duration("duration", duration), zap.Error(err))
+		c.logger.Debug("requested to remove keys from remote signer", zap.Int("count", len(pubKeys)), zap.Duration("duration", duration), zap.Error(err))
 	}()
 	req := web3signer.DeleteKeystoreRequest{
 		Pubkeys: pubKeys,
@@ -190,7 +188,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 	defer func() {
 		duration := time.Since(start)
 		recordClientRequest(ctx, opSignValidator, err, duration)
-		c.logger.Debug("requested to sign with share key", fields.PubKey(sharePubKey[:]), zap.Duration("duration", duration), zap.Error(err))
+		c.logger.Debug("requested to sign with share key", zap.Stringer("share_pubkey", sharePubKey), zap.Duration("duration", duration), zap.Error(err))
 	}()
 	err = requests.
 		URL(c.baseURL).

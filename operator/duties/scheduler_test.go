@@ -7,6 +7,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -413,6 +414,39 @@ func (sv *SafeValue[T]) Get() T {
 	return sv.v
 }
 
+func testRoot(value byte) phase0.Root {
+	var root phase0.Root
+	root[0] = value
+	return root
+}
+
+func setupSchedulerForHeadEventTest(currentSlot phase0.Slot) *Scheduler {
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.SlotDuration = time.Hour
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+	beaconCfg.GenesisTime = time.Now().Add(-(time.Duration(currentSlot) * beaconCfg.SlotDuration) - beaconCfg.SlotDuration/2)
+
+	return &Scheduler{
+		logger:              zap.NewNop(),
+		beaconConfig:        &beaconCfg,
+		blockPropagateDelay: 0,
+		reorg:               make(chan ReorgEvent, reorgChannelBuffer),
+		waitCond:            sync.NewCond(&sync.Mutex{}),
+	}
+}
+
+func drainReorgEvents(ch chan ReorgEvent) []ReorgEvent {
+	events := make([]ReorgEvent, 0, len(ch))
+	for {
+		select {
+		case event := <-ch:
+			events = append(events, event)
+		default:
+			return events
+		}
+	}
+}
+
 func TestScheduler_Run(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -520,4 +554,142 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 		// Ensure in-flight fanout work is drained before cleanup cancels the scheduler.
 		synctest.Wait()
 	})
+}
+
+func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
+	currentSlot := phase0.Slot(testSlotsPerEpoch*2 + 1)
+
+	tests := []struct {
+		name      string
+		configure func(s *Scheduler, event *eth2apiv1.HeadEvent)
+		expected  []ReorgEvent
+	}{
+		{
+			name: "no root change emits no reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch
+				s.lastBlockRoot = testRoot(0x10)
+				s.previousDutyDependentRoot = testRoot(0x20)
+				s.currentDutyDependentRoot = testRoot(0x21)
+				event.Block = testRoot(0x22)
+				event.PreviousDutyDependentRoot = s.previousDutyDependentRoot
+				event.CurrentDutyDependentRoot = s.currentDutyDependentRoot
+			},
+			expected: []ReorgEvent{},
+		},
+		{
+			name: "epoch transition emits previous epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch - 1
+				s.lastBlockRoot = testRoot(0x11)
+				s.previousDutyDependentRoot = testRoot(0x01)
+				s.currentDutyDependentRoot = testRoot(0x02)
+				event.Block = testRoot(0x12)
+				event.PreviousDutyDependentRoot = testRoot(0x03)
+				event.CurrentDutyDependentRoot = s.lastBlockRoot
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  false,
+				PreviousDutyDependentRootChanged: true,
+			}},
+		},
+		{
+			name: "same epoch previous root change emits previous epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch
+				s.lastBlockRoot = testRoot(0x13)
+				s.previousDutyDependentRoot = testRoot(0x04)
+				s.currentDutyDependentRoot = testRoot(0x05)
+				event.Block = testRoot(0x14)
+				event.PreviousDutyDependentRoot = testRoot(0x06)
+				event.CurrentDutyDependentRoot = s.currentDutyDependentRoot
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  false,
+				PreviousDutyDependentRootChanged: true,
+			}},
+		},
+		{
+			name: "epoch transition emits current epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch - 1
+				s.lastBlockRoot = testRoot(0x22)
+				s.previousDutyDependentRoot = testRoot(0x23)
+				s.currentDutyDependentRoot = testRoot(0x24)
+				event.Block = testRoot(0x25)
+				event.PreviousDutyDependentRoot = s.currentDutyDependentRoot
+				event.CurrentDutyDependentRoot = testRoot(0x26)
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  true,
+				PreviousDutyDependentRootChanged: false,
+			}},
+		},
+		{
+			name: "same epoch current root change emits current epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch
+				s.lastBlockRoot = testRoot(0x15)
+				s.previousDutyDependentRoot = testRoot(0x07)
+				s.currentDutyDependentRoot = testRoot(0x08)
+				event.Block = testRoot(0x16)
+				event.PreviousDutyDependentRoot = s.previousDutyDependentRoot
+				event.CurrentDutyDependentRoot = testRoot(0x09)
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  true,
+				PreviousDutyDependentRootChanged: false,
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := setupSchedulerForHeadEventTest(currentSlot)
+			event := &eth2apiv1.HeadEvent{Slot: currentSlot}
+
+			tt.configure(s, event)
+			s.HandleHeadEvent()(t.Context(), event)
+
+			require.Equal(t, tt.expected, drainReorgEvents(s.reorg))
+		})
+	}
+}
+
+func TestScheduler_HandleHeadEvent_DoesNotBlockWithoutReorgConsumer(t *testing.T) {
+	currentSlot := phase0.Slot(testSlotsPerEpoch*2 + 2)
+	s := setupSchedulerForHeadEventTest(currentSlot)
+	s.lastEpoch = s.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	s.lastBlockRoot = testRoot(0x17)
+	s.previousDutyDependentRoot = testRoot(0x0a)
+	s.currentDutyDependentRoot = testRoot(0x0b)
+
+	event := &eth2apiv1.HeadEvent{
+		Slot:                      currentSlot,
+		Block:                     testRoot(0x18),
+		PreviousDutyDependentRoot: testRoot(0x0c),
+		CurrentDutyDependentRoot:  testRoot(0x0d),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		s.HandleHeadEvent()(t.Context(), event)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(noActionTimeout):
+		t.Fatal("HandleHeadEvent blocked on reorg send")
+	}
+
+	require.Equal(t, []ReorgEvent{{
+		CurrentDutyDependentRootChanged:  true,
+		PreviousDutyDependentRootChanged: true,
+	}}, drainReorgEvents(s.reorg))
 }
