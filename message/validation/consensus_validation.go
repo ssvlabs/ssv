@@ -526,9 +526,10 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	// so adding allowedRoundsInFuture cannot get close to uint64 overflow.
 	highestAllowedRound := estimatedRoundMsgReceivedAt + allowedRoundsInFuture
 	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot
-	// values (until https://github.com/ssvlabs/ssv/issues/2429 is implemented), thus the best we can do for
-	// proposer role here is to always permit messages with round 1 and round 2 (and none else) since these
-	// are the only rounds proposer-runner can meaningfully work with (round 3+ is too late for this duty type).
+	// values (until https://github.com/ssvlabs/ssv/issues/2429 is implemented), since we don't have any visibility
+	// into the actual QBFT instance state here - the best we can do for proposer role is to always permit messages
+	// with round 1 and round 2 (and none else) since these are the only rounds proposer-runner can meaningfully
+	// work with (round 3+ is too late for this duty type).
 	if role == spectypes.RoleProposer {
 		lowestAllowedRound = specqbft.FirstRound
 		highestAllowedRound = specqbft.FirstRound + 1
