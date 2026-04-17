@@ -15,14 +15,14 @@ const (
 	clockErrorTolerance   = time.Millisecond * 50
 	allowedRoundsInFuture = 1
 
-	LateSlotAllowance     = 2
-	rsaSignatureSize      = 256
-	operatorIDSize        = 8 // uint64
-	maxSignatures         = 13
-	signatureSize         = 256
-	signatureOffset       = 0
-	operatorIDOffset      = signatureOffset + signatureSize
-	MessageOffset         = operatorIDOffset + operatorIDSize
+	LateSlotAllowance = 2
+	rsaSignatureSize  = 256
+	operatorIDSize    = 8 // uint64
+	maxSignatures     = 13
+	signatureSize     = 256
+	signatureOffset   = 0
+	operatorIDOffset  = signatureOffset + signatureSize
+	MessageOffset     = operatorIDOffset + operatorIDSize
 )
 
 const (

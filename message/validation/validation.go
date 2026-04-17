@@ -121,9 +121,13 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 		return mv.validateSelf(pmsg)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return mv.handleValidationError(ctx, peerID, nil, err)
+	}
+
 	validationStart := time.Now()
 
-	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
+	decodedMessage, err := mv.handlePubsubMessage(ctx, pmsg, time.Now())
 
 	defer func() {
 		recordMessageDuration(ctx, messageRole(decodedMessage), time.Since(validationStart))
@@ -144,7 +148,11 @@ func messageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
 	return decodedMessage.SSVMessage.GetID().GetRoleType()
 }
 
-func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
+func (mv *messageValidator) handlePubsubMessage(ctx context.Context, pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	if err := mv.validatePubSubMessage(pMsg); err != nil {
 		return nil, err
 	}
@@ -154,10 +162,11 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 		return nil, err
 	}
 
-	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
+	return mv.handleSignedSSVMessage(ctx, signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
 }
 
 func (mv *messageValidator) handleSignedSSVMessage(
+	ctx context.Context,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	topic string,
 	receivedFrom peer.ID,
@@ -165,6 +174,10 @@ func (mv *messageValidator) handleSignedSSVMessage(
 ) (*queue.SSVMessage, error) {
 	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
+	}
+
+	if err := ctx.Err(); err != nil {
+		return decodedMessage, err
 	}
 
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
@@ -189,6 +202,11 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
+	// Bail out before we potentially wait on the per-message validation mutex.
+	if err := ctx.Err(); err != nil {
+		return decodedMessage, err
+	}
+
 	validationMu := mv.getValidationLock(signedSSVMessage.SSVMessage.GetID())
 	validationMu.Lock()
 	defer validationMu.Unlock()
@@ -196,6 +214,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(
+			ctx,
 			signedSSVMessage,
 			committeeInfo,
 			topic,
@@ -209,6 +228,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 
 	case spectypes.SSVPartialSignatureMsgType:
 		partialSignatureMessages, err := mv.validatePartialSignatureMessage(
+			ctx,
 			signedSSVMessage,
 			committeeInfo,
 			topic,

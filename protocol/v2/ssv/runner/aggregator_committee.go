@@ -211,6 +211,10 @@ func (r *AggregatorCommitteeRunner) GetShares() map[phase0.ValidatorIndex]*spect
 	return r.BaseRunner.GetShares()
 }
 
+func (r *AggregatorCommitteeRunner) GetShare() *spectypes.Share {
+	return r.BaseRunner.GetShare()
+}
+
 func (r *AggregatorCommitteeRunner) GetRole() spectypes.RunnerRole {
 	return r.BaseRunner.GetRole()
 }

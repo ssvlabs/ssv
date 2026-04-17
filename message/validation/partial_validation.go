@@ -3,6 +3,7 @@ package validation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -17,6 +18,7 @@ import (
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
+	ctx context.Context,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
 	topic string,
@@ -55,6 +57,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedFrom, receivedAt, state); err != nil {
+		return partialSignatureMessages, err
+	}
+
+	if err := ctx.Err(); err != nil {
 		return partialSignatureMessages, err
 	}
 

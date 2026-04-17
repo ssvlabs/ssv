@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	msgIDHandlerBufferSize = 32
+	msgIDHandlerBufferSize = 1024
 )
 
 // MsgPeersResolver will resolve the sending peers of the given message
@@ -155,7 +155,8 @@ func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
 }
 
 // Add adds the given pair of msg id + peer id
-// it uses channel to avoid blocking
+// it uses a buffered channel to reduce lock contention and falls back to a
+// synchronous insert when the buffer is full to avoid losing associations.
 func (handler *msgIDHandler) Add(msgID string, pi peer.ID) {
 	select {
 	case handler.added <- addedEvent{
@@ -163,6 +164,8 @@ func (handler *msgIDHandler) Add(msgID string, pi peer.ID) {
 		pid: pi,
 	}:
 	default:
+		msgIDHandlerBufferFallbackCounter.Add(handler.ctx, 1)
+		handler.add(msgID, pi)
 	}
 }
 

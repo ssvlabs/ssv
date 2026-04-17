@@ -34,6 +34,9 @@ const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
 	blockPropagationDelay = 300 * time.Millisecond
+	// reorgChannelBuffer allows HandleHeadEvent to emit a reorg notification without blocking on
+	// downstream fanout startup or temporary consumer lag.
+	reorgChannelBuffer = 1
 )
 
 // DutiesExecutor is an interface for executing duties.
@@ -156,7 +159,7 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		handlers: []dutyHandler{},
 
 		ticker:   opts.SlotTickerProvider(),
-		reorg:    make(chan ReorgEvent),
+		reorg:    make(chan ReorgEvent, reorgChannelBuffer),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
 

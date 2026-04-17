@@ -1,6 +1,7 @@
 package commons
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"testing"
 
@@ -30,4 +31,49 @@ func TestECDSAPrivFromInterface(t *testing.T) {
 	require.Equal(t, ecdsaPrivKey.X.String(), "22653320514410971312249902166871933285664081749262857866749567141267477006697")
 	require.Equal(t, ecdsaPrivKey.Y.String(), "103853204202400939811590846319591563498962634102053730872842929232997685705657")
 	require.Equal(t, ecdsaPrivKey.Curve, gcrypto.S256())
+}
+
+func TestECDSAPubFromInterface(t *testing.T) {
+	hexKey := "0f042adb4a9b3401e0cebad1ff1865fcb3e849b9f2a4880d1b1c9844ba50c816"
+
+	rawKey, err := hex.DecodeString(hexKey)
+	require.NoError(t, err)
+
+	privKey, err := crypto.UnmarshalSecp256k1PrivateKey(rawKey)
+	require.NoError(t, err)
+
+	ecdsaPubKey, err := ECDSAPubFromInterface(privKey.GetPublic())
+	require.NoError(t, err)
+	require.NotNil(t, ecdsaPubKey)
+	require.Equal(t, ecdsaPubKey.X.String(), "22653320514410971312249902166871933285664081749262857866749567141267477006697")
+	require.Equal(t, ecdsaPubKey.Y.String(), "103853204202400939811590846319591563498962634102053730872842929232997685705657")
+}
+
+func TestECDSAFromInterfaceRejectsNonSecp256k1Keys(t *testing.T) {
+	privKey, pubKey, err := crypto.GenerateEd25519Key(rand.Reader)
+	require.NoError(t, err)
+
+	_, err = ECDSAPrivFromInterface(privKey)
+	require.ErrorContains(t, err, "unsupported key type")
+
+	_, err = ECDSAPubFromInterface(pubKey)
+	require.ErrorContains(t, err, "unsupported key type")
+}
+
+func TestECDSAFromInterfaceRejectsNilKeys(t *testing.T) {
+	_, err := ECDSAPrivFromInterface(nil)
+	require.ErrorContains(t, err, "private key is nil")
+
+	_, err = ECDSAPubFromInterface(nil)
+	require.ErrorContains(t, err, "public key is nil")
+}
+
+func TestECDSAFromInterfaceRejectsTypedNilKeys(t *testing.T) {
+	var privKey *crypto.Secp256k1PrivateKey
+	_, err := ECDSAPrivFromInterface(privKey)
+	require.ErrorContains(t, err, "unsupported key type")
+
+	var pubKey *crypto.Secp256k1PublicKey
+	_, err = ECDSAPubFromInterface(pubKey)
+	require.ErrorContains(t, err, "unsupported key type")
 }

@@ -32,6 +32,7 @@ type Getters interface {
 	HasRunningQBFTInstance() bool
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
+	GetShare() *spectypes.Share
 	GetRole() spectypes.RunnerRole
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
@@ -122,6 +123,18 @@ func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 
 func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 	return b.Share
+}
+
+// GetShare returns the runner's share. Intended for single-share runners
+// (all roles except Committee), whose constructors enforce len(Share) == 1.
+// CommitteeRunner owns multiple shares and must iterate b.Share directly —
+// calling GetShare on it returns an arbitrary entry (Go map iteration order
+// is randomized) and is almost certainly a bug.
+func (b *BaseRunner) GetShare() *spectypes.Share {
+	for _, share := range b.Share {
+		return share
+	}
+	return nil
 }
 
 func (b *BaseRunner) HasRunningDuty() bool {
@@ -329,7 +342,11 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 
 	// update the decided and the highest decided slot
 	b.State.DecidedValue = decidedValueEncoded
-	b.highestDecidedSlot = b.State.CurrentDuty.DutySlot()
+	currentDutySlot, err := b.currentDutySlot()
+	if err != nil {
+		return true, nil, fmt.Errorf("current duty slot: %w", err)
+	}
+	b.highestDecidedSlot = currentDutySlot
 
 	return true, decidedValue, nil
 }
@@ -507,12 +524,17 @@ func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 }
 
 func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
-	// assume CurrentDuty is not nil if state is not nil
-	if b.State != nil && b.State.CurrentDuty.DutySlot() >= duty.DutySlot() {
-		return spectypes.NewError(
-			spectypes.DutyAlreadyPassedErrorCode,
-			fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), b.State.CurrentDuty.DutySlot()),
-		)
+	if b.State != nil {
+		currentDutySlot, err := b.currentDutySlot()
+		if err != nil {
+			return fmt.Errorf("current duty slot: %w", err)
+		}
+		if currentDutySlot >= duty.DutySlot() {
+			return spectypes.NewError(
+				spectypes.DutyAlreadyPassedErrorCode,
+				fmt.Sprintf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(), currentDutySlot),
+			)
+		}
 	}
 	return nil
 }
