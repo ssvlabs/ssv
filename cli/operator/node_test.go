@@ -63,6 +63,58 @@ func Test_warnIfSSVAPIAddressUnset(t *testing.T) {
 	})
 }
 
+func Test_warnIfExporterSigningConfigProvided(t *testing.T) {
+	originalCfg := cfg
+	t.Cleanup(func() { cfg = originalCfg })
+
+	t.Run("does not warn when exporter has no signing config", func(t *testing.T) {
+		cfg = config{}
+
+		core, recorded := observer.New(zapcore.WarnLevel)
+		logger := zap.New(core)
+
+		warnIfExporterSigningConfigProvided(logger)
+
+		require.Len(t, recorded.All(), 0)
+	})
+
+	t.Run("warns when exporter is given operator key", func(t *testing.T) {
+		cfg = config{
+			OperatorPrivateKey: "operator-key",
+		}
+
+		core, recorded := observer.New(zapcore.WarnLevel)
+		logger := zap.New(core)
+
+		warnIfExporterSigningConfigProvided(logger)
+
+		logs := recorded.All()
+		require.Len(t, logs, 1)
+		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
+		require.Equal(t, "exporter mode ignores operator signing configuration", logs[0].Message)
+		require.EqualValues(t, len(cfg.OperatorPrivateKey), logs[0].ContextMap()["operator_private_key_len"])
+	})
+
+	t.Run("warns when exporter is given ssv-signer config", func(t *testing.T) {
+		cfg = config{
+			SSVSigner: SSVSignerConfig{
+				Endpoint: "https://signer.example",
+			},
+		}
+
+		core, recorded := observer.New(zapcore.WarnLevel)
+		logger := zap.New(core)
+
+		warnIfExporterSigningConfigProvided(logger)
+
+		logs := recorded.All()
+		require.Len(t, logs, 1)
+		require.Equal(t, zapcore.WarnLevel, logs[0].Level)
+		require.Equal(t, "exporter mode ignores operator signing configuration", logs[0].Message)
+		require.Equal(t, cfg.SSVSigner.Endpoint, logs[0].ContextMap()["ssv_signer_endpoint"])
+	})
+}
+
 func Test_ssvAPIListenAddress(t *testing.T) {
 	t.Parallel()
 
