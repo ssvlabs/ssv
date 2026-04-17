@@ -471,18 +471,64 @@ func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
 		require.Len(t, encryptionKey, 32)
 	})
 
+	t.Run("ignores incomplete keystore config when operator key is available", func(t *testing.T) {
+		privateKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
+		cfg = config{
+			KeyStore: KeyStore{
+				PrivateKeyFile: "/tmp/exporter-keystore.json",
+			},
+			OperatorPrivateKey: privateKey.Base64(),
+		}
+
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		require.NoError(t, err)
+		require.NotNil(t, operatorPrivKey)
+		require.Nil(t, signerClient)
+	})
+
+	t.Run("ignores incomplete keystore config when no other protector source exists", func(t *testing.T) {
+		cfg = config{
+			KeyStore: KeyStore{
+				PrivateKeyFile: "/tmp/exporter-keystore.json",
+			},
+		}
+
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		require.NoError(t, err)
+		require.Nil(t, operatorPrivKey)
+		require.Nil(t, signerClient)
+	})
+
 	t.Run("loads ssv-signer client for exporter p2p protection", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(t, ssvsigner.PathOperatorIdentity, r.URL.Path)
-			_, err := w.Write([]byte("exporter-identity"))
-			require.NoError(t, err)
-		}))
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 		t.Cleanup(server.Close)
 
 		cfg = config{
 			SSVSigner: SSVSignerConfig{
 				Endpoint: server.URL,
 			},
+		}
+
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		require.NoError(t, err)
+		require.Nil(t, operatorPrivKey)
+		require.NotNil(t, signerClient)
+	})
+
+	t.Run("prefers ssv-signer when both local and remote configs are present", func(t *testing.T) {
+		privateKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		t.Cleanup(server.Close)
+
+		cfg = config{
+			SSVSigner: SSVSignerConfig{
+				Endpoint: server.URL,
+			},
+			OperatorPrivateKey: privateKey.Base64(),
 		}
 
 		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())

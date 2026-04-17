@@ -805,7 +805,9 @@ func newSSVSignerClient(logger *zap.Logger) (*ssvsigner.Client, error) {
 }
 
 func resolveExporterP2PNetworkKeyProtector(ctx context.Context, logger *zap.Logger) (keys.OperatorPrivateKey, *ssvsigner.Client, error) {
-	usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
+	usingSSVSigner := cfg.SSVSigner.Endpoint != ""
+	usingKeystore := cfg.KeyStore.PrivateKeyFile != "" && cfg.KeyStore.PasswordFile != ""
+	usingPrivKey := cfg.OperatorPrivateKey != ""
 
 	if usingSSVSigner {
 		logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
