@@ -236,7 +236,7 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.ExporterOptions.Enabled {
 			logger.Info("exporter mode: skipping operator signing and key manager services")
 
-			operatorPrivKey, ssvSignerClient, err = resolveExporterP2PNetworkKeyProtector(cmd.Context(), logger)
+			operatorPrivKey, ssvSignerClient, err = resolveExporterP2PNetworkKeyProtector(logger)
 			if err != nil {
 				logger.Fatal("failed to initialize exporter p2p network key protector", zap.Error(err))
 			}
@@ -804,7 +804,7 @@ func newSSVSignerClient(logger *zap.Logger) (*ssvsigner.Client, error) {
 	return ssvsigner.NewClient(cfg.SSVSigner.Endpoint, ssvSignerOptions...), nil
 }
 
-func resolveExporterP2PNetworkKeyProtector(ctx context.Context, logger *zap.Logger) (keys.OperatorPrivateKey, *ssvsigner.Client, error) {
+func resolveExporterP2PNetworkKeyProtector(logger *zap.Logger) (keys.OperatorPrivateKey, *ssvsigner.Client, error) {
 	usingSSVSigner := cfg.SSVSigner.Endpoint != ""
 	usingKeystore := cfg.KeyStore.PrivateKeyFile != "" && cfg.KeyStore.PasswordFile != ""
 	usingPrivKey := cfg.OperatorPrivateKey != ""

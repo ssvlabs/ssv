@@ -447,7 +447,7 @@ func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
 	t.Run("returns nil when exporter has no protection config", func(t *testing.T) {
 		cfg = config{}
 
-		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(zap.NewNop())
 		require.NoError(t, err)
 		require.Nil(t, operatorPrivKey)
 		require.Nil(t, signerClient)
@@ -461,7 +461,7 @@ func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
 			OperatorPrivateKey: privateKey.Base64(),
 		}
 
-		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(zap.NewNop())
 		require.NoError(t, err)
 		require.NotNil(t, operatorPrivKey)
 		require.Nil(t, signerClient)
@@ -482,7 +482,7 @@ func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
 			OperatorPrivateKey: privateKey.Base64(),
 		}
 
-		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(zap.NewNop())
 		require.NoError(t, err)
 		require.NotNil(t, operatorPrivKey)
 		require.Nil(t, signerClient)
@@ -495,7 +495,7 @@ func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
 			},
 		}
 
-		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(zap.NewNop())
 		require.NoError(t, err)
 		require.Nil(t, operatorPrivKey)
 		require.Nil(t, signerClient)
@@ -511,7 +511,7 @@ func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
 			},
 		}
 
-		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(zap.NewNop())
 		require.NoError(t, err)
 		require.Nil(t, operatorPrivKey)
 		require.NotNil(t, signerClient)
@@ -531,7 +531,7 @@ func Test_resolveExporterP2PNetworkKeyProtector(t *testing.T) {
 			OperatorPrivateKey: privateKey.Base64(),
 		}
 
-		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(context.Background(), zap.NewNop())
+		operatorPrivKey, signerClient, err := resolveExporterP2PNetworkKeyProtector(zap.NewNop())
 		require.NoError(t, err)
 		require.Nil(t, operatorPrivKey)
 		require.NotNil(t, signerClient)
