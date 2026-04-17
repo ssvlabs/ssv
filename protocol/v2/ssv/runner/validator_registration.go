@@ -285,13 +285,6 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
-}
-
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }

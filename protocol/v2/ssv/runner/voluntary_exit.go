@@ -255,13 +255,6 @@ func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
-}
-
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }

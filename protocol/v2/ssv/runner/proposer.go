@@ -560,14 +560,6 @@ func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *ProposerRunner) GetShare() *spectypes.Share {
-	// TODO better solution for this
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
-}
-
 func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }

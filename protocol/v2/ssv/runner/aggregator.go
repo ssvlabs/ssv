@@ -476,14 +476,6 @@ func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *AggregatorRunner) GetShare() *spectypes.Share {
-	// TODO better solution for this
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
-}
-
 func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }

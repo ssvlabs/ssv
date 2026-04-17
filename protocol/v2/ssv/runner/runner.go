@@ -31,6 +31,7 @@ type Getters interface {
 	HasRunningQBFTInstance() bool
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
+	GetShare() *spectypes.Share
 	GetRole() spectypes.RunnerRole
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
@@ -121,6 +122,18 @@ func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
 
 func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
 	return b.Share
+}
+
+// GetShare returns the runner's share. Intended for single-share runners
+// (all roles except Committee), whose constructors enforce len(Share) == 1.
+// CommitteeRunner owns multiple shares and must iterate b.Share directly —
+// calling GetShare on it returns an arbitrary entry (Go map iteration order
+// is randomized) and is almost certainly a bug.
+func (b *BaseRunner) GetShare() *spectypes.Share {
+	for _, share := range b.Share {
+		return share
+	}
+	return nil
 }
 
 func (b *BaseRunner) HasRunningDuty() bool {
