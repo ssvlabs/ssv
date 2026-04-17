@@ -10,17 +10,17 @@ const (
 	// lateMessageMargin is the duration past a message's TTL in which it is still considered valid.
 	lateMessageMargin = time.Second * 3
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
-	clockErrorTolerance     = time.Millisecond * 50
-	allowedRoundsInFuture   = 1
-	allowedRoundsInPast     = 2
-	LateSlotAllowance       = 2
-	rsaSignatureSize        = 256
-	operatorIDSize          = 8 // uint64
-	slotSize                = 8 // uint64
-	validatorIndexSize      = 8 // uint64
-	identifierSize          = 56
-	rootSize                = 32
-	maxSignatures           = 13
+	clockErrorTolerance   = time.Millisecond * 50
+	allowedRoundsInPast   = 2
+	allowedRoundsInFuture = 1
+	LateSlotAllowance     = 2
+	rsaSignatureSize      = 256
+	operatorIDSize        = 8 // uint64
+	slotSize              = 8 // uint64
+	validatorIndexSize    = 8 // uint64
+	identifierSize        = 56
+	rootSize              = 32
+	maxSignatures         = 13
 	encodingOverheadDivisor = 20 // Divisor for message size to get encoding overhead, e.g. 10 for 10%, 20 for 5%. Done this way to keep const int.
 )
 

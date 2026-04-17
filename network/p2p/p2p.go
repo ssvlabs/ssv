@@ -494,7 +494,7 @@ func (n *p2pNetwork) isReady() bool {
 }
 
 // Healthy reports whether the p2p network is operating normally.
-// It satisfies the nodeprobe health-check interface.
+// It satisfies the health-check interface from hprobe package.
 func (n *p2pNetwork) Healthy(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
