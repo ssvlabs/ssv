@@ -83,6 +83,7 @@ type p2pNetwork struct {
 	cfg    *Config
 
 	host            host.Host
+	isHostSet       atomic.Bool
 	streamCtrl      streams.StreamController
 	idx             peers.Index
 	isIdxSet        atomic.Bool
@@ -174,7 +175,9 @@ func (n *p2pNetwork) parseTrustedPeers() error {
 	return nil
 }
 
-// Host implements HostProvider
+// Host implements HostProvider.
+// Callers must only invoke this after Setup() has returned — the read of n.host
+// is unsynchronized and races with the assignment inside SetupHost otherwise.
 func (n *p2pNetwork) Host() host.Host {
 	return n.host
 }

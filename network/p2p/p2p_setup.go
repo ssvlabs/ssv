@@ -143,6 +143,9 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
+	// The Store must happen after the n.host assignment above: it establishes the
+	// happens-before that connectionStats relies on via isHostSet.Load. See #2448.
+	n.isHostSet.Store(true)
 	n.libConnManager = host.ConnManager()
 
 	backoffFactory := libp2pdiscbackoff.NewExponentialDecorrelatedJitter(
@@ -386,12 +389,16 @@ func (n *p2pNetwork) inboundLimit() int {
 }
 
 // connectionStats returns the number of inbound and outbound connections.
-// It safely handles the case where the host is not yet initialized, which can
-// occur during network setup when the connection gater is active but libp2p.New()
-// hasn't completed yet. In this case, it returns (0, 0) since no connections
-// exist before the host is fully initialized.
+//
+// The isHostSet.Load gate is a memory barrier, not just a nil check: it
+// synchronizes-with the Store in SetupHost and establishes the happens-before
+// needed to read n.host safely. The connection gater can fire InterceptAccept
+// from libp2p listener goroutines while SetupHost is still inside libp2p.New(),
+// i.e. before n.host has been assigned — reading n.host without this barrier
+// is a data race (see #2448). When the host isn't set yet, we return (0, 0)
+// since no connections can exist before the host is fully initialized.
 func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
-	if n.host == nil {
+	if !n.isHostSet.Load() {
 		return 0, 0
 	}
 
