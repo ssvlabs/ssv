@@ -152,7 +152,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.State.Finished = true
+	r.finishDuty()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
