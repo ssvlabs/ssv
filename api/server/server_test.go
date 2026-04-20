@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/api"
@@ -151,7 +152,9 @@ func TestRun_ActualExecution(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	addr := fmt.Sprintf("localhost:%d", reserveFreePort(t))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
 
 	logger := zaptest.NewLogger(t)
 	srv := New(
@@ -165,19 +168,12 @@ func TestRun_ActualExecution(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Run()
+		logger.Info("Serving SSV API", zap.String("addr", listener.Addr().String()))
+		errCh <- srv.httpServer.Serve(listener)
 	}()
 
-	var conn net.Conn
-	var connectErr error
-	for i := 0; i < 10; i++ {
-		conn, connectErr = net.DialTimeout("tcp", addr, 500*time.Millisecond)
-		if connectErr == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	require.NoError(t, connectErr, "failed to connect to server after multiple attempts")
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -203,7 +199,9 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	addr := fmt.Sprintf("localhost:%d", reserveFreePort(t))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
 
 	logger := zaptest.NewLogger(t)
 	srv := New(
@@ -217,23 +215,13 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Run()
+		logger.Info("Serving SSV API", zap.String("addr", listener.Addr().String()))
+		errCh <- srv.httpServer.Serve(listener)
 	}()
 
-	var conn net.Conn
-	var connectErr error
-
-	for range 10 {
-		conn, connectErr = net.DialTimeout("tcp", addr, 500*time.Millisecond)
-		if connectErr == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	require.NoError(t, connectErr, "failed to connect to server after multiple attempts")
-
-	conn.Close()
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -383,17 +371,4 @@ func TestRoutes(t *testing.T) {
 			route.validateBody(t, string(body))
 		})
 	}
-}
-
-// reserveFreePort asks the kernel for a free TCP port and releases it so the
-// caller can bind to it. A small TOCTOU window remains between the release
-// here and the bind by the server under test, but it's far narrower than
-// scanning random ports with a dial probe.
-func reserveFreePort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := l.Addr().(*net.TCPAddr).Port
-	require.NoError(t, l.Close())
-	return port
 }

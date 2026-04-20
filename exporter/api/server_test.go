@@ -25,13 +25,13 @@ func TestHandleQuery(t *testing.T) {
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false).(*wsServer)
-	port := reserveFreePort(t)
-	addr := fmt.Sprintf(":%d", port)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- ws.Start(addr)
+		serverErrCh <- ws.Serve(listener)
 	}()
-	waitForCondition(t, 2*time.Second, func() bool { return checkPort(port) == nil })
 	select {
 	case err := <-serverErrCh:
 		require.NoError(t, err)
@@ -72,13 +72,13 @@ func TestHandleStream(t *testing.T) {
 	ctx := context.Background() // t.Context() breaks the test
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
-	port := reserveFreePort(t)
-	addr := fmt.Sprintf(":%d", port)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := listener.Addr().String()
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- ws.Start(addr)
+		serverErrCh <- ws.Serve(listener)
 	}()
-	waitForCondition(t, 2*time.Second, func() bool { return checkPort(port) == nil })
 	select {
 	case err := <-serverErrCh:
 		require.NoError(t, err)
@@ -151,26 +151,4 @@ func newTestMessage() Message {
 			{"PublicKey": "pubkey3"},
 		},
 	}
-}
-
-// reserveFreePort asks the kernel for a free TCP port and releases it so the
-// caller can bind to it. A small TOCTOU window remains between the release
-// here and the bind by the server under test, but it's far narrower than
-// scanning random ports with a dial probe.
-func reserveFreePort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := l.Addr().(*net.TCPAddr).Port
-	require.NoError(t, l.Close())
-	return port
-}
-
-func checkPort(port int) error {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%d", port), 3*time.Second)
-	if err != nil {
-		return err
-	}
-	_ = conn.Close()
-	return nil
 }

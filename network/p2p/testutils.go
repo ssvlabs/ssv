@@ -192,9 +192,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	// Use TCP port 0 so the kernel picks a free port atomically at bind time,
-	// avoiding the TOCTOU gap in testing.RandomTCPPort. UDP port is unused for
-	// mDNS tests; leave it randomized for the (currently unused) discv5 path.
+	// Use TCP port 0 so the kernel picks a free port atomically at bind time. UDP port is unused for
+	// mDNS tests, leaving it randomized for the (currently unused) discv5 path.
 	cfg := NewNetConfig(keys, ln.Bootnode, 0, ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.MdnsDiscoveryTag = ln.mdnsTag

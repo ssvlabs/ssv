@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"time"
 
@@ -35,13 +36,16 @@ type wsServer struct {
 
 	broadcaster Broadcaster
 
-	router *http.ServeMux
+	router     *http.ServeMux
+	httpServer *http.Server
 	// out is a subject for writing messages
 	out      *event.Feed
 	withPing bool
 }
 
-// NewWsServer creates a new instance
+// NewWsServer creates a new instance. Handler routes are registered here so
+// that by the time Start/Serve is called the mux is ready and callers can
+// safely bind a listener and dial it without a setup race.
 func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
 	ws := wsServer{
 		ctx:         ctx,
@@ -52,6 +56,8 @@ func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHa
 		out:         new(event.Feed),
 		withPing:    withPing,
 	}
+	ws.RegisterHandler("query", "/query", ws.handleQuery)
+	ws.RegisterHandler("stream", "/stream", ws.handleStream)
 	return &ws
 }
 
@@ -59,29 +65,38 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 	ws.handler = handler
 }
 
-// Start starts the websocket server and the broadcaster
+// Start listens on addr and serves the websocket server. Blocks until the
+// server is shut down.
 func (ws *wsServer) Start(addr string) error {
-	ws.RegisterHandler("query", "/query", ws.handleQuery)
-	ws.RegisterHandler("stream", "/stream", ws.handleStream)
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		ws.logger.Warn("could not listen", zap.Error(err))
+		return err
+	}
+	return ws.Serve(l)
+}
 
+// Serve serves the websocket server on the given listener and blocks until
+// the server is shut down. Takes ownership of l — Shutdown/Close will close
+// it.
+func (ws *wsServer) Serve(l net.Listener) error {
 	go func() {
 		if err := ws.broadcaster.FromFeed(ws.out); err != nil {
 			ws.logger.Debug("failed to pull messages from feed")
 		}
 	}()
 
-	ws.logger.Info("starting", fields.Address(addr), zap.Strings("endPoints", []string{"/query", "/stream"}))
+	ws.logger.Info("starting", fields.Address(l.Addr().String()), zap.Strings("endPoints", []string{"/query", "/stream"}))
 
 	const timeout = 3 * time.Second
 
-	httpServer := &http.Server{
-		Addr:         addr,
+	ws.httpServer = &http.Server{
 		Handler:      ws.router,
 		ReadTimeout:  timeout,
 		WriteTimeout: timeout,
 	}
 
-	err := httpServer.ListenAndServe()
+	err := ws.httpServer.Serve(l)
 	if err != nil {
 		ws.logger.Warn("could not start", zap.Error(err))
 	}
