@@ -68,4 +68,12 @@ func TestCurrentDutySlot(t *testing.T) {
 	slot, err = (&BaseRunner{State: &State{CurrentDuty: committeeDuty}}).currentDutySlot()
 	require.NoError(t, err)
 	require.Equal(t, committeeDuty.DutySlot(), slot)
+
+	aggregatorCommitteeDuty := &spectypes.AggregatorCommitteeDuty{
+		Slot:            17,
+		ValidatorDuties: []*spectypes.ValidatorDuty{{Slot: 17}},
+	}
+	slot, err = (&BaseRunner{State: &State{CurrentDuty: aggregatorCommitteeDuty}}).currentDutySlot()
+	require.NoError(t, err)
+	require.Equal(t, aggregatorCommitteeDuty.DutySlot(), slot)
 }

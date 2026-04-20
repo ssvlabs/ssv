@@ -59,6 +59,11 @@ func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
 			return 0, fmt.Errorf("committee duty is nil")
 		}
 		return duty.DutySlot(), nil
+	case *spectypes.AggregatorCommitteeDuty:
+		if duty == nil {
+			return 0, fmt.Errorf("aggregator committee duty is nil")
+		}
+		return duty.DutySlot(), nil
 	default:
 		return 0, fmt.Errorf("unsupported duty type: %T", b.State.CurrentDuty)
 	}
