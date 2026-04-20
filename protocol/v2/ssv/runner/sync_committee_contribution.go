@@ -147,7 +147,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	if len(selectionProofs) == 0 {
-		r.State.Finished = true
+		r.finishDuty()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, 0)
 		const dutyFinishedNoProofsEvent = "✔️successfully finished duty processing (no selection proofs)"
@@ -404,7 +404,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		fields.Took(time.Since(start)),
 	)
 
-	r.State.Finished = true
+	r.finishDuty()
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleSyncCommitteeContribution, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
@@ -586,14 +586,6 @@ func (r *SyncCommitteeAggregatorRunner) GetNetwork() specqbft.Network {
 
 func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
-}
-
-func (r *SyncCommitteeAggregatorRunner) GetShare() *spectypes.Share {
-	// TODO better solution for this
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {

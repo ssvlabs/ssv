@@ -435,6 +435,7 @@ func fixInstanceForRun(
 		contr.Identifier,
 		contr.Height,
 		signer,
+		nil,
 	)
 
 	newInst.State.DecidedValue = inst.State.DecidedValue

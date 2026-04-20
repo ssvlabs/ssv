@@ -19,6 +19,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
@@ -143,9 +144,14 @@ func newCommitteeRunnerEnv(
 	)
 	require.NoError(t, err)
 
+	crunner := runnerI.(*CommitteeRunner)
+	crunner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+		return func(specqbft.Round) {}
+	})
+
 	return &committeeRunnerEnv{
 		logger:     logger,
-		runner:     runnerI.(*CommitteeRunner),
+		runner:     crunner,
 		beacon:     beacon,
 		network:    network,
 		keySetMap:  keySetMap,

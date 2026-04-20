@@ -43,7 +43,6 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	testConfig := &qbft.Config{
 		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-		Timer:        roundtimer.NewTestingTimer(),
 		CutOffRound:  spectestingutils.TestingCutOffRound,
 	}
 
@@ -61,6 +60,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 		identifier,
 		specqbft.FirstHeight,
 		spectestingutils.TestingOperatorSigner(keySet),
+		roundtimer.NewTestingTimer(),
 	)
 
 	// Initialize Controller

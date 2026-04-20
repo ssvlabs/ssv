@@ -257,7 +257,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 }
 
 func (n *p2pNetwork) ActiveSubnets() p2pcommons.Subnets {
-	return n.currentSubnets
+	return n.currentSubnetsSnapshot()
 }
 
 func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {

@@ -152,7 +152,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.State.Finished = true
+	r.finishDuty()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -283,13 +283,6 @@ func (r *ValidatorRegistrationRunner) GetNetwork() specqbft.Network {
 
 func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
-}
-
-func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
 }
 
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {

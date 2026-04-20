@@ -420,7 +420,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
 	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
 
-	r.State.Finished = true
+	r.finishDuty()
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
@@ -558,14 +558,6 @@ func (r *ProposerRunner) GetNetwork() specqbft.Network {
 
 func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
-}
-
-func (r *ProposerRunner) GetShare() *spectypes.Share {
-	// TODO better solution for this
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
 }
 
 func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {

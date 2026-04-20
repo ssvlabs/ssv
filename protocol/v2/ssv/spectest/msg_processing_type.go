@@ -21,6 +21,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -100,6 +101,10 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			}
 		}
 	}
+
+	test.Runner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+		return func(specqbft.Round) {}
+	})
 
 	var v *validator.Validator
 	var c *validator.Committee

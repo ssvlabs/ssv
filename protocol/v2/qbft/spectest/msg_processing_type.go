@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -38,6 +39,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 		test.Pre.State.ID,
 		test.Pre.State.Height,
 		signer,
+		roundtimer.NewTestingTimer(),
 	)
 	pre.ValueChecker = protocoltesting.TestingValueChecker{}
 	require.NoError(t, pre.Decode(preByts))
