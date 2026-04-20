@@ -409,7 +409,7 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	r.measurements.StartPreConsensus()
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
-		return fmt.Errorf("could not broadcast selection proof partial sig: %w", err)
+		return fmt.Errorf("could not sign/broadcast selection proof partial sig: %w", err)
 	}
 
 	return nil

@@ -188,7 +188,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	logger.Debug("signing and broadcasting voluntary exit partial sig", fields.Slot(duty.DutySlot()))
 
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
-		return fmt.Errorf("could not broadcast voluntary exit partial sig: %w", err)
+		return fmt.Errorf("could not sign/broadcast voluntary exit partial sig: %w", err)
 	}
 
 	// stores value for later using in ProcessPreConsensus

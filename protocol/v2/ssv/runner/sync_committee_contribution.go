@@ -512,7 +512,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 
 	r.measurements.StartPreConsensus()
 	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
-		return fmt.Errorf("could not broadcast contribution proof partial sig: %w", err)
+		return fmt.Errorf("could not sign/broadcast contribution proof partial sig: %w", err)
 	}
 
 	return nil
