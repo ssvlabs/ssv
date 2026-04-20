@@ -46,6 +46,12 @@ type Options struct {
 	SSVConfig           *networkconfig.SSV
 	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
 	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
+
+	// MdnsServiceTag overrides the mDNS service tag when local (mdns) discovery
+	// is used. Empty falls back to LocalDiscoveryServiceTag. Tests set this to
+	// a unique value so concurrently-running test processes don't discover
+	// each other's peers.
+	MdnsServiceTag string
 }
 
 // Validate checks if the options are valid.
@@ -73,7 +79,7 @@ func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service,
 	}
 
 	if opts.DiscV5Opts == nil {
-		return NewLocalDiscovery(ctx, logger, opts.Host)
+		return NewLocalDiscovery(ctx, logger, opts.Host, opts.MdnsServiceTag)
 	}
 	return newDiscV5Service(ctx, logger, &opts)
 }

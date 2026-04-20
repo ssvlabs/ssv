@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -38,6 +39,19 @@ type LocalNet struct {
 	Nodes    []network.P2PNetwork
 
 	udpRand testing.UDPPortsRandomizer
+
+	// mdnsTag is a per-LocalNet mDNS service tag so concurrently-running
+	// test processes don't discover each other's peers.
+	mdnsTag string
+}
+
+// randomMdnsTag returns a unique mDNS service tag for a test LocalNet.
+func randomMdnsTag() string {
+	var buf [8]byte
+	if _, err := cryptorand.Read(buf[:]); err != nil {
+		panic(fmt.Sprintf("read random bytes: %v", err))
+	}
+	return "ssv.test." + hex.EncodeToString(buf[:])
 }
 
 // WithBootnode adds a bootnode to the network
@@ -178,8 +192,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	cfg := NewNetConfig(keys, ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	// Use TCP port 0 so the kernel picks a free port atomically at bind time,
+	// avoiding the TOCTOU gap in testing.RandomTCPPort. UDP port is unused for
+	// mDNS tests; leave it randomized for the (currently unused) discv5 path.
+	cfg := NewNetConfig(keys, ln.Bootnode, 0, ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
+	cfg.MdnsDiscoveryTag = ln.mdnsTag
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
 	cfg.MessageValidator = validation.New(
@@ -253,6 +271,7 @@ type LocalNetOptions struct {
 func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
+	ln.mdnsTag = randomMdnsTag()
 	if options.UseDiscv5 {
 		if err := ln.WithBootnode(ctx, logger); err != nil {
 			return nil, err

@@ -380,7 +380,7 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
+	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, "")
 	require.NoError(t, err)
 
 	var p *P

@@ -303,6 +303,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		SSVConfig:           n.cfg.NetworkConfig.SSV,
 		DiscoveredPeersPool: n.discoveredPeersPool,
 		TrimmedRecently:     n.trimmedRecently,
+		MdnsServiceTag:      n.cfg.MdnsDiscoveryTag,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
