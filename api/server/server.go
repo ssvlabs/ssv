@@ -1,6 +1,10 @@
 package server
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"runtime"
 	"time"
@@ -20,8 +24,8 @@ import (
 type Server struct {
 	logger *zap.Logger
 
-	addr       string
-	httpServer *http.Server
+	addr   string
+	router *chi.Mux
 }
 
 // New creates a new Server instance.
@@ -35,22 +39,10 @@ func New(
 ) *Server {
 	router := chi.NewRouter()
 
-	s := &Server{
-		logger: logger,
-		addr:   addr,
-		httpServer: &http.Server{
-			Addr:              addr,
-			Handler:           router,
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       12 * time.Second,
-			WriteTimeout:      12 * time.Second,
-		},
-	}
-
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
-	router.Use(middlewareLogger(s.logger))
+	router.Use(middlewareLogger(logger))
 	router.Use(middlewareNodeVersion)
 
 	// @Summary Get node identity information
@@ -111,14 +103,49 @@ func New(
 		router.Post("/v1/exporter/decideds", api.Handler(exporter.Decideds))
 	}
 
-	return s
+	return &Server{
+		logger: logger,
+		addr:   addr,
+		router: router,
+	}
 }
 
-// Run starts the server and blocks until it's shut down.
-func (s *Server) Run() error {
-	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
+// Start binds a listener on the configured address and serves the HTTP API in
+// the background. It returns the bound address once the listener is ready (so
+// callers using a :0 port can discover the kernel-assigned one). The server
+// shuts down when ctx is canceled.
+func (s *Server) Start(ctx context.Context) (string, error) {
+	l, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return "", fmt.Errorf("listen on %s: %w", s.addr, err)
+	}
+	boundAddr := l.Addr().String()
 
-	return s.httpServer.ListenAndServe()
+	httpServer := &http.Server{
+		Handler:           s.router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       12 * time.Second,
+		WriteTimeout:      12 * time.Second,
+	}
+
+	s.logger.Info("Serving SSV API", zap.String("addr", boundAddr))
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			s.logger.Error("shutdown failed", zap.Error(err))
+		}
+	}()
+
+	go func() {
+		if err := httpServer.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.logger.Error("serve loop exited", zap.Error(err))
+		}
+	}()
+
+	return boundAddr, nil
 }
 
 func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
