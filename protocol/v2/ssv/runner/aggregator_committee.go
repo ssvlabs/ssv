@@ -382,7 +382,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	if !hasNewQuorum {
 		// If didn't get any new quorum, didn't yet start QBFT (checked above), and has received the last message, then terminate.
 		if r.HasSeenAllPreConsensusSigners() {
-			r.BaseRunner.State.Finished = true
+			r.BaseRunner.finishDuty()
 			r.measurements.EndPreConsensus()
 			recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregatorCommittee)
 			r.measurements.EndDutyFlow()
@@ -561,7 +561,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 	if !hasAnyAggregatorForNewQuorum {
 		// If all duties have been tested for selection or all messages (from all operators) have been seen, terminate.
 		if r.HaveCheckedAllDutiesForSelection(aggregatorMap, contributionMap) || r.HasSeenAllPreConsensusSigners() {
-			r.state().Finished = true
+			r.BaseRunner.finishDuty()
 			r.measurements.EndDutyFlow()
 			recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
 			const dutyFinishedNoAggregators = "✔️successfully finished duty processing (no validator is aggregator or sync committee contributor)"
@@ -1092,7 +1092,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 
 	// Check if duty has terminated (runner has submitted for all duties)
 	if r.HasSubmittedAllDuties(ctx, logger) {
-		r.state().Finished = true
+		r.BaseRunner.finishDuty()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, r.state().RunningInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
@@ -1674,7 +1674,7 @@ func (r *AggregatorCommitteeRunner) executeDuty(ctx context.Context, logger *zap
 
 	// Early exit if no selection proofs needed
 	if len(msg.Messages) == 0 {
-		r.state().Finished = true
+		r.BaseRunner.finishDuty()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregatorCommittee, 0)
 		const dutyFinishedNoMessages = "✔️successfully finished duty processing (no selection proofs needed)"
