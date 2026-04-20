@@ -358,7 +358,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, scoreInspector)
+		peers[i] = newPeer(t, ctx, logger, msgValidator, msgID, scoreInspector)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
@@ -377,10 +377,10 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
+func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, "")
+	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, "ssv.test."+t.Name())
 	require.NoError(t, err)
 
 	var p *P
