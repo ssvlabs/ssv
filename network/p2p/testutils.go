@@ -54,32 +54,6 @@ func randomMdnsTag() string {
 	return "ssv.test." + hex.EncodeToString(buf[:])
 }
 
-// WithBootnode adds a bootnode to the network
-func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := testing.GenNetworkKey()
-	if err != nil {
-		return err
-	}
-	isk, err := p2pcommons.ECDSAPrivToInterface(bnSk)
-	if err != nil {
-		return err
-	}
-	b, err := isk.Raw()
-	if err != nil {
-		return err
-	}
-	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork.SSV, &discovery.BootnodeOptions{
-		PrivateKey: hex.EncodeToString(b),
-		ExternalIP: "127.0.0.1",
-		Port:       ln.udpRand.Next(13001, 13999),
-	})
-	if err != nil {
-		return err
-	}
-	ln.Bootnode = bn
-	return nil
-}
-
 // CreateAndStartLocalNet creates a new local network and starts it
 // if any errors occurs during starting local network CreateAndStartLocalNet trying
 // to create and start local net one more time until pCtx is not Done()
