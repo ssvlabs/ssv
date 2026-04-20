@@ -315,7 +315,5 @@ func TestIsSyncCommitteeAggregatorHandlesZeroModulo(t *testing.T) {
 }
 
 func signatureWithFirstByte(first byte) phase0.BLSSignature {
-	var sig phase0.BLSSignature
-	sig[0] = first
-	return sig
+	return phase0.BLSSignature{first}
 }
