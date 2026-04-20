@@ -26,7 +26,7 @@ func (c *Controller) UponDecided(msg *specqbft.ProcessingMessage) (*spectypes.Si
 	if inst == nil {
 		// Since we are going to get rid of "decided" messages anyway, use zap.NewNop() here for simplicity.
 		identifier := c.IdentifierFn(msg.QBFTMessage.Height)
-		i := instance.NewInstance(zap.NewNop(), c.GetConfig(), c.CommitteeMember, identifier, msg.QBFTMessage.Height, c.OperatorSigner)
+		i := instance.NewInstance(zap.NewNop(), c.GetConfig(), c.CommitteeMember, identifier, msg.QBFTMessage.Height, c.OperatorSigner, nil)
 		i.State.Round = msg.QBFTMessage.Round
 		i.State.Decided = true
 		i.State.DecidedValue = msg.SignedMessage.FullData

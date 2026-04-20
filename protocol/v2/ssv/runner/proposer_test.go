@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -416,7 +417,11 @@ func newProposerRunnerForTest(
 	)
 	require.NoError(t, err)
 
-	return runnerIface.(*ProposerRunner), keySet, network
+	proposerRunner := runnerIface.(*ProposerRunner)
+	proposerRunner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+		return func(specqbft.Round) {}
+	})
+	return proposerRunner, keySet, network
 }
 
 func setupRunnerForPostConsensus(
@@ -452,6 +457,7 @@ func setupRunnerForPostConsensus(
 		msgID[:],
 		specqbft.Height(duty.Slot),
 		runner.operatorSigner,
+		nil,
 	)
 	runner.State.RunningInstance.State.Decided = true
 	runner.State.RunningInstance.State.DecidedValue = encodedDecidedValue

@@ -4,7 +4,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
 type IConfig interface {
@@ -12,16 +11,14 @@ type IConfig interface {
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() protocolp2p.Network
-	// GetTimer returns round timer
-	GetTimer() roundtimer.Timer
 	// GetCutOffRound returns the round cut off
 	GetCutOffRound() specqbft.Round
 }
 
 type Config struct {
-	ProposerF   specqbft.ProposerF
-	Network     protocolp2p.Network
-	Timer       roundtimer.Timer
+	ProposerF specqbft.ProposerF
+	Network   protocolp2p.Network
+
 	CutOffRound specqbft.Round
 }
 
@@ -33,11 +30,6 @@ func (c *Config) GetProposerF() specqbft.ProposerF {
 // GetNetwork returns a p2p Network instance
 func (c *Config) GetNetwork() protocolp2p.Network {
 	return c.Network
-}
-
-// GetTimer returns round timer
-func (c *Config) GetTimer() roundtimer.Timer {
-	return c.Timer
 }
 
 func (c *Config) GetCutOffRound() specqbft.Round {

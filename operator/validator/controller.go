@@ -1058,7 +1058,6 @@ func SetupCommitteeRunners(
 				return qbft.RoundRobinProposerPreBooleFork(state, round)
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
@@ -1152,7 +1151,6 @@ func SetupRunners(
 				return qbft.RoundRobinProposerPreBooleFork(state, round)
 			},
 			Network:     options.Network,
-			Timer:       roundtimer.New(ctx, options.NetworkConfig.Beacon, role),
 			CutOffRound: roundtimer.CutOffRound,
 		}
 
