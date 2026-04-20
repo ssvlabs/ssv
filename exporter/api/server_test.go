@@ -87,18 +87,18 @@ func TestHandleStream(t *testing.T) {
 	}
 
 	// send 3 messages in the stream channel
-	ws.out.Send(newTestMessage())
+	ws.outFeed.Send(newTestMessage())
 
 	msg2 := newTestMessage()
 	msg2.Data = []registrystorage.OperatorData{
 		{PublicKey: "pubkey-operator"},
 	}
-	ws.out.Send(msg2)
+	ws.outFeed.Send(msg2)
 
 	msg3 := newTestMessage()
 	msg3.Type = TypeValidator
 	msg3.Data = map[string]string{"PublicKey": "pubkey3"}
-	ws.out.Send(msg3)
+	ws.outFeed.Send(msg3)
 
 	waitForCondition(t, 2*time.Second, func() bool { return client.MessageCount() == 3 })
 

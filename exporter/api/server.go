@@ -38,13 +38,13 @@ type wsServer struct {
 	logger *zap.Logger
 	ctx    context.Context
 
+	router  *http.ServeMux
 	handler QueryMessageHandler
 
 	broadcaster Broadcaster
+	// outFeed is a subject for writing messages
+	outFeed *event.Feed
 
-	router     *http.ServeMux
-	// out is a subject for writing messages
-	out      *event.Feed
 	withPing bool
 }
 
@@ -56,7 +56,7 @@ func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHa
 		handler:     handler,
 		router:      mux,
 		broadcaster: newBroadcaster(logger),
-		out:         new(event.Feed),
+		outFeed:     new(event.Feed),
 		withPing:    withPing,
 	}
 	ws.RegisterHandler("query", "/query", ws.handleQuery)
@@ -88,7 +88,7 @@ func (ws *wsServer) Start(addr string) (string, error) {
 
 	ws.logger.Info("starting", fields.Address(boundAddr), zap.Strings("endPoints", []string{"/query", "/stream"}))
 
-	ws.broadcaster.FromFeed(ws.ctx, ws.out)
+	ws.broadcaster.FromFeed(ws.ctx, ws.outFeed)
 
 	go func() {
 		<-ws.ctx.Done()
@@ -110,7 +110,7 @@ func (ws *wsServer) Start(addr string) (string, error) {
 
 // BroadcastFeed returns the feed for stream messages
 func (ws *wsServer) BroadcastFeed() *event.Feed {
-	return ws.out
+	return ws.outFeed
 }
 
 // RegisterHandler registers an end point
