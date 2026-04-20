@@ -196,14 +196,12 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Assert that the messages were distributed as expected.
 	time.Sleep(20 * time.Second)
 
-	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
 		// Messages from nodes broadcasting rejected role become rejected once score threshold is reached
 		if slices.Contains(messageTypesByNodeIndex[i], rejectedRole) {
 			continue
 		}
 
-		// better lock inside loop than wait interval locked
 		mtx.Lock()
 		var errors []error
 		if roleBroadcasts[acceptedRole] != messageValidators[i].TotalAccepted {
@@ -217,7 +215,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 		mtx.Unlock()
 		require.Empty(t, errors)
-		time.Sleep(interval)
 	}
 
 	// Assert that each node scores it's peers according to the following order:
