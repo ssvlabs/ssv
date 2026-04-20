@@ -183,7 +183,7 @@ func TestRoundTimeoutOffset(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got := opts.roundTimeoutOffset(tc.role, testSlotDuration, tc.round)
+			got := opts.roundTimeoutForRound(tc.role, testSlotDuration, tc.round)
 			require.Equal(t, tc.want, got)
 		})
 	}
@@ -219,7 +219,7 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 			// "late message" territory but EstimatedRoundAt is still defined and should
 			// keep incrementing with the same rules.
 			for round := specqbft.Round(1); round <= CutOffRound+2; round++ {
-				offset := defaultTimeoutOptions.roundTimeoutOffset(rc.role, realSlotDuration, round)
+				offset := defaultTimeoutOptions.roundTimeoutForRound(rc.role, realSlotDuration, round)
 
 				// 1 ns before the boundary: round r has not yet timed out.
 				got, err := EstimatedRoundAt(rc.role, realSlotDuration, offset-time.Nanosecond)
@@ -308,7 +308,7 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 				timer := New(t.Context(), beaconConfig, rc.role)
 
 				for round := specqbft.Round(1); round <= CutOffRound; round++ {
-					expected := defaultTimeoutOptions.roundTimeoutOffset(rc.role, beaconConfig.SlotDuration, round)
+					expected := defaultTimeoutOptions.roundTimeoutForRound(rc.role, beaconConfig.SlotDuration, round)
 					got := timer.RoundTimeout(specqbft.FirstHeight, round)
 					require.Equal(t, expected, got, "round %d", round)
 				}

@@ -38,7 +38,7 @@ type TimeoutOptions struct {
 	slow           time.Duration
 }
 
-// roundTimeoutOffset returns the time-into-slot at which the given round will time out
+// roundTimeoutForRound returns the time-into-slot at which the given round will time out
 // (i.e. transition to round+1) for the given role:
 //
 //	Round 1     ends at  headStart + 1 * quick
@@ -49,7 +49,7 @@ type TimeoutOptions struct {
 //	Round T+2   ends at  headStart + T * quick + 2 * slow
 //
 // Every role has its own dedicated headStart duration.
-func (o TimeoutOptions) roundTimeoutOffset(role spectypes.RunnerRole, slotDuration time.Duration, round specqbft.Round) time.Duration {
+func (o TimeoutOptions) roundTimeoutForRound(role spectypes.RunnerRole, slotDuration time.Duration, round specqbft.Round) time.Duration {
 	headStart := round1HeadStart(role, slotDuration)
 	if round <= o.quickThreshold {
 		return headStart + casts.DurationFromUint64(uint64(round))*o.quick
@@ -190,7 +190,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 
 	// Slot-synchronized roles: timeout happens at slot start + roundTimeoutOffset(...).
 	dutyStartTime := t.beaconConfig.SlotStartTime(phase0.Slot(height))
-	return time.Until(dutyStartTime.Add(t.timeoutOptions.roundTimeoutOffset(t.role, t.beaconConfig.SlotDuration, round)))
+	return time.Until(dutyStartTime.Add(t.timeoutOptions.roundTimeoutForRound(t.role, t.beaconConfig.SlotDuration, round)))
 }
 
 // armLocked stops any running timer and schedules a new AfterFunc for the
