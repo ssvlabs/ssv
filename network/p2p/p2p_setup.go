@@ -280,6 +280,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		if err != nil {
 			return errors.Wrap(err, "could not get ip addr")
 		}
+
 		discV5Opts := &discovery.DiscV5Options{
 			IP:            ipAddr.String(),
 			BindIP:        net.IPv4zero.String(),
@@ -297,6 +298,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
 			zap.String("ip", discV5Opts.IP),
 		)
+
 		discOpts := &discovery.Options{
 			Host:                n.host,
 			DiscV5Opts:          discV5Opts,
