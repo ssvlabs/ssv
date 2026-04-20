@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -41,15 +43,12 @@ type wsServer struct {
 	broadcaster Broadcaster
 
 	router     *http.ServeMux
-	httpServer *http.Server
 	// out is a subject for writing messages
 	out      *event.Feed
 	withPing bool
 }
 
-// NewWsServer creates a new instance. Handler routes are registered here so
-// that by the time Start is called the mux is ready and callers can safely
-// dial the bound address without a setup race.
+// NewWsServer creates a new instance.
 func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) *wsServer {
 	ws := wsServer{
 		ctx:         ctx,
@@ -76,39 +75,33 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 func (ws *wsServer) Start(addr string) (string, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		ws.logger.Warn("could not listen", zap.Error(err))
-		return "", err
+		return "", fmt.Errorf("listen on %s: %w", addr, err)
 	}
-
 	boundAddr := l.Addr().String()
 
 	const timeout = 3 * time.Second
-	ws.httpServer = &http.Server{
+	httpServer := &http.Server{
 		Handler:      ws.router,
 		ReadTimeout:  timeout,
 		WriteTimeout: timeout,
 	}
 
-	go func() {
-		if err := ws.broadcaster.FromFeed(ws.ctx, ws.out); err != nil {
-			ws.logger.Debug("failed to pull messages from feed")
-		}
-	}()
-
 	ws.logger.Info("starting", fields.Address(boundAddr), zap.Strings("endPoints", []string{"/query", "/stream"}))
+
+	ws.broadcaster.FromFeed(ws.ctx, ws.out)
 
 	go func() {
 		<-ws.ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := ws.httpServer.Shutdown(shutdownCtx); err != nil {
-			ws.logger.Warn("shutdown failed", zap.Error(err))
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			ws.logger.Error("shutdown failed", zap.Error(err))
 		}
 	}()
 
 	go func() {
-		if err := ws.httpServer.Serve(l); err != nil && err != http.ErrServerClosed {
-			ws.logger.Warn("serve loop exited", zap.Error(err))
+		if err := httpServer.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			ws.logger.Error("serve loop exited", zap.Error(err))
 		}
 	}()
 

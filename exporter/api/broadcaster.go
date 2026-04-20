@@ -12,7 +12,7 @@ import (
 
 // Broadcaster is an interface broadcasting stream message across all available connections
 type Broadcaster interface {
-	FromFeed(ctx context.Context, feed *event.Feed) error
+	FromFeed(ctx context.Context, feed *event.Feed)
 	Broadcast(msg Message) error
 	Register(conn broadcasted) bool
 	Deregister(conn broadcasted) bool
@@ -37,19 +37,24 @@ func newBroadcaster(logger *zap.Logger) Broadcaster {
 	}
 }
 
-// FromFeed subscribes to the given feed and broadcasts incoming messages
-// until ctx is canceled or the subscription errors. Returns nil on clean
-// ctx-driven shutdown.
-func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) error {
+// FromFeed subscribes to the given feed synchronously so any subsequent Send
+// on the feed is guaranteed to reach this broadcaster, then spawns a pump
+// goroutine that forwards messages to registered connections until ctx is
+// canceled or the subscription errors.
+func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) {
 	cn := make(chan Message, 512)
 	sub := msgFeed.Subscribe(cn)
+	go b.pumpFeed(ctx, cn, sub)
+}
+
+func (b *broadcaster) pumpFeed(ctx context.Context, cn <-chan Message, sub event.Subscription) {
 	defer sub.Unsubscribe()
 	defer b.logger.Debug("done reading from feed")
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case msg := <-cn:
 			go func(msg Message) {
 				if err := b.Broadcast(msg); err != nil {
@@ -58,7 +63,7 @@ func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) error {
 			}(msg)
 		case err := <-sub.Err():
 			b.logger.Warn("could not read messages from msgFeed", zap.Error(err))
-			return err
+			return
 		}
 	}
 }

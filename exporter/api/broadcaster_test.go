@@ -24,9 +24,7 @@ func TestBroadcaster(t *testing.T) {
 	b := newBroadcaster(logger)
 
 	feed := new(event.Feed)
-	go func() {
-		require.NoError(t, b.FromFeed(t.Context(), feed))
-	}()
+	b.FromFeed(t.Context(), feed)
 	bm1 := newBroadcastedMock("1")
 	bm2 := newBroadcastedMock("2")
 
@@ -35,8 +33,6 @@ func TestBroadcaster(t *testing.T) {
 
 	require.True(t, b.Register(bm2))
 
-	// wait so setup will be finished
-	<-time.After(10 * time.Millisecond)
 	go feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})
 	<-time.After(5 * time.Millisecond)
 	go b.Deregister(bm2)
