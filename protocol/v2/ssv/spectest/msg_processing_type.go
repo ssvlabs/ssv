@@ -102,7 +102,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		}
 	}
 
-	test.Runner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+	test.Runner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ phase0.Slot) roundtimer.OnRoundTimeoutF {
 		return func(specqbft.Round) {}
 	})
 

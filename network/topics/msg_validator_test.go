@@ -32,7 +32,11 @@ import (
 func TestMsgValidator(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	beaconCfg := *networkconfig.TestNetwork.Beacon
-	beaconCfg.GenesisTime = time.Now().Add(-time.Second)
+	// Pin slot 0 to start right now so that by the time `mv.Validate` runs the message is
+	// still comfortably inside round 1 for the committee role. Committee round 1 is accepted
+	// as long as timeIntoSlot stays below ~(slotDuration/3 + 3*QuickTimeout) ≈ 10s — any
+	// larger offset here would eat into that budget. A zero offset maximizes it.
+	beaconCfg.GenesisTime = time.Now()
 	testNet := &networkconfig.Network{
 		Beacon: &beaconCfg,
 		SSV:    networkconfig.TestNetwork.SSV,

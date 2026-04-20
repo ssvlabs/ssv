@@ -291,7 +291,7 @@ func (c *Committee) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 			if err != nil {
 				return nil, fmt.Errorf("event message: get timeout data: %w", err)
 			}
-			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
+			logger = logger.With(fields.QBFTRound(timeoutData.Round))
 		}
 	}
 	if msg.MsgType == spectypes.SSVConsensusMsgType {

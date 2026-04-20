@@ -469,13 +469,12 @@ func (b *BaseRunner) decide(
 		return fmt.Errorf("input data invalid: %w", err)
 	}
 
-	height := specqbft.Height(slot)
-	timer := b.createTimer(ctx, logger, height)
+	timer := b.createTimer(ctx, logger, slot)
 
 	newInstance, err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
-		height,
+		specqbft.Height(slot),
 		timer,
 		byts,
 		valueChecker,

@@ -1811,17 +1811,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				topicID := commons.CommitteeTopicID(committeeID)[0]
 
-				sinceSlotStart := time.Duration(0)
+				timeIntoSlot := time.Duration(0)
 				for {
-					currentRound, err := validator.currentEstimatedRound(role, sinceSlotStart)
+					currentRound, err := validator.estimatedRoundAt(role, timeIntoSlot)
 					require.NoError(t, err)
 					if currentRound == round {
 						break
 					}
-					sinceSlotStart += roundtimer.QuickTimeout
+					timeIntoSlot += roundtimer.QuickTimeout
 				}
 
-				receivedAt := netCfg.SlotStartTime(slot).Add(sinceSlotStart)
+				receivedAt := netCfg.SlotStartTime(slot).Add(timeIntoSlot)
 				_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
 				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
 			})
