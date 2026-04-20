@@ -145,7 +145,7 @@ func newCommitteeRunnerEnv(
 	require.NoError(t, err)
 
 	crunner := runnerI.(*CommitteeRunner)
-	crunner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+	crunner.SetTimeoutFunc(func(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, slot phase0.Slot) roundtimer.OnRoundTimeoutF {
 		return func(specqbft.Round) {}
 	})
 

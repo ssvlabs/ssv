@@ -17,7 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
+func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, slot phase0.Slot) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
 		v.mtx.RLock() // read-lock for v.Queues
 		defer v.mtx.RUnlock()
@@ -39,7 +39,7 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 
-		msg, err := v.createTimerMessage(identifier, height, round)
+		msg, err := v.createTimerMessage(identifier, slot, round)
 		if err != nil {
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
@@ -59,10 +59,10 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 	}
 }
 
-func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (v *Validator) createTimerMessage(identifier spectypes.MessageID, slot phase0.Slot, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
-		Height: height,
-		Round:  round,
+		Slot:  slot,
+		Round: round,
 	}
 	data, err := json.Marshal(td)
 	if err != nil {
@@ -84,12 +84,12 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 	}, nil
 }
 
-func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
+func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, slot phase0.Slot) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
 		c.mtx.RLock() // read-lock for c.Queues, c.Runners
 		defer c.mtx.RUnlock()
 
-		dr := c.Runners[phase0.Slot(height)]
+		dr := c.Runners[slot]
 		if dr == nil { // only happens when we prune expired runners
 			logger.Debug("❗no committee runner found for slot")
 			return
@@ -100,7 +100,7 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 
-		msg, err := c.createTimerMessage(identifier, height, round)
+		msg, err := c.createTimerMessage(identifier, slot, round)
 		if err != nil {
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
@@ -111,16 +111,16 @@ func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 			return
 		}
 
-		if pushed := c.Queues[phase0.Slot(height)].Q.TryPush(dec); !pushed {
+		if pushed := c.Queues[slot].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
 		}
 	}
 }
 
-func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (c *Committee) createTimerMessage(identifier spectypes.MessageID, slot phase0.Slot, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
-		Height: height,
-		Round:  round,
+		Slot:  slot,
+		Round: round,
 	}
 	data, err := json.Marshal(td)
 	if err != nil {

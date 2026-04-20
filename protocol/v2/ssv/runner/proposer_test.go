@@ -420,7 +420,7 @@ func newProposerRunnerForTest(
 	require.NoError(t, err)
 
 	proposerRunner := runnerIface.(*ProposerRunner)
-	proposerRunner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+	proposerRunner.SetTimeoutFunc(func(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, slot phase0.Slot) roundtimer.OnRoundTimeoutF {
 		return func(specqbft.Round) {}
 	})
 	return proposerRunner, keySet, network

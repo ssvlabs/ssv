@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 
@@ -19,10 +19,10 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, timeoutD
 
 	span.SetAttributes(
 		observability.DutyRoundAttribute(timeoutData.Round),
-		observability.BeaconSlotAttribute(phase0.Slot(timeoutData.Height)),
+		observability.BeaconSlotAttribute(timeoutData.Slot),
 	)
 
-	instance := c.StoredInstances.FindInstance(timeoutData.Height)
+	instance := c.StoredInstances.FindInstance(specqbft.Height(timeoutData.Slot))
 	if instance == nil {
 		return traces.Errorf(span, "instance is nil")
 	}

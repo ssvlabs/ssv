@@ -68,8 +68,8 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	// Initialize EventMsg for the test
 	timeoutData := &types.TimeoutData{
-		Height: specqbft.FirstHeight,
-		Round:  specqbft.FirstRound,
+		Slot:  0,
+		Round: specqbft.FirstRound,
 	}
 
 	// Simulate a scenario where the instance is at a higher round
