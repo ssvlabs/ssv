@@ -108,11 +108,13 @@ func TestNewEventHandler(t *testing.T) {
 		require.NotNil(t, initialEvent)
 		require.Equal(t, phase0.Slot(10), initialEvent.Slot)
 
+		start := make(chan struct{})
 		var wg sync.WaitGroup
 		for i := 0; i < 32; i++ {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
+				<-start
 
 				slot := phase0.Slot(10)
 				block := initialRoot
@@ -130,6 +132,7 @@ func TestNewEventHandler(t *testing.T) {
 				})
 			}(i)
 		}
+		close(start)
 		wg.Wait()
 
 		require.Len(t, eventsCh, 1)
@@ -145,6 +148,74 @@ func TestNewEventHandler(t *testing.T) {
 		headAtSlot11 := client.headCache.Get(11)
 		require.NotNil(t, headAtSlot11)
 		assert.Equal(t, nextRoot, headAtSlot11.Value())
+	})
+
+	t.Run("Keeps only the highest slot when advancing head events race", func(t *testing.T) {
+		eventsCh := make(chan *apiv1.HeadEvent, 16)
+		client := &GoClient{
+			log:       zap.NewNop(),
+			headCache: ttlcache.New[phase0.Slot, phase0.Root](),
+			headEventSubscribers: []subscriber[*apiv1.HeadEvent]{
+				{Identifier: "test_subscriber", Channel: eventsCh},
+			},
+		}
+		handler := client.newEventHandler()
+
+		initialRoot := phase0.Root{0x0A}
+		midRoot := phase0.Root{0x0B}
+		latestRoot := phase0.Root{0x0C}
+
+		handler(&apiv1.Event{
+			Topic: string(eventTopicHead),
+			Data: &apiv1.HeadEvent{
+				Slot:  10,
+				Block: initialRoot,
+			},
+		})
+
+		require.Len(t, eventsCh, 1)
+		<-eventsCh
+
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i := 0; i < 32; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				<-start
+
+				slot := phase0.Slot(11)
+				block := midRoot
+				if i%2 == 0 {
+					slot = 12
+					block = latestRoot
+				}
+
+				handler(&apiv1.Event{
+					Topic: string(eventTopicHead),
+					Data: &apiv1.HeadEvent{
+						Slot:  slot,
+						Block: block,
+					},
+				})
+			}(i)
+		}
+		close(start)
+		wg.Wait()
+
+		require.Len(t, eventsCh, 1)
+		latestEvent := <-eventsCh
+		require.NotNil(t, latestEvent)
+		assert.Equal(t, phase0.Slot(12), latestEvent.Slot)
+		assert.Equal(t, latestRoot, latestEvent.Block)
+
+		headAtSlot10 := client.headCache.Get(10)
+		require.NotNil(t, headAtSlot10)
+		assert.Equal(t, initialRoot, headAtSlot10.Value())
+
+		headAtSlot12 := client.headCache.Get(12)
+		require.NotNil(t, headAtSlot12)
+		assert.Equal(t, latestRoot, headAtSlot12.Value())
 	})
 
 	t.Run("Drops head event broadcast when subscriber channel is full", func(t *testing.T) {
