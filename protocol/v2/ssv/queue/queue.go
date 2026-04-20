@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -44,11 +45,8 @@ type Queue interface {
 	// Len returns the number of messages in the queue.
 	Len() int
 
-	// InboxLen returns the number of messages waiting in the inbox channel.
-	InboxLen() int
-
-	// InboxCap returns the inbox channel capacity.
-	InboxCap() int
+	// Cap returns the inbox channel capacity.
+	Cap() int
 }
 
 type priorityQueue struct {
@@ -57,6 +55,7 @@ type priorityQueue struct {
 	head     *item
 	inbox    chan *SSVMessage
 	lastRead time.Time
+	size     atomic.Int64
 
 	inboxSizeMetric    metric.Int64Gauge
 	inboxSizeRecordOps []metric.RecordOption
@@ -97,15 +96,15 @@ func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 
 func (q *priorityQueue) Push(msg *SSVMessage) {
 	q.inbox <- msg
+	q.size.Add(1)
 	q.recordInboxSize(int64(len(q.inbox)))
-	q.warnIfInboxIsTooBig()
 }
 
 func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 	select {
 	case q.inbox <- msg:
+		q.size.Add(1)
 		q.recordInboxSize(int64(len(q.inbox)))
-		q.warnIfInboxIsTooBig()
 		return true
 	default:
 		q.recordDrop(DropReasonBufferFull)
@@ -190,6 +189,7 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *SSVM
 	if q.head.next == nil {
 		if m := q.head.message; filter(m) {
 			q.head = nil
+			q.size.Add(-1)
 			return m
 		}
 		return nil
@@ -222,26 +222,19 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *SSVM
 	} else {
 		prior.next = highest.next
 	}
+	q.size.Add(-1)
 	return highest.message
 }
 
 func (q *priorityQueue) Empty() bool {
-	return q.head == nil && len(q.inbox) == 0
+	return q.Len() == 0
 }
 
 func (q *priorityQueue) Len() int {
-	n := len(q.inbox)
-	for i := q.head; i != nil; i = i.next {
-		n++
-	}
-	return n
+	return int(q.size.Load())
 }
 
-func (q *priorityQueue) InboxLen() int {
-	return len(q.inbox)
-}
-
-func (q *priorityQueue) InboxCap() int {
+func (q *priorityQueue) Cap() int {
 	return cap(q.inbox)
 }
 
@@ -261,14 +254,6 @@ func (q *priorityQueue) recordDrop(reason string) {
 		return
 	}
 	RecordDroppedMessage(q.queueType, q.queueID, reason)
-}
-
-// warnIfInboxIsTooBig logs a warning that we'd ideally never want to hit, if we do - we'd want to do
-// something about it.
-func (q *priorityQueue) warnIfInboxIsTooBig() {
-	if len(q.inbox) > cap(q.inbox)/2 {
-		q.logger.Warn("queue is half-full")
-	}
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

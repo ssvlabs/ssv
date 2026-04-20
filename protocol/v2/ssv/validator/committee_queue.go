@@ -69,7 +69,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	c.mtx.Unlock()
 
 	queueID := queue.CommitteeMetricID(slot)
-	if accepted, dropReason := queue.ShouldAcceptUnderPressure(state, msg, q.Q.InboxLen(), q.Q.InboxCap()); !accepted {
+	if accepted, dropReason := queue.ShouldAcceptUnderPressure(state, msg, q.Q.Len(), q.Q.Cap()); !accepted {
 		const errMsg = "❗ dropping stale message because the queue is under pressure"
 		queue.RecordDroppedMessage(queue.CommitteeQueueMetricType, queueID, dropReason)
 		logger.Warn(errMsg, zap.String("drop_reason", dropReason))

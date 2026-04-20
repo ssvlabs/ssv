@@ -60,7 +60,7 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	defer v.mtx.RUnlock()
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		queueID := queue.ValidatorMetricID(msg.MsgID.GetRoleType())
-		if accepted, dropReason := queue.ShouldAcceptUnderPressure(v.messageQueueState(msg.MsgID), msg, q.InboxLen(), q.InboxCap()); !accepted {
+		if accepted, dropReason := queue.ShouldAcceptUnderPressure(v.messageQueueState(msg.MsgID, slot), msg, q.Len(), q.Cap()); !accepted {
 			const eventMsg = "❗ dropping stale message because the queue is under pressure"
 			queue.RecordDroppedMessage(queue.ValidatorQueueMetricType, queueID, dropReason)
 			logger.Warn(eventMsg,
@@ -93,28 +93,31 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	span.SetStatus(codes.Error, errMsg)
 }
 
-func (v *Validator) messageQueueState(msgID spectypes.MessageID) *queue.State {
+func (v *Validator) messageQueueState(msgID spectypes.MessageID, msgSlot phase0.Slot) *queue.State {
+	state := &queue.State{
+		Height: specqbft.Height(msgSlot),
+		Slot:   msgSlot,
+		Quorum: v.Operator.GetQuorum(),
+	}
+
 	r := v.DutyRunners.DutyRunnerForMsgID(msgID)
 	if r == nil {
-		return nil
+		return state
 	}
 
-	height := r.GetLastHeight()
-	slot, ok := r.GetCurrentDutySlot()
-	if !ok {
-		slot = phase0.Slot(height)
-	}
-	if height == 0 && slot > 0 {
-		height = specqbft.Height(slot)
+	if slot, ok := r.GetCurrentDutySlot(); ok {
+		state.Slot = slot
 	}
 
-	return &queue.State{
-		HasRunningInstance: r.HasRunningQBFTInstance(),
-		Height:             height,
-		Round:              r.GetLastRound(),
-		Slot:               slot,
-		Quorum:             v.Operator.GetQuorum(),
+	if height := r.GetLastHeight(); height != 0 {
+		state.Height = height
+	} else if state.Slot > 0 {
+		state.Height = specqbft.Height(state.Slot)
 	}
+
+	state.HasRunningInstance = r.HasRunningQBFTInstance()
+	state.Round = r.GetLastRound()
+	return state
 }
 
 // StartQueueConsumer start consuming p2p message queue with the supplied handler

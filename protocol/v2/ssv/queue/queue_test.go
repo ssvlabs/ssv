@@ -341,6 +341,23 @@ func TestPriorityQueue_TryPushInboxSizeMetricDoesNotExceedCapacityOnDrop(t *test
 	require.EqualValues(t, 1, gaugeData.DataPoints[0].Value)
 }
 
+func TestPriorityQueue_LenTracksBacklogAfterInboxDrain(t *testing.T) {
+	q := New(log.TestLogger(t), 4).(*priorityQueue)
+
+	for i := 0; i < 3; i++ {
+		decodeAndPush(t, q, mockConsensusMessage{Height: specqbft.Height(100 + i), Type: specqbft.PrepareMsgType}, mockState)
+	}
+
+	require.Equal(t, 3, q.Len())
+	require.Equal(t, 3, len(q.inbox))
+
+	q.readInbox()
+
+	require.Equal(t, 3, q.Len())
+	require.Equal(t, 0, len(q.inbox))
+	require.NotNil(t, q.head)
+}
+
 func TestShouldAcceptUnderPressure(t *testing.T) {
 	state := &State{
 		HasRunningInstance: true,
@@ -366,13 +383,25 @@ func TestShouldAcceptUnderPressure(t *testing.T) {
 	t.Run("rejects stale slot partial signatures", func(t *testing.T) {
 		msg := &SSVMessage{
 			Body: &spectypes.PartialSignatureMessages{
-				Slot: 99,
+				Slot: 98,
 			},
 		}
 
 		accepted, reason := ShouldAcceptUnderPressure(state, msg, 3, 4)
 		require.False(t, accepted)
 		require.Equal(t, DropReasonStaleSlot, reason)
+	})
+
+	t.Run("accepts previous slot partial signatures", func(t *testing.T) {
+		msg := &SSVMessage{
+			Body: &spectypes.PartialSignatureMessages{
+				Slot: 99,
+			},
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(state, msg, 3, 4)
+		require.True(t, accepted)
+		require.Empty(t, reason)
 	})
 
 	t.Run("accepts current round under pressure", func(t *testing.T) {
@@ -411,6 +440,42 @@ func TestShouldAcceptUnderPressure(t *testing.T) {
 		accepted, reason := ShouldAcceptUnderPressure(state, msg, 2, 4)
 		require.True(t, accepted)
 		require.Empty(t, reason)
+	})
+
+	t.Run("rejects stale height without a running instance", func(t *testing.T) {
+		idleState := &State{
+			HasRunningInstance: false,
+			Height:             100,
+			Slot:               100,
+			Round:              2,
+		}
+		msg := &SSVMessage{
+			Body: &specqbft.Message{
+				Height: 99,
+				Round:  1,
+			},
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(idleState, msg, 3, 4)
+		require.False(t, accepted)
+		require.Equal(t, DropReasonStaleHeight, reason)
+	})
+
+	t.Run("rejects stale slot without a running instance", func(t *testing.T) {
+		idleState := &State{
+			HasRunningInstance: false,
+			Height:             100,
+			Slot:               100,
+		}
+		msg := &SSVMessage{
+			Body: &spectypes.PartialSignatureMessages{
+				Slot: 98,
+			},
+		}
+
+		accepted, reason := ShouldAcceptUnderPressure(idleState, msg, 3, 4)
+		require.False(t, accepted)
+		require.Equal(t, DropReasonStaleSlot, reason)
 	})
 }
 

@@ -23,7 +23,7 @@ func IsUnderPressure(buffered, capacity int) bool {
 // ShouldAcceptUnderPressure keeps current or newer work admissible when inbox pressure is high.
 // It rejects only obviously stale messages, leaving strict-full behavior unchanged.
 func ShouldAcceptUnderPressure(state *State, msg *SSVMessage, buffered, capacity int) (bool, string) {
-	if !IsUnderPressure(buffered, capacity) || state == nil || !state.HasRunningInstance || msg == nil {
+	if !IsUnderPressure(buffered, capacity) || state == nil || msg == nil {
 		return true, ""
 	}
 
@@ -35,7 +35,7 @@ func ShouldAcceptUnderPressure(state *State, msg *SSVMessage, buffered, capacity
 		if body.Height < state.Height {
 			return false, DropReasonStaleHeight
 		}
-		if body.Height == state.Height && body.Round < state.Round {
+		if state.HasRunningInstance && body.Height == state.Height && body.Round < state.Round {
 			return false, DropReasonStaleRound
 		}
 	case *spectypes.PartialSignatureMessages:
@@ -46,7 +46,12 @@ func ShouldAcceptUnderPressure(state *State, msg *SSVMessage, buffered, capacity
 		if currentSlot == 0 {
 			currentSlot = phase0.Slot(state.Height)
 		}
-		if body.Slot < currentSlot {
+		// Match runner's [currentDutySlot-1, currentDutySlot] acceptance window.
+		minAcceptableSlot := currentSlot
+		if currentSlot > 0 {
+			minAcceptableSlot = currentSlot - 1
+		}
+		if body.Slot < minAcceptableSlot {
 			return false, DropReasonStaleSlot
 		}
 	}
