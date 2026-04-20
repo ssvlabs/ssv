@@ -7,12 +7,13 @@ import (
 
 // MockConnectionIndex is a mock implementation of the ConnectionIndex interface
 type MockConnectionIndex struct {
-	LimitValue bool
+	LimitValue         bool
+	ConnectednessValue network.Connectedness
+	BadPeers           map[peer.ID]bool
 }
 
-// Connectedness panics if called
 func (m *MockConnectionIndex) Connectedness(id peer.ID) network.Connectedness {
-	panic("Connectedness method is not implemented in MockConnectionIndex")
+	return m.ConnectednessValue
 }
 
 // CanConnect panics if called
@@ -25,7 +26,6 @@ func (m *MockConnectionIndex) AtLimit(dir network.Direction) bool {
 	return m.LimitValue
 }
 
-// IsBad panics if called
 func (m *MockConnectionIndex) IsBad(id peer.ID) bool {
-	panic("IsBad method is not implemented in MockConnectionIndex")
+	return m.BadPeers[id]
 }

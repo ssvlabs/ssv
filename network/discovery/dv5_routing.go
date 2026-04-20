@@ -43,7 +43,22 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	return opts.Ttl, nil
 }
 
-// FindPeers discovers peers providing a service implementation of discovery.Discoverer
+// FindPeers discovers peers providing a service implementation of discovery.Discoverer.
+// Called by libp2p pubsub (via pubsub.WithDiscovery) to find additional peers for a
+// specific subnet/topic.
+//
+// Unlike Bootstrap — which builds a broad candidate pool scored by subnet coverage —
+// FindPeers is a targeted, on-demand search: pubsub needs peers for one specific
+// subnet it is trying to gossip on. This drives the filter differences:
+//
+//   - subnetFilter(subnet) instead of sharedSubnetsFilter: pubsub asks "give me peers
+//     for subnet X", not "peers sharing any subnet with me".
+//   - ssvNodeFilter, badNodeFilter, alreadyConnectedFilter, recentlyTrimmedFilter:
+//     same as Bootstrap — basic validity and connection-state checks still apply.
+//   - No alreadyDiscoveredFilter: pubsub may call FindPeers repeatedly for the same
+//     subnet and expects fresh candidate lists; there is no candidate pool to dedup against.
+//   - No domainTypeFilter: pubsub operates within a pre-established topic namespace that
+//     already implies domain alignment; a separate domain-type check is not required here.
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
 	logger := log.FromContext(ctx).Named(log.NameDiscoveryService)
 	subnet, err := dvs.nsToSubnet(ns)
