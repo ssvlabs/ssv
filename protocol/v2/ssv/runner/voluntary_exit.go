@@ -65,7 +65,12 @@ func NewVoluntaryExitRunner(
 }
 
 func (r *VoluntaryExitRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.baseStartNewNonBeaconDuty(ctx, logger, r, duty.(*spectypes.ValidatorDuty), quorum)
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,
@@ -126,7 +131,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.State.Finished = true
+	r.finishDuty()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -143,7 +148,12 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 }
 
 func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	vr, err := r.calculateVoluntaryExit()
+	validatorDuty, err := r.currentValidatorDuty()
+	if err != nil {
+		return nil, spectypes.DomainError, errors.Wrap(err, "current validator duty")
+	}
+
+	vr, err := r.calculateVoluntaryExit(validatorDuty)
 	if err != nil {
 		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate voluntary exit")
 	}
@@ -159,7 +169,12 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	voluntaryExit, err := r.calculateVoluntaryExit()
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	voluntaryExit, err := r.calculateVoluntaryExit(validatorDuty)
 	if err != nil {
 		return fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
@@ -170,9 +185,9 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		ctx,
 		r,
 		r.NetworkConfig,
-		duty.(*spectypes.ValidatorDuty),
+		validatorDuty,
 		voluntaryExit,
-		duty.DutySlot(),
+		validatorDuty.DutySlot(),
 		spectypes.DomainVoluntaryExit,
 	)
 	if err != nil {
@@ -181,7 +196,7 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.VoluntaryExitPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
@@ -221,12 +236,14 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 }
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
-func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
-	validatorIndex := r.State.CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+func (r *VoluntaryExitRunner) calculateVoluntaryExit(duty *spectypes.ValidatorDuty) (*phase0.VoluntaryExit, error) {
+	if duty == nil {
+		return nil, fmt.Errorf("validator duty is nil")
+	}
+
 	return &phase0.VoluntaryExit{
-		Epoch:          epoch,
-		ValidatorIndex: validatorIndex,
+		Epoch:          r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot()),
+		ValidatorIndex: duty.ValidatorIndex,
 	}, nil
 }
 
@@ -236,13 +253,6 @@ func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
 
 func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
-}
-
-func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
 }
 
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {

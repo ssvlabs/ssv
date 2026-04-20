@@ -11,13 +11,11 @@ type TestQBFTTimer struct {
 	State TimerState
 }
 
-func NewTestingTimer() Timer {
-	return &TestQBFTTimer{
-		State: TimerState{},
-	}
+func NewTestingTimer() specqbft.Timer {
+	return &TestQBFTTimer{}
 }
 
-func (t *TestQBFTTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
+func (t *TestQBFTTimer) TimeoutForRound(round specqbft.Round) {
 	t.State.Timeouts++
 	t.State.Round = round
 }
