@@ -40,32 +40,23 @@ func newBroadcaster(logger *zap.Logger) Broadcaster {
 // FromFeed subscribes to the given feed synchronously so any subsequent Send
 // on the feed is guaranteed to reach this broadcaster, then spawns a pump
 // goroutine that forwards messages to registered connections until ctx is
-// canceled or the subscription errors.
+// canceled.
 func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) {
-	cn := make(chan Message, 512)
-	sub := msgFeed.Subscribe(cn)
-	go b.pumpFeed(ctx, cn, sub)
-}
-
-func (b *broadcaster) pumpFeed(ctx context.Context, cn <-chan Message, sub event.Subscription) {
-	defer sub.Unsubscribe()
-	defer b.logger.Debug("done reading from feed")
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg := <-cn:
-			go func(msg Message) {
+	buffer := make(chan Message, 512)
+	sub := msgFeed.Subscribe(buffer)
+	go func() {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg := <-buffer:
 				if err := b.Broadcast(msg); err != nil {
 					b.logger.Error("could not broadcast message", zap.Error(err))
 				}
-			}(msg)
-		case err := <-sub.Err():
-			b.logger.Warn("could not read messages from msgFeed", zap.Error(err))
-			return
+			}
 		}
-	}
+	}()
 }
 
 // Broadcast broadcasts a message to all available connections
