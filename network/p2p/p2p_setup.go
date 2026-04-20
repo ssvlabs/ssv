@@ -267,13 +267,20 @@ func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
 func (n *p2pNetwork) setupDiscovery() error {
 	logger := n.logger
 
-	ipAddr, err := p2pcommons.IPAddr()
-	if err != nil {
-		return errors.Wrap(err, "could not get ip addr")
-	}
-	var discV5Opts *discovery.DiscV5Options
-	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
-		discV5Opts = &discovery.DiscV5Options{
+	var disc discovery.Service
+	if n.cfg.Discovery == localDiscvery {
+		logger.Info("discovery: using mdns (local)")
+		var err error
+		disc, err = discovery.NewLocalDiscovery(n.ctx, logger, n.host, n.cfg.MdnsDiscoveryTag)
+		if err != nil {
+			return err
+		}
+	} else {
+		ipAddr, err := p2pcommons.IPAddr()
+		if err != nil {
+			return errors.Wrap(err, "could not get ip addr")
+		}
+		discV5Opts := &discovery.DiscV5Options{
 			IP:            ipAddr.String(),
 			BindIP:        net.IPv4zero.String(),
 			Port:          n.cfg.UDPPort,
@@ -290,24 +297,21 @@ func (n *p2pNetwork) setupDiscovery() error {
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),
 			zap.String("ip", discV5Opts.IP),
 		)
-	} else {
-		logger.Info("discovery: using mdns (local)")
-	}
-	discOpts := discovery.Options{
-		Host:                n.host,
-		DiscV5Opts:          discV5Opts,
-		ConnIndex:           n.idx,
-		SubnetsIdx:          n.idx,
-		HostAddress:         n.cfg.HostAddress,
-		HostDNS:             n.cfg.HostDNS,
-		SSVConfig:           n.cfg.NetworkConfig.SSV,
-		DiscoveredPeersPool: n.discoveredPeersPool,
-		TrimmedRecently:     n.trimmedRecently,
-		MdnsServiceTag:      n.cfg.MdnsDiscoveryTag,
-	}
-	disc, err := discovery.NewService(n.ctx, logger, discOpts)
-	if err != nil {
-		return err
+		discOpts := &discovery.Options{
+			Host:                n.host,
+			DiscV5Opts:          discV5Opts,
+			ConnIndex:           n.idx,
+			SubnetsIdx:          n.idx,
+			HostAddress:         n.cfg.HostAddress,
+			HostDNS:             n.cfg.HostDNS,
+			SSVConfig:           n.cfg.NetworkConfig.SSV,
+			DiscoveredPeersPool: n.discoveredPeersPool,
+			TrimmedRecently:     n.trimmedRecently,
+		}
+		disc, err = discovery.NewDiscV5Service(n.ctx, logger, discOpts)
+		if err != nil {
+			return err
+		}
 	}
 	n.disc = disc
 

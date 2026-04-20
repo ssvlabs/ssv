@@ -82,7 +82,10 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
+func NewDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		logger:              logger.Named(log.NameDiscoveryService),
