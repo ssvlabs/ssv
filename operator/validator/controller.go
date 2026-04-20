@@ -53,10 +53,10 @@ import (
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	// 48 was the best median fan-out in BenchmarkRouterFanout for the current
+	// 40 was the best median fan-out in BenchmarkRouterFanout for the current
 	// pod shape, where the Go runtime rounds the 3.6 CPU cgroup quota to
 	// GOMAXPROCS=4.
-	networkRouterConcurrency = 48
+	networkRouterConcurrency = 40
 )
 
 // ControllerOptions for creating a validator controller
