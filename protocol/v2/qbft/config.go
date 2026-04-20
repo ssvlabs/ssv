@@ -5,8 +5,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
-	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
 )
 
 type signing interface {
@@ -22,8 +20,6 @@ type IConfig interface {
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() specqbft.Network
-	// GetTimer returns round timer
-	GetTimer() roundtimer.Timer
 	// GetCutOffRound returns the round cut off
 	GetCutOffRound() specqbft.Round
 }
@@ -33,7 +29,6 @@ type Config struct {
 	Domain       spectypes.DomainType
 	ProposerF    specqbft.ProposerF
 	Network      specqbft.Network
-	Timer        roundtimer.Timer
 	CutOffRound  specqbft.Round
 }
 
@@ -55,11 +50,6 @@ func (c *Config) GetProposerF() specqbft.ProposerF {
 // GetNetwork returns a p2p Network instance
 func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
-}
-
-// GetTimer returns round timer
-func (c *Config) GetTimer() roundtimer.Timer {
-	return c.Timer
 }
 
 func (c *Config) GetCutOffRound() specqbft.Round {

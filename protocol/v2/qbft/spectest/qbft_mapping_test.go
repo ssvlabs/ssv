@@ -14,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/v2/ibft/storage"
 	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
 	protocoltesting "github.com/ssvlabs/ssv/v2/protocol/v2/testing"
 )
 
@@ -104,6 +105,7 @@ func TestQBFTMapping(t *testing.T) {
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
 				signer,
+				roundtimer.NewTestingTimer(),
 			)
 			err = pre.Decode(preByts)
 			require.NoError(t, err)

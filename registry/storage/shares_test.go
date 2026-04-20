@@ -730,7 +730,10 @@ func (t *testStorage) open(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	t.Operators = NewOperatorsStorage(logger, t.db, []byte("test"))
+	t.Operators, err = NewOperatorsStorage(logger, t.db, []byte("test"))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

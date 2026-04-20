@@ -3,11 +3,11 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -76,19 +76,31 @@ type Operators interface {
 }
 
 type operatorsStorage struct {
-	logger *zap.Logger
-	db     basedb.Database
-	lock   sync.RWMutex
-	prefix []byte
+	logger    *zap.Logger
+	db        basedb.Database
+	lock      sync.RWMutex
+	prefix    []byte
+	pubkeyIdx map[string]spectypes.OperatorID
 }
 
-// NewOperatorsStorage creates a new instance of Storage
-func NewOperatorsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) Operators {
-	return &operatorsStorage{
-		logger: logger,
-		db:     db,
-		prefix: prefix,
+// NewOperatorsStorage creates a new instance of Storage and loads the pubkey index from existing data.
+func NewOperatorsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Operators, error) {
+	s := &operatorsStorage{
+		logger:    logger,
+		db:        db,
+		prefix:    prefix,
+		pubkeyIdx: make(map[string]spectypes.OperatorID),
 	}
+
+	operators, err := s.listOperators(nil, 0, 0)
+	if err != nil {
+		return nil, fmt.Errorf("list operators: %w", err)
+	}
+	for _, op := range operators {
+		s.pubkeyIdx[op.PublicKey] = op.ID
+	}
+
+	return s, nil
 }
 
 // GetOperatorsPrefix returns DB prefix
@@ -147,16 +159,18 @@ func (s *operatorsStorage) getOperatorDataByPubKey(
 	r basedb.Reader,
 	operatorPubKey string,
 ) (*OperatorData, bool, error) {
-	operatorsData, err := s.listOperators(r, 0, 0)
+	id, ok := s.pubkeyIdx[operatorPubKey]
+	if !ok {
+		return nil, false, nil
+	}
+	op, found, err := s.getOperatorData(r, id)
 	if err != nil {
-		return nil, false, errors.Wrap(err, "could not get all operators")
+		return nil, false, err
 	}
-	for _, op := range operatorsData {
-		if op.PublicKey == operatorPubKey {
-			return &op, true, nil
-		}
+	if !found || op.PublicKey != operatorPubKey {
+		return nil, false, nil
 	}
-	return nil, false, nil
+	return op, true, nil
 }
 
 func (s *operatorsStorage) getOperatorData(
@@ -224,7 +238,7 @@ func (s *operatorsStorage) SaveOperatorData(
 
 	_, found, err := s.getOperatorData(nil, operatorData.ID)
 	if err != nil {
-		return found, errors.Wrap(err, "could not get operator data")
+		return found, fmt.Errorf("get operator data: %w", err)
 	}
 	if found {
 		s.logger.Debug("operator already exist",
@@ -235,10 +249,16 @@ func (s *operatorsStorage) SaveOperatorData(
 
 	raw, err := json.Marshal(operatorData)
 	if err != nil {
-		return found, errors.Wrap(err, "could not marshal operator data")
+		return found, fmt.Errorf("marshal operator data: %w", err)
 	}
 
-	return found, s.db.Using(rw).Set(s.prefix, buildOperatorKey(operatorData.ID), raw)
+	if err := s.db.Using(rw).Set(s.prefix, buildOperatorKey(operatorData.ID), raw); err != nil {
+		return found, fmt.Errorf("set operator data: %w", err)
+	}
+
+	s.pubkeyIdx[operatorData.PublicKey] = operatorData.ID
+
+	return found, nil
 }
 
 func (s *operatorsStorage) DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error {
@@ -252,10 +272,16 @@ func (s *operatorsStorage) DropOperators() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.DropPrefix(bytes.Join(
+	if err := s.db.DropPrefix(bytes.Join(
 		[][]byte{s.prefix, operatorsPrefix, []byte("/")},
 		nil,
-	))
+	)); err != nil {
+		return err
+	}
+
+	s.pubkeyIdx = make(map[string]spectypes.OperatorID)
+
+	return nil
 }
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"

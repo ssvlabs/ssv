@@ -189,12 +189,81 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 	})
 }
 
+func TestStorage_PubKeyIndexConsistency(t *testing.T) {
+	logger := log.TestLogger(t)
+	s, done := newOperatorStorageForTest(logger)
+	require.NotNil(t, s)
+	defer done()
+
+	pk := base64.StdEncoding.EncodeToString([]byte("indexTestKey"))
+	op := storage.OperatorData{PublicKey: pk, ID: 100}
+
+	t.Run("save populates index", func(t *testing.T) {
+		_, err := s.SaveOperatorData(nil, &op)
+		require.NoError(t, err)
+
+		result, found, err := s.GetOperatorDataByPubKey(nil, pk)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, op.ID, result.ID)
+	})
+
+	t.Run("delete cleans index", func(t *testing.T) {
+		err := s.DeleteOperatorData(nil, op.ID)
+		require.NoError(t, err)
+
+		_, found, err := s.GetOperatorDataByPubKey(nil, pk)
+		require.NoError(t, err)
+		require.False(t, found)
+	})
+
+	t.Run("drop cleans index", func(t *testing.T) {
+		_, err := s.SaveOperatorData(nil, &op)
+		require.NoError(t, err)
+
+		err = s.DropOperators()
+		require.NoError(t, err)
+
+		_, found, err := s.GetOperatorDataByPubKey(nil, pk)
+		require.NoError(t, err)
+		require.False(t, found)
+	})
+}
+
+func TestStorage_PubKeyIndexPopulatedOnInit(t *testing.T) {
+	logger := log.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	prefix := []byte("test")
+	pk := base64.StdEncoding.EncodeToString([]byte("initTestKey"))
+	op := storage.OperatorData{PublicKey: pk, ID: 200}
+
+	s1, err := storage.NewOperatorsStorage(logger, db, prefix)
+	require.NoError(t, err)
+	_, err = s1.SaveOperatorData(nil, &op)
+	require.NoError(t, err)
+
+	// New instance from the same DB must build the index from existing data.
+	s2, err := storage.NewOperatorsStorage(logger, db, prefix)
+	require.NoError(t, err)
+
+	result, found, err := s2.GetOperatorDataByPubKey(nil, pk)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, op.ID, result.ID)
+}
+
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}
-	s := storage.NewOperatorsStorage(logger, db, []byte("test"))
+	s, err := storage.NewOperatorsStorage(logger, db, []byte("test"))
+	if err != nil {
+		return nil, func() {}
+	}
 	return s, func() {
 		db.Close()
 	}

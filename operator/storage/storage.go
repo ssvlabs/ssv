@@ -71,10 +71,15 @@ func NewNodeStorage(beaconCfg *networkconfig.Beacon, logger *zap.Logger, db base
 		return nil, fmt.Errorf("failed to create recipients storage: %w", err)
 	}
 
+	operatorStore, err := registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix)
+	if err != nil {
+		return nil, fmt.Errorf("create operators storage: %w", err)
+	}
+
 	stg := &storage{
 		logger:         logger,
 		db:             db,
-		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix),
+		operatorStore:  operatorStore,
 		recipientStore: recipientStore,
 	}
 

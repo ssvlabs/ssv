@@ -7,16 +7,18 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
 )
 
 type TimeoutF func(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF
 
-func (b *BaseRunner) registerTimeoutHandler(ctx context.Context, logger *zap.Logger, instance *instance.Instance, height specqbft.Height) {
-	identifier := spectypes.MessageID(instance.State.ID)
-	timer, ok := instance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
-	if ok {
-		timer.OnTimeout(height, b.TimeoutF(ctx, logger, identifier, height))
+func (b *BaseRunner) createTimer(ctx context.Context, logger *zap.Logger, height specqbft.Height) specqbft.Timer {
+	if b.timerCancel != nil {
+		b.timerCancel()
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	b.timerCancel = cancel
+	identifier := spectypes.MessageID(b.QBFTController.GetIdentifier())
+	callback := b.TimeoutF(ctx, logger, identifier, height)
+	return roundtimer.New(ctx, b.NetworkConfig.Beacon, b.RunnerRoleType, height, callback)
 }

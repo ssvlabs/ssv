@@ -31,7 +31,7 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, err)
 
 	// test calling timeout
-	timer, ok := test.Pre.GetConfig().GetTimer().(*roundtimer.TestQBFTTimer)
+	timer, ok := test.Pre.Timer().(*roundtimer.TestQBFTTimer)
 	require.True(t, ok)
 	require.Equal(t, test.ExpectedTimerState.Timeouts, timer.State.Timeouts)
 	require.Equal(t, test.ExpectedTimerState.Round, timer.State.Round)
