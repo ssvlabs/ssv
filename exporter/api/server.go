@@ -22,7 +22,11 @@ const (
 
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
-	Start(addr string) error
+	// Start binds a listener on addr and begins serving in the background.
+	// It returns the bound address (useful when addr has a :0 port) once the
+	// listener is ready to accept connections. Serve-loop errors are logged,
+	// not returned.
+	Start(addr string) (string, error)
 	BroadcastFeed() *event.Feed
 	UseQueryHandler(handler QueryMessageHandler)
 }
@@ -44,9 +48,9 @@ type wsServer struct {
 }
 
 // NewWsServer creates a new instance. Handler routes are registered here so
-// that by the time Start/Serve is called the mux is ready and callers can
-// safely bind a listener and dial it without a setup race.
-func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
+// that by the time Start is called the mux is ready and callers can safely
+// dial the bound address without a setup race.
+func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) *wsServer {
 	ws := wsServer{
 		ctx:         ctx,
 		logger:      logger.Named(log.NameWSServer),
@@ -65,42 +69,50 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 	ws.handler = handler
 }
 
-// Start listens on addr and serves the websocket server. Blocks until the
-// server is shut down.
-func (ws *wsServer) Start(addr string) error {
+// Start binds a listener on addr and serves the websocket server in the
+// background. It returns the bound address once the listener is ready (so
+// callers using a :0 port can discover the kernel-assigned one). The server
+// shuts down when the ctx passed to NewWsServer is canceled
+func (ws *wsServer) Start(addr string) (string, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		ws.logger.Warn("could not listen", zap.Error(err))
-		return err
+		return "", err
 	}
-	return ws.Serve(l)
-}
 
-// Serve serves the websocket server on the given listener and blocks until
-// the server is shut down. Takes ownership of l — Shutdown/Close will close
-// it.
-func (ws *wsServer) Serve(l net.Listener) error {
-	go func() {
-		if err := ws.broadcaster.FromFeed(ws.out); err != nil {
-			ws.logger.Debug("failed to pull messages from feed")
-		}
-	}()
-
-	ws.logger.Info("starting", fields.Address(l.Addr().String()), zap.Strings("endPoints", []string{"/query", "/stream"}))
+	boundAddr := l.Addr().String()
 
 	const timeout = 3 * time.Second
-
 	ws.httpServer = &http.Server{
 		Handler:      ws.router,
 		ReadTimeout:  timeout,
 		WriteTimeout: timeout,
 	}
 
-	err := ws.httpServer.Serve(l)
-	if err != nil {
-		ws.logger.Warn("could not start", zap.Error(err))
-	}
-	return err
+	go func() {
+		if err := ws.broadcaster.FromFeed(ws.ctx, ws.out); err != nil {
+			ws.logger.Debug("failed to pull messages from feed")
+		}
+	}()
+
+	ws.logger.Info("starting", fields.Address(boundAddr), zap.Strings("endPoints", []string{"/query", "/stream"}))
+
+	go func() {
+		<-ws.ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := ws.httpServer.Shutdown(shutdownCtx); err != nil {
+			ws.logger.Warn("shutdown failed", zap.Error(err))
+		}
+	}()
+
+	go func() {
+		if err := ws.httpServer.Serve(l); err != nil && err != http.ErrServerClosed {
+			ws.logger.Warn("serve loop exited", zap.Error(err))
+		}
+	}()
+
+	return boundAddr, nil
 }
 
 // BroadcastFeed returns the feed for stream messages

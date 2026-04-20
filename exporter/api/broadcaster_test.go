@@ -25,7 +25,7 @@ func TestBroadcaster(t *testing.T) {
 
 	feed := new(event.Feed)
 	go func() {
-		require.NoError(t, b.FromFeed(feed))
+		require.NoError(t, b.FromFeed(t.Context(), feed))
 	}()
 	bm1 := newBroadcastedMock("1")
 	bm2 := newBroadcastedMock("2")

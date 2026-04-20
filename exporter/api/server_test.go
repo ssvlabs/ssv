@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -24,20 +23,9 @@ func TestHandleQuery(t *testing.T) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
-	}, mux, false).(*wsServer)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	}, mux, false)
+	addr, err := ws.Start("127.0.0.1:0")
 	require.NoError(t, err)
-	addr := listener.Addr().String()
-	serverErrCh := make(chan error, 1)
-	go func() {
-		serverErrCh <- ws.Serve(listener)
-	}()
-	select {
-	case err := <-serverErrCh:
-		require.NoError(t, err)
-		t.Fatal("server exited unexpectedly")
-	default:
-	}
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
 	client := NewWSClient(clientCtx, logger)
@@ -69,22 +57,11 @@ func TestHandleQuery(t *testing.T) {
 
 func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx := context.Background() // t.Context() breaks the test
+	ctx := t.Context()
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false)
+	addr, err := ws.Start("127.0.0.1:0")
 	require.NoError(t, err)
-	addr := listener.Addr().String()
-	serverErrCh := make(chan error, 1)
-	go func() {
-		serverErrCh <- ws.Serve(listener)
-	}()
-	select {
-	case err := <-serverErrCh:
-		require.NoError(t, err)
-		t.Fatal("server exited unexpectedly")
-	default:
-	}
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()

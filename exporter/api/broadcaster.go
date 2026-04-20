@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 
@@ -11,7 +12,7 @@ import (
 
 // Broadcaster is an interface broadcasting stream message across all available connections
 type Broadcaster interface {
-	FromFeed(feed *event.Feed) error
+	FromFeed(ctx context.Context, feed *event.Feed) error
 	Broadcast(msg Message) error
 	Register(conn broadcasted) bool
 	Deregister(conn broadcasted) bool
@@ -37,7 +38,9 @@ func newBroadcaster(logger *zap.Logger) Broadcaster {
 }
 
 // FromFeed subscribes to the given feed and broadcasts incoming messages
-func (b *broadcaster) FromFeed(msgFeed *event.Feed) error {
+// until ctx is canceled or the subscription errors. Returns nil on clean
+// ctx-driven shutdown.
+func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) error {
 	cn := make(chan Message, 512)
 	sub := msgFeed.Subscribe(cn)
 	defer sub.Unsubscribe()
@@ -45,6 +48,8 @@ func (b *broadcaster) FromFeed(msgFeed *event.Feed) error {
 
 	for {
 		select {
+		case <-ctx.Done():
+			return nil
 		case msg := <-cn:
 			go func(msg Message) {
 				if err := b.Broadcast(msg); err != nil {
