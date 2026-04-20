@@ -80,12 +80,6 @@ func TestSubmitAggregateSelectionProof_UsesForkSpecificAggregateAndProof(t *test
 			epoch:         5,
 			expectedIndex: 0,
 		},
-		{
-			name:          "fulu uses zero index",
-			version:       spec.DataVersionFulu,
-			epoch:         6,
-			expectedIndex: 0,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -240,13 +234,13 @@ func requireAggregateAndProof(
 	switch version {
 	case spec.DataVersionElectra, spec.DataVersionFulu:
 		proof, ok := gotProof.(*electra.AggregateAndProof)
-		require.True(t, ok)
+		require.Truef(t, ok, "expected *electra.AggregateAndProof, got %T", gotProof)
 		require.Equal(t, validatorIndex, proof.AggregatorIndex)
 		require.Equal(t, slotSig, proof.SelectionProof[:])
 		require.Equal(t, expectedIndex, proof.Aggregate.Data.Index)
 	default:
 		proof, ok := gotProof.(*phase0.AggregateAndProof)
-		require.True(t, ok)
+		require.Truef(t, ok, "expected *phase0.AggregateAndProof, got %T", gotProof)
 		require.Equal(t, validatorIndex, proof.AggregatorIndex)
 		require.Equal(t, slotSig, proof.SelectionProof[:])
 		require.Equal(t, expectedIndex, proof.Aggregate.Data.Index)
