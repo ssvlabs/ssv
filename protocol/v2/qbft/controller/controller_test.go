@@ -67,7 +67,6 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
 		Network:     newTestingNetwork(1, keySet.OperatorKeys[1]),
-
 		CutOffRound: spectestingutils.TestingCutOffRound,
 	}
 
