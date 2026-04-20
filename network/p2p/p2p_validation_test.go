@@ -155,7 +155,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
 	broadcaster := func(node *VirtualNode, roles ...spectypes.RunnerRole) {
 		broadcasters.Go(func(ctx context.Context) error {
-			for i := 0; i < 12; i++ {
+			for i := 0; i < 30; i++ {
 				role := roles[i%len(roles)]
 
 				mtx.Lock()
@@ -194,7 +194,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert that the messages were distributed as expected.
-	time.Sleep(8 * time.Second)
+	time.Sleep(20 * time.Second)
 
 	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
