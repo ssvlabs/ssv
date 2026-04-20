@@ -50,7 +50,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
 		Nodes:        n,
 		MinConnected: n/2 - 1,
-		UseDiscv5:    false,
 		Shares:       shares,
 	})
 	require.NoError(t, err)

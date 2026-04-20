@@ -340,7 +340,6 @@ func createVirtualNet(
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
 		Nodes:                    nodes,
 		MinConnected:             nodes - 1,
-		UseDiscv5:                false,
 		TotalValidators:          1000,
 		ActiveValidators:         800,
 		MyValidators:             300,

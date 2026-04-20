@@ -259,7 +259,6 @@ type LocalNetOptions struct {
 	MessageValidatorProvider                        func(uint64) validation.MessageValidator
 	Nodes                                           int
 	MinConnected                                    int
-	UseDiscv5                                       bool
 	TotalValidators, ActiveValidators, MyValidators uint64
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
@@ -271,11 +270,6 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	ln.mdnsTag = randomMdnsTag()
-	if options.UseDiscv5 {
-		if err := ln.WithBootnode(ctx, logger); err != nil {
-			return nil, err
-		}
-	}
 	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
 		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
