@@ -151,15 +151,7 @@ func TestRun_ActualExecution(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	listener, err := net.Listen("tcp", "localhost:0")
-
-	require.NoError(t, err)
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	addr := fmt.Sprintf("localhost:%d", port)
-
-	err = listener.Close()
-	require.NoError(t, err)
+	addr := fmt.Sprintf("localhost:%d", reserveFreePort(t))
 
 	logger := zaptest.NewLogger(t)
 	srv := New(
@@ -191,8 +183,7 @@ func TestRun_ActualExecution(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	err = srv.httpServer.Shutdown(ctx)
-	if err != nil {
+	if err := srv.httpServer.Shutdown(ctx); err != nil {
 		t.Logf("error shutting down server: %v", err)
 	}
 
@@ -212,15 +203,7 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	listener, err := net.Listen("tcp", "localhost:0")
-
-	require.NoError(t, err)
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	addr := fmt.Sprintf("localhost:%d", port)
-
-	err = listener.Close()
-	require.NoError(t, err)
+	addr := fmt.Sprintf("localhost:%d", reserveFreePort(t))
 
 	logger := zaptest.NewLogger(t)
 	srv := New(
@@ -255,8 +238,7 @@ func TestRun_ActualExecutionFullMode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
-	err = srv.httpServer.Shutdown(ctx)
-	if err != nil {
+	if err := srv.httpServer.Shutdown(ctx); err != nil {
 		t.Logf("error shutting down server: %v", err)
 	}
 
@@ -401,4 +383,17 @@ func TestRoutes(t *testing.T) {
 			route.validateBody(t, string(body))
 		})
 	}
+}
+
+// reserveFreePort asks the kernel for a free TCP port and releases it so the
+// caller can bind to it. A small TOCTOU window remains between the release
+// here and the bind by the server under test, but it's far narrower than
+// scanning random ports with a dial probe.
+func reserveFreePort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := l.Addr().(*net.TCPAddr).Port
+	require.NoError(t, l.Close())
+	return port
 }

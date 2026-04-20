@@ -156,7 +156,7 @@ func newTestMessage() Message {
 // reserveFreePort asks the kernel for a free TCP port and releases it so the
 // caller can bind to it. A small TOCTOU window remains between the release
 // here and the bind by the server under test, but it's far narrower than
-// scanning random ports with a dial probe. Matches api/server/server_test.go.
+// scanning random ports with a dial probe.
 func reserveFreePort(t *testing.T) int {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
