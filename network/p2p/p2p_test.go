@@ -251,8 +251,9 @@ type dummyRouter struct {
 	i     int
 }
 
-func (r *dummyRouter) Route(_ context.Context, _ network.DecodedSSVMessage) {
+func (r *dummyRouter) Route(_ context.Context, _ network.DecodedSSVMessage) bool {
 	atomic.AddUint64(&r.count, 1)
+	return true
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions) (*LocalNet, []*dummyRouter, error) {

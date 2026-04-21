@@ -3,103 +3,262 @@ package validator
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter"
-	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	validatorprotocol "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
-const benchmarkWorkerCount = 256
+const (
+	benchmarkCommitteeCount = 4
+	benchmarkMaxOutstanding = 1024
+)
 
+// BenchmarkRouterFanout keeps a fixed amount of work in flight so the router
+// stays in steady state instead of spending the whole run saturated.
 func BenchmarkRouterFanout(b *testing.B) {
-	for _, fanout := range []int{16, 32, 40, 48, 56, 64, 80, 96, 128, 256, 2048} {
+	for _, fanout := range []int{8, 12, 16, 24, 32, 40, 48, 56, 64, 80, 96, 128, 256, 2048} {
 		b.Run(fmt.Sprintf("fanout=%d", fanout), func(b *testing.B) {
-			ctrl, cancel, state := newBenchmarkController(b, fanout)
+			ctrl, cancel, state := newBenchmarkController(b)
 			defer cancel()
 
 			for i := 0; i < fanout; i++ {
 				go ctrl.handleRouterMessages()
 			}
 
-			msg := benchmarkRouterMessage()
+			producerCount := runtime.GOMAXPROCS(0)
+			var producers sync.WaitGroup
+			producers.Add(producerCount)
 
 			b.ReportAllocs()
 			b.ResetTimer()
 			start := time.Now()
 
-			b.RunParallel(func(pb *testing.PB) {
-				for pb.Next() {
-					ctrl.messageRouter.Route(ctrl.ctx, msg)
-				}
-			})
+			for producerID := 0; producerID < producerCount; producerID++ {
+				go func() {
+					defer producers.Done()
+
+					for {
+						sequence := state.nextSequence.Add(1) - 1
+						if sequence >= int64(b.N) {
+							return
+						}
+
+						<-state.credits
+
+						msg := state.messageFor(sequence)
+						for {
+							state.attempted.Add(1)
+							if ctrl.messageRouter.Route(ctrl.ctx, msg) {
+								state.routerEnqueued.Add(1)
+								state.observeOutstanding(state.outstanding.Add(1))
+								break
+							}
+
+							state.routerDropped.Add(1)
+							runtime.Gosched()
+						}
+					}
+				}()
+			}
+
+			producers.Wait()
+			require.Eventually(b, func() bool {
+				return state.processed.Load() == int64(b.N)
+			}, 30*time.Second, time.Millisecond)
 
 			elapsed := time.Since(start)
 			b.StopTimer()
 
-			require.Eventually(b, func() bool {
-				return len(ctrl.messageRouter.ch) == 0 && ctrl.messageWorker.Size() == 0 && state.inFlight.Load() == 0
-			}, 10*time.Second, 10*time.Millisecond)
+			routerEnqueued := state.routerEnqueued.Load()
+			processed := state.processed.Load()
+			routerBacklog := int64(ctrl.messageRouter.Len())
+			committeeBacklog := state.committeeBacklog()
 
-			b.ReportMetric(float64(state.processed.Load())/elapsed.Seconds(), "msgs/s")
+			b.ReportMetric(float64(routerEnqueued)/elapsed.Seconds(), "router_msgs/s")
+			b.ReportMetric(float64(processed)/elapsed.Seconds(), "processed_msgs/s")
+			if attempted := state.attempted.Load(); attempted > 0 {
+				b.ReportMetric(float64(state.routerDropped.Load())/float64(attempted)*100, "router_drop_pct")
+				b.ReportMetric(float64(attempted)/float64(processed), "attempts/msg")
+			}
+			b.ReportMetric(float64(routerBacklog), "router_backlog")
+			b.ReportMetric(float64(committeeBacklog), "committee_backlog")
+			b.ReportMetric(float64(state.maxOutstanding.Load()), "max_outstanding")
 		})
 	}
 }
 
 type benchmarkState struct {
-	processed atomic.Int64
-	inFlight  atomic.Int64
+	attempted      atomic.Int64
+	nextSequence   atomic.Int64
+	routerEnqueued atomic.Int64
+	routerDropped  atomic.Int64
+	processed      atomic.Int64
+	outstanding    atomic.Int64
+	maxOutstanding atomic.Int64
+	credits        chan struct{}
+	queues         []queue.Queue
+	messages       []*queue.SSVMessage
 }
 
-func newBenchmarkController(b *testing.B, fanout int) (*Controller, context.CancelFunc, *benchmarkState) {
+func newBenchmarkController(b *testing.B) (*Controller, context.CancelFunc, *benchmarkState) {
 	b.Helper()
 
 	logger := zap.NewNop()
 	ctx, cancel := context.WithCancel(context.Background())
-	state := &benchmarkState{}
+	state := &benchmarkState{
+		credits:  make(chan struct{}, benchmarkMaxOutstanding),
+		queues:   make([]queue.Queue, 0, benchmarkCommitteeCount),
+		messages: make([]*queue.SSVMessage, 0, benchmarkCommitteeCount),
+	}
+	for i := 0; i < benchmarkMaxOutstanding; i++ {
+		state.credits <- struct{}{}
+	}
+
+	validatorsMap := validators.New(ctx)
+	for committeeIndex := 0; committeeIndex < benchmarkCommitteeCount; committeeIndex++ {
+		msg, committeeQueue := benchmarkCommitteeFixture(ctx, logger, validatorsMap, committeeIndex)
+		state.messages = append(state.messages, msg)
+		state.queues = append(state.queues, committeeQueue)
+		go benchmarkConsumeCommitteeQueue(ctx, state, committeeQueue, phase0.Slot(committeeIndex+1))
+	}
 
 	ctrl := &Controller{
 		logger:        logger,
 		ctx:           ctx,
 		networkConfig: networkconfig.TestNetwork,
-		validatorsMap: validators.New(ctx),
+		validatorsMap: validatorsMap,
 		messageRouter: newMessageRouter(logger),
-		messageWorker: worker.NewWorker(logger, &worker.Config{
-			Ctx:          ctx,
-			WorkersCount: benchmarkWorkerCount,
-			Buffer:       1 << 20,
-		}),
-		validatorCommonOpts: &validatorprotocol.CommonOptions{
-			ExporterOptions: exporter.Options{Enabled: true},
-		},
 	}
-
-	ctrl.messageWorker.UseHandler(func(context.Context, network.DecodedSSVMessage) error {
-		state.inFlight.Add(1)
-		defer state.inFlight.Add(-1)
-		state.processed.Add(1)
-		return nil
-	})
 
 	return ctrl, cancel, state
 }
 
-func benchmarkRouterMessage() *queue.SSVMessage {
+func benchmarkCommitteeFixture(
+	ctx context.Context,
+	logger *zap.Logger,
+	validatorsMap *validators.ValidatorsMap,
+	committeeIndex int,
+) (*queue.SSVMessage, queue.Queue) {
+	committeeMembers := []*spectypes.Operator{
+		{OperatorID: spectypes.OperatorID(committeeIndex*10 + 1)},
+		{OperatorID: spectypes.OperatorID(committeeIndex*10 + 2)},
+		{OperatorID: spectypes.OperatorID(committeeIndex*10 + 3)},
+		{OperatorID: spectypes.OperatorID(committeeIndex*10 + 4)},
+	}
+	committeeID := spectypes.GetCommitteeID([]spectypes.OperatorID{
+		committeeMembers[0].OperatorID,
+		committeeMembers[1].OperatorID,
+		committeeMembers[2].OperatorID,
+		committeeMembers[3].OperatorID,
+	})
+	slot := phase0.Slot(committeeIndex + 1)
+
+	committee := validatorprotocol.NewCommittee(
+		logger,
+		networkconfig.TestNetwork,
+		&spectypes.CommitteeMember{
+			CommitteeID: committeeID,
+			Committee:   committeeMembers,
+			FaultyNodes: 1,
+		},
+		nil,
+		nil,
+		nil,
+	)
+	validatorsMap.PutCommittee(committeeID, committee)
+
+	warmupMsg := benchmarkRouterMessage(committeeID, slot)
+	committee.EnqueueMessage(ctx, warmupMsg)
+	committeeQueue := committee.Queues[slot].Q
+	committeeQueue.TryPop(queue.NewCommitteeQueuePrioritizer(&queue.State{
+		Height: specqbft.Height(slot),
+		Slot:   slot,
+		Quorum: 3,
+	}), queue.FilterAny)
+
+	return warmupMsg, committeeQueue
+}
+
+func benchmarkRouterMessage(committeeID spectypes.CommitteeID, slot phase0.Slot) *queue.SSVMessage {
+	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, committeeID[:], spectypes.RoleCommittee)
+
+	qbftMsg := &specqbft.Message{
+		Height:     specqbft.Height(slot),
+		Round:      1,
+		MsgType:    specqbft.PrepareMsgType,
+		Identifier: msgID[:],
+	}
+	data, err := qbftMsg.Encode()
+	if err != nil {
+		panic(err)
+	}
+
 	return &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("router-benchmark-message"), spectypes.RoleCommittee),
-			Data:    []byte("bench"),
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   msgID,
+			Data:    data,
 		},
+		Body: qbftMsg,
+	}
+}
+
+func benchmarkConsumeCommitteeQueue(ctx context.Context, state *benchmarkState, q queue.Queue, slot phase0.Slot) {
+	prioritizer := queue.NewCommitteeQueuePrioritizer(&queue.State{
+		Height: specqbft.Height(slot),
+		Slot:   slot,
+		Quorum: 3,
+	})
+	for {
+		msg := q.TryPop(prioritizer, queue.FilterAny)
+		if msg != nil {
+			state.processed.Add(1)
+			state.outstanding.Add(-1)
+			state.credits <- struct{}{}
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			runtime.Gosched()
+		}
+	}
+}
+
+func (s *benchmarkState) messageFor(sequence int64) *queue.SSVMessage {
+	return s.messages[int(sequence%int64(len(s.messages)))]
+}
+
+func (s *benchmarkState) committeeBacklog() int64 {
+	var backlog int64
+	for _, q := range s.queues {
+		backlog += int64(q.Len())
+	}
+	return backlog
+}
+
+func (s *benchmarkState) observeOutstanding(outstanding int64) {
+	for {
+		current := s.maxOutstanding.Load()
+		if outstanding <= current {
+			return
+		}
+		if s.maxOutstanding.CompareAndSwap(current, outstanding) {
+			return
+		}
 	}
 }

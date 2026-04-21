@@ -18,8 +18,8 @@ type DecodedSSVMessage interface {
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
-	// Route routes the given message, this function MUST NOT block
-	Route(ctx context.Context, message DecodedSSVMessage)
+	// Route routes the given message without blocking and reports whether it was accepted.
+	Route(ctx context.Context, message DecodedSSVMessage) bool
 }
 
 // MessageRouting allows to register a MessageRouter
