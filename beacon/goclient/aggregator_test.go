@@ -39,10 +39,11 @@ func TestSubmitAggregateSelectionProof_UsesForkSpecificAggregateAndProof(t *test
 	committeeIndex := phase0.CommitteeIndex(7)
 
 	testCases := []struct {
-		name          string
-		version       spec.DataVersion
-		epoch         phase0.Epoch
-		expectedIndex phase0.CommitteeIndex
+		name             string
+		version          spec.DataVersion
+		epoch            phase0.Epoch
+		attDataSlotEpoch *phase0.Epoch
+		expectedIndex    phase0.CommitteeIndex
 	}{
 		{
 			name:          "phase0 uses committee index",
@@ -80,6 +81,13 @@ func TestSubmitAggregateSelectionProof_UsesForkSpecificAggregateAndProof(t *test
 			epoch:         5,
 			expectedIndex: 0,
 		},
+		{
+			name:             "electra duty with pre electra attestation slot uses zero index",
+			version:          spec.DataVersionElectra,
+			epoch:            5,
+			attDataSlotEpoch: epochPtr(4),
+			expectedIndex:    0,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -88,9 +96,13 @@ func TestSubmitAggregateSelectionProof_UsesForkSpecificAggregateAndProof(t *test
 
 			cfg := aggregatorTestBeaconConfig(time.Now().Add(-1000 * networkconfig.TestNetwork.SlotDuration))
 			slot := cfg.FirstSlotAtEpoch(tc.epoch)
+			attDataSlot := slot
+			if tc.attDataSlotEpoch != nil {
+				attDataSlot = cfg.FirstSlotAtEpoch(*tc.attDataSlotEpoch)
+			}
 
 			attData := &phase0.AttestationData{
-				Slot:  slot,
+				Slot:  attDataSlot,
 				Index: phase0.CommitteeIndex(99),
 				Source: &phase0.Checkpoint{
 					Epoch: 1,
@@ -172,7 +184,6 @@ func TestSubmitAggregateSelectionProof_RespectsContextCancellationWhileWaiting(t
 
 		time.Sleep(cfg.IntervalDuration())
 		cancel()
-		time.Sleep(time.Millisecond)
 
 		err := <-errCh
 		require.ErrorIs(t, err, context.Canceled)
@@ -186,6 +197,10 @@ func aggregatorTestBeaconConfig(genesisTime time.Time) networkconfig.Beacon {
 	cfg := *networkconfig.TestNetwork.Beacon
 	cfg.GenesisTime = genesisTime
 	return cfg
+}
+
+func epochPtr(epoch phase0.Epoch) *phase0.Epoch {
+	return &epoch
 }
 
 func newAggregatorTestClient(cfg *networkconfig.Beacon, service MultiClient) *GoClient {
