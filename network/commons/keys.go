@@ -2,11 +2,12 @@ package commons
 
 import (
 	"crypto/ecdsa"
+	"errors"
+	"fmt"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/pkg/errors"
 )
 
 // ECDSAPrivFromInterface converts crypto.PrivKey back to ecdsa.PrivateKey
@@ -17,12 +18,12 @@ func ECDSAPrivFromInterface(privkey crypto.PrivKey) (*ecdsa.PrivateKey, error) {
 
 	secpKey, ok := privkey.(*crypto.Secp256k1PrivateKey)
 	if !ok || secpKey == nil {
-		return nil, errors.Errorf("unsupported key type: expected Secp256k1 private key, got %T", privkey)
+		return nil, fmt.Errorf("unsupported key type: expected Secp256k1 private key, got %T", privkey)
 	}
 
 	rawKey, err := secpKey.Raw()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not convert ecdsa.PrivateKey")
+		return nil, fmt.Errorf("could not convert ecdsa.PrivateKey: %w", err)
 	}
 
 	privKey, _ := btcec.PrivKeyFromBytes(rawKey)
@@ -51,7 +52,7 @@ func ECDSAPubFromInterface(pubKey crypto.PubKey) (*ecdsa.PublicKey, error) {
 
 	secpKey, ok := pubKey.(*crypto.Secp256k1PublicKey)
 	if !ok || secpKey == nil {
-		return nil, errors.Errorf("unsupported key type: expected Secp256k1 public key, got %T", pubKey)
+		return nil, fmt.Errorf("unsupported key type: expected Secp256k1 public key, got %T", pubKey)
 	}
 
 	pk := btcec.PublicKey(*secpKey)
@@ -62,10 +63,10 @@ func ECDSAPubFromInterface(pubKey crypto.PubKey) (*ecdsa.PublicKey, error) {
 func ECDSAPubToInterface(pubkey *ecdsa.PublicKey) (crypto.PubKey, error) {
 	xVal, yVal := new(btcec.FieldVal), new(btcec.FieldVal)
 	if xVal.SetByteSlice(pubkey.X.Bytes()) {
-		return nil, errors.Errorf("X value overflows")
+		return nil, fmt.Errorf("X value overflows")
 	}
 	if yVal.SetByteSlice(pubkey.Y.Bytes()) {
-		return nil, errors.Errorf("Y value overflows")
+		return nil, fmt.Errorf("Y value overflows")
 	}
 
 	newKey := crypto.PubKey((*crypto.Secp256k1PublicKey)(btcec.NewPublicKey(xVal, yVal)))
