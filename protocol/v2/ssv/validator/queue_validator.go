@@ -2,11 +2,11 @@ package validator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
