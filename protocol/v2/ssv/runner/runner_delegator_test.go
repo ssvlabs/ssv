@@ -15,14 +15,12 @@ func TestVoluntaryExitRunnerDecodePreservesEmbeddedBaseRunnerMethods(t *testing.
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewVoluntaryExitRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	runnerIface, err := NewVoluntaryExitRunner(VoluntaryExitRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+	})
 	require.NoError(t, err)
 
 	runner := runnerIface.(*VoluntaryExitRunner)
@@ -53,14 +51,12 @@ func TestVoluntaryExitRunnerUsesReplacedBaseRunner(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewVoluntaryExitRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	runnerIface, err := NewVoluntaryExitRunner(VoluntaryExitRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+	})
 	require.NoError(t, err)
 
 	runner := runnerIface.(*VoluntaryExitRunner)

@@ -286,24 +286,26 @@ var baseCommitteeWithRunnerSample = func(
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
 	) (*runner.CommitteeRunner, error) {
-		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			attestingValidators,
-			controller.NewController(
+		r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions: runner.BaseRunnerOptions{
+				NetworkConfig:  networkconfig.TestNetwork,
+				Share:          shareMap,
+				Beacon:         runnerSample.GetBeaconNode(),
+				Network:        runnerSample.GetNetwork(),
+				Signer:         runnerSample.GetSigner(),
+				OperatorSigner: runnerSample.GetOperatorSigner(),
+			},
+			AttestingValidators: attestingValidators,
+			QBFTController: controller.NewController(
 				runnerSample.QBFTController.Identifier,
 				runnerSample.QBFTController.CommitteeMember,
 				runnerSample.QBFTController.GetConfig(),
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			),
-			runnerSample.GetBeaconNode(),
-			runnerSample.GetNetwork(),
-			runnerSample.GetSigner(),
-			runnerSample.GetOperatorSigner(),
-			committeeDutyGuard,
-			runnerSample.GetDoppelgangerHandler(),
-		)
+			DutyGuard:           committeeDutyGuard,
+			DoppelgangerHandler: runnerSample.GetDoppelgangerHandler(),
+		})
 		return r.(*runner.CommitteeRunner), err
 	}
 

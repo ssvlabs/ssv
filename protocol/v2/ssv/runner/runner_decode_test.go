@@ -7,7 +7,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 type dummyValueChecker struct{}
@@ -45,17 +44,14 @@ func TestAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	r, err := NewAggregatorRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		dummyValueChecker{},
-		0,
-	)
+	r, err := NewAggregatorRunner(AggregatorRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+		ValCheck:           dummyValueChecker{},
+		HighestDecidedSlot: 0,
+	})
 	require.NoError(t, err)
 
 	beforeRoot, err := r.GetRoot()
@@ -85,21 +81,16 @@ func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewProposerRunner(
-		zap.NewNop(),
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		dummyValueChecker{},
-		0,
-		nil,
-		0,
-	)
+	runnerIface, err := NewProposerRunner(ProposerRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+		ValCheck:           dummyValueChecker{},
+		HighestDecidedSlot: 0,
+		Graffiti:           nil,
+		ProposerDelay:      0,
+	})
 	require.NoError(t, err)
 
 	r := runnerIface.(*ProposerRunner)
@@ -130,17 +121,14 @@ func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewSyncCommitteeAggregatorRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		dummyValueChecker{},
-		0,
-	)
+	runnerIface, err := NewSyncCommitteeAggregatorRunner(SyncCommitteeAggregatorRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+		ValCheck:           dummyValueChecker{},
+		HighestDecidedSlot: 0,
+	})
 	require.NoError(t, err)
 
 	r := runnerIface.(*SyncCommitteeAggregatorRunner)

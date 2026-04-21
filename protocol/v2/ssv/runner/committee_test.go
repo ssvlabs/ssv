@@ -130,18 +130,20 @@ func newCommitteeRunnerEnv(
 		doppelganger = &doppelgangerStub{}
 	}
 
-	runnerI, err := NewCommitteeRunner(
-		networkconfig.TestNetwork,
-		shareMap,
-		sharePubKeys,
-		controller,
-		beacon,
-		network,
-		signer,
-		spectestingutils.NewOperatorSigner(sampleKey, 1),
-		guard,
-		doppelganger,
-	)
+	runnerI, err := NewCommitteeRunner(CommitteeRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  networkconfig.TestNetwork,
+			Share:          shareMap,
+			Beacon:         beacon,
+			Network:        network,
+			Signer:         signer,
+			OperatorSigner: spectestingutils.NewOperatorSigner(sampleKey, 1),
+		},
+		AttestingValidators: sharePubKeys,
+		QBFTController:      controller,
+		DutyGuard:           guard,
+		DoppelgangerHandler: doppelganger,
+	})
 	require.NoError(t, err)
 
 	crunner := runnerI.(*CommitteeRunner)
