@@ -4,9 +4,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"testing"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -48,10 +48,10 @@ func (test *CreateMsgSpecTest) UnmarshalJSON(data []byte) error {
 	if aux.Value != "" {
 		decoded, err := hex.DecodeString(aux.Value)
 		if err != nil {
-			return errors.Wrap(err, "failed to decode Value hex string")
+			return fmt.Errorf("failed to decode Value hex string: %w", err)
 		}
 		if len(decoded) != 32 {
-			return errors.Errorf("Value must be 32 bytes, got %d", len(decoded))
+			return fmt.Errorf("Value must be 32 bytes, got %d", len(decoded))
 		}
 		copy(test.Value[:], decoded)
 	}
@@ -60,7 +60,7 @@ func (test *CreateMsgSpecTest) UnmarshalJSON(data []byte) error {
 	if aux.StateValue != "" {
 		decoded, err := base64.StdEncoding.DecodeString(aux.StateValue)
 		if err != nil {
-			return errors.Wrap(err, "failed to decode StateValue base64 string")
+			return fmt.Errorf("failed to decode StateValue base64 string: %w", err)
 		}
 		test.StateValue = decoded
 	}
@@ -154,7 +154,7 @@ func createRoundChange(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, er
 		for _, msg := range test.PrepareJustifications {
 			_, err := state.PrepareContainer.AddFirstMsgForSignerAndRound(spectestingutils.ToProcessingMessage(msg))
 			if err != nil {
-				return nil, errors.Wrap(err, "could not add first message for signer")
+				return nil, fmt.Errorf("could not add first message for signer: %w", err)
 			}
 		}
 	}
