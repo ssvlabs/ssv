@@ -51,7 +51,7 @@ func (test *CreateMsgSpecTest) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("failed to decode Value hex string: %w", err)
 		}
 		if len(decoded) != 32 {
-			return fmt.Errorf("Value must be 32 bytes, got %d", len(decoded))
+			return fmt.Errorf("value must be 32 bytes, got %d", len(decoded))
 		}
 		copy(test.Value[:], decoded)
 	}

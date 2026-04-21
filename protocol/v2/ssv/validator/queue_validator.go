@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -89,7 +88,7 @@ func (v *Validator) StartQueueConsumer(
 			var ok bool
 			q, ok = v.Queues[msgID.GetRoleType()]
 			if !ok {
-				return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
+				return fmt.Errorf("queue not found for role %s", msgID.GetRoleType().String())
 			}
 			return nil
 		}()

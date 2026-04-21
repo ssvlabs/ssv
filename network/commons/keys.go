@@ -63,10 +63,10 @@ func ECDSAPubFromInterface(pubKey crypto.PubKey) (*ecdsa.PublicKey, error) {
 func ECDSAPubToInterface(pubkey *ecdsa.PublicKey) (crypto.PubKey, error) {
 	xVal, yVal := new(btcec.FieldVal), new(btcec.FieldVal)
 	if xVal.SetByteSlice(pubkey.X.Bytes()) {
-		return nil, fmt.Errorf("X value overflows")
+		return nil, fmt.Errorf("x value overflows")
 	}
 	if yVal.SetByteSlice(pubkey.Y.Bytes()) {
-		return nil, fmt.Errorf("Y value overflows")
+		return nil, fmt.Errorf("y value overflows")
 	}
 
 	newKey := crypto.PubKey((*crypto.Secp256k1PublicKey)(btcec.NewPublicKey(xVal, yVal)))
