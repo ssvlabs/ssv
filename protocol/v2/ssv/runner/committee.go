@@ -1047,12 +1047,12 @@ func (r *CommitteeRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 
-func (r *CommitteeRunner) GetDoppelgangerHandler() DoppelgangerProvider {
-	return r.doppelgangerHandler
-}
-
 func (r *CommitteeRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
+}
+
+func (r *CommitteeRunner) GetDoppelgangerHandler() DoppelgangerProvider {
+	return r.doppelgangerHandler
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion) *phase0.AttestationData {

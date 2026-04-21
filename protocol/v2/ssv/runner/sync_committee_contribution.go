@@ -589,6 +589,7 @@ func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }

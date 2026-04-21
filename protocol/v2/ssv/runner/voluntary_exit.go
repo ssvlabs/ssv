@@ -257,6 +257,7 @@ func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }

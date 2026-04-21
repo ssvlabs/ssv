@@ -287,6 +287,7 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
