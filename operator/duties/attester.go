@@ -128,7 +128,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 				indicesChangeDeadline := h.beaconConfig.SlotStartTime(currentSlot).Add(h.beaconConfig.IntervalDuration())
 				select {
-				case <-h.indicesChange:
+				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
 
 					// 1) Declare intents.
@@ -160,7 +160,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				}
 			}()
 
-		case reorgEvent := <-h.reorg:
+		case reorgEvent := <-h.reorgEventsCh:
 			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1
