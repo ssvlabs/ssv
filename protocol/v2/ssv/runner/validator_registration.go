@@ -48,36 +48,35 @@ type ValidatorRegistrationRunner struct {
 	gasLimit uint64
 }
 
-func NewValidatorRegistrationRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	validatorRegistrationSubmitter ValidatorRegistrationSubmitter,
-	feeRecipientProvider feeRecipientProvider,
-	gasLimit uint64,
-) (Runner, error) {
-	if len(share) != 1 {
+// ValidatorRegistrationRunnerOptions bundles all dependencies required by NewValidatorRegistrationRunner.
+type ValidatorRegistrationRunnerOptions struct {
+	BaseRunnerOptions
+
+	ValidatorRegistrationSubmitter ValidatorRegistrationSubmitter
+	FeeRecipientProvider           feeRecipientProvider
+	GasLimit                       uint64
+}
+
+func NewValidatorRegistrationRunner(opts ValidatorRegistrationRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, fmt.Errorf("must have one share")
 	}
 
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
-			NetworkConfig:  networkConfig,
-			Share:          share,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
 		},
 
-		beacon:                         beacon,
-		network:                        network,
-		signer:                         signer,
-		operatorSigner:                 operatorSigner,
-		validatorRegistrationSubmitter: validatorRegistrationSubmitter,
-		feeRecipientProvider:           feeRecipientProvider,
+		beacon:                         opts.Beacon,
+		network:                        opts.Network,
+		signer:                         opts.Signer,
+		operatorSigner:                 opts.OperatorSigner,
+		validatorRegistrationSubmitter: opts.ValidatorRegistrationSubmitter,
+		feeRecipientProvider:           opts.FeeRecipientProvider,
 
-		gasLimit: gasLimit,
+		gasLimit: opts.GasLimit,
 	}, nil
 }
 
@@ -288,6 +287,7 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }

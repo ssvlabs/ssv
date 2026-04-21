@@ -116,7 +116,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 func TestSetupRunnersExporter(t *testing.T) {
 	runners, err := SetupRunners(
 		t.Context(),
-		log.TestLogger(t),
 		&types.SSVShare{},
 		nil,
 		nil,
