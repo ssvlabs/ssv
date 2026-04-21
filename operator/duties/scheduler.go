@@ -204,13 +204,15 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	}
 
 	indicesChangeFeed := NewEventFeed[struct{}]()
-	reorgFeed := NewEventFeed[ReorgEvent]()
+	reorgEventsFeed := NewEventFeed[ReorgEvent]()
 
 	for _, handler := range s.dutyHandlers {
-		indicesChangeCh := make(chan struct{})
+		// indicesChangeCh is buffered as a temporary work-around to mitigate https://github.com/ssvlabs/ssv-node-board/issues/992
+		indicesChangeCh := make(chan struct{}, 1)
 		indicesChangeFeed.Subscribe(indicesChangeCh)
-		reorgCh := make(chan ReorgEvent)
-		reorgFeed.Subscribe(reorgCh)
+		// reorgEventsCh is buffered as a temporary work-around to mitigate https://github.com/ssvlabs/ssv-node-board/issues/992
+		reorgEventsCh := make(chan ReorgEvent, 1)
+		reorgEventsFeed.Subscribe(reorgEventsCh)
 
 		handler.Setup(ctx, SetupOptions{
 			Name:                handler.Name(),
@@ -222,7 +224,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			ValidatorController: s.validatorController,
 			DutiesExecutor:      s,
 			SlotTickerProvider:  s.slotTickerProvider,
-			ReorgEventsCh:       reorgCh,
+			ReorgEventsCh:       reorgEventsCh,
 			IndicesChangeCh:     indicesChangeCh,
 		})
 
@@ -245,7 +247,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	s.backgroundTasks.Add(1)
 	go func() {
 		defer s.backgroundTasks.Done()
-		reorgFeed.FanOut(s.ctx, s.reorgCh)
+		reorgEventsFeed.FanOut(s.ctx, s.reorgCh)
 	}()
 
 	s.backgroundTasks.Add(1)
