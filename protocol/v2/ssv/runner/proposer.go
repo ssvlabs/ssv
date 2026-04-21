@@ -22,7 +22,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -61,44 +60,45 @@ type ProposerRunner struct {
 	cachedBlindedBlockSSZ []byte
 }
 
-func NewProposerRunner(
-	logger *zap.Logger,
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	doppelgangerHandler DoppelgangerProvider,
-	valCheck ssv.ValueChecker,
-	highestDecidedSlot phase0.Slot,
-	graffiti []byte,
-	proposerDelay time.Duration,
-) (Runner, error) {
-	if len(share) != 1 {
+// ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
+type ProposerRunnerOptions struct {
+	BaseRunnerOptions
+
+	QBFTController      *controller.Controller
+	DoppelgangerHandler DoppelgangerProvider
+	ValCheck            ssv.ValueChecker
+	HighestDecidedSlot  phase0.Slot
+	Graffiti            []byte
+	// ProposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
+	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
+	// higher MEV.
+	ProposerDelay time.Duration
+}
+
+func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
-			NetworkConfig:      networkConfig,
-			Share:              share,
-			QBFTController:     qbftController,
-			highestDecidedSlot: highestDecidedSlot,
+			NetworkConfig:      opts.NetworkConfig,
+			Share:              opts.Share,
+			QBFTController:     opts.QBFTController,
+			highestDecidedSlot: opts.HighestDecidedSlot,
 		},
 
-		beacon:              beacon,
-		network:             network,
-		signer:              signer,
-		operatorSigner:      operatorSigner,
-		doppelgangerHandler: doppelgangerHandler,
-		ValCheck:            valCheck,
+		beacon:              opts.Beacon,
+		network:             opts.Network,
+		signer:              opts.Signer,
+		operatorSigner:      opts.OperatorSigner,
+		doppelgangerHandler: opts.DoppelgangerHandler,
+		ValCheck:            opts.ValCheck,
 		measurements:        newMeasurementsStore(),
-		graffiti:            graffiti,
+		graffiti:            opts.Graffiti,
 
-		proposerDelay: proposerDelay,
+		proposerDelay: opts.ProposerDelay,
 	}, nil
 }
 

@@ -17,7 +17,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -38,29 +37,29 @@ type VoluntaryExitRunner struct {
 	voluntaryExit *phase0.VoluntaryExit
 }
 
-func NewVoluntaryExitRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-) (Runner, error) {
-	if len(share) != 1 {
+// VoluntaryExitRunnerOptions bundles all dependencies required by NewVoluntaryExitRunner.
+// It currently only embeds BaseRunnerOptions since the runner has no role-specific fields,
+// but wrapping it keeps the constructor signature consistent with other runners.
+type VoluntaryExitRunnerOptions struct {
+	BaseRunnerOptions
+}
+
+func NewVoluntaryExitRunner(opts VoluntaryExitRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
-			NetworkConfig:  networkConfig,
-			Share:          share,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		operatorSigner: operatorSigner,
+		beacon:         opts.Beacon,
+		network:        opts.Network,
+		signer:         opts.Signer,
+		operatorSigner: opts.OperatorSigner,
 	}, nil
 }
 
@@ -258,6 +257,7 @@ func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
