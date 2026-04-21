@@ -15,14 +15,12 @@ func TestVoluntaryExitRunnerDecodePreservesEmbeddedBaseRunnerMethods(t *testing.
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewVoluntaryExitRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	runnerIface, err := NewVoluntaryExitRunner(VoluntaryExitRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+	})
 	require.NoError(t, err)
 
 	runner := runnerIface.(*VoluntaryExitRunner)
@@ -42,9 +40,9 @@ func TestVoluntaryExitRunnerDecodePreservesEmbeddedBaseRunnerMethods(t *testing.
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleVoluntaryExit, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Equal(t, share.ValidatorIndex, decoded.GetShare().ValidatorIndex)
+	require.False(t, decoded.hasDutyRunning())
 }
 
 func TestVoluntaryExitRunnerUsesReplacedBaseRunner(t *testing.T) {
@@ -53,14 +51,12 @@ func TestVoluntaryExitRunnerUsesReplacedBaseRunner(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewVoluntaryExitRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	runnerIface, err := NewVoluntaryExitRunner(VoluntaryExitRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+	})
 	require.NoError(t, err)
 
 	runner := runnerIface.(*VoluntaryExitRunner)
@@ -100,6 +96,6 @@ func TestCommitteeRunnerDecodePreservesEmbeddedBaseRunnerMethods(t *testing.T) {
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleCommittee, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
+	require.False(t, decoded.hasDutyRunning())
 }

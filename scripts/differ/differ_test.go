@@ -14,7 +14,7 @@ func TestDiffer(t *testing.T) {
 	input := `package main
 
 		func (r *ProposerRunner) ProcessPostConsensus(signedMsg *types.SignedPartialSignatureMessage) error {
-			quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
+			quorum, roots, err := r.basePostConsensusMsgProcessing(r, signedMsg)
 			if err != nil {
 				return errors.Wrap(err, "failed processing post consensus message")
 			}
@@ -28,7 +28,7 @@ func TestDiffer(t *testing.T) {
 				if err != nil {
 					// If the reconstructed signature verification failed, fall back to verifying each partial signature
 					for _, root := range roots {
-						r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root)
+						r.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root)
 					}
 					return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
 				}
@@ -49,7 +49,7 @@ func TestDiffer(t *testing.T) {
 		}`
 
 	expectedOutput := `func (r *ProposerRunner) ProcessPostConsensus(signedMsg *SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -60,7 +60,7 @@ func TestDiffer(t *testing.T) {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
 			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root)
+				r.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root)
 			}
 			return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
 		}

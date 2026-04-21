@@ -21,6 +21,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -32,6 +33,38 @@ func TestGetMaxPeers(t *testing.T) {
 
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
+}
+
+func TestCurrentSubnetsConcurrentAccess(t *testing.T) {
+	n := &p2pNetwork{}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := uint64(0); i < 5000; i++ {
+			subnets := commons.ZeroSubnets
+			subnets.Set(i % commons.SubnetsCount)
+			n.setCurrentSubnets(subnets)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 5000; i++ {
+			subnets := n.ActiveSubnets()
+			_ = subnets.ActiveCount()
+			_ = subnets.StringHex()
+		}
+	}()
+
+	close(start)
+	wg.Wait()
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {

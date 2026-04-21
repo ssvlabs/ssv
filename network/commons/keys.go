@@ -11,7 +11,15 @@ import (
 
 // ECDSAPrivFromInterface converts crypto.PrivKey back to ecdsa.PrivateKey
 func ECDSAPrivFromInterface(privkey crypto.PrivKey) (*ecdsa.PrivateKey, error) {
-	secpKey := privkey.(*crypto.Secp256k1PrivateKey)
+	if privkey == nil {
+		return nil, errors.New("private key is nil")
+	}
+
+	secpKey, ok := privkey.(*crypto.Secp256k1PrivateKey)
+	if !ok || secpKey == nil {
+		return nil, errors.Errorf("unsupported key type: expected Secp256k1 private key, got %T", privkey)
+	}
+
 	rawKey, err := secpKey.Raw()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not convert ecdsa.PrivateKey")
@@ -36,9 +44,18 @@ func ECDSAPrivToInterface(privkey *ecdsa.PrivateKey) (crypto.PrivKey, error) {
 }
 
 // ECDSAPubFromInterface converts crypto.PubKey to ecdsa.PublicKey
-func ECDSAPubFromInterface(pubKey crypto.PubKey) *ecdsa.PublicKey {
-	pk := btcec.PublicKey(*(pubKey.(*crypto.Secp256k1PublicKey)))
-	return pk.ToECDSA()
+func ECDSAPubFromInterface(pubKey crypto.PubKey) (*ecdsa.PublicKey, error) {
+	if pubKey == nil {
+		return nil, errors.New("public key is nil")
+	}
+
+	secpKey, ok := pubKey.(*crypto.Secp256k1PublicKey)
+	if !ok || secpKey == nil {
+		return nil, errors.Errorf("unsupported key type: expected Secp256k1 public key, got %T", pubKey)
+	}
+
+	pk := btcec.PublicKey(*secpKey)
+	return pk.ToECDSA(), nil
 }
 
 // ECDSAPubToInterface converts ecdsa.PublicKey to crypto.PubKey

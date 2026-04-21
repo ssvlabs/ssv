@@ -21,6 +21,7 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -100,6 +101,10 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			}
 		}
 	}
+
+	test.Runner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+		return func(specqbft.Round) {}
+	})
 
 	var v *validator.Validator
 	var c *validator.Committee
@@ -281,24 +286,26 @@ var baseCommitteeWithRunnerSample = func(
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
 	) (*runner.CommitteeRunner, error) {
-		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			attestingValidators,
-			controller.NewController(
+		r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions: runner.BaseRunnerOptions{
+				NetworkConfig:  networkconfig.TestNetwork,
+				Share:          shareMap,
+				Beacon:         runnerSample.GetBeaconNode(),
+				Network:        runnerSample.GetNetwork(),
+				Signer:         runnerSample.GetSigner(),
+				OperatorSigner: runnerSample.GetOperatorSigner(),
+			},
+			AttestingValidators: attestingValidators,
+			QBFTController: controller.NewController(
 				runnerSample.QBFTController.Identifier,
 				runnerSample.QBFTController.CommitteeMember,
 				runnerSample.QBFTController.GetConfig(),
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			),
-			runnerSample.GetBeaconNode(),
-			runnerSample.GetNetwork(),
-			runnerSample.GetSigner(),
-			runnerSample.GetOperatorSigner(),
-			committeeDutyGuard,
-			runnerSample.GetDoppelgangerHandler(),
-		)
+			DutyGuard:           committeeDutyGuard,
+			DoppelgangerHandler: runnerSample.GetDoppelgangerHandler(),
+		})
 		return r.(*runner.CommitteeRunner), err
 	}
 

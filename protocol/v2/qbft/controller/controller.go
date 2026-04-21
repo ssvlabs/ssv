@@ -63,6 +63,7 @@ func (c *Controller) StartNewInstance(
 	ctx context.Context,
 	logger *zap.Logger,
 	height specqbft.Height,
+	timer specqbft.Timer,
 	value []byte,
 	valueChecker ssv.ValueChecker,
 ) (*instance.Instance, error) {
@@ -85,10 +86,10 @@ func (c *Controller) StartNewInstance(
 
 	c.Height = height
 
-	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner, timer)
 	c.StoredInstances.addNewInstance(newInstance)
-	newInstance.Start(ctx, value, height, valueChecker)
 	c.forceStopAllInstanceExceptCurrent()
+	newInstance.Start(ctx, value, valueChecker)
 
 	span.SetStatus(codes.Ok, "")
 
