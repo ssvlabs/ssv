@@ -49,7 +49,7 @@ func TestUponCommitReturnsDecidedOnQuorum(t *testing.T) {
 		env.commit(1, 2, root),
 	)
 
-	decided, decidedValue, aggregated, err := env.inst.UponCommit(
+	decided, decidedValue, aggregated, err := env.inst.uponCommit(
 		context.Background(),
 		zap.NewNop(),
 		env.commit(1, 3, root),
@@ -70,13 +70,13 @@ func TestUponCommitNoQuorumOrDuplicateReturnsNoDecision(t *testing.T) {
 	msg := env.commit(1, 1, root)
 	env.inst.State.ProposalAcceptedForCurrentRound = env.proposal(1, 1, fullData, root, nil, nil)
 
-	decided, decidedValue, aggregated, err := env.inst.UponCommit(context.Background(), zap.NewNop(), msg)
+	decided, decidedValue, aggregated, err := env.inst.uponCommit(context.Background(), zap.NewNop(), msg)
 	require.NoError(t, err)
 	require.False(t, decided)
 	require.Nil(t, decidedValue)
 	require.Nil(t, aggregated)
 
-	decided, decidedValue, aggregated, err = env.inst.UponCommit(context.Background(), zap.NewNop(), msg)
+	decided, decidedValue, aggregated, err = env.inst.uponCommit(context.Background(), zap.NewNop(), msg)
 	require.NoError(t, err)
 	require.False(t, decided)
 	require.Nil(t, decidedValue)
@@ -100,7 +100,7 @@ func TestUponCommitPostDecisionRecordsLateCommitWithoutRedeciding(t *testing.T) 
 	)
 
 	lateCommit := env.commit(1, 4, root)
-	decided, decidedValue, aggregated, err := env.inst.UponCommit(context.Background(), zap.NewNop(), lateCommit)
+	decided, decidedValue, aggregated, err := env.inst.uponCommit(context.Background(), zap.NewNop(), lateCommit)
 	require.NoError(t, err)
 	require.False(t, decided)
 	require.Nil(t, decidedValue)

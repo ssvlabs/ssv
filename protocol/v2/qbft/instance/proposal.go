@@ -16,6 +16,8 @@ import (
 // uponProposal process proposal message
 // Assumes proposal message is valid!
 func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) error {
+	logger = logger.With(zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
+
 	addedMsg, err := i.State.ProposeContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return fmt.Errorf("could not add proposal msg to container: %w", err)
@@ -23,8 +25,6 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	if !addedMsg {
 		return nil // uponProposal was already called
 	}
-
-	logger = logger.With(zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
 
 	logger.Debug("📬 got proposal message")
 
@@ -41,7 +41,6 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	i.metrics.EndStage(ctx, msgRound)
 	i.metrics.StartStage(stagePrepare)
 
-	// value root
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
 		return fmt.Errorf("could not hash input data: %w", err)

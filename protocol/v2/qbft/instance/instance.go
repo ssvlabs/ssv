@@ -188,7 +188,7 @@ func allSigners(all []*specqbft.ProcessingMessage) []spectypes.OperatorID {
 // ProcessMsg processes a new QBFT message.
 // The returned bool/value pair reports whether this call newly decided the
 // instance. Callers that need the post-call state should inspect State/IsDecided.
-func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (newlyDecided bool, newlyDecidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
+func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (decided bool, decidedValue []byte, aggregatedCommit *spectypes.SignedSSVMessage, err error) {
 	if !i.CanProcessMessages() {
 		return false, nil, nil, spectypes.NewError(spectypes.InstanceStoppedProcessingMessagesErrorCode, "instance stopped processing messages")
 	}
@@ -204,9 +204,9 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 		case specqbft.PrepareMsgType:
 			return i.uponPrepare(ctx, logger, msg)
 		case specqbft.CommitMsgType:
-			newlyDecided, newlyDecidedValue, aggregatedCommit, err = i.UponCommit(ctx, logger, msg)
-			if newlyDecided {
-				err := i.MarkDecided(msg.QBFTMessage.Round, newlyDecidedValue)
+			decided, decidedValue, aggregatedCommit, err = i.uponCommit(ctx, logger, msg)
+			if decided {
+				err := i.MarkDecided(msg.QBFTMessage.Round, decidedValue)
 				if err != nil {
 					return fmt.Errorf("mark as decided: %w", err)
 				}
@@ -221,7 +221,7 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 	if res != nil {
 		return false, nil, nil, res.(error)
 	}
-	return newlyDecided, newlyDecidedValue, aggregatedCommit, nil
+	return decided, decidedValue, aggregatedCommit, nil
 }
 
 func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
