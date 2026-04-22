@@ -5,6 +5,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -20,7 +21,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -1099,7 +1099,6 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 			zap.String("name", cfg.SSVOptions.NetworkName),
 		)
 	}
-
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
 		nodeType = "full"

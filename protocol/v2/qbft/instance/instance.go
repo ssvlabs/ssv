@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -170,7 +171,7 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 	}
 
 	if err := i.BaseMsgValidation(msg); err != nil {
-		return false, nil, nil, errors.Wrap(err, "invalid signed message")
+		return false, nil, nil, fmt.Errorf("invalid signed message: %w", err)
 	}
 
 	res := i.processMsgF.Run(func() any {

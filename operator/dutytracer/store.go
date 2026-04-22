@@ -1,12 +1,12 @@
 package validator
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/exporter"

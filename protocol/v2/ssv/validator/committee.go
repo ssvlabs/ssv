@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -454,7 +454,7 @@ func (c *Committee) Decode(data []byte) error {
 func (c *Committee) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := c.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode state")
+		return [32]byte{}, fmt.Errorf("could not encode state: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

@@ -1,10 +1,10 @@
 package records
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/pkg/errors"
 
 	"github.com/ssvlabs/ssv/network/commons"
 )

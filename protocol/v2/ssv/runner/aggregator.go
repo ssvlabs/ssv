@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
 	"sync"
@@ -14,7 +15,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -383,11 +383,11 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 	cd := &spectypes.ProposerConsensusData{}
 	err := cd.Decode(r.State.DecidedValue)
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
+		return nil, spectypes.DomainError, fmt.Errorf("could not create consensus data: %w", err)
 	}
 	_, hashRoot, err := ssvtypes.GetAggregateAndProof(cd)
 	if err != nil {
-		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get aggregate and proof")
+		return nil, phase0.DomainType{}, fmt.Errorf("could not get aggregate and proof: %w", err)
 	}
 
 	return []ssz.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
@@ -515,7 +515,7 @@ func (r *AggregatorRunner) Decode(data []byte) error {
 func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode AggregatorRunner")
+		return [32]byte{}, fmt.Errorf("could not encode AggregatorRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

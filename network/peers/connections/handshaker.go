@@ -3,12 +3,13 @@ package connections
 import (
 	"context"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -106,22 +107,22 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		nodeInfo := &records.NodeInfo{}
 		err = nodeInfo.Consume(request)
 		if err != nil {
-			return errors.Wrap(err, "could not consume node info request")
+			return fmt.Errorf("could not consume node info request: %w", err)
 		}
 
 		// Respond with our own NodeInfo.
 		self, err := h.sealedNodeRecord()
 		if err != nil {
-			return errors.Wrap(err, "could not seal self node info")
+			return fmt.Errorf("could not seal self node info: %w", err)
 		}
 
 		if err := respond(self); err != nil {
-			return errors.Wrap(err, "could not send self node info")
+			return fmt.Errorf("could not send self node info: %w", err)
 		}
 
 		err = h.verifyTheirNodeInfo(logger, pid, nodeInfo)
 		if err != nil {
-			return errors.Wrap(err, "failed verifying their node info")
+			return fmt.Errorf("failed verifying their node info: %w", err)
 		}
 		return nil
 	}
@@ -134,7 +135,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		var err error
 		defer func() {
 			if r := recover(); r != nil {
-				err = errors.Errorf("panic: %v", r)
+				err = fmt.Errorf("panic: %v", r)
 			}
 			h.updatePeerInfo(pid, err)
 		}()
@@ -170,20 +171,20 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 	// Update PeerInfo with the result of this handshake.
 	defer func() {
 		if r := recover(); r != nil {
-			err = errors.Errorf("panic: %v", r)
+			err = fmt.Errorf("panic: %v", r)
 		}
 		h.updatePeerInfo(pid, err)
 	}()
 
 	nodeInfo, err = h.requestNodeInfo(logger, conn)
 	if err != nil {
-		err = errors.Wrap(err, "failed requesting node info")
+		err = fmt.Errorf("failed requesting node info: %w", err)
 		return
 	}
 
 	err = h.verifyTheirNodeInfo(logger, pid, nodeInfo)
 	if err != nil {
-		err = errors.Wrap(err, "failed verifying their node info")
+		err = fmt.Errorf("failed verifying their node info: %w", err)
 		return
 	}
 	return
@@ -227,7 +228,7 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 	nodeInfo := &records.NodeInfo{}
 
 	if err := nodeInfo.Consume(resBytes); err != nil {
-		return nil, errors.Wrap(errConsumingMessage, err.Error())
+		return nil, fmt.Errorf("%w: %s", errConsumingMessage, err.Error())
 	}
 	return nodeInfo, nil
 }
@@ -237,7 +238,7 @@ func (h *handshaker) applyFilters(sender peer.ID, ni *records.NodeInfo) error {
 	for i := range fltrs {
 		err := fltrs[i](sender, ni)
 		if err != nil {
-			return errors.Wrap(errPeerWasFiltered, err.Error())
+			return fmt.Errorf("%w: %s", errPeerWasFiltered, err.Error())
 		}
 	}
 

@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -149,12 +149,12 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	validatorDuty, err := r.currentValidatorDuty()
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "current validator duty")
+		return nil, spectypes.DomainError, fmt.Errorf("current validator duty: %w", err)
 	}
 
 	vr, err := r.calculateVoluntaryExit(validatorDuty)
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate voluntary exit")
+		return nil, spectypes.DomainError, fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
 	return []ssz.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
 }
@@ -281,7 +281,7 @@ func (r *VoluntaryExitRunner) Decode(data []byte) error {
 func (r *VoluntaryExitRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode VoluntaryExitRunner")
+		return [32]byte{}, fmt.Errorf("could not encode VoluntaryExitRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

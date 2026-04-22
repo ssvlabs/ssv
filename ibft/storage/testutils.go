@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -257,7 +257,7 @@ func GetSpecDir(path, module string) (string, error) {
 			}
 		}
 		if req == nil {
-			return "", errors.Errorf("could not find %s module", specModule)
+			return "", fmt.Errorf("could not find %s module", specModule)
 		}
 		modPath = req.Mod.Path
 		modVersion = req.Mod.Version
@@ -266,11 +266,11 @@ func GetSpecDir(path, module string) (string, error) {
 	// get module path
 	p, err := GetModulePath(modPath, modVersion)
 	if err != nil {
-		return "", errors.Wrap(err, "could not get module path")
+		return "", fmt.Errorf("could not get module path: %w", err)
 	}
 
 	if _, err := os.Stat(p); os.IsNotExist(err) {
-		return "", errors.Wrapf(err, "you don't have this module-%s/version-%s installed", modPath, modVersion)
+		return "", fmt.Errorf("you don't have this module-%s/version-%s installed: %w", modPath, modVersion, err)
 	}
 
 	return filepath.Join(filepath.Clean(p), module), nil
@@ -319,7 +319,7 @@ func getGoModFile(path string) (*modfile.File, error) {
 		}
 		path = filepath.Dir(path)
 		if path == "/" {
-			return nil, errors.Errorf("could not find %s file", modFileName)
+			return nil, fmt.Errorf("could not find %s file", modFileName)
 		}
 	}
 
@@ -327,7 +327,7 @@ func getGoModFile(path string) (*modfile.File, error) {
 	// #nosec G304 -- modFileName is selected by build tags from fixed constants.
 	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), modFileName))
 	if err != nil {
-		return nil, errors.Errorf("could not read %s", modFileName)
+		return nil, fmt.Errorf("could not read %s", modFileName)
 	}
 
 	// parse mod file

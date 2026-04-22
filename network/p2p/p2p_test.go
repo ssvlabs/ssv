@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,7 +13,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -326,7 +326,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 		return nil, nil, err
 	}
 	if len(ln.Nodes) != options.Nodes {
-		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), options.Nodes)
+		return nil, nil, fmt.Errorf("only %d peers created, expected %d", len(ln.Nodes), options.Nodes)
 	}
 
 	logger.Debug("created local network")

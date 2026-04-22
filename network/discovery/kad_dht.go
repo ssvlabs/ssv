@@ -2,13 +2,13 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/routing"
 	libp2pdisc "github.com/libp2p/go-libp2p/p2p/discovery/routing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 func NewKadDHT(ctx context.Context, host host.Host, mode dht.ModeOpt) (routing.Routing, discovery.Discovery, error) {
 	kdht, err := dht.New(ctx, host, dht.ProtocolPrefix(DHTDiscoveryProtocol), dht.Mode(mode))
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not create DHT")
+		return nil, nil, fmt.Errorf("could not create DHT: %w", err)
 	}
 	return kdht, libp2pdisc.NewRoutingDiscovery(kdht), nil
 }

@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -18,7 +19,6 @@ import (
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
@@ -120,14 +120,14 @@ func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
 func (n *p2pNetwork) SetupHost() error {
 	opts, err := n.cfg.Libp2pOptions(n.logger)
 	if err != nil {
-		return errors.Wrap(err, "could not create libp2p options")
+		return fmt.Errorf("could not create libp2p options: %w", err)
 	}
 
 	limitsCfg := rcmgr.DefaultLimits.AutoScale()
 	// TODO: enable and extract resource manager params as config
 	rmgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(limitsCfg))
 	if err != nil {
-		return errors.Wrap(err, "could not create resource manager")
+		return fmt.Errorf("could not create resource manager: %w", err)
 	}
 	n.connGater = connections.NewConnectionGater(
 		n.logger,
@@ -140,7 +140,7 @@ func (n *p2pNetwork) SetupHost() error {
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
-		return errors.Wrap(err, "could not create p2p host")
+		return fmt.Errorf("could not create p2p host: %w", err)
 	}
 	n.host = host
 	n.libConnManager = host.ConnManager()
@@ -153,7 +153,7 @@ func (n *p2pNetwork) SetupHost() error {
 	)
 	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
-		return errors.Wrap(err, "could not create backoff connector")
+		return fmt.Errorf("could not create backoff connector: %w", err)
 	}
 	n.backoffConnector = backoffConnector
 
@@ -164,20 +164,20 @@ func (n *p2pNetwork) SetupHost() error {
 // IMPORTANT: setupPeerServices must be invoked before setupPubsub to ensure n.idx is correctly initialized.
 func (n *p2pNetwork) SetupServices() error {
 	if err := n.setupStreamCtrl(); err != nil {
-		return errors.Wrap(err, "could not setup stream controller")
+		return fmt.Errorf("could not setup stream controller: %w", err)
 	}
 
 	if err := n.setupPeerServices(); err != nil {
-		return errors.Wrap(err, "could not setup peer services")
+		return fmt.Errorf("could not setup peer services: %w", err)
 	}
 
 	_, err := n.setupPubsub()
 	if err != nil {
-		return errors.Wrap(err, "could not setup topic controller")
+		return fmt.Errorf("could not setup topic controller: %w", err)
 	}
 
 	if err := n.setupDiscovery(); err != nil {
-		return errors.Wrap(err, "could not setup discovery service")
+		return fmt.Errorf("could not setup discovery service: %w", err)
 	}
 
 	return nil
@@ -216,7 +216,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	} else {
 		ids, err = identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
 		if err != nil {
-			return errors.Wrap(err, "could not create ID service")
+			return fmt.Errorf("could not create ID service: %w", err)
 		}
 		ids.Start()
 	}
@@ -282,7 +282,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
-		return errors.Wrap(err, "could not get ip addr")
+		return fmt.Errorf("could not get ip addr: %w", err)
 	}
 	var discV5Opts *discovery.DiscV5Options
 	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
@@ -363,7 +363,7 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 
 	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not setup pubsub")
+		return nil, fmt.Errorf("could not setup pubsub: %w", err)
 	}
 
 	n.topicsCtrl = tc

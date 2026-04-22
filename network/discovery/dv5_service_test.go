@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"net"
 	"os"
 	"testing"
@@ -12,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
