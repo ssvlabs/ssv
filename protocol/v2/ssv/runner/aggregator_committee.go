@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -16,7 +17,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -288,7 +288,7 @@ func (r *AggregatorCommitteeRunner) processSyncCommitteeSelectionProof(
 	// Type assertion to get the actual Contributions object
 	contribs, ok := contributions.(*spectypes.Contributions)
 	if !ok {
-		return true, errors.Errorf("unexpected contributions type: %T", contributions)
+		return true, fmt.Errorf("unexpected contributions type: %T", contributions)
 	}
 
 	if len(*contribs) == 0 {
@@ -508,7 +508,7 @@ func (r *AggregatorCommitteeRunner) ProcessPreConsensus(
 
 			default:
 				// This should never happen as we build rootToMetadata ourselves with valid roles
-				return errors.Errorf("unexpected role type in pre-consensus metadata: %v", metadata.Role)
+				return fmt.Errorf("unexpected role type in pre-consensus metadata: %v", metadata.Role)
 			}
 		}
 	}
@@ -661,7 +661,7 @@ func (r *AggregatorCommitteeRunner) ProcessConsensus(
 		// Sign the aggregate and proof
 		hashRoot, err := spectypes.GetAggregateAndProofHashRoot(aggProof)
 		if err != nil {
-			return errors.Wrap(err, "failed to get aggregate and proof hash root")
+			return fmt.Errorf("failed to get aggregate and proof hash root: %w", err)
 		}
 
 		msg, err := signBeaconObject(
@@ -972,7 +972,7 @@ func (r *AggregatorCommitteeRunner) ProcessPostConsensus(
 					contributionsToSubmit[signatureResult.validatorIndex][root] = signedContrib
 
 				default:
-					return errors.Errorf("unexpected role type in post-consensus: %v", role)
+					return fmt.Errorf("unexpected role type in post-consensus: %v", role)
 				}
 			}
 		}
@@ -1273,7 +1273,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 	consensusData := &spectypes.AggregatorCommitteeConsensusData{}
 	if err := consensusData.Decode(r.State.DecidedValue); err != nil {
 		return nil, nil, nil,
-			errors.Wrap(err, "could not decode consensus data")
+			fmt.Errorf("could not decode consensus data: %w", err)
 	}
 
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
@@ -1281,7 +1281,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 	aggregateAndProofs, err := consensusData.GetAggregateAndProofs()
 	if err != nil {
 		return nil, nil, nil,
-			errors.Wrap(err, "could not get aggregate and proofs")
+			fmt.Errorf("could not get aggregate and proofs: %w", err)
 	}
 
 	for i, aggregateAndProof := range aggregateAndProofs {
@@ -1326,7 +1326,7 @@ func (r *AggregatorCommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(
 	contributions, err := consensusData.GetSyncCommitteeContributions()
 	if err != nil {
 		return nil, nil, nil,
-			errors.Wrap(err, "could not get sync committee contributions")
+			fmt.Errorf("could not get sync committee contributions: %w", err)
 	}
 	for i, contribution := range contributions {
 		validatorIndex := consensusData.Contributors[i].ValidatorIndex
@@ -1500,7 +1500,7 @@ func (r *AggregatorCommitteeRunner) constructSignedAggregateAndProof(
 			Signature: signature,
 		}
 	default:
-		return nil, errors.Errorf("unknown version %s", ret.Version.String())
+		return nil, fmt.Errorf("unknown version %s", ret.Version.String())
 	}
 
 	return ret, nil
