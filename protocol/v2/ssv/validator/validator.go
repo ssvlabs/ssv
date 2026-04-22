@@ -212,7 +212,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
-				return fmt.Errorf("get event message timeout data: %w", err)
+				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
 
 			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {

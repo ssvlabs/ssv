@@ -14,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -32,7 +33,7 @@ func TestQBFTMapping(t *testing.T) {
 		testType := strings.Split(name, "_")[0]
 
 		switch testType {
-		case reflect.TypeOf(&spectests.MsgProcessingSpecTest{}).String():
+		case reflect.TypeFor[*spectests.MsgProcessingSpecTest]().String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &spectests.MsgProcessingSpecTest{}
@@ -42,7 +43,7 @@ func TestQBFTMapping(t *testing.T) {
 				t.Parallel()
 				RunMsgProcessing(t, typedTest)
 			})
-		case reflect.TypeOf(&spectests.MsgSpecTest{}).String():
+		case reflect.TypeFor[*spectests.MsgSpecTest]().String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &spectests.MsgSpecTest{}
@@ -52,7 +53,7 @@ func TestQBFTMapping(t *testing.T) {
 				t.Parallel()
 				RunMsg(t, typedTest)
 			})
-		case reflect.TypeOf(&spectests.ControllerSpecTest{}).String():
+		case reflect.TypeFor[*spectests.ControllerSpecTest]().String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &spectests.ControllerSpecTest{}
@@ -62,7 +63,7 @@ func TestQBFTMapping(t *testing.T) {
 				t.Parallel()
 				RunControllerSpecTest(t, typedTest)
 			})
-		case reflect.TypeOf(&spectests.CreateMsgSpecTest{}).String():
+		case reflect.TypeFor[*spectests.CreateMsgSpecTest]().String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &CreateMsgSpecTest{}
@@ -72,7 +73,7 @@ func TestQBFTMapping(t *testing.T) {
 				t.Parallel()
 				typedTest.RunCreateMsg(t)
 			})
-		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
+		case reflect.TypeFor[*spectests.RoundRobinSpecTest]().String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &spectests.RoundRobinSpecTest{}
@@ -85,7 +86,7 @@ func TestQBFTMapping(t *testing.T) {
 			/*t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunMsg(t, typedTest)
 			})*/
-		case reflect.TypeOf(&timeout.SpecTest{}).String():
+		case reflect.TypeFor[*timeout.SpecTest]().String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &SpecTest{}
@@ -104,6 +105,7 @@ func TestQBFTMapping(t *testing.T) {
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
 				signer,
+				roundtimer.NewTestingTimer(),
 			)
 			err = pre.Decode(preByts)
 			require.NoError(t, err)

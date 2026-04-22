@@ -76,7 +76,7 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 
 	// Fetch sync committee contributions for each subnet in parallel.
 	var (
-		contributions = make(spectypes.Contributions, 0, len(subnetIDs))
+		contributions = make(spectypes.Contributions, len(subnetIDs))
 		g             errgroup.Group
 	)
 	for i := range subnetIDs {
@@ -100,10 +100,10 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 			}
 
 			contribution := syncCommitteeContrResp.Data
-			contributions = append(contributions, &spectypes.Contribution{
+			contributions[index] = &spectypes.Contribution{
 				SelectionProofSig: selectionProofs[index],
 				Contribution:      *contribution,
-			})
+			}
 			return nil
 		})
 	}

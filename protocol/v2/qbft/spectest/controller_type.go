@@ -63,16 +63,18 @@ func generateController(logger *zap.Logger) *controller.Controller {
 	)
 }
 
-func testTimer(
+func testTimerState(
 	t *testing.T,
-	config *qbft.Config,
+	contr *controller.Controller,
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedTimerState != nil {
-		if timer, ok := config.GetTimer().(*roundtimer.TestQBFTTimer); ok {
-			require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
-			require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
-		}
+		inst := contr.StoredInstances.FindInstance(contr.Height)
+		require.NotNilf(t, inst, "ExpectedTimerState set but no instance found at height %d", contr.Height)
+		timer, ok := inst.Timer().(*roundtimer.TestQBFTTimer)
+		require.True(t, ok)
+		require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
+		require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
 	}
 }
 
@@ -148,12 +150,13 @@ func runInstanceWithData(
 	runData *spectests.RunInstanceData,
 ) error {
 	var lastErr error
-	_, err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, protocoltesting.TestingValueChecker{})
+	testTimer := roundtimer.NewTestingTimer()
+	_, err := contr.StartNewInstance(context.TODO(), logger, height, testTimer, runData.InputValue, protocoltesting.TestingValueChecker{})
 	if err != nil {
 		lastErr = err
 	}
 
-	testTimer(t, contr.GetConfig().(*qbft.Config), runData)
+	testTimerState(t, contr, runData)
 
 	if err := testProcessMsg(t, logger, contr, contr.GetConfig().(*qbft.Config), runData); err != nil {
 		lastErr = err
@@ -173,7 +176,7 @@ func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.
 	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	specDir = filepath.Join(specDir, "generate")
-	dir := typescomparable.GetSCDir(specDir, reflect.TypeOf(test).String())
+	dir := typescomparable.GetSCDir(specDir, reflect.TypeFor[*spectests.ControllerSpecTest]().String())
 	path := filepath.Join(dir, fmt.Sprintf("%s.json", test.TestName()))
 	byteValue, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)

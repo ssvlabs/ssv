@@ -5,9 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -63,6 +64,7 @@ func (c *Controller) StartNewInstance(
 	ctx context.Context,
 	logger *zap.Logger,
 	height specqbft.Height,
+	timer specqbft.Timer,
 	value []byte,
 	valueChecker ssv.ValueChecker,
 ) (*instance.Instance, error) {
@@ -85,10 +87,10 @@ func (c *Controller) StartNewInstance(
 
 	c.Height = height
 
-	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner)
+	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner, timer)
 	c.StoredInstances.addNewInstance(newInstance)
-	newInstance.Start(ctx, value, height, valueChecker)
 	c.forceStopAllInstanceExceptCurrent()
+	newInstance.Start(ctx, value, valueChecker)
 
 	span.SetStatus(codes.Ok, "")
 
@@ -111,7 +113,7 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	}
 
 	if err := c.BaseMsgValidation(msg); err != nil {
-		return nil, errors.Wrap(err, "invalid msg")
+		return nil, fmt.Errorf("invalid msg: %w", err)
 	}
 
 	/**
@@ -151,7 +153,7 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 		return nil, NewRetryableError(err)
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "could not process msg")
+		return nil, fmt.Errorf("could not process msg: %w", err)
 	}
 
 	if !decided {
@@ -198,7 +200,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
 func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode controller")
+		return [32]byte{}, fmt.Errorf("could not encode controller: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
@@ -213,7 +215,7 @@ func (c *Controller) Encode() ([]byte, error) {
 func (c *Controller) Decode(data []byte) error {
 	err := json.Unmarshal(data, &c)
 	if err != nil {
-		return errors.Wrap(err, "could not decode controller")
+		return fmt.Errorf("could not decode controller: %w", err)
 	}
 
 	config := c.GetConfig()
@@ -229,7 +231,7 @@ func (c *Controller) Decode(data []byte) error {
 func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage) error {
 	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.GetID(), aggregatedCommit); err != nil {
 		// We do not return error here, just Log broadcasting error.
-		return errors.Wrap(err, "could not broadcast decided")
+		return fmt.Errorf("could not broadcast decided: %w", err)
 	}
 	return nil
 }

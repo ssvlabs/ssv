@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -401,24 +402,29 @@ func newProposerRunnerForTest(
 		share.ValidatorIndex: share,
 	}
 
-	runnerIface, err := NewProposerRunner(
-		logger,
-		cfg,
-		shareMap,
-		controller,
-		beacon,
-		network,
-		km,
-		operatorSigner,
-		dg,
-		valCheck,
-		0,
-		[]byte("graffiti"),
-		proposerDelay,
-	)
+	runnerIface, err := NewProposerRunner(ProposerRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  cfg,
+			Share:          shareMap,
+			Beacon:         beacon,
+			Network:        network,
+			Signer:         km,
+			OperatorSigner: operatorSigner,
+		},
+		QBFTController:      controller,
+		DoppelgangerHandler: dg,
+		ValCheck:            valCheck,
+		HighestDecidedSlot:  0,
+		Graffiti:            []byte("graffiti"),
+		ProposerDelay:       proposerDelay,
+	})
 	require.NoError(t, err)
 
-	return runnerIface.(*ProposerRunner), keySet, network
+	proposerRunner := runnerIface.(*ProposerRunner)
+	proposerRunner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
+		return func(specqbft.Round) {}
+	})
+	return proposerRunner, keySet, network
 }
 
 func setupRunnerForPostConsensus(
@@ -431,7 +437,7 @@ func setupRunnerForPostConsensus(
 	t.Helper()
 
 	duty := spectestingutils.TestingProposerDutyV(consensusData.Version)
-	runner.baseSetupForNewDuty(duty, keySet.Threshold)
+	runner.State = NewRunnerState(keySet.Threshold, duty)
 	runner.measurements.StartDutyFlow()
 	runner.measurements.StartConsensus()
 	runner.measurements.EndConsensus()
@@ -456,6 +462,7 @@ func setupRunnerForPostConsensus(
 		msgID[:],
 		specqbft.Height(duty.Slot),
 		runner.operatorSigner,
+		nil,
 	)
 	runner.State.RunningInstance.State.Decided = true
 	runner.State.RunningInstance.State.DecidedValue = encodedDecidedValue

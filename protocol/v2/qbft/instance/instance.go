@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -30,6 +31,7 @@ type Instance struct {
 	State  *specqbft.State
 	config qbft.IConfig
 	signer ssvtypes.OperatorSigner
+	timer  specqbft.Timer
 
 	processMsgF *spectypes.ThreadSafeF
 
@@ -47,6 +49,7 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
+	timer specqbft.Timer,
 ) *Instance {
 	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
 	if len(identifier) == 56 {
@@ -70,6 +73,7 @@ func NewInstance(
 		},
 		config:      config,
 		signer:      signer,
+		timer:       timer,
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(logger, runnerRole),
 	}
@@ -79,19 +83,23 @@ func (i *Instance) ForceStop() {
 	i.forceStop = true
 }
 
+// Timer returns the instance timer.
+func (i *Instance) Timer() specqbft.Timer {
+	return i.timer
+}
+
 // Start is an interface implementation
 func (i *Instance) Start(
 	ctx context.Context,
 	value []byte,
-	height specqbft.Height,
 	valueChecker ssv.ValueChecker,
 ) {
 	_, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
-		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(i.State.Height))))
 	defer span.End()
 
-	logger := i.logger.With(fields.QBFTRound(specqbft.FirstRound), fields.QBFTHeight(height))
+	logger := i.logger.With(fields.QBFTRound(specqbft.FirstRound), fields.QBFTHeight(i.State.Height))
 
 	proposerID := i.ProposerForRound(specqbft.FirstRound)
 
@@ -104,10 +112,8 @@ func (i *Instance) Start(
 	span.AddEvent(startingQBFTInstanceEvent, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
 
 	i.StartValue = value
-	i.bumpToRound(specqbft.FirstRound)
-	i.State.Height = height
 	i.ValueChecker = valueChecker
-	i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
+	i.timer.TimeoutForRound(specqbft.FirstRound)
 	i.metrics.StartStage(stageProposal)
 
 	// propose if this node is the proposer
@@ -164,7 +170,7 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 	}
 
 	if err := i.BaseMsgValidation(msg); err != nil {
-		return false, nil, nil, errors.Wrap(err, "invalid signed message")
+		return false, nil, nil, fmt.Errorf("invalid signed message: %w", err)
 	}
 
 	res := i.processMsgF.Run(func() any {
