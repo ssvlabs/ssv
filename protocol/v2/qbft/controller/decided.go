@@ -27,9 +27,8 @@ func (c *Controller) UponDecided(
 	inst := c.RecentInstances.FindInstance(msg.QBFTMessage.Height)
 
 	if inst == nil {
-		// We are not aware of this instance, create it. There is no need to start->stop this instance, we are at
-		// the end of instance-lifecycle already, it's too late to start this instance now - we can just fast-forward
-		// it to completion here (mark as decided, etc.).
+		// We are not aware of this instance, create it. There is no need to start this instance, we are at the end
+		// of instance-lifecycle already - we can just fast-forward it to completion here (mark as decided, etc.).
 
 		inst = instance.NewInstance(
 			context.Background(),
@@ -41,19 +40,20 @@ func (c *Controller) UponDecided(
 			c.OperatorSigner,
 			roundTimerF,
 		)
-		inst.State.Decided = true
-		inst.State.Round = msg.QBFTMessage.Round
-		inst.State.DecidedValue = msg.SignedMessage.FullData
+
+		if err := inst.MarkDecided(msg.QBFTMessage.Round, msg.SignedMessage.FullData); err != nil {
+			return nil, errors.Wrap(err, "mark as decided")
+		}
 		if err := inst.State.CommitContainer.AddMsg(msg); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "add message to commit-container")
 		}
 		c.RecentInstances.addNewInstance(inst)
 		if msg.QBFTMessage.Height > c.CurrentInstanceHeight {
 			// If the new instance turned out to be "from the future", it means other nodes in our cluster are
 			// already ahead working with an instance we haven't gotten to. We accept it as our current (latest
 			// known) height.
-			// NOTE: we could also stop & trim older instances that became irrelevant now - but spectests do not
-			// expect this, and we are doing it in `Controller.StartNewInstance` periodically anyway.
+			// NOTE: we could also mark older instances as irrelevant now - but spectests do not expect this,
+			// and we are doing it in `Controller.StartNewInstance` periodically anyway.
 			c.CurrentInstanceHeight = msg.QBFTMessage.Height
 		}
 
@@ -62,23 +62,21 @@ func (c *Controller) UponDecided(
 	}
 
 	if decided, _ := inst.IsDecided(); !decided {
-		// We are aware of this instance, it is currently running, and it hasn't been stopped & marked as decided just
-		// yet - we can do so now.
+		// We are aware of this instance, it is currently running, and it hasn't been marked as decided just yet.
+		// We can do so now.
 
-		inst.Stop()
-		inst.State.Decided = true
-		inst.State.Round = msg.QBFTMessage.Round
-		inst.State.DecidedValue = msg.SignedMessage.FullData
+		if err := inst.MarkDecided(msg.QBFTMessage.Round, msg.SignedMessage.FullData); err != nil {
+			return nil, errors.Wrap(err, "mark as decided")
+		}
 		if err := inst.State.CommitContainer.AddMsg(msg); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "add message to commit-container")
 		}
 
 		// Signal "newly decided" to the caller.
 		return msg.SignedMessage, nil
 	}
 
-	// The instance is known to be decided already, which also means it has been stopped - just record the message
-	// we got (for bookkeeping purposes).
+	// The instance is known to be decided already - just record the message we got (for bookkeeping purposes).
 	signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndRoot(msg.QBFTMessage.Round, msg.QBFTMessage.Root)
 	if len(msg.SignedMessage.OperatorIDs) > len(signers) {
 		if err := inst.State.CommitContainer.AddMsg(msg); err != nil {

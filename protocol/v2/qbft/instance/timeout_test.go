@@ -53,7 +53,7 @@ func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
 
 func TestUponRoundTimeoutKilledInstance(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
-	env.inst.Kill()
+	env.inst.MarkIrrelevant()
 
 	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
 	require.ErrorContains(t, err, "instance stopped processing timeouts")

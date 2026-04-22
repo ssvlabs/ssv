@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -34,8 +35,9 @@ type Instance struct {
 	StartValue   []byte
 	ValueChecker ssv.ValueChecker `json:"-"`
 	roundTimer   ssv.QBFTRoundTimer
-	// killed is set when Instance has been forcefully stopped as irrelevant.
-	killed bool
+	// markedIrrelevant is set to signal that Instance will no longer process messages (aka forcefully stopped in
+	// ssv-spec terms).
+	markedIrrelevant bool
 
 	metrics *metricsRecorder
 }
@@ -76,11 +78,6 @@ func NewInstance(
 		roundTimer:  roundTimerF(ctx, logger, height),
 		metrics:     newMetrics(logger, runnerRole),
 	}
-}
-
-func (i *Instance) Kill() {
-	i.killed = true
-	i.Stop()
 }
 
 // Timer returns the instance timer.
@@ -146,7 +143,30 @@ func (i *Instance) Start(
 	span.SetStatus(codes.Ok, "")
 }
 
-func (i *Instance) Stop() {
+// MarkDecided marks instance as decided, recording the decided-round and decided-value.
+// This func essentially terminates instance, rendering it read-only, releasing all the resources it spawned.
+// Both MarkDecided and MarkIrrelevant can be called on the same instance, these calls do not conflict.
+func (i *Instance) MarkDecided(round specqbft.Round, value []byte) error {
+	if i.State.Decided {
+		return fmt.Errorf(
+			"instance has already decided in round %d (attempted to mark as decided in round %d)",
+			i.State.Round,
+			round,
+		)
+	}
+	i.State.Decided = true
+	i.State.Round = round
+	i.State.DecidedValue = value
+	i.roundTimer.Stop()
+	return nil
+}
+
+// MarkIrrelevant marks instance as irrelevant to signal that it will no longer process messages, hence no further
+// progress will be made on this instance.
+// This func essentially terminates instance, rendering it read-only, releasing all the resources it spawned.
+// Both MarkDecided and MarkIrrelevant can be called on the same instance, these calls do not conflict.
+func (i *Instance) MarkIrrelevant() {
+	i.markedIrrelevant = true
 	i.roundTimer.Stop()
 }
 
@@ -185,8 +205,10 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 		case specqbft.CommitMsgType:
 			decided, decidedValue, aggregatedCommit, err = i.UponCommit(ctx, logger, msg)
 			if decided {
-				i.State.Decided = decided
-				i.State.DecidedValue = decidedValue
+				err := i.MarkDecided(msg.QBFTMessage.Round, decidedValue)
+				if err != nil {
+					return errors.Wrap(err, "mark as decided")
+				}
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
@@ -286,5 +308,5 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 
 // CanProcessMessages will return true if instance can process messages
 func (i *Instance) CanProcessMessages() bool {
-	return !i.killed && i.State.Round < i.config.GetCutOffRound()
+	return !i.markedIrrelevant && i.State.Round < i.config.GetCutOffRound()
 }

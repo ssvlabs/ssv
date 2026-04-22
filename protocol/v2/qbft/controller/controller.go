@@ -115,18 +115,18 @@ func (c *Controller) StartNewInstance(
 	newInstance.Start(ctx, value, valueChecker)
 	c.RecentInstances.addNewInstance(newInstance)
 	c.CurrentInstanceHeight = height
-	c.killInstancesExceptCurrent()
+	c.markInstancesIrrelevantExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")
 
 	return newInstance, nil
 }
 
-// killInstancesExceptCurrent force-stops all instances except for the current one.
-func (c *Controller) killInstancesExceptCurrent() {
+// markInstancesIrrelevantExceptCurrent marks all instances except for the current one as irrelevant.
+func (c *Controller) markInstancesIrrelevantExceptCurrent() {
 	for _, i := range c.RecentInstances {
 		if i.State.Height != c.CurrentInstanceHeight {
-			i.Kill()
+			i.MarkIrrelevant()
 		}
 	}
 }
@@ -173,8 +173,6 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	}
 
 	prevDecided, _ := inst.IsDecided()
-
-	// if previously decided, we don't process more messages
 	if prevDecided {
 		return nil, spectypes.NewError(spectypes.SkipConsensusMessageAsInstanceIsDecidedErrorCode, "not processing consensus message since instance is already decided")
 	}
